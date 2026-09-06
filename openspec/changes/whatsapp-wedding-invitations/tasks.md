@@ -54,23 +54,23 @@ Chain strategy: pending
 
 ## Phase 2: Pure Domain Functions (Work Unit 2)
 
-- [ ] 2.1 RED — `lib/domain/phone.spec.ts`: table-driven `normalizePhone(input, defaultCountry)` cases (with/without `+`, spaces, dashes, parens, Mexican `1` mobile prefix, Argentine `9` prefix, empty string, garbage).
-- [ ] 2.2 GREEN — `lib/domain/phone.ts`: implement `normalizePhone` via `libphonenumber-js`'s `parsePhoneNumberFromString`; never throws, returns a discriminated success/failure result.
-- [ ] 2.3 RED — `phone.spec.ts`: `normalizeForStorage` (throws on invalid input), `deriveGateKey` (lenient, digits-only, `null` if <8 digits), `matchesInvitation` (any-guest match true; one-digit near-miss false).
-- [ ] 2.4 GREEN — `phone.ts`: implement `normalizeForStorage`, `deriveGateKey`, `matchesInvitation`; run `npm run test:coverage` and confirm 100% coverage on this file.
-- [ ] 2.5 Add `DEFAULT_PHONE_COUNTRY` to `.env.example`; confirm 2.1/2.3's table spans MX/AR/US candidate default-country values (extend the table if a candidate is missing).
-- [ ] 2.6 RED — `lib/domain/wa-link.spec.ts`: `buildWaMeLink` encoding table (space, `&`, `?`, newline as `%0A`, accented character, emoji, digits contain no `+`).
-- [ ] 2.7 GREEN — `lib/domain/wa-link.ts`: implement `buildWaMeLink`; confirm 100% coverage on this file.
-- [ ] 2.8 RED — `lib/domain/message-template.spec.ts`: renders `{{greeting_name}}`; a template referencing a missing variable throws/errors and never renders the literal string `undefined`.
-- [ ] 2.9 GREEN — `lib/domain/message-template.ts`: implement `renderMessageTemplate`.
-- [ ] 2.10 RED — `lib/domain/slug.spec.ts`: `encodeSlug(bytes)` on 10-byte input produces a 16-char `[a-z2-7]` string; `isWellFormedSlug` validates the shape; a 10,000-sample uniqueness check using varied injected byte arrays (no `node:crypto` inside the test target).
-- [ ] 2.11 GREEN — `lib/domain/slug.ts`: implement `encodeSlug`, `SLUG_BYTE_LENGTH = 10`, `isWellFormedSlug`.
-- [ ] 2.12 RED — `lib/domain/rate-limit.spec.ts`: `evaluateGate(attempts, now)` pure — (invitation, ip_hash) 15 min / 8-fail / 30 min lockout; (invitation, all-IP) 60 min / 30-fail / 60 min lockout; deterministic via an injected `now`.
-- [ ] 2.13 GREEN — `lib/domain/rate-limit.ts`: implement `evaluateGate`.
-- [ ] 2.14 RED — `lib/domain/seats.spec.ts`: `validateRsvpSelection` rejects a selection exceeding `seats_allowed`, accepts at/under the cap.
-- [ ] 2.15 GREEN — `lib/domain/seats.ts`: implement `validateRsvpSelection`.
-- [ ] 2.16 Verify: 1.7's ESLint zone against the real `lib/domain/**` files — a deliberately added banned import fails `npm run lint`; remove the smoke violation after confirming.
-- [ ] 2.17 Verify: `npm run test:coverage` shows 100% specifically on `phone.ts` and `wa-link.ts` (not a global threshold, per `design.md`'s Testing Architecture table).
+- [x] 2.1 RED — `lib/domain/phone.spec.ts`: table-driven `normalizePhone(input, defaultCountry)` cases (with/without `+`, spaces, dashes, parens, Mexican `1` mobile prefix, Argentine `9` prefix, empty string, garbage).
+- [x] 2.2 GREEN — `lib/domain/phone.ts`: implement `normalizePhone` via `libphonenumber-js`'s `parsePhoneNumberFromString`; never throws, returns a discriminated success/failure result.
+- [x] 2.3 RED — `phone.spec.ts`: `normalizeForStorage` (throws on invalid input), `deriveGateKey` (lenient, digits-only, `null` if <8 digits), `matchesInvitation` (any-guest match true; one-digit near-miss false).
+- [x] 2.4 GREEN — `phone.ts`: implement `normalizeForStorage`, `deriveGateKey`, `matchesInvitation`; run `npm run test:coverage` and confirm 100% coverage on this file.
+- [ ] 2.5 (PARTIAL — test table done; `.env.example` write BLOCKED by the environment's permission settings, see apply-progress) Add `DEFAULT_PHONE_COUNTRY` to `.env.example`; confirm 2.1/2.3's table spans MX/AR/US candidate default-country values (extend the table if a candidate is missing).
+- [x] 2.6 RED — `lib/domain/wa-link.spec.ts`: `buildWaMeLink` encoding table (space, `&`, `?`, newline as `%0A`, accented character, emoji, digits contain no `+`).
+- [x] 2.7 GREEN — `lib/domain/wa-link.ts`: implement `buildWaMeLink`; confirm 100% coverage on this file.
+- [x] 2.8 RED — `lib/domain/message-template.spec.ts`: renders `{{greeting_name}}`; a template referencing a missing variable throws/errors and never renders the literal string `undefined`.
+- [x] 2.9 GREEN — `lib/domain/message-template.ts`: implement `renderMessageTemplate`.
+- [x] 2.10 RED — `lib/domain/slug.spec.ts`: `encodeSlug(bytes)` on 10-byte input produces a 16-char `[a-z2-7]` string; `isWellFormedSlug` validates the shape; a 10,000-sample uniqueness check using varied injected byte arrays (no `node:crypto` inside the test target).
+- [x] 2.11 GREEN — `lib/domain/slug.ts`: implement `encodeSlug`, `SLUG_BYTE_LENGTH = 10`, `isWellFormedSlug`.
+- [x] 2.12 RED — `lib/domain/rate-limit.spec.ts`: `evaluateGate(attempts, now)` pure — (invitation, ip_hash) 15 min / 8-fail / 30 min lockout; (invitation, all-IP) 60 min / 30-fail / 60 min lockout; deterministic via an injected `now`.
+- [x] 2.13 GREEN — `lib/domain/rate-limit.ts`: implement `evaluateGate`.
+- [x] 2.14 RED — `lib/domain/seats.spec.ts`: `validateRsvpSelection` rejects a selection exceeding `seats_allowed`, accepts at/under the cap.
+- [x] 2.15 GREEN — `lib/domain/seats.ts`: implement `validateRsvpSelection`.
+- [x] 2.16 Verify: 1.7's ESLint zone against the real `lib/domain/**` files — a deliberately added banned import fails `npm run lint`; remove the smoke violation after confirming.
+- [x] 2.17 Verify: `npm run test:coverage` shows 100% specifically on `phone.ts` and `wa-link.ts` (not a global threshold, per `design.md`'s Testing Architecture table).
 
 ## Phase 3: Supabase Schema, RLS, Triggers, Base Adapters (Work Unit 3)
 
