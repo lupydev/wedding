@@ -1,0 +1,121 @@
+schema: spec-driven
+
+sdd:
+  artifact_store: hybrid
+
+context: |
+  Greenfield, not yet scaffolded: repo contains only .git/, .atl/, openspec/.
+  Target stack: Next.js (App Router) + TypeScript on Vercel, with Supabase as the data layer.
+  Purpose: console to compose and dispatch personalized wedding invitations via wa.me
+  click-to-chat deep links, plus a per-guest invitation page behind a phone-number gate.
+  The app PREPARES messages; a human sends inside WhatsApp.
+  Two independent human senders (user and fiancee), each dispatching from their own personal
+  number and their own device.
+
+  LOCKED decisions — do not re-open:
+  - WhatsApp Cloud API is ruled out: enrolling a personal number destroys its consumer account.
+  - wa.me is TEXT ONLY and addresses the RECIPIENT only; there is no sender parameter, so
+    sender routing is physical per-device and can be guarded but never enforced.
+  - The "image" in the message is the Open Graph preview card, not an attachment.
+  - WhatsApp's crawler does not execute JavaScript, so per-guest OG tags MUST be in the first
+    server HTML response. This is why the stack is server-rendered rather than a Vite SPA.
+  - Guest phone numbers must never reach the browser.
+
+  Toolchain present: Node v26.8.1, npm 11.19.0, bun 1.3.6. pnpm is NOT installed.
+
+# Strict TDD resolution (sdd-init 2026-09-06, revised after the Next.js stack decision)
+# Orchestrator marker requested strict_tdd: true, but zero projects were discovered
+# (no package.json / tsconfig.json / next.config.*) and no workspace-level test command
+# exists. Per the sdd-init decision gate this FAILS CLOSED to false. Flip to true in the
+# same change that scaffolds Next.js + Vitest and defines a workspace-wide `npm test`.
+strict_tdd: false
+strict_tdd_intent: true
+
+testing:
+  status: not-installed
+  runnable_today: false
+  projects: []
+  recommended:
+    package_manager: npm
+    scaffold_command: "npx create-next-app@latest . --ts --app --eslint"
+    test_command: "npm test"                  # maps to `vitest run`
+    watch_command: "npm run test:watch"       # maps to `vitest`
+    coverage_command: "npm run test:coverage" # maps to `vitest run --coverage`
+    type_check_command: "npm run typecheck"   # maps to `tsc --noEmit`
+    lint_command: "npm run lint"              # maps to `eslint .`
+    format_command: "npm run format"          # maps to `prettier --write .`
+    build_command: "npm run build"            # maps to `next build`
+    e2e_command: "npm run e2e"                # maps to `playwright test`
+    dev_dependencies:
+      - vitest
+      - "@vitejs/plugin-react"
+      - vite-tsconfig-paths
+      - "@vitest/coverage-v8"
+      - jsdom
+      - "@testing-library/react"
+      - "@testing-library/dom"
+      - "@testing-library/user-event"
+      - "@testing-library/jest-dom"
+      - "@playwright/test"
+    runtime_dependencies:
+      - "@supabase/supabase-js"
+      - libphonenumber-js
+      - zod
+      - server-only
+    layers:
+      unit: vitest
+      integration: "@testing-library/react + jsdom"
+      e2e: playwright
+    constraints:
+      - Vitest CANNOT test async Server Components; those require E2E coverage.
+        Source: https://nextjs.org/docs/app/guides/testing/vitest
+      - Require 100% coverage on phone normalization and wa.me link building specifically;
+        do not chase a global coverage number.
+
+rules:
+  proposal:
+    - Include a rollback plan for risky changes.
+    - Never propose WhatsApp Cloud API; it is ruled out because it destroys a personal account.
+    - The data layer is decided: Supabase. Do not re-open static JSON or SQLite.
+  specs:
+    - Use Given/When/Then for scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - Model the two senders as distinct actors with disjoint guest subsets.
+    - The app prepares a wa.me deep link; it never claims to send a message itself.
+    - Any requirement touching the invitation page MUST state that Open Graph tags are
+      server-rendered into the first HTML response.
+  design:
+    - Document architecture decisions with rationale.
+    - Keep domain logic (phone normalization, message templating, link building, slug
+      generation) free of React and of any storage vendor; storage and UI are adapters
+      at the edges.
+    - Include a sequence diagram for the compose-to-dispatch flow.
+    - Supabase RLS MUST be default-deny with zero anon policies; all data access goes
+      through server-only code.
+  tasks:
+    - Group by phase, use hierarchical numbering.
+    - Keep tasks completable in one session.
+    - Scaffolding the Next.js + Vitest + Playwright project MUST be its own first work unit,
+      and that unit MUST also flip strict_tdd to true and fill the test commands below.
+    - The pure domain functions MUST land immediately after the scaffold; everything else
+      depends on them.
+  apply:
+    guidelines:
+      - Follow existing code patterns once they exist.
+      - All source, comments, identifiers, and docs in English. Guest-facing product copy
+        is Spanish.
+      - Guest phone numbers are personal data: never commit real numbers to the repo,
+        to fixtures, or to seed files. Never log them.
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas.
+
+delivery:
+  execution_mode: interactive
+  delivery_strategy: ask-on-risk
+  review_budget_lines: 800
