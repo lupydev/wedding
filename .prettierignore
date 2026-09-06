@@ -1,0 +1,15 @@
+# Build and tooling output
+.next/
+out/
+build/
+coverage/
+playwright-report/
+test-results/
+
+# SDD planning artifacts are authored documents, not formatted source.
+openspec/
+.atl/
+
+# Generated
+next-env.d.ts
+package-lock.json

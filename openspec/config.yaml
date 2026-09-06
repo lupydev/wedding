@@ -23,18 +23,24 @@ context: |
 
   Toolchain present: Node v26.8.1, npm 11.19.0, bun 1.3.6. pnpm is NOT installed.
 
-# Strict TDD resolution (sdd-init 2026-09-06, revised after the Next.js stack decision)
-# Orchestrator marker requested strict_tdd: true, but zero projects were discovered
-# (no package.json / tsconfig.json / next.config.*) and no workspace-level test command
-# exists. Per the sdd-init decision gate this FAILS CLOSED to false. Flip to true in the
-# same change that scaffolds Next.js + Vitest and defines a workspace-wide `npm test`.
-strict_tdd: false
-strict_tdd_intent: true
+# Strict TDD resolution (sdd-init 2026-09-06; enabled 2026-09-06 by work unit 1 of
+# change whatsapp-wedding-invitations).
+# The initial resolution FAILED CLOSED to false because zero projects were discovered
+# and no workspace-level test command existed. Work unit 1 scaffolded Next.js + Vitest
+# + Playwright and defined a workspace-wide `npm test` (`vitest run`), so the gate now
+# resolves to true. `strict_tdd_intent` was removed: it recorded a deferred intention
+# that this change has fulfilled, and leaving it would imply the gate is still pending.
+strict_tdd: true
 
 testing:
-  status: not-installed
-  runnable_today: false
-  projects: []
+  status: installed
+  runnable_today: true
+  projects:
+    - name: wedding-invitations
+      root: "."
+      package_manager: npm
+      unit_runner: vitest
+      e2e_runner: playwright
   recommended:
     package_manager: npm
     scaffold_command: "npx create-next-app@latest . --ts --app --eslint"
@@ -106,11 +112,11 @@ rules:
         is Spanish.
       - Guest phone numbers are personal data: never commit real numbers to the repo,
         to fixtures, or to seed files. Never log them.
-    tdd: false
-    test_command: ""
+    tdd: true
+    test_command: "npm test"
   verify:
-    test_command: ""
-    build_command: ""
+    test_command: "npm test"
+    build_command: "npm run build"
     coverage_threshold: 0
   archive:
     - Warn before merging destructive deltas.

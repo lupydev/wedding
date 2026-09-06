@@ -39,18 +39,18 @@ Chain strategy: pending
 
 ## Phase 1: Scaffold + Strict TDD (Work Unit 1)
 
-- [ ] 1.1 Run `npx create-next-app@latest . --ts --app --eslint` to scaffold the Next.js App Router project with `npm`.
-- [ ] 1.2 Install Vitest + testing deps (`vitest`, `@vitejs/plugin-react`, `vite-tsconfig-paths`, `@vitest/coverage-v8`, `jsdom`, `@testing-library/react`, `@testing-library/dom`, `@testing-library/user-event`, `@testing-library/jest-dom`); create `vitest.config.mts`.
-- [ ] 1.3 Install `@playwright/test`, create `playwright.config.ts`, run `npx playwright install`.
-- [ ] 1.4 Add `package.json` scripts `test`, `test:watch`, `test:coverage`, `typecheck`, `lint`, `format`, `build`, `e2e` per `openspec/config.yaml` `testing.recommended`.
-- [ ] 1.5 Create `next.config.ts` with `htmlLimitedBots: /.*/`; check `node_modules/next/package.json` (read-only) to determine whether the key is top-level or under `experimental` for the installed version and place it correctly.
-- [ ] 1.6 Create `app/layout.tsx` setting `metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_ORIGIN ?? 'http://localhost:3000')`.
-- [ ] 1.7 Add ESLint `no-restricted-imports` zone for `lib/domain/**` banning `react`, `react-dom`, `next/*`, `@supabase/*`, `server-only`, `node:*`, `../server/*`.
-- [ ] 1.8 Add ESLint `no-restricted-imports` zone for `components/**` banning `lib/server/**` and `@supabase/*`.
-- [ ] 1.9 Edit `openspec/config.yaml`: set `strict_tdd: true`, `apply.tdd: true`, `apply.test_command: "npm test"`, `verify.test_command: "npm test"`, `verify.build_command: "npm run build"`.
-- [ ] 1.10 Verify: clean-clone `npm install && npm run build` succeeds with zero TypeScript errors (Scaffold produces a runnable dev server).
-- [ ] 1.11 Verify: `npm test` with zero test files present exits successfully (Test harnesses installed).
-- [ ] 1.12 Verify: `openspec/config.yaml` inspection shows `strict_tdd: true` and a non-empty, executable `apply.test_command` (Strict TDD enabled by this change).
+- [x] 1.1 Run `npx create-next-app@latest . --ts --app --eslint` to scaffold the Next.js App Router project with `npm`.
+- [x] 1.2 Install Vitest + testing deps (`vitest`, `@vitejs/plugin-react`, `vite-tsconfig-paths`, `@vitest/coverage-v8`, `jsdom`, `@testing-library/react`, `@testing-library/dom`, `@testing-library/user-event`, `@testing-library/jest-dom`); create `vitest.config.mts`.
+- [x] 1.3 Install `@playwright/test`, create `playwright.config.ts`, run `npx playwright install`.
+- [x] 1.4 Add `package.json` scripts `test`, `test:watch`, `test:coverage`, `typecheck`, `lint`, `format`, `build`, `e2e` per `openspec/config.yaml` `testing.recommended`.
+- [x] 1.5 Create `next.config.ts` with `htmlLimitedBots: /.*/`; check `node_modules/next/package.json` (read-only) to determine whether the key is top-level or under `experimental` for the installed version and place it correctly.
+- [x] 1.6 Create `app/layout.tsx` setting `metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_ORIGIN ?? 'http://localhost:3000')`.
+- [x] 1.7 Add ESLint `no-restricted-imports` zone for `lib/domain/**` banning `react`, `react-dom`, `next/*`, `@supabase/*`, `server-only`, `node:*`, `../server/*`.
+- [x] 1.8 Add ESLint `no-restricted-imports` zone for `components/**` banning `lib/server/**` and `@supabase/*`.
+- [x] 1.9 Edit `openspec/config.yaml`: set `strict_tdd: true`, `apply.tdd: true`, `apply.test_command: "npm test"`, `verify.test_command: "npm test"`, `verify.build_command: "npm run build"`.
+- [x] 1.10 Verify: clean-clone `npm install && npm run build` succeeds with zero TypeScript errors (Scaffold produces a runnable dev server).
+- [x] 1.11 Verify: `npm test` with zero test files present exits successfully (Test harnesses installed).
+- [x] 1.12 Verify: `openspec/config.yaml` inspection shows `strict_tdd: true` and a non-empty, executable `apply.test_command` (Strict TDD enabled by this change).
 
 ## Phase 2: Pure Domain Functions (Work Unit 2)
 
