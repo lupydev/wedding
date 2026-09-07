@@ -672,3 +672,197 @@ The throwaway directory was deleted and `npm run build` is green again.
 16/16 Work Unit 3 tasks complete. Work units 1, 2 and 2b are unchanged (task 2.5
 still PARTIAL on its environment-blocked `.env.example` half). Work units 4a
 onward are untouched. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 3b — Schema and Import Hardening
+
+**Mode**: Strict TDD. **Baseline safety net**: `npm test` → 229/229 passing
+before any edit. **Final**: `npm test` → 244/244 passing.
+
+Three WARNING-level findings from the Work Unit 3 reliability review, and
+nothing else. The three SUGGESTION-level findings
+(`R3-seat-cap-partial-invariant`, `R3-sender-directory-unpaginated`,
+`R3-site-origin-accepts-path`) and the other three WU3 WARNINGs
+(`R3-create-compensation-unverified`, `R3-import-row-shape-unvalidated`,
+`R3-test-key-resolution-order-dependent`) were deliberately left untouched and
+**remain open**.
+
+## Completed tasks
+
+- [x] 3b.1 RED — default-deny-for-future-objects tests
+- [x] 3b.2 GREEN — `0004_default_deny_new_objects.sql` + down-script
+- [x] 3b.3 RED — cascade-vs-direct-delete tests
+- [x] 3b.4 GREEN — `0005_append_only_allows_cascade.sql` + down-script
+- [x] 3b.5 RED — import atomicity/idempotency tests
+- [x] 3b.6 GREEN — `0006_import_invitations.sql` + down-script
+- [x] 3b.7 GREEN — `lib/server/invitations.ts` + `scripts/import-guests.ts`
+- [x] 3b.8 Verify — full suite, down/up migration replay, typecheck, lint,
+      format:check, build
+
+## Files changed
+
+| File | Action | What was done |
+|---|---|---|
+| `supabase/migrations/0004_default_deny_new_objects.sql` | Created | Event trigger revoking `anon`/`authenticated` on every new `public` object; the functions-scoped revoke `0002` never issued |
+| `supabase/down/0004_default_deny_new_objects_down.sql` | Created | Drops the event trigger and its function; does NOT reissue grants |
+| `supabase/migrations/0005_append_only_allows_cascade.sql` | Created | `reject_mutation()` now exempts the FK cascade only |
+| `supabase/down/0005_append_only_allows_cascade_down.sql` | Created | Restores `0003`'s reject-everything body |
+| `supabase/migrations/0006_import_invitations.sql` | Created | `invitations.source_key` + unique index + `import_invitations(jsonb)` |
+| `supabase/down/0006_import_invitations_down.sql` | Created | Drops the function, index and column |
+| `supabase/tests/rls.spec.ts` | Modified | +4 tests on default-deny for objects created later |
+| `supabase/tests/append-only.spec.ts` | Modified | +4 tests on cascade vs. direct delete |
+| `lib/server/invitations.spec.ts` | Modified | +7 tests on source keys, atomicity, idempotency, anon RPC denial |
+| `lib/server/invitations.ts` | Modified | `sourceKey`, `validateImportRows`, `importInvitations` |
+| `scripts/import-guests.ts` | Modified | One atomic RPC call instead of a per-row loop; created/skipped reporting |
+
+## TDD cycle evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 3b.1–3b.2 | `supabase/tests/rls.spec.ts` | Integration (real Postgres) | 229/229 | ✅ 3 failed of 8 | ✅ 8/8 | ✅ 4 cases (table, function, `service_role` counter-case, trigger state) | ➖ migration written once |
+| 3b.3–3b.4 | `supabase/tests/append-only.spec.ts` | Integration (real Postgres) | 12/12 in file | ✅ 1 failed of 13 | ✅ 13/13 | ✅ 4 cases (cascade, direct DELETE ×2, direct UPDATE) | ➖ single-function change |
+| 3b.5–3b.7 | `lib/server/invitations.spec.ts` | Unit + Integration | 17/17 in file | ✅ 7 failed of 24 | ✅ 24/24 | ✅ 7 cases (key derivation, distinctness, explicit key, collision, atomicity, idempotency, anon denial) | ✅ `deriveSourceKey` extracted as a pure function |
+
+### Exact RED evidence
+
+- 3b.1 → `Tests 3 failed | 5 passed (8)`. The function case failed with
+  `expected [ 'PUBLIC', 'anon', 'authenticated' ] to deeply equal []`.
+- 3b.3 → `Tests 1 failed | 12 passed (13)`, failing with
+  `error: table dispatch_events is append-only` raised by
+  `delete from invitations where id = $1` — the cascade, exactly as the finding
+  described.
+- 3b.5 → `Tests 7 failed | 17 passed (24)`.
+
+## What was actually measured, and what it changed
+
+The finding asked whether `alter default privileges` covers migrations applied
+by a different role. It was **measured against the live instance**, not assumed:
+
+1. `0002`'s `alter default privileges` ran as `postgres`, so it covers TABLES
+   and SEQUENCES created by `postgres` — and a probe confirmed a new table
+   created by `postgres` is already denied to `anon` today.
+2. `supabase_admin` **still holds default ACLs granting `anon` everything on new
+   `public` tables**, and `postgres` cannot fix that:
+   `alter default privileges for role supabase_admin ...` fails with
+   `ERROR: permission denied to change default privileges`.
+3. **FUNCTIONS were never covered at all.** A probe created
+   `public.__probe_f()` as `postgres` and it was granted EXECUTE to `PUBLIC`,
+   `anon` and `authenticated`. PostgREST publishes such a function as an RPC
+   endpoint — and `0006` adds exactly such a function.
+
+So the corrected-default-privileges option could not close the gap, and the
+event trigger could: `postgres` is permitted to create one on this instance
+(probed before committing to the design). It is `security invoker` on purpose,
+so the revoke runs as the creating role, which always owns the new object; a
+`security definer` version owned by `postgres` could not revoke on a
+`supabase_admin`-owned table, which is gap 2.
+
+The table test is RED-by-construction rather than RED-by-accident: it reinstates
+the default grants (`alter default privileges ... grant all on tables to anon`)
+inside the rolled-back transaction before creating the table, which is precisely
+the lapse the finding describes. Stated plainly: **without that reinstatement, a
+`postgres`-created table was already denied**. The function test was RED with no
+help at all.
+
+## The design choice on fix 2
+
+Two candidates were on the table:
+
+- **(a) allow the cascade, distinguishing it from a direct delete** — chosen.
+- **(b) replace the cascade with an explicit archival path.**
+
+(b) was rejected because it requires either `on delete restrict` plus an archive
+table or a soft-delete column, and both introduce a *second* definition of "this
+invitation exists". Every later read path — the gate, the OG image, the console
+list, the RSVP write — would have to honour it, and the first one that forgets
+leaks a supposedly-removed invitation. A hard cascade keeps one definition. The
+motivating case (a household created by mistake at import) wants the row gone,
+not archived: the row's entire content is the mistake.
+
+The discrimination is the parent's existence, not `pg_trigger_depth()`. The FK
+cascade is an AFTER DELETE trigger on `invitations`, so the child's BEFORE
+DELETE trigger sees the parent already gone; a direct delete always leaves it
+present, because `invitation_id` is NOT NULL and its FK is not deferrable. That
+is a fact about the transaction. `pg_trigger_depth()` would have exempted *any*
+nested trigger, which is a strictly weaker guarantee. The exemption is DELETE
+only — `invitations.id` is never updated, so an UPDATE exemption would be pure
+attack surface.
+
+## Guarantees re-verified, not assumed
+
+- `nullif` mutation test (`supabase/tests/phone-last8.spec.ts`): 4/4 passing.
+- `rolbypassrls` companion assertion: still passing (`service_role` → `true`).
+- Direct `UPDATE` and direct `DELETE` on `dispatch_events` and `rsvp_responses`
+  as `service_role`: still rejected, now also proven at single-row granularity
+  with the row asserted to survive.
+- `anon` still reaches nothing on all six owned tables (`rls.spec.ts`, both the
+  grant query and the live anon-key HTTP probe).
+- The new `import_invitations(jsonb)` RPC grants:
+  `postgres | EXECUTE` and `service_role | EXECUTE` only.
+
+## Verification output (actual)
+
+```
+npm test          → Test Files 14 passed (14) | Tests 244 passed (244)
+npm run typecheck → tsc --noEmit, no output
+npm run lint      → eslint ., no output
+npm run format:check → All matched files use Prettier code style!
+npm run build     → ✓ Compiled successfully in 320ms
+```
+
+Migration integrity was proven by replay, not by inspection: all six
+down-scripts were applied in reverse order (`0006 → 0001`), then all six
+migrations re-applied in order, then `npm test` re-run → 244/244.
+
+## Deviations from design
+
+- `invitations.source_key` and `import_invitations(jsonb)` are not in
+  `design.md`. Design specifies neither an atomicity nor an idempotency
+  mechanism for the import; it only says a partial import is undesirable. The
+  column is NULLable with a plain unique index, so any non-import creation path
+  (the console, later) carries no key and cannot collide.
+- Slugs are still minted in the adapter and passed into the RPC, preserving
+  design D2 (randomness lives in the adapter, not the core).
+- `0005` weakens `0003`'s literal wording ("rejects every UPDATE or DELETE") in
+  the cascade case only. `design.md` D5's stated intent — a trigger because
+  `service_role` has BYPASSRLS — is unchanged and re-tested.
+
+## Issues found
+
+1. **A shadowing bug was caught before it shipped.** The first draft of
+   `import_invitations` declared a plpgsql variable named `source_key`, which
+   shadows the column of the same name; `on conflict (source_key)` and the
+   lookup `where i.source_key = source_key` would have raised an ambiguous
+   column reference at runtime while `CREATE FUNCTION` succeeded. Renamed to
+   `row_key` and the function was dropped and recreated from clean before the
+   GREEN run.
+2. **A latent plpgsql trap is documented in the migration**: `RETURNING ... INTO`
+   leaves the variable untouched when no row matches, so an `ON CONFLICT` skip
+   would inherit the previous household's id and attach this household's guests
+   to it. `new_id := null` at the top of each iteration is load-bearing, not
+   defensive style.
+3. **`.env.example` remains environment-blocked** (unchanged from WU2/WU3). Not
+   attempted here; the path is denied to agents.
+4. **Three WU3 WARNINGs remain open**: `R3-create-compensation-unverified`,
+   `R3-import-row-shape-unvalidated`, `R3-test-key-resolution-order-dependent`.
+   Note that `createInvitation`'s unverified compensation is now bypassed by the
+   import path, which no longer calls it — but the function itself is unchanged
+   and the finding still stands for any other caller.
+
+## Workload / PR boundary
+
+- Mode: chained PR slice — a small follow-up to PR3.
+- Boundary: starts at `a64c862` (clean tree, 229 tests), ends with three
+  migrations, three down-scripts and the import rewrite, 244 tests green.
+- **Authored lines: ~710 (≈340 production/SQL, ≈370 test).** Within a single
+  reviewable slice.
+- No commit was made. The tree is convergent: `npm run format` and
+  `npm run lint` were run after the last source change and `format:check` is
+  clean.
+
+## Status
+
+8/8 Work Unit 3b tasks complete. Work units 1, 2, 2b and 3 are unchanged
+(task 2.5 still PARTIAL on its environment-blocked `.env.example` half). Work
+units 4a onward are untouched. Ready for `sdd-verify`.

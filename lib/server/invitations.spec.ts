@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { withDb, withRollback } from "../../supabase/tests/helpers/db";
+import {
+  captureError,
+  withDb,
+  withRollback,
+} from "../../supabase/tests/helpers/db";
 import { resolveLocalKeys } from "../../supabase/tests/helpers/local-keys";
 import {
   createInvitation,
   findInvitationBySlug,
+  importInvitations,
   listSenderDirectory,
   toGatePhoneRefs,
   toGuestFacingInvitation,
   validateImportRow,
+  validateImportRows,
   type ImportRow,
+  type NewInvitation,
   type SenderDirectory,
 } from "./invitations";
 import { createServerSupabaseClient } from "./supabase";
@@ -348,5 +355,206 @@ describe("listSenderDirectory (local Supabase)", () => {
         );
       });
     }
+  });
+});
+
+describe("validateImportRows — the source must be re-runnable", () => {
+  it("derives a stable source key from the row's identity", () => {
+    const first = validateImportRows([importRow()], SENDERS, "CO");
+    const second = validateImportRows([importRow()], SENDERS, "CO");
+
+    expect(first[0].sourceKey).toBe(second[0].sourceKey);
+    expect(first[0].sourceKey).toBe("ana@example.test|familia restrepo");
+  });
+
+  it("gives two different households two different source keys", () => {
+    const validated = validateImportRows(
+      [
+        importRow(),
+        importRow({
+          displayName: "Familia Muñóz",
+          greetingName: "Familia Muñóz",
+        }),
+      ],
+      SENDERS,
+      "CO",
+    );
+
+    expect(validated[0].sourceKey).not.toBe(validated[1].sourceKey);
+  });
+
+  it("lets a row declare its own key, for two households sharing a name", () => {
+    const validated = validateImportRows(
+      [
+        importRow({ sourceKey: "restrepo-bogota" }),
+        importRow({ sourceKey: "restrepo-medellin" }),
+      ],
+      SENDERS,
+      "CO",
+    );
+
+    expect(validated.map((row) => row.sourceKey)).toEqual([
+      "restrepo-bogota",
+      "restrepo-medellin",
+    ]);
+  });
+
+  it("rejects a file whose rows collide on one source key", () => {
+    // Left unchecked, the second row would be silently swallowed by the
+    // idempotent insert and one household would never be invited.
+    expect(() =>
+      validateImportRows([importRow(), importRow()], SENDERS, "CO"),
+    ).toThrow(/source key/i);
+  });
+});
+
+describe("importInvitations — atomic and idempotent (local Supabase)", () => {
+  function useLocalSecretKey(): void {
+    const { secretKey } = resolveLocalKeys();
+    process.env.SUPABASE_URL = "http://127.0.0.1:54321";
+    process.env.SUPABASE_SECRET_KEY = secretKey;
+  }
+
+  async function seedOwner(): Promise<string> {
+    return withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.import.${Date.now()}.${Math.random()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+  }
+
+  async function dropOwner(senderId: string): Promise<void> {
+    await withDb(async (db) => {
+      // The cascade from `invitations` is what 0005 made possible; before it,
+      // this teardown could not remove a dispatched invitation at all.
+      await db.query("delete from invitations where owner_sender_id = $1", [
+        senderId,
+      ]);
+      await db.query("delete from senders where id = $1", [senderId]);
+    });
+  }
+
+  function household(
+    ownerSenderId: string,
+    sourceKey: string,
+    displayName: string,
+  ): NewInvitation {
+    return {
+      ownerSenderId,
+      sourceKey,
+      displayName,
+      greetingName: displayName,
+      seatsAllowed: 2,
+      rsvpDeadline: null,
+      guests: [
+        {
+          fullName: "Ana Restrepo",
+          phoneE164: "+573001234567",
+          isPrimary: true,
+          isChild: false,
+        },
+        {
+          fullName: "Niño Restrepo",
+          phoneE164: null,
+          isPrimary: false,
+          isChild: true,
+        },
+      ],
+    };
+  }
+
+  it("persists nothing at all when a later row fails", async () => {
+    useLocalSecretKey();
+    const senderId = await seedOwner();
+    const stamp = `atomic-${Date.now()}`;
+
+    try {
+      const good = household(senderId, `${stamp}-a`, "Familia Restrepo");
+      // A real mid-import failure: an owner id that is not in `senders`, which
+      // the FK rejects at write time rather than at validation time.
+      const bad = {
+        ...household(senderId, `${stamp}-b`, "Familia Muñóz"),
+        ownerSenderId: "99999999-9999-4999-8999-999999999999",
+      };
+
+      await expect(
+        importInvitations(createServerSupabaseClient(), [good, bad]),
+      ).rejects.toThrow();
+
+      const persisted = await withDb(async (db) => {
+        const result = await db.query(
+          "select source_key from invitations where source_key like $1",
+          [`${stamp}-%`],
+        );
+        return result.rowCount;
+      });
+
+      // The row that WOULD have succeeded must be gone too. That is the whole
+      // point: a half-imported guest list has no clean way to be re-run.
+      expect(persisted).toBe(0);
+    } finally {
+      await dropOwner(senderId);
+    }
+  });
+
+  it("creates no duplicates when the same source is imported twice", async () => {
+    useLocalSecretKey();
+    const senderId = await seedOwner();
+    const stamp = `idempotent-${Date.now()}`;
+    const client = createServerSupabaseClient();
+
+    try {
+      const source = [
+        household(senderId, `${stamp}-a`, "Familia Restrepo"),
+        household(senderId, `${stamp}-b`, "Familia Muñóz"),
+      ];
+
+      const first = await importInvitations(client, source);
+      const second = await importInvitations(client, source);
+
+      const counts = await withDb(async (db) => {
+        const invitations = await db.query(
+          "select id from invitations where source_key like $1",
+          [`${stamp}-%`],
+        );
+        const guests = await db.query(
+          `select g.id from invitation_guests g
+           join invitations i on i.id = g.invitation_id
+           where i.source_key like $1`,
+          [`${stamp}-%`],
+        );
+        return {
+          invitations: invitations.rowCount,
+          guests: guests.rowCount,
+        };
+      });
+
+      expect(first.map((row) => row.created)).toEqual([true, true]);
+      expect(second.map((row) => row.created)).toEqual([false, false]);
+      // The second run reports the slug that already exists, so a re-run is
+      // still usable output rather than a silent no-op.
+      expect(second.map((row) => row.slug)).toEqual(
+        first.map((row) => row.slug),
+      );
+      expect(counts).toEqual({ invitations: 2, guests: 4 });
+    } finally {
+      await dropOwner(senderId);
+    }
+  });
+
+  it("is not reachable by anon, even though PostgREST publishes RPCs", async () => {
+    const message = await withRollback(async (db) => {
+      await db.query("set local role anon");
+
+      return captureError(() =>
+        db.query("select import_invitations('[]'::jsonb)"),
+      );
+    });
+
+    expect(message).toMatch(/permission denied/i);
   });
 });

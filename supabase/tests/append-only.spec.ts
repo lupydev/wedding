@@ -213,3 +213,156 @@ describe("rsvp seat cap (as service_role)", () => {
     expect(stored.attendee_guest_ids).toHaveLength(2);
   });
 });
+
+/**
+ * Append-only must not mean undeletable.
+ *
+ * `reject_mutation()` originally rejected EVERY delete, including the one fired
+ * by `on delete cascade` when the parent `invitations` row goes. An invitation
+ * that had ever been dispatched could therefore never be removed — not even a
+ * row created by mistake during import, which is the single most likely reason
+ * to need a delete at all.
+ *
+ * The chosen discrimination is the parent's existence. A cascading delete is
+ * fired by the FK's AFTER DELETE trigger on `invitations`, so by the time the
+ * child's BEFORE DELETE trigger runs, the parent row is already gone in this
+ * transaction's view. A direct delete always leaves it there, because
+ * `invitation_id` is NOT NULL and its FK is not deferrable. The distinction is
+ * therefore a fact about the transaction, not a heuristic about call depth.
+ */
+describe("cascade delete vs. direct delete (as service_role)", () => {
+  it("deletes an invitation that already has dispatch events and RSVPs", async () => {
+    const remaining = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      await db.query(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind)
+         values ($1, $2, 'marked_sent'), ($1, $2, 'resent')`,
+        [invitationId, senderId],
+      );
+      await db.query(
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
+         values ($1, true, 2)`,
+        [invitationId],
+      );
+      await db.query(
+        `insert into invitation_guests (invitation_id, full_name)
+         values ($1, 'Guest One')`,
+        [invitationId],
+      );
+      await db.query("set local role service_role");
+
+      await db.query("delete from invitations where id = $1", [invitationId]);
+
+      const counts: Record<string, number> = {};
+      for (const table of [
+        "invitations",
+        "dispatch_events",
+        "rsvp_responses",
+        "invitation_guests",
+      ]) {
+        const column = table === "invitations" ? "id" : "invitation_id";
+        const result = await db.query(
+          `select 1 from ${table} where ${column} = $1`,
+          [invitationId],
+        );
+        counts[table] = result.rowCount ?? 0;
+      }
+
+      return counts;
+    });
+
+    expect(remaining).toEqual({
+      invitations: 0,
+      dispatch_events: 0,
+      rsvp_responses: 0,
+      invitation_guests: 0,
+    });
+  });
+
+  it("still rejects deleting one dispatch event while its invitation lives", async () => {
+    const outcome = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      const event = await db.query<{ id: string }>(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind)
+         values ($1, $2, 'marked_sent')
+         returning id`,
+        [invitationId, senderId],
+      );
+      await db.query("set local role service_role");
+      await db.query("savepoint probe");
+
+      const message = await captureError(() =>
+        db.query("delete from dispatch_events where id = $1", [
+          event.rows[0].id,
+        ]),
+      );
+      await db.query("rollback to savepoint probe");
+
+      const survivors = await db.query(
+        "select 1 from dispatch_events where invitation_id = $1",
+        [invitationId],
+      );
+
+      return { message, survivors: survivors.rowCount };
+    });
+
+    expect(outcome.message).toContain("dispatch_events is append-only");
+    expect(outcome.survivors).toBe(1);
+  });
+
+  it("still rejects deleting one RSVP response while its invitation lives", async () => {
+    const outcome = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      const response = await db.query<{ id: string }>(
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
+         values ($1, true, 1)
+         returning id`,
+        [invitationId],
+      );
+      await db.query("set local role service_role");
+      await db.query("savepoint probe");
+
+      const message = await captureError(() =>
+        db.query("delete from rsvp_responses where id = $1", [
+          response.rows[0].id,
+        ]),
+      );
+      await db.query("rollback to savepoint probe");
+
+      const survivors = await db.query(
+        "select 1 from rsvp_responses where invitation_id = $1",
+        [invitationId],
+      );
+
+      return { message, survivors: survivors.rowCount };
+    });
+
+    expect(outcome.message).toContain("rsvp_responses is append-only");
+    expect(outcome.survivors).toBe(1);
+  });
+
+  it("still rejects an UPDATE even when the invitation is being deleted", async () => {
+    // The cascade exemption is DELETE-only. An UPDATE has no cascading form
+    // here — `invitations.id` is never updated — so allowing one would widen
+    // the hole well past the finding.
+    const message = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      await db.query(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind)
+         values ($1, $2, 'marked_sent')`,
+        [invitationId, senderId],
+      );
+      await db.query("set local role service_role");
+
+      return captureError(() =>
+        db.query("update dispatch_events set kind = 'marked_failed'"),
+      );
+    });
+
+    expect(message).toContain("dispatch_events is append-only");
+  });
+});

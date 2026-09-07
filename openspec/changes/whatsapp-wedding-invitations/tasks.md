@@ -105,6 +105,21 @@ review findings on the Work Unit 2 domain modules.
 - [x] 3.15 Create `scripts/import-guests.ts` reading the untracked guest source file and calling the invitations repository; add the source path to `.gitignore`; document usage in a header comment.
 - [x] 3.16 Verify: run local Supabase (docker) and the DB-layer Vitest suite — confirm 3.1, 3.3, 3.5, 3.7, 3.13 RED tests now pass GREEN.
 
+## Phase 3b: Schema and Import Hardening (Work Unit 3b)
+
+Closes three WARNING-level findings from the Work Unit 3 reliability review. The
+three SUGGESTION-level findings and the other three WU3 WARNINGs are explicitly
+out of scope and remain open.
+
+- [x] 3b.1 RED — `supabase/tests/rls.spec.ts` addendum: a table created after `0002_rls.sql` with the default grants reinstated is still denied to `anon` for SELECT and INSERT; a function created after it is denied EXECUTE; `service_role` still reaches the new table; the enforcing event trigger is present and enabled.
+- [x] 3b.2 GREEN — `supabase/migrations/0004_default_deny_new_objects.sql`: `deny_anon_on_new_public_object()` event trigger on `ddl_command_end` revoking `anon`/`authenticated` (and PUBLIC for routines) on every new `public` table, view, sequence, function and procedure; plus the never-issued `revoke execute on all functions` and the functions-scoped `alter default privileges` that `0002` omitted; matching down-script (`R3-default-deny-not-future-proof`).
+- [x] 3b.3 RED — `supabase/tests/append-only.spec.ts` addendum: deleting an invitation that already has dispatch events and RSVPs succeeds and removes its children; a DIRECT single-row `DELETE` on `dispatch_events` and on `rsvp_responses` is still rejected as `service_role` with the row surviving; a direct `UPDATE` is still rejected.
+- [x] 3b.4 GREEN — `supabase/migrations/0005_append_only_allows_cascade.sql`: `reject_mutation()` exempts a `DELETE` only when the parent `invitations` row is already gone, which is true exactly for the FK cascade; matching down-script restoring `0003`'s body (`R3-append-only-blocks-cascade-delete`).
+- [x] 3b.5 RED — `lib/server/invitations.spec.ts` addendum: `validateImportRows` derives a stable source key, keeps two households distinct, honours an explicit `sourceKey`, and rejects a file whose rows collide; a mid-import failure persists zero rows; the same source imported twice leaves the row count unchanged and reports the original slugs; `anon` cannot execute the import RPC.
+- [x] 3b.6 GREEN — `supabase/migrations/0006_import_invitations.sql`: `invitations.source_key` + unique index; `import_invitations(jsonb)` performing the whole import in one transaction with `on conflict (source_key) do nothing`; grants revoked from PUBLIC/`anon`/`authenticated`; matching down-script (`R3-import-loop-not-atomic-or-idempotent`).
+- [x] 3b.7 GREEN — `lib/server/invitations.ts`: `sourceKey` on `ImportRow`/`NewInvitation`, `validateImportRows`, `importInvitations` calling the RPC with adapter-minted slugs; `scripts/import-guests.ts` uses both and reports created vs. already-present.
+- [x] 3b.8 Verify: `npm test` green (244, up from 229), migrations rolled fully down and back up then re-verified, `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm run build` clean.
+
 ## Phase 4a: Invitation Page, OG Image, Metadata (Work Unit 4a)
 
 - [ ] 4a.1 RED — `e2e/invitation-page-og.spec.ts`: fetch `/i/<slug>` with `User-Agent: WhatsApp/2.23.20.0`, assert `og:title`/`og:image` inside raw `<head>...</head>` before JS runs; repeat with an ordinary browser UA; assert `og:image` starts with `https://` and matches the deployed origin.

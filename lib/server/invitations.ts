@@ -38,6 +38,16 @@ export interface ImportRow {
   readonly greetingName: string;
   readonly seatsAllowed: number;
   readonly rsvpDeadline?: string | null;
+  /**
+   * Optional stable identity of this household in the source file.
+   *
+   * Omitted, it is derived from owner + display name, which is what makes a
+   * re-run of the same source a no-op instead of a duplicate. Two genuinely
+   * different households that share both an owner and a display name must
+   * declare their own keys — the import refuses the file otherwise rather than
+   * quietly importing one of them.
+   */
+  readonly sourceKey?: string;
   readonly guests: readonly ImportGuest[];
 }
 
@@ -53,6 +63,12 @@ export interface NewInvitationGuest {
 
 export interface NewInvitation {
   readonly ownerSenderId: string;
+  /**
+   * Set for every imported invitation; absent for any created by another path.
+   * `importInvitations` requires it, because idempotency has no meaning
+   * without a key to be idempotent on.
+   */
+  readonly sourceKey?: string | null;
   readonly displayName: string;
   readonly greetingName: string;
   readonly seatsAllowed: number;
@@ -186,12 +202,61 @@ export function validateImportRow(
 
   return {
     ownerSenderId,
+    sourceKey:
+      row.sourceKey?.trim() || deriveSourceKey(ownerEmail, displayName),
     displayName,
     greetingName,
     seatsAllowed: row.seatsAllowed,
     rsvpDeadline: row.rsvpDeadline?.trim() || null,
     guests,
   };
+}
+
+/**
+ * The household's identity in the source file, when the file does not state one.
+ *
+ * Owner plus display name, because that is what a person editing the source
+ * would call the same household on a second run. It deliberately excludes
+ * seats, deadline and guest list: re-running after fixing a typo must not
+ * create a second invitation for the same family.
+ */
+function deriveSourceKey(ownerEmail: string, displayName: string): string {
+  return `${ownerEmail}|${displayName.toLowerCase()}`;
+}
+
+/**
+ * Validates a whole source file, not just a row.
+ *
+ * The extra guarantee over mapping `validateImportRow` is collision detection.
+ * Two rows sharing a source key would be collapsed into one by the idempotent
+ * insert, and one household would silently never be invited — a failure that
+ * looks exactly like a successful import. It is a hard error instead.
+ */
+export function validateImportRows(
+  rows: readonly ImportRow[],
+  senders: SenderDirectory,
+  defaultCountry: CountryCode,
+): NewInvitation[] {
+  const validated = rows.map((row) =>
+    validateImportRow(row, senders, defaultCountry),
+  );
+
+  const seen = new Map<string, string>();
+  for (const invitation of validated) {
+    const key = invitation.sourceKey ?? "";
+    const previous = seen.get(key);
+
+    if (previous !== undefined) {
+      throw new Error(
+        `Import rows "${previous}" and "${invitation.displayName}" share one source key: ${key}. ` +
+          "Give at least one of them an explicit sourceKey so both are imported.",
+      );
+    }
+
+    seen.set(key, invitation.displayName);
+  }
+
+  return validated;
 }
 
 /**
@@ -301,6 +366,7 @@ export async function createInvitation(
       greeting_name: input.greetingName,
       seats_allowed: input.seatsAllowed,
       rsvp_deadline: input.rsvpDeadline,
+      source_key: input.sourceKey ?? null,
     })
     .select("id")
     .single();
@@ -337,6 +403,86 @@ export async function createInvitation(
   }
 
   return created;
+}
+
+/** One household's outcome from an import run. */
+export interface ImportedInvitation {
+  readonly sourceKey: string;
+  readonly slug: string;
+  /** `false` when this household was already present from an earlier run. */
+  readonly created: boolean;
+}
+
+interface ImportedInvitationRow {
+  source_key: string;
+  slug: string;
+  created: boolean;
+}
+
+/**
+ * Imports every household in ONE database transaction.
+ *
+ * Atomic: the work happens inside the `import_invitations` SQL function, so a
+ * failure on the fortieth household rolls back the first thirty-nine too.
+ * `createInvitation`'s per-invitation compensation cannot give that guarantee,
+ * because PostgREST has no transaction spanning two requests — it can only
+ * undo the invitation whose guest insert it just watched fail.
+ *
+ * Idempotent: each household carries a `sourceKey`, and the function skips one
+ * that is already present. Re-running the same source after a failure is
+ * therefore the normal recovery, not a duplicate-producing hazard.
+ *
+ * Slugs are minted HERE, not in SQL: randomness stays in the adapter (design
+ * D2). A skipped household reports the slug it already had, so the operator
+ * still gets a usable link from a re-run.
+ */
+export async function importInvitations(
+  client: SupabaseClient,
+  invitations: readonly NewInvitation[],
+): Promise<readonly ImportedInvitation[]> {
+  if (invitations.length === 0) {
+    return [];
+  }
+
+  const payload = invitations.map((invitation) => {
+    const sourceKey = invitation.sourceKey?.trim();
+
+    if (!sourceKey) {
+      throw new Error(
+        `Invitation "${invitation.displayName}" has no source key, so importing it could not be re-run safely.`,
+      );
+    }
+
+    return {
+      source_key: sourceKey,
+      slug: mintSlug(),
+      owner_sender_id: invitation.ownerSenderId,
+      display_name: invitation.displayName,
+      greeting_name: invitation.greetingName,
+      seats_allowed: invitation.seatsAllowed,
+      rsvp_deadline: invitation.rsvpDeadline,
+      guests: invitation.guests.map((guest) => ({
+        full_name: guest.fullName,
+        phone_e164: guest.phoneE164,
+        is_primary: guest.isPrimary,
+        is_child: guest.isChild,
+      })),
+    };
+  });
+
+  const { data, error } = await client.rpc("import_invitations", { payload });
+
+  if (error) {
+    throw new Error(
+      `Import failed and nothing was written: ${error.message}. Fix the source and run it again.`,
+    );
+  }
+
+  return ((data ?? []) as ImportedInvitationRow[]).map((row) => ({
+    sourceKey: row.source_key,
+    slug: row.slug,
+    created: row.created,
+  }));
 }
 
 /** Reads one invitation and its guests by slug. `null` when no such slug exists. */

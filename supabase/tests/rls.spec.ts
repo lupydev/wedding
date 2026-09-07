@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
 import {
+  captureError,
   LOCAL_API_URL,
   OWNED_TABLES,
   withDb,
@@ -157,6 +158,142 @@ describe("row level security", () => {
       dispatch_events: "42501",
       rsvp_responses: "42501",
       gate_attempts: "42501",
+    });
+  });
+});
+
+/**
+ * Default-deny must survive the NEXT migration, not only this one.
+ *
+ * `0002_rls.sql` revokes the grants that existed when it ran. A table created
+ * later is born with whatever default privileges are in force at that moment,
+ * so the protection can lapse silently — for exactly the reason it was needed.
+ * The Work Unit 3 RED run proved the danger is not theoretical: before the
+ * revoke, the anon key could INSERT into `senders` and write itself into the
+ * operator allowlist.
+ *
+ * Measured facts about this database, which decide the mechanism:
+ *
+ *  - `alter default privileges` binds to (grantor role, schema, object kind).
+ *    `0002_rls.sql` ran as `postgres`, so it covers TABLES and SEQUENCES
+ *    created by `postgres` — and nothing else.
+ *  - `supabase_admin` still holds default ACLs granting `anon` everything on
+ *    new public tables, and `postgres` cannot alter them: `alter default
+ *    privileges for role supabase_admin ...` fails with "permission denied to
+ *    change default privileges". The gap is real and unreachable by that tool.
+ *  - FUNCTIONS were never covered at all. A function created by `postgres` in
+ *    `public` is granted EXECUTE to PUBLIC, `anon` and `authenticated`, and
+ *    PostgREST exposes it as an RPC endpoint.
+ *
+ * The mechanism that closes all three is an event trigger, which fires on the
+ * created object regardless of which role created it or what the default
+ * privileges said.
+ */
+describe("default deny for objects created after 0002_rls.sql", () => {
+  it("keeps anon out of a table born with the default grants reinstated", async () => {
+    const observed = await withRollback(async (db) => {
+      // Exactly the lapse the finding describes: a later migration, tool or
+      // dashboard action puts the default grants back, and the next table is
+      // created with them.
+      await db.query(
+        "alter default privileges in schema public grant all on tables to anon, authenticated",
+      );
+      await db.query("create table public.future_table (id int primary key)");
+
+      const grants = await db.query<{ grantee: string }>(
+        `select distinct grantee from information_schema.role_table_grants
+         where table_schema = 'public'
+           and table_name = 'future_table'
+           and grantee in ('anon', 'authenticated')`,
+      );
+
+      await db.query("set local role anon");
+      await db.query("savepoint probe");
+      const selectError = await captureError(() =>
+        db.query("select id from public.future_table"),
+      );
+      await db.query("rollback to savepoint probe");
+      const insertError = await captureError(() =>
+        db.query("insert into public.future_table (id) values (1)"),
+      );
+      await db.query("rollback to savepoint probe");
+      await db.query("reset role");
+
+      return {
+        grantees: grants.rows.map((row) => row.grantee),
+        selectError,
+        insertError,
+      };
+    });
+
+    expect(observed.grantees).toEqual([]);
+    expect(observed.selectError).toMatch(/permission denied/i);
+    expect(observed.insertError).toMatch(/permission denied/i);
+  });
+
+  it("keeps anon out of a function created after the migration", async () => {
+    const observed = await withRollback(async (db) => {
+      await db.query(
+        "create function public.future_function() returns int language sql as 'select 1'",
+      );
+
+      const grants = await db.query<{ grantee: string }>(
+        `select distinct grantee from information_schema.role_routine_grants
+         where routine_schema = 'public'
+           and routine_name = 'future_function'
+           and grantee in ('anon', 'authenticated', 'PUBLIC')`,
+      );
+
+      await db.query("set local role anon");
+      await db.query("savepoint probe");
+      const callError = await captureError(() =>
+        db.query("select public.future_function()"),
+      );
+      await db.query("rollback to savepoint probe");
+      await db.query("reset role");
+
+      return { grantees: grants.rows.map((row) => row.grantee), callError };
+    });
+
+    expect(observed.grantees).toEqual([]);
+    expect(observed.callError).toMatch(/permission denied/i);
+  });
+
+  it("still lets service_role use a newly created table", async () => {
+    // The revoke must be surgical. If it also cost `service_role` its access,
+    // every later migration would ship a table our own server cannot read, and
+    // the previous two tests would pass for the wrong reason.
+    const rows = await withRollback(async (db) => {
+      await db.query("create table public.future_table (id int primary key)");
+      await db.query("set local role service_role");
+      await db.query("insert into public.future_table (id) values (7)");
+      const result = await db.query<{ id: number }>(
+        "select id from public.future_table",
+      );
+      await db.query("reset role");
+
+      return result.rows.map((row) => row.id);
+    });
+
+    expect(rows).toEqual([7]);
+  });
+
+  it("enforces this with an enabled event trigger, not a convention", async () => {
+    const trigger = await withRollback(async (db) => {
+      const result = await db.query<{ evtname: string; evtenabled: string }>(
+        `select evtname, evtenabled from pg_event_trigger
+         where evtname = 'deny_anon_on_new_public_objects'`,
+      );
+
+      return result.rows[0] ?? null;
+    });
+
+    // 'O' is "enabled, origin" — the trigger fires for ordinary DDL. A
+    // disabled trigger ('D') would leave the three tests above passing only
+    // until the next object is created.
+    expect(trigger).toEqual({
+      evtname: "deny_anon_on_new_public_objects",
+      evtenabled: "O",
     });
   });
 });

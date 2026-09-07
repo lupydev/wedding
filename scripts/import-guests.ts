@@ -22,6 +22,7 @@
  *         "greetingName": "Familia Restrepo",
  *         "seatsAllowed": 3,
  *         "rsvpDeadline": "2026-05-01",       // optional
+ *         "sourceKey": "restrepo-bogota",     // optional, see below
  *         "guests": [
  *           { "fullName": "Ana Restrepo", "phone": "3001234567", "isPrimary": true },
  *           { "fullName": "Niño Restrepo", "isChild": true }
@@ -30,18 +31,31 @@
  *     ]
  *   }
  *
- * Validation runs over EVERY row before a single write happens. An unrecognized
- * owner or an unnormalizable phone aborts the whole import, because a partially
- * imported guest list is harder to reason about than one that never started.
+ * ATOMIC AND RE-RUNNABLE
+ *
+ * Validation runs over EVERY row before a single write happens, and the write
+ * itself is one transaction: either every household lands or none does. There
+ * is no state in which some invitations exist and some do not.
+ *
+ * Re-running the same source is therefore the normal way to recover from a
+ * failure. Each household is keyed by `sourceKey`, defaulting to owner email +
+ * display name, and one that already exists is skipped rather than duplicated.
+ * Supply an explicit `sourceKey` only when two genuinely different households
+ * share an owner AND a display name — the import refuses the file in that case
+ * instead of quietly importing one of them.
+ *
+ * Editing a row and re-running does NOT update the existing invitation; it is
+ * recognized by its key and skipped. Correcting an already-imported household
+ * is a deliberate act against that row, not a side effect of the importer.
  */
 
 import { readFileSync } from "node:fs";
 
 import { requiredDefaultPhoneCountry } from "@/lib/server/env";
 import {
-  createInvitation,
+  importInvitations,
   listSenderDirectory,
-  validateImportRow,
+  validateImportRows,
   type ImportRow,
 } from "@/lib/server/invitations";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
@@ -86,11 +100,9 @@ async function main(): Promise<void> {
   const senders = await listSenderDirectory(client);
   const defaultCountry = requiredDefaultPhoneCountry();
 
-  // Validate everything first: a partially imported guest list is worse than
-  // one that never started.
-  const validated = rows.map((row) =>
-    validateImportRow(row, senders, defaultCountry),
-  );
+  // Validate everything first. This catches an unusable row without touching
+  // the database at all; the write itself is atomic regardless.
+  const validated = validateImportRows(rows, senders, defaultCountry);
 
   if (dryRun) {
     console.log(
@@ -99,13 +111,22 @@ async function main(): Promise<void> {
     return;
   }
 
-  for (const invitation of validated) {
-    const created = await createInvitation(client, invitation);
+  // One call, one transaction. Either every household lands or none does.
+  const imported = await importInvitations(client, validated);
+
+  for (const invitation of imported) {
     // Slug only. Never a guest name and never a phone: this output reaches logs.
-    console.log(`Created invitation ${created.slug}`);
+    console.log(
+      invitation.created
+        ? `Created invitation ${invitation.slug}`
+        : `Already present, skipped: ${invitation.slug}`,
+    );
   }
 
-  console.log(`Imported ${validated.length} invitations.`);
+  const created = imported.filter((invitation) => invitation.created).length;
+  console.log(
+    `Imported ${created} new invitations; ${imported.length - created} were already present.`,
+  );
 }
 
 // `import.meta.main` is not available on every Node version this may run on, so
