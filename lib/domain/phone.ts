@@ -27,66 +27,19 @@ export interface GuestPhoneRef {
   readonly phone_last8: string | null;
 }
 
-const MEXICO_COUNTRY = "MX";
-const MEXICO_CALLING_CODE = "52";
-const MEXICO_NATIONAL_DIGITS = 10;
-const MEXICO_LEGACY_MOBILE_TOKEN = "1";
-
 function digitsOf(value: string): string {
   return value.replace(/\D/g, "");
 }
 
 /**
- * Mexico dropped the `1` mobile token in August 2019, so current metadata rejects
- * `+52 1 55 1234 5678` outright — yet a large share of address books, and every
- * contact exported before 2019, still carries it. Dropping those guests is not an
- * option: they simply could not open their own invitation.
- *
- * This is a canonicalization of one known-deprecated national token, NOT a
- * hand-rolled E.164 implementation. Nothing here builds, validates, or formats a
- * number; it only rewrites a legacy input shape and hands it back to the library.
- * It runs solely as a retry after the library has already rejected the input, so a
- * number the library accepts is never touched.
- *
- * Returns `null` when the input is not the legacy Mexican shape.
- */
-function canonicalizeLegacyMexicanMobile(
-  input: string,
-  defaultCountry: string,
-): string | null {
-  const trimmed = input.trim();
-  const digits = digitsOf(trimmed);
-  const isInternational = trimmed.startsWith("+") || digits.startsWith("00");
-
-  let national: string;
-  if (isInternational) {
-    const withCallingCode = digits.replace(/^0+/, "");
-    if (!withCallingCode.startsWith(MEXICO_CALLING_CODE)) return null;
-    national = withCallingCode.slice(MEXICO_CALLING_CODE.length);
-  } else {
-    // A bare national number is only Mexican when Mexico is the default
-    // country. Assuming otherwise would silently rewrite another country's
-    // number into a Mexican one.
-    if (defaultCountry !== MEXICO_COUNTRY) return null;
-    national = digits;
-  }
-
-  if (!national.startsWith(MEXICO_LEGACY_MOBILE_TOKEN)) return null;
-  if (
-    national.length !==
-    MEXICO_LEGACY_MOBILE_TOKEN.length + MEXICO_NATIONAL_DIGITS
-  ) {
-    return null;
-  }
-
-  return `+${MEXICO_CALLING_CODE}${national.slice(MEXICO_LEGACY_MOBILE_TOKEN.length)}`;
-}
-
-/**
  * Normalizes an arbitrary phone input into E.164 plus its last 8 digits.
  *
- * Never throws: every failure is reported through the returned discriminated
- * union so callers cannot accidentally crash a request on bad guest data.
+ * Never throws on guest DATA: every input failure is reported through the
+ * returned discriminated union so callers cannot accidentally crash a request
+ * on bad guest data. A misconfigured `defaultCountry` is a different class of
+ * problem — a deployment fault — and `resolveDefaultCountry` throws on it,
+ * because casting an unsupported value would mis-normalize every nationally
+ * formatted phone and those guests would never match at the gate.
  */
 export function normalizePhone(
   input: string,
@@ -96,22 +49,8 @@ export function normalizePhone(
     return { ok: false, reason: "empty" };
   }
 
-  const country = defaultCountry as CountryCode;
-  let parsed = parsePhoneNumberFromString(input, country);
-
-  if (!parsed?.isValid()) {
-    const legacy = canonicalizeLegacyMexicanMobile(input, defaultCountry);
-    const legacyParsed = legacy
-      ? parsePhoneNumberFromString(legacy, country)
-      : undefined;
-
-    // Only adopt the canonicalized form when it actually produces a valid
-    // number; otherwise keep the original parse so the reported reason still
-    // describes what the caller submitted.
-    if (legacyParsed?.isValid()) {
-      parsed = legacyParsed;
-    }
-  }
+  const country = resolveDefaultCountry(defaultCountry);
+  const parsed = parsePhoneNumberFromString(input, country);
 
   if (!parsed) {
     return { ok: false, reason: "unparseable" };

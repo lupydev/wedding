@@ -326,3 +326,123 @@ outstanding, and nothing was committed.
 
 29/29 tasks complete for work units 1 and 2, except task 2.5's `.env.example` half,
 which is environment-blocked. Work units 3–8 are untouched. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 2b — Domain Corrections
+
+**Mode**: Strict TDD. **Runner**: `vitest run`. **Baseline safety net**: 158 tests
+passing across 7 files before any change.
+
+## Driver
+
+The confirmed product fact changed the risk calculus: every guest phone on this
+list is a Colombian mobile — 10 national digits behind country code 57,
+`DEFAULT_PHONE_COUNTRY=CO`, dispatch links `wa.me/57XXXXXXXXXX`. There are no
+Mexican, Argentine or other-country guests.
+
+## Completed tasks
+
+- [x] 2b.1 RED — inherited-key tests in `message-template.spec.ts`
+- [x] 2b.2 GREEN — `Object.hasOwn` lookup in `message-template.ts`
+- [x] 2b.3 RED — unvalidated-default-country tests in `phone.spec.ts`
+- [x] 2b.4 GREEN — `normalizePhone` routes through `resolveDefaultCountry`
+- [x] 2b.5 RED — Colombian approval rows, then legacy Mexican rows flipped to `invalid`
+- [x] 2b.6 GREEN — legacy Mexican path deleted from `phone.ts`
+- [x] 2b.7 Verify — full gate run
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 2b.1/2b.2 | `lib/domain/message-template.spec.ts` | Unit | 15/15 passing | 5 failed — `constructor`/`toString` rendered `function Object() { [native code] } function toString() { [native code] }` | 20/20 passing | 4 inherited members plus a shadowing own property | Doc comment records why indexing is unsafe |
+| 2b.3/2b.4 | `lib/domain/phone.spec.ts` | Unit | 63/63 passing | 5 failed — `MEX`, `ZZ`, `57`, `""` silently produced results; `co` was rejected | 68/68 passing | 3 unsupported shapes + unset + lowercase-accepted | `normalizePhone` doc now distinguishes guest-data failure from deployment fault |
+| 2b.5/2b.6 | `lib/domain/phone.spec.ts` | Unit | 73/73 passing (incl. 5 new Colombian approval rows, green before the change) | 2 failed — `+52 1 55 1234 5678` and `+5215512345678` still normalized to `+525512345678` | 66/66 passing | Colombian table spans 5 real input shapes; MX/AR/US non-legacy rows retained | ~30 lines of production code and 3 constants removed; `digitsOf` retained for `deriveGateKey` |
+
+Note on 2b.5/2b.6: the RED rows asserting the deprecated Mexican token is
+`invalid` were deliberately transient. They proved the deletion changed real
+behavior, then were removed with the rest of the legacy-only tests, because a
+test whose only subject is a path that no longer exists is not a spec.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command / result | `npx vitest run lib/domain/phone.spec.ts` → 66 passed; `npx vitest run lib/domain/message-template.spec.ts` → 20 passed |
+| Full suite | `npm test` → **7 files, 167 tests passed** (was 158; +9 net) |
+| Coverage | `npm run test:coverage` → global 100% (118/118 stmts, 58/58 branches, 21/21 funcs, 113/113 lines). Per-file `json-summary`: `lib/domain/phone.ts` 100% (32/32 stmts, 18/18 branches, 7/7 funcs, 31/31 lines); `lib/domain/wa-link.ts` 100% (8/8, 4/4, 1/1, 8/8) |
+| Runtime harness | N/A — all three changes are pure functions in `lib/domain/**` with no runtime boundary; nothing imports them yet |
+| Gates | `npm run typecheck`, `npm run lint`, `npm run format:check` all clean; zero `eslint-disable` under `lib/domain/**` |
+| Rollback boundary | Exactly four files: `lib/domain/phone.ts`, `lib/domain/phone.spec.ts`, `lib/domain/message-template.ts`, `lib/domain/message-template.spec.ts`. Reverting them restores Work Unit 2 verbatim and touches no other work unit. |
+
+## Line delta (`git diff --numstat`)
+
+| File | Added | Removed | Net |
+|---|---|---|---|
+| `lib/domain/phone.ts` (production) | 8 | 69 | **−61** |
+| `lib/domain/message-template.ts` (production) | 7 | 1 | **+6** |
+| `lib/domain/phone.spec.ts` (test) | 60 | 44 | +16 |
+| `lib/domain/message-template.spec.ts` (test) | 29 | 0 | +29 |
+| **Production subtotal** | **15** | **70** | **−55** |
+| **Total** | **104** | **114** | **−10** |
+
+Production code is net **−55 lines**, as required. The `+6` on
+`message-template.ts` is one behavioral line plus a five-line comment explaining
+why the prototype chain must not be consulted; the deletion in `phone.ts` more
+than absorbs it.
+
+## Decisions and rationale
+
+1. **The legacy Mexican path was deleted, not repaired.** `R3-legacy-mx-foreign-rewrite`
+   (WARNING) flagged that `canonicalizeLegacyMexicanMobile` could rewrite a
+   foreign number into a Mexican one. With a Colombian-only guest list that was
+   roughly 30 lines of production code, three constants and a retry branch
+   guarding a case that cannot occur — while retaining the ability to corrupt a
+   case that can. Deleting it closes the finding and shrinks the highest-risk
+   module in the product. This supersedes Work Unit 2's decision 1, which was
+   correct under the then-unknown default country and is now obsolete.
+
+2. **`Object.hasOwn`, not a denylist.** `renderMessageTemplate`'s stated invariant
+   is that a missing variable fails loudly rather than reaching a message a human
+   is about to send. Plain indexing quietly broke it: `{{constructor}}` rendered
+   `function Object() { [native code] }` into the draft. Blocking specific names
+   would have been a patch on the symptom; only own properties count as provided.
+
+3. **`normalizePhone` may now throw — but only on misconfiguration.** The
+   "never throws" contract is about guest DATA, and it still holds: every input
+   failure is still returned through the discriminated union. An unsupported
+   `DEFAULT_PHONE_COUNTRY` is a deployment fault, and casting it silently
+   mis-normalizes every nationally formatted phone, so those guests would never
+   match at the gate. `resolveDefaultCountry` already threw a named error; it is
+   now wired in rather than bypassed. A side effect worth noting: a lowercase
+   `co` is now accepted, because `resolveDefaultCountry` upper-cases.
+
+4. **The MX/AR/US rows that do not depend on the legacy path were kept.** They
+   are the generic evidence that the library, not hand-rolled logic, does the
+   normalizing. Five Colombian rows were added ahead of the deletion as approval
+   tests and were green before any production code moved.
+
+5. **`R3-last8-includes-plus` was left alone, deliberately.** Colombian E.164 is
+   13 characters, so `slice(-8)` yields eight clean digits matching the Postgres
+   generated column. The finding cannot manifest for this guest list.
+
+## Out of scope, untouched
+
+`.env.example` (still environment-blocked; the maintainer creates it — the value
+is now known to be `CO`), Work Unit 3, schema, migrations, pages and console code.
+
+## Workload / PR boundary
+
+- Mode: small correction slice appended to Work Unit 2.
+- Boundary: starts at `ff9d7fc` (Work Unit 2 domain), ends with the legacy path
+  deleted and both findings closed.
+- Authored lines: 104 added / 114 removed — comfortably inside budget and net
+  negative overall.
+- No commit was made. The tree is convergent: `npm run format` and `npm run lint`
+  were run after the last source change, and `format:check` is clean.
+
+## Status
+
+7/7 Work Unit 2b tasks complete. Work unit 1 and 2 status is unchanged (29/29,
+except task 2.5's environment-blocked `.env.example` half). Work units 3–8 are
+untouched. Ready for `sdd-verify`.

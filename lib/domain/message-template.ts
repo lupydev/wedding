@@ -23,6 +23,11 @@ export type TemplateVars = Readonly<Record<string, string | undefined>>;
  * Substitution is single-pass: a value that happens to contain `{{...}}` is
  * emitted literally and never re-expanded, so one variable's content cannot
  * inject another's.
+ *
+ * Lookups use `Object.hasOwn` rather than plain indexing: a plain read walks the
+ * prototype chain, so `{{constructor}}` or `{{toString}}` would resolve to a
+ * function and render its source text into the draft instead of failing. Only
+ * own properties count as provided.
  */
 export function renderMessageTemplate(
   template: string,
@@ -31,7 +36,8 @@ export function renderMessageTemplate(
   const missing: string[] = [];
 
   const rendered = template.replace(PLACEHOLDER_PATTERN, (_match, name) => {
-    const value = vars[name as string];
+    const key = name as string;
+    const value = Object.hasOwn(vars, key) ? vars[key] : undefined;
 
     if (value === undefined || value === "") {
       missing.push(name as string);

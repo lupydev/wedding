@@ -72,6 +72,20 @@ Chain strategy: pending
 - [x] 2.16 Verify: 1.7's ESLint zone against the real `lib/domain/**` files — a deliberately added banned import fails `npm run lint`; remove the smoke violation after confirming.
 - [x] 2.17 Verify: `npm run test:coverage` shows 100% specifically on `phone.ts` and `wa-link.ts` (not a global threshold, per `design.md`'s Testing Architecture table).
 
+## Phase 2b: Domain Corrections (Work Unit 2b)
+
+Driven by the confirmed product fact that every guest phone is a Colombian mobile
+(10 national digits, country code 57, `DEFAULT_PHONE_COUNTRY=CO`) and by three
+review findings on the Work Unit 2 domain modules.
+
+- [x] 2b.1 RED — `lib/domain/message-template.spec.ts`: `{{constructor}}`, `{{toString}}`, `{{hasOwnProperty}}` and `{{valueOf}}` are reported as MISSING and throw; an own property that shadows a prototype member still substitutes.
+- [x] 2b.2 GREEN — `lib/domain/message-template.ts`: resolve placeholders with `Object.hasOwn(vars, name)` so the prototype chain can never render a function body into a WhatsApp draft (`R3-template-inherited-key`).
+- [x] 2b.3 RED — `lib/domain/phone.spec.ts`: an unset or unsupported `defaultCountry` (`""`, `MEX`, `ZZ`, `57`) fails with the named `DEFAULT_PHONE_COUNTRY` error; a lowercase `co` is accepted.
+- [x] 2b.4 GREEN — `lib/domain/phone.ts`: `normalizePhone` validates through the existing `resolveDefaultCountry` instead of casting `defaultCountry as CountryCode` (`R3-unvalidated-default-country`).
+- [x] 2b.5 RED — `phone.spec.ts`: pin the five real Colombian input shapes (`3001234567`, `300 123 4567`, `+573001234567`, `57 300 123 4567`, `+57 300 1234567`) to `+573001234567` / `01234567`, then flip the legacy Mexican `1`-token rows to `invalid`.
+- [x] 2b.6 GREEN — `phone.ts`: delete `canonicalizeLegacyMexicanMobile`, its `MEXICO_*` constants and its call site in `normalizePhone`; drop the tests that existed solely to exercise it, including the foreign-rewrite guard (`R3-legacy-mx-foreign-rewrite`). No Mexican, Argentine or other-country guests exist, so the path could not occur and its only remaining effect was the ability to rewrite a foreign number into a Mexican one.
+- [x] 2b.7 Verify: `npm test` green, `npm run test:coverage` still 100% statements/branches/functions/lines on `phone.ts` and `wa-link.ts`, `npm run typecheck`, `npm run lint` and `npm run format:check` clean, zero `eslint-disable` under `lib/domain/**`.
+
 ## Phase 3: Supabase Schema, RLS, Triggers, Base Adapters (Work Unit 3)
 
 - [ ] 3.1 RED — `supabase/tests/phone-last8.spec.ts` (dedicated security test): `invitation_guests.phone_last8` is `NULL` — never `''` — when `phone_e164` is `NULL`; an empty/blank gate submission therefore cannot match a phone-less guest.

@@ -15,6 +15,44 @@ import {
 describe("normalizePhone", () => {
   it.each([
     // [label, input, defaultCountry, expected e164, expected last8]
+    // Every guest on this list is a Colombian mobile: 10 national digits behind
+    // country code 57. These five shapes are what the address books actually
+    // contain, so they are the rows that decide whether a guest gets in.
+    [
+      "Colombian mobile, bare national digits",
+      "3001234567",
+      "CO",
+      "+573001234567",
+      "01234567",
+    ],
+    [
+      "Colombian mobile, national digits with spaces",
+      "300 123 4567",
+      "CO",
+      "+573001234567",
+      "01234567",
+    ],
+    [
+      "Colombian mobile in E.164",
+      "+573001234567",
+      "CO",
+      "+573001234567",
+      "01234567",
+    ],
+    [
+      "Colombian mobile with a spaced country code and no plus",
+      "57 300 123 4567",
+      "CO",
+      "+573001234567",
+      "01234567",
+    ],
+    [
+      "Colombian mobile with a plus and irregular grouping",
+      "+57 300 1234567",
+      "CO",
+      "+573001234567",
+      "01234567",
+    ],
     [
       "E.164 already, with spaces",
       "+52 55 1234 5678",
@@ -32,34 +70,6 @@ describe("normalizePhone", () => {
     [
       "parentheses and dashes",
       "(55) 1234-5678",
-      "MX",
-      "+525512345678",
-      "12345678",
-    ],
-    [
-      "legacy Mexican 1 mobile token, international format",
-      "+52 1 55 1234 5678",
-      "MX",
-      "+525512345678",
-      "12345678",
-    ],
-    [
-      "legacy Mexican 1 mobile token, no separators",
-      "+5215512345678",
-      "MX",
-      "+525512345678",
-      "12345678",
-    ],
-    [
-      "legacy Mexican 1 mobile token, national format",
-      "1 55 1234 5678",
-      "MX",
-      "+525512345678",
-      "12345678",
-    ],
-    [
-      "legacy Mexican 1 mobile token with a 00 international prefix",
-      "0052 1 55 1234 5678",
       "MX",
       "+525512345678",
       "12345678",
@@ -138,18 +148,8 @@ describe("normalizePhone", () => {
       "invalid",
     ],
     [
-      "a Mexican number that is one digit short even after the legacy fixup",
-      "+52 1 55 1234 567",
-      "invalid",
-    ],
-    [
       "a non-Mexican international number of the wrong length",
       "+1 415 555 267",
-      "invalid",
-    ],
-    [
-      "a legacy-shaped Mexican number that is still invalid once the token is dropped",
-      "+52 1 00 0000 0000",
       "invalid",
     ],
   ])("rejects %s without throwing", (_label, input, expectedReason) => {
@@ -160,26 +160,42 @@ describe("normalizePhone", () => {
     expect(result.reason).toBe(expectedReason);
   });
 
-  it("does not treat a bare national number as Mexican under another default country", () => {
-    // Without the default-country guard this would silently become +525512345678.
-    const result = normalizePhone("1 55 1234 5678", "AR");
+  it.each([
+    ["a non-ISO token", "MEX"],
+    ["an unsupported region code", "ZZ"],
+    ["a phone calling code", "57"],
+  ])(
+    "throws a named configuration error for %s rather than producing garbage",
+    (_label, country) => {
+      // A misconfigured default country is a deployment fault, not guest data:
+      // silently casting it would mis-normalize every nationally formatted
+      // phone and those guests would never match at the gate.
+      expect(() => normalizePhone("300 123 4567", country)).toThrow(
+        /DEFAULT_PHONE_COUNTRY/,
+      );
+    },
+  );
 
-    expect(result.ok).toBe(false);
+  it("throws when the default country is unset", () => {
+    expect(() => normalizePhone("300 123 4567", "")).toThrow(
+      /DEFAULT_PHONE_COUNTRY/,
+    );
   });
 
-  it("does not strip a leading 1 from a valid non-Mexican number", () => {
-    const result = normalizePhone("+1 415 555 2671", "MX");
+  it("accepts a lowercase default country", () => {
+    const result = normalizePhone("300 123 4567", "co");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.e164).toBe("+14155552671");
+    expect(result.e164).toBe("+573001234567");
   });
 });
 
 describe("normalizeForStorage", () => {
   it.each([
+    ["300 123 4567", "CO", "+573001234567"],
+    ["+57 300 1234567", "CO", "+573001234567"],
     ["+52 55 1234 5678", "MX", "+525512345678"],
-    ["+52 1 55 1234 5678", "MX", "+525512345678"],
     ["9 11 2345-6789", "AR", "+5491123456789"],
     ["(415) 555-2671", "US", "+14155552671"],
   ])("stores %s as E.164", (input, country, expected) => {

@@ -116,6 +116,35 @@ describe("renderMessageTemplate", () => {
     expect(rendered).toBeNull();
   });
 
+  it.each([["constructor"], ["toString"], ["hasOwnProperty"], ["valueOf"]])(
+    "treats the inherited Object.prototype member %s as missing",
+    (name) => {
+      // Without an own-property check the prototype chain answers with a
+      // function, and its source text would be rendered straight into a
+      // WhatsApp draft a human is about to send.
+      expect(() => renderMessageTemplate(`Hola {{${name}}}`, {})).toThrow(
+        new RegExp(`missing a value for: ${name}`),
+      );
+    },
+  );
+
+  it("never renders a function body for an inherited member", () => {
+    let rendered: string | null = null;
+    try {
+      rendered = renderMessageTemplate("{{constructor}} {{toString}}", {});
+    } catch {
+      rendered = null;
+    }
+
+    expect(rendered).toBeNull();
+  });
+
+  it("still substitutes an own property that shadows a prototype member", () => {
+    expect(
+      renderMessageTemplate("Hola {{toString}}", { toString: "Ana" }),
+    ).toBe("Hola Ana");
+  });
+
   it("ignores unused variables", () => {
     expect(
       renderMessageTemplate("Hola {{a}}", { a: "Ana", unused: "Luis" }),
