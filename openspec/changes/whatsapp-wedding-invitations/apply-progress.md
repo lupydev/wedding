@@ -446,3 +446,229 @@ is now known to be `CO`), Work Unit 3, schema, migrations, pages and console cod
 7/7 Work Unit 2b tasks complete. Work unit 1 and 2 status is unchanged (29/29,
 except task 2.5's environment-blocked `.env.example` half). Work units 3–8 are
 untouched. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 3 — Supabase Schema, RLS, Triggers, Base Adapters
+
+**Mode**: Strict TDD. **Runner**: `vitest run`. **Baseline safety net**: 167
+tests passing across 7 files before any change (matches Work Unit 2b's exit
+state).
+
+**Runtime**: `supabase` CLI 2.116.0, Docker 29.1.3. `supabase init` created the
+`supabase/` directory; `supabase start` brought up the full local stack and
+`supabase db reset` applied all three migrations. Every DB assertion below ran
+against that real Postgres. `psql` is not on PATH, so the harness uses the `pg`
+Node client for privileged SQL and `@supabase/supabase-js` for the anon-key
+HTTP surface.
+
+## Completed tasks
+
+- [x] 3.1 RED — `supabase/tests/phone-last8.spec.ts` (dedicated security test)
+- [x] 3.2 GREEN — `supabase/migrations/0001_schema.sql` + `supabase/down/0001_schema_down.sql`
+- [x] 3.3 RED — `supabase/tests/rls.spec.ts`
+- [x] 3.4 GREEN — `supabase/migrations/0002_rls.sql` + down-script
+- [x] 3.5 RED — `supabase/tests/append-only.spec.ts` (as `service_role`)
+- [x] 3.6 GREEN — `supabase/migrations/0003_triggers.sql` append-only triggers + down-script
+- [x] 3.7 RED — seat-cap addendum in `append-only.spec.ts`
+- [x] 3.8 GREEN — `enforce_seat_cap()` + `BEFORE INSERT` trigger
+- [x] 3.9 GREEN — `lib/server/supabase.ts`
+- [x] 3.10 Verify — throwaway `'use client'` import fails `npm run build`; throwaway deleted
+- [x] 3.11 Standing lint check that every `lib/server/**` file opens with `import 'server-only'`
+- [x] 3.12 GREEN — `lib/server/env.ts`
+- [x] 3.13 RED — `lib/server/invitations.spec.ts`
+- [x] 3.14 GREEN — `lib/server/invitations.ts`
+- [x] 3.15 `scripts/import-guests.ts` + `/data/` in `.gitignore` + usage header
+- [x] 3.16 Verify — local Supabase + full suite green
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 3.1/3.2 | `supabase/tests/phone-last8.spec.ts` | DB | N/A (new) | 4 failed — `relation "senders" does not exist` against the live empty DB | 4/4 passing after `0001_schema.sql` | 4 cases: NULL phone, real phone, empty-submission lookup, matching lookup | Fixture slug generator rewritten to emit valid `[a-z2-7]{16}` after the CHECK constraint rejected digit padding |
+| 3.3/3.4 | `supabase/tests/rls.spec.ts` | DB + HTTP | N/A (new) | 4 failed — RLS disabled on all six tables, 84 live `anon`/`authenticated` grants, anon read returned the seeded row from every table, and anon **INSERT into `senders` succeeded** (`NO_ERROR`) | 4/4 passing after `0002_rls.sql` | SQL-level catalog assertions + grant assertions + anon HTTP read + anon HTTP insert | Anon read test rewritten to seed committed rows first, so "0 rows" is proven against data a privileged reader can see |
+| 3.5/3.6 | `supabase/tests/append-only.spec.ts` | DB | N/A (new) | 5 failed — `relation "senders" does not exist` | 6/6 passing after `0003_triggers.sql` | UPDATE + DELETE on both tables, a guard asserting `service_role.rolbypassrls = true`, and a second INSERT that must still succeed | Second-INSERT case given explicit timestamps after it exposed a real tie (see Issues) |
+| 3.7/3.8 | `append-only.spec.ts` (seat cap) | DB | N/A (new) | 3 failed | 3/3 passing after `enforce_seat_cap()` | over-cap `seats_confirmed`, over-cap `cardinality(attendee_guest_ids)`, and an at-cap acceptance | None needed |
+| 3.9 | `lib/server/supabase.spec.ts` | Integration | N/A (new) | `Cannot find module './supabase'` | 4/4 passing | missing URL, missing key, publishable-key-in-secret-slot, and a live read the anon key is denied | `persistSession`/`autoRefreshToken` disabled with rationale |
+| 3.11 | `tools/eslint-zones.spec.ts` | Unit (ESLint API) | 9/9 passing | 2 failed — no rule existed | 14/14 passing | absent import, misplaced import, correct import, empty file, non-`lib/server` file, and every real `lib/server` file | Selector split into two so an empty program is also caught |
+| 3.12 | `lib/server/env.spec.ts` | Unit | N/A (new) | `Cannot find module './env'` | 13/13 passing | 4 country cases, 3 cookie-secret cases, 2 pepper cases, 4 origin cases | `MIN_SECRET_LENGTH` extracted with the reason it is 32 |
+| 3.13/3.14 | `lib/server/invitations.spec.ts` | Unit + Integration | N/A (new) | `Cannot find module './invitations'` | 17/17 passing | 4 ownership cases, 6 guest-data cases, 3 mapper cases, 4 repository cases | `toGatePhoneRefs` split out so the two audiences cannot be confused by one flag |
+| 3.15 | `scripts/import-guests.spec.ts` | Unit | N/A (new) | `Cannot find module './import-guests'` | 5/5 passing | valid source, invalid JSON, missing array, empty array, git-ignored path | Parser extracted from the entry point so it is testable without I/O |
+
+## Mutation evidence for the `nullif` (task 3.1)
+
+The security claim was proved, not asserted. Inside a rolled-back transaction
+the generated column was redefined WITHOUT the `nullif` wrapper, exactly as a
+careless edit would leave it:
+
+```
+phone_last8 without nullif = ""
+empty gate submission matched rows: 1 [ { full_name: 'No Phone' } ]
+```
+
+A phone-less guest matched an empty submission — anyone holding the link would
+have opened that invitation. With the shipped definition the same query matches
+zero rows. The throwaway script was deleted and the transaction rolled back.
+
+## Task 3.10 — the exact build error observed
+
+A throwaway `app/throwaway-server-only-check/page.tsx` carrying `'use client'`
+and importing `@/lib/server/supabase` produced:
+
+```
+./lib/server/supabase.ts:1:1
+Error: 'server-only' cannot be imported from a Client Component module
+> 1 | import "server-only";
+It should only be used from a Server Component.
+
+Import traces:
+  Client Component Browser:
+    ./lib/server/supabase.ts [Client Component Browser]
+    ./app/throwaway-server-only-check/page.tsx [Client Component Browser]
+```
+
+The throwaway directory was deleted and `npm run build` is green again.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command / result | `npx vitest run supabase/tests` → 3 files, 17 passed. `npx vitest run lib/server` → 3 files, 34 passed |
+| Full suite | `npm test` → **14 files, 229 tests passed** (was 167; +62) |
+| Runtime harness — database | `supabase start` (full stack up), `supabase db reset` applied `0001`, `0002`, `0003` in order. All DB assertions ran against that instance |
+| Runtime harness — import script | `npm run import:guests -- --dry-run` correctly aborted with `Import row "Familia Probe" has an unrecognized owner`. After seeding a matching sender, a real run printed `Created invitation z7ogapc7serodwvn` and the row read back as `phone_e164=+573001234567`, `phone_last8=01234567`. The probe sender, invitation and the `data/` directory were all removed afterwards |
+| Gates | `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm run build` all clean |
+| Rollback boundary | Delete `supabase/`, `lib/server/{supabase,env,invitations}.{ts,spec.ts}`, `scripts/`, `vitest/`; revert the `serverOnlyGuard` block in `eslint.config.mjs`, the `resolve.alias` + `scripts/**` include in `vitest.config.mts`, the `server-only`/`@supabase/supabase-js`/`pg`/`tsx` dependencies and the `import:guests` script in `package.json`, the `/data/` line in `.gitignore`, and the appended block in `tools/eslint-zones.spec.ts`. Nothing in `lib/domain/**`, `app/**` or `components/**` was touched |
+
+## Decisions and rationale
+
+1. **Down-scripts live in `supabase/down/`, not `supabase/migrations/`.** The
+   CLI applies every file in the migrations directory in filename order, so a
+   `0001_schema_down.sql` sitting there would drop the schema it had just
+   created. The task text names the file, not its directory; the directory is
+   the only placement that makes the file harmless.
+
+2. **`0002_rls_down.sql` deliberately does NOT restore the revoked grants.**
+   Those grants were the leak the migration closed — the RED run proved `anon`
+   could INSERT a row into `senders`, i.e. write itself into the operator
+   allowlist. Re-issuing them from a rollback script would be a silent
+   regression, so full rollback goes through `0001_schema_down.sql` instead.
+
+3. **DB tests fail loudly when the database is unreachable; they never skip.**
+   A conditional skip reads as coverage while proving nothing. The harness
+   raises `Cannot reach the local Supabase database at ... Run 'supabase start'`
+   so the cause is unmistakable. The consequence is explicit: **`npm test`
+   requires a running local Supabase** from this work unit onward.
+
+4. **`server-only` is aliased away in Vitest only.** The real package throws on
+   import outside a React Server Component — that is the guard, and task 3.10
+   proves it fires in the Next build. It also makes every `lib/server/**` module
+   unimportable from a plain node test, so `vitest.config.mts` aliases it to
+   `vitest/server-only-stub.ts`. The alias never reaches the Next.js build.
+
+5. **The `server-only` guard is a lint rule, not a script.** Two
+   `no-restricted-syntax` selectors on `lib/server/**`: one rejecting any first
+   statement that is not `import 'server-only'`, one rejecting a file with no
+   statements at all. It rides `npm run lint` with no new tooling, and a
+   temporary violating file was used to confirm `eslint .` reports it.
+
+6. **`requiredDefaultPhoneCountry()` is the single boundary.** It resolves
+   `DEFAULT_PHONE_COUNTRY` through the domain's own `resolveDefaultCountry`, so
+   every call site downstream receives a validated `CountryCode` and no code
+   path ever hands a raw env string to `normalizePhone`. This is the Work
+   Unit 2b contract, honoured at the adapter edge.
+
+7. **`toGuestFacingInvitation` is a projection, not a redaction.** It builds a
+   new object containing only the fields a guest may see. A column added to
+   `invitation_guests` later cannot leak by being forgotten, because it is never
+   copied in the first place. `toGatePhoneRefs` is a separate function rather
+   than an options flag on the same one, so the two audiences cannot be
+   conflated at a call site.
+
+8. **`createInvitation` compensates explicitly.** PostgREST offers no
+   cross-statement transaction, so a failed guest insert deletes the invitation
+   row it had just created. An invitation with no guests can never be unlocked
+   by anyone yet would sit in the console looking valid.
+
+9. **The import script validates every row before writing any row.** A
+   partially imported guest list is harder to reason about than one that never
+   started. `--dry-run` performs the same validation with no writes.
+
+10. **`npm run import:guests` passes `--conditions=react-server`.** The script
+    transitively imports `lib/server/**`, and `server-only` resolves to a module
+    that throws under any other condition. That is correct behaviour, not a
+    defect; the Node entry point opts out explicitly rather than the guard being
+    weakened.
+
+## Issues found
+
+1. **`rsvp_responses` has no deterministic tie-break for "latest row wins".**
+   `rsvp_responses_latest_idx` orders by `(invitation_id, submitted_at desc)`
+   alone. Two rows inserted in one transaction share `now()` and the ordering is
+   then arbitrary — the append-only test caught this directly. Real submissions
+   arrive in separate transactions so it does not bite today, but
+   `getCurrentRsvp(invitationId)` in Work Unit 5 should order by
+   `submitted_at desc, id desc` rather than trusting the timestamp alone.
+
+2. **`enforce_seat_cap`'s message is misleading for the array case.** Design's
+   DDL always reports `seats_confirmed % exceeds seats_allowed %`, so an
+   over-cap `attendee_guest_ids` with an in-cap `seats_confirmed` produces
+   "seats_confirmed 2 exceeds seats_allowed 2". The DDL was followed verbatim
+   rather than improvised on; the message is worth a one-line fix in a later
+   slice.
+
+3. **`.env.example` is still environment-blocked**, as in Work Unit 2. The write
+   is denied by the environment's permission settings. The intended contents are
+   now larger than in Work Unit 2 — `SUPABASE_URL`, `SUPABASE_SECRET_KEY`,
+   `DEFAULT_PHONE_COUNTRY=CO`, `UNLOCK_COOKIE_SECRET`, `GATE_IP_PEPPER`,
+   `NEXT_PUBLIC_SITE_ORIGIN` — and the maintainer must create the file. Task 2.5
+   remains PARTIAL for this reason.
+
+4. **Test-isolation defect, found and fixed during the final full-suite run.**
+   `supabase/tests/helpers/db.ts` originally generated fixture slugs and sender
+   emails from module-level counters. Vitest runs spec files in parallel worker
+   threads, each with its own copy of the module, so two files produced the same
+   slug and collided on `invitations.slug`'s unique index. The symptom was a
+   test that passed in isolation and failed in `npm test` —
+   `lib/server/supabase.spec.ts > reads rows the publishable key is denied`.
+   Both generators now draw from `randomBytes`. Five consecutive full-suite runs
+   are green at 229/229.
+
+## Deviations from design
+
+- Down-script location (`supabase/down/`) as explained above. Design says only
+  "every migration ships a down-script"; it names no directory.
+- `lib/server/env.ts` adds a 32-character minimum on `UNLOCK_COOKIE_SECRET` and
+  `GATE_IP_PEPPER`. Design does not specify a length. A short pepper on an IPv4
+  address is equivalent to no pepper, so the floor is enforced rather than
+  documented.
+- `createServerSupabaseClient` rejects a `sb_publishable_` value handed to it in
+  the secret slot. Not in design; without it the misconfiguration is silent and
+  presents as "the guest list is empty".
+- `listSenderDirectory` and `mintSlug` were added to `lib/server/invitations.ts`.
+  Design lists the file but not its exact function set; both are required by the
+  import path task 3.15 defines.
+
+## Workload / PR boundary
+
+- Mode: chained PR slice — **PR3**, base PR2, per the tasks artifact's linear
+  chain. `Chain strategy` is still `pending`, which the orchestrator must
+  resolve before WU4a; it does not block this slice.
+- Boundary: starts at `831812c` (clean tree, 167 tests), ends with the schema,
+  RLS, triggers and base adapters in place and 229 tests green.
+- **Authored lines: ~2,360 (≈940 production, ≈1,420 test), plus a generated
+  413-line `supabase/config.toml` from `supabase init`.** The session budget is
+  800 and the forecast for this unit was ~600. This slice is roughly 3x over.
+  **`size:exception` is recommended, or a split into WU3a (migrations + DB
+  tests, ~850 lines) and WU3b (`lib/server/**` + import script, ~1,500 lines).**
+  It was not compressed to fit: the overage is real test coverage and explicit
+  type contracts, and cutting either to reach a number would have traded a
+  security-critical work unit's evidence for an arithmetic target.
+- No commit was made. The tree is convergent: `npm run format` and `npm run lint`
+  were run after the last source change and `format:check` is clean.
+
+## Status
+
+16/16 Work Unit 3 tasks complete. Work units 1, 2 and 2b are unchanged (task 2.5
+still PARTIAL on its environment-blocked `.env.example` half). Work units 4a
+onward are untouched. Ready for `sdd-verify`.

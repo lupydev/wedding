@@ -1,0 +1,215 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  captureError,
+  seedInvitation,
+  seedSender,
+  withRollback,
+} from "./helpers/db";
+
+/**
+ * Append-only enforcement, and why it is a TRIGGER rather than a policy.
+ *
+ * The `sb_secret_` key maps to `service_role`, which has BYPASSRLS. An RLS
+ * policy therefore cannot make a table append-only against our own server
+ * code — the exact code most likely to issue an accidental UPDATE. Every test
+ * below runs `set local role service_role` so a passing result proves the
+ * trigger fired, not that RLS blocked the statement.
+ */
+describe("append-only tables (as service_role)", () => {
+  it("confirms service_role really does bypass RLS", async () => {
+    const bypasses = await withRollback(async (db) => {
+      const result = await db.query<{ rolbypassrls: boolean }>(
+        "select rolbypassrls from pg_roles where rolname = 'service_role'",
+      );
+
+      return result.rows[0]?.rolbypassrls;
+    });
+
+    // If this ever becomes false the tests below stop proving what they claim.
+    expect(bypasses).toBe(true);
+  });
+
+  it("rejects UPDATE on dispatch_events", async () => {
+    const message = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      await db.query(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind)
+         values ($1, $2, 'marked_sent')`,
+        [invitationId, senderId],
+      );
+      await db.query("set local role service_role");
+
+      return captureError(() =>
+        db.query("update dispatch_events set kind = 'marked_failed'"),
+      );
+    });
+
+    expect(message).toContain("dispatch_events is append-only");
+  });
+
+  it("rejects DELETE on dispatch_events", async () => {
+    const message = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      await db.query(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind)
+         values ($1, $2, 'link_opened')`,
+        [invitationId, senderId],
+      );
+      await db.query("set local role service_role");
+
+      return captureError(() => db.query("delete from dispatch_events"));
+    });
+
+    expect(message).toContain("dispatch_events is append-only");
+  });
+
+  it("rejects UPDATE on rsvp_responses", async () => {
+    const message = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      await db.query(
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
+         values ($1, true, 2)`,
+        [invitationId],
+      );
+      await db.query("set local role service_role");
+
+      return captureError(() =>
+        db.query("update rsvp_responses set seats_confirmed = 1"),
+      );
+    });
+
+    expect(message).toContain("rsvp_responses is append-only");
+  });
+
+  it("rejects DELETE on rsvp_responses", async () => {
+    const message = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      await db.query(
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
+         values ($1, false, 0)`,
+        [invitationId],
+      );
+      await db.query("set local role service_role");
+
+      return captureError(() => db.query("delete from rsvp_responses"));
+    });
+
+    expect(message).toContain("rsvp_responses is append-only");
+  });
+
+  it("still accepts a second INSERT, so the answer can change", async () => {
+    const seats = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId);
+      await db.query("set local role service_role");
+      // Explicit timestamps: both statements run inside one transaction, where
+      // `now()` is the transaction start time, so the default would tie and the
+      // "latest row wins" ordering would be arbitrary. Real submissions arrive
+      // in separate transactions.
+      await db.query(
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, submitted_at)
+         values ($1, true, 3, timestamptz '2026-01-01 10:00:00+00')`,
+        [invitationId],
+      );
+      await db.query(
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, submitted_at)
+         values ($1, false, 0, timestamptz '2026-01-01 11:00:00+00')`,
+        [invitationId],
+      );
+
+      const result = await db.query<{ seats_confirmed: number }>(
+        `select seats_confirmed from rsvp_responses
+         where invitation_id = $1
+         order by submitted_at desc`,
+        [invitationId],
+      );
+
+      return result.rows.map((row) => row.seats_confirmed);
+    });
+
+    expect(seats).toEqual([0, 3]);
+  });
+});
+
+/**
+ * Seat allowance is a HARD CAP (design D6, confirmed product decision). It is
+ * an invariant, so it is enforced at the database, not only in the form the
+ * attacker controls.
+ */
+describe("rsvp seat cap (as service_role)", () => {
+  it("rejects seats_confirmed above the invitation's seats_allowed", async () => {
+    const message = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId, 3);
+      await db.query("set local role service_role");
+
+      return captureError(() =>
+        db.query(
+          `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
+           values ($1, true, 4)`,
+          [invitationId],
+        ),
+      );
+    });
+
+    expect(message).toContain("seats_confirmed 4 exceeds seats_allowed 3");
+  });
+
+  it("rejects more attendee_guest_ids than seats_allowed", async () => {
+    const message = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId, 2);
+      const guests = await db.query<{ id: string }>(
+        `insert into invitation_guests (invitation_id, full_name)
+         values ($1, 'Guest One'), ($1, 'Guest Two'), ($1, 'Guest Three')
+         returning id`,
+        [invitationId],
+      );
+      await db.query("set local role service_role");
+
+      return captureError(() =>
+        db.query(
+          `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+           values ($1, true, 2, $2)`,
+          [invitationId, guests.rows.map((row) => row.id)],
+        ),
+      );
+    });
+
+    expect(message).toContain("exceeds seats_allowed 2");
+  });
+
+  it("accepts a selection exactly at the cap", async () => {
+    const stored = await withRollback(async (db) => {
+      const senderId = await seedSender(db);
+      const invitationId = await seedInvitation(db, senderId, 2);
+      const guests = await db.query<{ id: string }>(
+        `insert into invitation_guests (invitation_id, full_name)
+         values ($1, 'Guest One'), ($1, 'Guest Two')
+         returning id`,
+        [invitationId],
+      );
+      await db.query("set local role service_role");
+
+      const inserted = await db.query<{
+        seats_confirmed: number;
+        attendee_guest_ids: string[];
+      }>(
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+         values ($1, true, 2, $2)
+         returning seats_confirmed, attendee_guest_ids`,
+        [invitationId, guests.rows.map((row) => row.id)],
+      );
+
+      return inserted.rows[0];
+    });
+
+    expect(stored.seats_confirmed).toBe(2);
+    expect(stored.attendee_guest_ids).toHaveLength(2);
+  });
+});

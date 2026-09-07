@@ -49,3 +49,6 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# guest source data — real phone numbers must never enter the repository
+/data/

@@ -88,22 +88,22 @@ review findings on the Work Unit 2 domain modules.
 
 ## Phase 3: Supabase Schema, RLS, Triggers, Base Adapters (Work Unit 3)
 
-- [ ] 3.1 RED — `supabase/tests/phone-last8.spec.ts` (dedicated security test): `invitation_guests.phone_last8` is `NULL` — never `''` — when `phone_e164` is `NULL`; an empty/blank gate submission therefore cannot match a phone-less guest.
-- [ ] 3.2 GREEN — `supabase/migrations/0001_schema.sql`: all six tables (`senders`, `invitations`, `invitation_guests`, `dispatch_events`, `rsvp_responses`, `gate_attempts`) per `design.md`'s DDL, including `phone_last8 generated always as (nullif(right(regexp_replace(coalesce(phone_e164,''), '\D', '', 'g'), 8), '')) stored`; matching `0001_schema_down.sql`.
-- [ ] 3.3 RED — `supabase/tests/rls.spec.ts`: the anon key gets permission-denied or empty results on all six tables.
-- [ ] 3.4 GREEN — `supabase/migrations/0002_rls.sql`: enable RLS on all six tables with zero `CREATE POLICY` statements (default-deny); revoke default grants from `anon`/`authenticated`; matching down-script.
-- [ ] 3.5 RED — `supabase/tests/append-only.spec.ts`: `UPDATE`/`DELETE` on `dispatch_events` and `rsvp_responses` raise an exception even when run as `service_role` (proves the trigger, not RLS, is the enforcement — `service_role` has `BYPASSRLS`).
-- [ ] 3.6 GREEN — `supabase/migrations/0003_triggers.sql`: `reject_mutation()` + `BEFORE UPDATE OR DELETE` triggers on `dispatch_events` and `rsvp_responses`; matching down-script.
-- [ ] 3.7 RED — `append-only.spec.ts` addendum: an `rsvp_responses` INSERT with `seats_confirmed` or `cardinality(attendee_guest_ids)` exceeding the invitation's `seats_allowed` raises.
-- [ ] 3.8 GREEN — `0003_triggers.sql`: add `enforce_seat_cap()` + `BEFORE INSERT` trigger on `rsvp_responses`.
-- [ ] 3.9 GREEN — `lib/server/supabase.ts`: `import 'server-only'` as the first line; secret-key (`sb_secret_`) Supabase client.
-- [ ] 3.10 Verify: a throwaway `'use client'` component importing `lib/server/supabase.ts` fails `npm run build`; delete the throwaway after confirming.
-- [ ] 3.11 Add a lint/CI check verifying every file under `lib/server/**` begins with `import 'server-only'`; wire it into `npm run lint`.
-- [ ] 3.12 GREEN — `lib/server/env.ts`: `import 'server-only'` first line; typed accessors for `DEFAULT_PHONE_COUNTRY`, `UNLOCK_COOKIE_SECRET`, `GATE_IP_PEPPER`, `NEXT_PUBLIC_SITE_ORIGIN`.
-- [ ] 3.13 RED — `lib/server/invitations.spec.ts`: import rejects a row with a missing/unrecognized owner rather than creating an unassigned invitation; the guest-facing read mapper never exposes `phone_e164`/`phone_last8`.
-- [ ] 3.14 GREEN — `lib/server/invitations.ts`: `import 'server-only'` first line; repository + import-validation functions; guest-facing mapper strips phone fields.
-- [ ] 3.15 Create `scripts/import-guests.ts` reading the untracked guest source file and calling the invitations repository; add the source path to `.gitignore`; document usage in a header comment.
-- [ ] 3.16 Verify: run local Supabase (docker) and the DB-layer Vitest suite — confirm 3.1, 3.3, 3.5, 3.7, 3.13 RED tests now pass GREEN.
+- [x] 3.1 RED — `supabase/tests/phone-last8.spec.ts` (dedicated security test): `invitation_guests.phone_last8` is `NULL` — never `''` — when `phone_e164` is `NULL`; an empty/blank gate submission therefore cannot match a phone-less guest.
+- [x] 3.2 GREEN — `supabase/migrations/0001_schema.sql`: all six tables (`senders`, `invitations`, `invitation_guests`, `dispatch_events`, `rsvp_responses`, `gate_attempts`) per `design.md`'s DDL, including `phone_last8 generated always as (nullif(right(regexp_replace(coalesce(phone_e164,''), '\D', '', 'g'), 8), '')) stored`; matching `0001_schema_down.sql`.
+- [x] 3.3 RED — `supabase/tests/rls.spec.ts`: the anon key gets permission-denied or empty results on all six tables.
+- [x] 3.4 GREEN — `supabase/migrations/0002_rls.sql`: enable RLS on all six tables with zero `CREATE POLICY` statements (default-deny); revoke default grants from `anon`/`authenticated`; matching down-script.
+- [x] 3.5 RED — `supabase/tests/append-only.spec.ts`: `UPDATE`/`DELETE` on `dispatch_events` and `rsvp_responses` raise an exception even when run as `service_role` (proves the trigger, not RLS, is the enforcement — `service_role` has `BYPASSRLS`).
+- [x] 3.6 GREEN — `supabase/migrations/0003_triggers.sql`: `reject_mutation()` + `BEFORE UPDATE OR DELETE` triggers on `dispatch_events` and `rsvp_responses`; matching down-script.
+- [x] 3.7 RED — `append-only.spec.ts` addendum: an `rsvp_responses` INSERT with `seats_confirmed` or `cardinality(attendee_guest_ids)` exceeding the invitation's `seats_allowed` raises.
+- [x] 3.8 GREEN — `0003_triggers.sql`: add `enforce_seat_cap()` + `BEFORE INSERT` trigger on `rsvp_responses`.
+- [x] 3.9 GREEN — `lib/server/supabase.ts`: `import 'server-only'` as the first line; secret-key (`sb_secret_`) Supabase client.
+- [x] 3.10 Verify: a throwaway `'use client'` component importing `lib/server/supabase.ts` fails `npm run build`; delete the throwaway after confirming.
+- [x] 3.11 Add a lint/CI check verifying every file under `lib/server/**` begins with `import 'server-only'`; wire it into `npm run lint`.
+- [x] 3.12 GREEN — `lib/server/env.ts`: `import 'server-only'` first line; typed accessors for `DEFAULT_PHONE_COUNTRY`, `UNLOCK_COOKIE_SECRET`, `GATE_IP_PEPPER`, `NEXT_PUBLIC_SITE_ORIGIN`.
+- [x] 3.13 RED — `lib/server/invitations.spec.ts`: import rejects a row with a missing/unrecognized owner rather than creating an unassigned invitation; the guest-facing read mapper never exposes `phone_e164`/`phone_last8`.
+- [x] 3.14 GREEN — `lib/server/invitations.ts`: `import 'server-only'` first line; repository + import-validation functions; guest-facing mapper strips phone fields.
+- [x] 3.15 Create `scripts/import-guests.ts` reading the untracked guest source file and calling the invitations repository; add the source path to `.gitignore`; document usage in a header comment.
+- [x] 3.16 Verify: run local Supabase (docker) and the DB-layer Vitest suite — confirm 3.1, 3.3, 3.5, 3.7, 3.13 RED tests now pass GREEN.
 
 ## Phase 4a: Invitation Page, OG Image, Metadata (Work Unit 4a)
 

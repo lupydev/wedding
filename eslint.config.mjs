@@ -60,11 +60,42 @@ const componentImportZone = {
   },
 };
 
+// `import 'server-only'` must be the FIRST statement of every file under
+// `lib/server/**`. Transitive protection through a database-touching module is
+// not enough: a future server adapter that touches no database would otherwise
+// be unguarded, and the failure mode is a silent data leak to the browser
+// rather than an error. Enforcing it here means a new file cannot forget it.
+//
+// Spec files are exempt: they run under Vitest, which aliases `server-only`
+// away precisely because the real package refuses to be imported outside a
+// React Server Component.
+const serverOnlyGuard = {
+  files: ["lib/server/**/*.{ts,tsx}"],
+  ignores: ["lib/server/**/*.spec.{ts,tsx}"],
+  rules: {
+    "no-restricted-syntax": [
+      "error",
+      {
+        selector:
+          'Program > :first-child:not(ImportDeclaration[source.value="server-only"])',
+        message:
+          "Every file under lib/server/** must begin with `import 'server-only'` as its first statement.",
+      },
+      {
+        selector: "Program:not(:has(> :first-child))",
+        message:
+          "Every file under lib/server/** must begin with `import 'server-only'` as its first statement.",
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   domainImportZone,
   componentImportZone,
+  serverOnlyGuard,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

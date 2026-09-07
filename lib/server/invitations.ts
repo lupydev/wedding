@@ -1,0 +1,384 @@
+import "server-only";
+
+import { randomBytes } from "node:crypto";
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CountryCode } from "libphonenumber-js";
+
+import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
+import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
+
+/**
+ * Invitation repository and import validation.
+ *
+ * Two responsibilities that must not be confused:
+ *
+ *  - `validateImportRow` is the STRICT side of the boundary. It runs once, at
+ *    import, and fails loudly. An unusable owner or an unnormalizable phone
+ *    must stop the import at the row that introduced it, not surface weeks
+ *    later as a guest who cannot open their own invitation.
+ *  - `toGuestFacingInvitation` is the read side. It exists so that no code path
+ *    can accidentally hand a phone number to a browser: the mapper simply has
+ *    no phone field to leak.
+ */
+
+/** Maximum seats an invitation may allow, matching the DB CHECK constraint. */
+export const MAX_SEATS_ALLOWED = 12;
+
+export interface ImportGuest {
+  readonly fullName: string;
+  readonly phone?: string;
+  readonly isPrimary?: boolean;
+  readonly isChild?: boolean;
+}
+
+export interface ImportRow {
+  readonly ownerEmail: string;
+  readonly displayName: string;
+  readonly greetingName: string;
+  readonly seatsAllowed: number;
+  readonly rsvpDeadline?: string | null;
+  readonly guests: readonly ImportGuest[];
+}
+
+/** Allowlisted operator email → `senders.id`. Built from the senders table. */
+export type SenderDirectory = Readonly<Record<string, string>>;
+
+export interface NewInvitationGuest {
+  readonly fullName: string;
+  readonly phoneE164: string | null;
+  readonly isPrimary: boolean;
+  readonly isChild: boolean;
+}
+
+export interface NewInvitation {
+  readonly ownerSenderId: string;
+  readonly displayName: string;
+  readonly greetingName: string;
+  readonly seatsAllowed: number;
+  readonly rsvpDeadline: string | null;
+  readonly guests: readonly NewInvitationGuest[];
+}
+
+export interface InvitationGuestRecord extends NewInvitationGuest {
+  readonly id: string;
+  readonly phoneLast8: string | null;
+}
+
+export interface InvitationRecord {
+  readonly id: string;
+  readonly slug: string;
+  readonly ownerSenderId: string;
+  readonly displayName: string;
+  readonly greetingName: string;
+  readonly seatsAllowed: number;
+  readonly rsvpDeadline: string | null;
+  readonly guests: readonly InvitationGuestRecord[];
+}
+
+/** Exactly what a guest-facing surface is allowed to see. No phone field exists. */
+export interface GuestFacingGuest {
+  readonly id: string;
+  readonly fullName: string;
+  readonly isChild: boolean;
+}
+
+export interface GuestFacingInvitation {
+  readonly slug: string;
+  readonly displayName: string;
+  readonly greetingName: string;
+  readonly seatsAllowed: number;
+  readonly rsvpDeadline: string | null;
+  readonly guests: readonly GuestFacingGuest[];
+}
+
+function requireText(value: string | undefined, field: string): string {
+  const trimmed = value?.trim() ?? "";
+
+  if (trimmed === "") {
+    throw new Error(`Import row is missing a value for ${field}.`);
+  }
+
+  return trimmed;
+}
+
+/**
+ * Validates one import row and resolves its owner to a single sender id.
+ *
+ * Sender ownership is mandatory at creation: `invitations.owner_sender_id` is
+ * NOT NULL and there is no unassigned queue and no claim flow. A row with a
+ * missing or unrecognized owner is therefore a hard failure, never an
+ * invitation created without one.
+ */
+export function validateImportRow(
+  row: ImportRow,
+  senders: SenderDirectory,
+  defaultCountry: CountryCode,
+): NewInvitation {
+  const displayName = requireText(row.displayName, "display_name");
+  const greetingName = requireText(row.greetingName, "greeting_name");
+  const ownerEmail = requireText(row.ownerEmail, "owner").toLowerCase();
+  const ownerSenderId = senders[ownerEmail];
+
+  if (!ownerSenderId) {
+    throw new Error(
+      `Import row "${displayName}" has an unrecognized owner: ${ownerEmail}. Every invitation must be owned by a known sender.`,
+    );
+  }
+
+  if (
+    !Number.isInteger(row.seatsAllowed) ||
+    row.seatsAllowed < 1 ||
+    row.seatsAllowed > MAX_SEATS_ALLOWED
+  ) {
+    throw new Error(
+      `Import row "${displayName}" has an invalid seats_allowed: ${row.seatsAllowed}. It must be an integer between 1 and ${MAX_SEATS_ALLOWED}.`,
+    );
+  }
+
+  if (row.guests.length === 0) {
+    throw new Error(
+      `Import row "${displayName}" lists no guests. An invitation is a household of at least one named guest.`,
+    );
+  }
+
+  const primaries = row.guests.filter((guest) => guest.isPrimary === true);
+  if (primaries.length > 1) {
+    throw new Error(
+      `Import row "${displayName}" marks ${primaries.length} guests as primary. At most one primary guest is allowed per invitation.`,
+    );
+  }
+
+  const guests = row.guests.map((guest) => {
+    const fullName = requireText(guest.fullName, "full_name");
+    const raw = guest.phone?.trim() ?? "";
+
+    if (raw === "") {
+      // A phone-less guest is legitimate — a child, or a household member who
+      // shares the link. `phone_e164` stays NULL, and the DB's generated
+      // `phone_last8` is NULL too, so nothing at the gate can ever match them.
+      return {
+        fullName,
+        phoneE164: null,
+        isPrimary: guest.isPrimary === true,
+        isChild: guest.isChild === true,
+      };
+    }
+
+    let phoneE164: string;
+    try {
+      phoneE164 = normalizeForStorage(raw, defaultCountry);
+    } catch (cause) {
+      // The raw number is deliberately kept out of the message: guest phone
+      // numbers are personal data and import errors reach logs.
+      throw new Error(
+        `Import row "${displayName}" has an unusable phone for guest "${fullName}": ${(cause as Error).message}`,
+      );
+    }
+
+    return {
+      fullName,
+      phoneE164,
+      isPrimary: guest.isPrimary === true,
+      isChild: guest.isChild === true,
+    };
+  });
+
+  return {
+    ownerSenderId,
+    displayName,
+    greetingName,
+    seatsAllowed: row.seatsAllowed,
+    rsvpDeadline: row.rsvpDeadline?.trim() || null,
+    guests,
+  };
+}
+
+/**
+ * Projects an invitation onto exactly what a guest may see.
+ *
+ * `phone_e164` and `phone_last8` are dropped here, at the only place a record
+ * crosses into guest-facing rendering. The mapper is a projection rather than a
+ * redaction on purpose: an added column cannot leak by being forgotten,
+ * because it is never copied in the first place.
+ */
+export function toGuestFacingInvitation(
+  record: InvitationRecord,
+): GuestFacingInvitation {
+  return {
+    slug: record.slug,
+    displayName: record.displayName,
+    greetingName: record.greetingName,
+    seatsAllowed: record.seatsAllowed,
+    rsvpDeadline: record.rsvpDeadline,
+    guests: record.guests.map((guest) => ({
+      id: guest.id,
+      fullName: guest.fullName,
+      isChild: guest.isChild,
+    })),
+  };
+}
+
+/**
+ * The server-side counterpart: the last-8 refs the phone gate compares against.
+ *
+ * Deliberately a separate function from `toGuestFacingInvitation` so the two
+ * audiences can never be confused by a single "options" flag.
+ */
+export function toGatePhoneRefs(
+  record: InvitationRecord,
+): readonly GuestPhoneRef[] {
+  return record.guests.map((guest) => ({ phone_last8: guest.phoneLast8 }));
+}
+
+/** Mints a fresh 80-bit slug. Randomness comes from the adapter (design D2). */
+export function mintSlug(): string {
+  return encodeSlug(randomBytes(SLUG_BYTE_LENGTH));
+}
+
+interface InvitationRow {
+  id: string;
+  slug: string;
+  owner_sender_id: string;
+  display_name: string;
+  greeting_name: string;
+  seats_allowed: number;
+  rsvp_deadline: string | null;
+  invitation_guests: {
+    id: string;
+    full_name: string;
+    phone_e164: string | null;
+    phone_last8: string | null;
+    is_primary: boolean;
+    is_child: boolean;
+  }[];
+}
+
+const INVITATION_SELECT =
+  "id, slug, owner_sender_id, display_name, greeting_name, seats_allowed, rsvp_deadline, " +
+  "invitation_guests(id, full_name, phone_e164, phone_last8, is_primary, is_child)";
+
+function toRecord(row: InvitationRow): InvitationRecord {
+  return {
+    id: row.id,
+    slug: row.slug,
+    ownerSenderId: row.owner_sender_id,
+    displayName: row.display_name,
+    greetingName: row.greeting_name,
+    seatsAllowed: row.seats_allowed,
+    rsvpDeadline: row.rsvp_deadline,
+    guests: row.invitation_guests.map((guest) => ({
+      id: guest.id,
+      fullName: guest.full_name,
+      phoneE164: guest.phone_e164,
+      phoneLast8: guest.phone_last8,
+      isPrimary: guest.is_primary,
+      isChild: guest.is_child,
+    })),
+  };
+}
+
+/**
+ * Creates an invitation and its guests.
+ *
+ * If the guest insert fails the invitation row is removed again, because an
+ * invitation with no guests can never be unlocked by anyone and would sit in
+ * the console looking valid. Postgres has no cross-statement transaction over
+ * PostgREST, so the compensation is explicit.
+ */
+export async function createInvitation(
+  client: SupabaseClient,
+  input: NewInvitation,
+): Promise<InvitationRecord> {
+  const slug = mintSlug();
+
+  const { data: invitation, error: invitationError } = await client
+    .from("invitations")
+    .insert({
+      slug,
+      owner_sender_id: input.ownerSenderId,
+      display_name: input.displayName,
+      greeting_name: input.greetingName,
+      seats_allowed: input.seatsAllowed,
+      rsvp_deadline: input.rsvpDeadline,
+    })
+    .select("id")
+    .single();
+
+  if (invitationError || !invitation) {
+    throw new Error(
+      `Could not create invitation "${input.displayName}": ${invitationError?.message ?? "no row returned"}`,
+    );
+  }
+
+  const { error: guestsError } = await client.from("invitation_guests").insert(
+    input.guests.map((guest) => ({
+      invitation_id: invitation.id,
+      full_name: guest.fullName,
+      phone_e164: guest.phoneE164,
+      is_primary: guest.isPrimary,
+      is_child: guest.isChild,
+    })),
+  );
+
+  if (guestsError) {
+    await client.from("invitations").delete().eq("id", invitation.id);
+    throw new Error(
+      `Could not create guests for invitation "${input.displayName}": ${guestsError.message}`,
+    );
+  }
+
+  const created = await findInvitationBySlug(client, slug);
+
+  if (!created) {
+    throw new Error(
+      `Invitation "${input.displayName}" was created but could not be read back.`,
+    );
+  }
+
+  return created;
+}
+
+/** Reads one invitation and its guests by slug. `null` when no such slug exists. */
+export async function findInvitationBySlug(
+  client: SupabaseClient,
+  slug: string,
+): Promise<InvitationRecord | null> {
+  const { data, error } = await client
+    .from("invitations")
+    .select(INVITATION_SELECT)
+    .eq("slug", slug)
+    .maybeSingle<InvitationRow>();
+
+  if (error) {
+    throw new Error(`Could not read invitation by slug: ${error.message}`);
+  }
+
+  return data ? toRecord(data) : null;
+}
+
+/**
+ * Builds the allowlisted-email → sender-id directory the import validates against.
+ *
+ * The `senders` table IS the allowlist (design D7). Reading it here rather than
+ * accepting a hand-maintained map means the import cannot assign an invitation
+ * to a "sender" that does not exist as an authenticatable operator.
+ */
+export async function listSenderDirectory(
+  client: SupabaseClient,
+): Promise<SenderDirectory> {
+  const { data, error } = await client
+    .from("senders")
+    .select("id, allowlisted_email");
+
+  if (error) {
+    throw new Error(`Could not read the sender directory: ${error.message}`);
+  }
+
+  const directory: Record<string, string> = {};
+  for (const sender of data ?? []) {
+    directory[sender.allowlisted_email] = sender.id;
+  }
+
+  return directory;
+}

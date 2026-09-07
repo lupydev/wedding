@@ -13,13 +13,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "import:guests": "tsx --conditions=react-server scripts/import-guests.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.115.0",
     "libphonenumber-js": "^1.13.12",
     "next": "16.3.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
@@ -28,6 +31,7 @@
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
     "@types/node": "^26.4.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
@@ -35,7 +39,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "jsdom": "^30.0.1",
+    "pg": "^8.23.0",
     "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^5.0.0"

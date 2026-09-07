@@ -85,3 +85,85 @@ describe("components import zone", () => {
     expect(messages).toHaveLength(0);
   });
 });
+
+// `import 'server-only'` must be the FIRST line of every file under
+// `lib/server/**`. Transitive protection through a DB-touching module is not
+// enough: a future server module that touches no database would otherwise be
+// unguarded, and the failure mode is a silent data leak to the browser rather
+// than an error. The rule is enforced by lint so a new file cannot forget it.
+
+function serverOnlyMessages(messages: Awaited<ReturnType<typeof messagesFor>>) {
+  return messages.filter(
+    (message) => message.ruleId === "no-restricted-syntax",
+  );
+}
+
+describe("lib/server server-only guard", () => {
+  it("rejects a file with no server-only import at all", async () => {
+    const messages = serverOnlyMessages(
+      await messagesFor("lib/server/zone-probe.ts", `export const x = 1;\n`),
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].severity).toBe(2);
+    expect(messages[0].message).toMatch(/server-only/);
+  });
+
+  it("rejects a file where server-only is not the first statement", async () => {
+    const messages = serverOnlyMessages(
+      await messagesFor(
+        "lib/server/zone-probe.ts",
+        `import { createClient } from "@supabase/supabase-js";\nimport "server-only";\nexport const x = createClient;\n`,
+      ),
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].severity).toBe(2);
+  });
+
+  it("accepts a file that opens with server-only", async () => {
+    const messages = serverOnlyMessages(
+      await messagesFor(
+        "lib/server/zone-probe.ts",
+        `import "server-only";\n\nimport { createClient } from "@supabase/supabase-js";\nexport const x = createClient;\n`,
+      ),
+    );
+
+    expect(messages).toHaveLength(0);
+  });
+
+  it("rejects an empty file, which has no first statement to check", async () => {
+    const messages = serverOnlyMessages(
+      await messagesFor("lib/server/zone-probe.ts", ``),
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].message).toMatch(/server-only/);
+  });
+
+  it("does not impose the guard outside lib/server", async () => {
+    const messages = serverOnlyMessages(
+      await messagesFor("lib/domain/zone-probe.ts", `export const x = 1;\n`),
+    );
+
+    expect(messages).toHaveLength(0);
+  });
+
+  it("holds for every real file currently under lib/server", async () => {
+    const results = await eslint.lintFiles(["lib/server/**/*.ts"]);
+    const offenders = results
+      .filter((result) =>
+        result.messages.some(
+          (message) =>
+            message.ruleId === "no-restricted-syntax" &&
+            /server-only/.test(message.message),
+        ),
+      )
+      .map((result) => result.filePath);
+
+    // Non-empty by construction: if the glob ever matches nothing this
+    // assertion would pass while proving nothing.
+    expect(results.length).toBeGreaterThan(0);
+    expect(offenders).toEqual([]);
+  });
+});
