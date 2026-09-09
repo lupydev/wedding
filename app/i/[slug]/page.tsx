@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 
 import { InvitationBody } from "@/components/invitation/InvitationBody";
+import { InvitationGate } from "@/components/invitation/InvitationGate";
 import { InvitationUnavailable } from "@/components/invitation/InvitationUnavailable";
 import { buildInvitationMetadataText } from "@/lib/domain/og-card";
+import { buildGateRecoveryLink } from "@/lib/domain/recovery-message";
+import { UNLOCK_COOKIE_NAME, unlockCookieUnlocks } from "@/lib/server/cookies";
 
-import { loadGuestFacingInvitation } from "./load-invitation";
+import { unlockAction } from "./actions";
+import { GateForm } from "./gate-form";
+import {
+  loadGuestFacingInvitation,
+  loadInvitationRecord,
+  loadOwnerContactPhone,
+} from "./load-invitation";
 
 /**
  * The per-guest invitation page.
@@ -21,8 +31,17 @@ import { loadGuestFacingInvitation } from "./load-invitation";
  * Deliberately thin. The body is `InvitationBody`, the one component the
  * operator preview renders too, so the two surfaces cannot drift.
  *
- * The phone gate is NOT here yet; work unit 4b inserts it in front of the body
- * without restructuring this container.
+ * The phone gate sits in front of that body and is composed SYNCHRONOUSLY: no
+ * `loading.tsx`, no Suspense boundary, no client-side data fetch. That is not a
+ * style preference. Anything that lets Next.js flush a shell early turns this
+ * route's metadata into streamed metadata, which appends the Open Graph tags
+ * near `</body>` where WhatsApp's crawler — which stops at the first response
+ * and runs no JavaScript — would never see them. The failure is silent: the
+ * message still sends, the card is simply blank. `e2e/invitation-page-og.spec.ts`
+ * is the regression guard, and it asserts the tags are NOT after `</head>`.
+ *
+ * There is exactly ONE piece of unlock state read here: the signed `inv_unlock`
+ * cookie. No query parameter, header, token or admin session participates.
  */
 
 interface RouteParams {
@@ -72,9 +91,47 @@ export default async function InvitationPage({ params }: RouteParams) {
     return <InvitationUnavailable />;
   }
 
+  // Non-null whenever the projection above is: both read the same cached row.
+  const record = (await loadInvitationRecord(slug))!;
+  const cookieStore = await cookies();
+  const unlockCookie = cookieStore.get(UNLOCK_COOKIE_NAME)?.value ?? "";
+
+  // The cookie's own payload names the invitation it unlocked, and it is
+  // checked against THIS invitation. Path-scoping already keeps the browser
+  // from sending household A's cookie to household B, but a person can hold
+  // both links and the server must not depend on the browser for that.
+  if (unlockCookieUnlocks(unlockCookie, record.id)) {
+    return (
+      <main>
+        <InvitationBody invitation={invitation} />
+      </main>
+    );
+  }
+
+  const ownerContact = await loadOwnerContactPhone(record.ownerSenderId);
+
+  if (ownerContact === null) {
+    // `senders.contact_wa_phone_e164` is NOT NULL and `owner_sender_id` is a
+    // required foreign key, so this means the owner row is gone. Failing loudly
+    // beats rendering a gate whose only escape hatch is missing.
+    throw new Error(
+      `Invitation ${record.id} has no reachable owning sender, so its gate has no recovery path.`,
+    );
+  }
+
   return (
     <main>
-      <InvitationBody invitation={invitation} />
+      <InvitationGate
+        greetingName={invitation.greetingName}
+        recoveryHref={buildGateRecoveryLink(
+          ownerContact,
+          invitation.greetingName,
+        )}
+      >
+        {/* The slug is bound on the SERVER: the form never supplies it, so a
+            client cannot aim the unlock at a different household. */}
+        <GateForm action={unlockAction.bind(null, slug)} />
+      </InvitationGate>
     </main>
   );
 }

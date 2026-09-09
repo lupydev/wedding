@@ -5,25 +5,29 @@ import { cache } from "react";
 import { isWellFormedSlug } from "@/lib/domain/slug";
 import {
   findInvitationBySlug,
+  findSenderContactPhone,
   toGuestFacingInvitation,
   type GuestFacingInvitation,
+  type InvitationRecord,
 } from "@/lib/server/invitations";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
 /**
  * Reads one invitation for the guest-facing route.
  *
- * Wrapped in React's `cache` because the page renders it TWICE per request:
- * once in `generateMetadata`, to put the household's name in `og:title`, and
- * once in the page body. Without deduplication every crawler fetch would cost
- * two round trips to Postgres for the same row.
+ * Wrapped in React's `cache` because the request touches it more than once:
+ * `generateMetadata` needs the household's name for `og:title`, the page needs
+ * the invitation id to check the unlock cookie, and the gate needs the greeting
+ * name. Without deduplication every crawler fetch would cost several round
+ * trips to Postgres for the same row.
  *
- * The result is the guest-facing PROJECTION, never the record: `phone_e164`
- * and `phone_last8` are dropped before anything reaches a component, so no
- * rendering path has a phone number available to leak.
+ * The RECORD stays here, inside `lib/server`-facing code. Nothing rendered ever
+ * receives it: components are handed `toGuestFacingInvitation`'s projection,
+ * which has no phone field to leak, and the gate is handed the last-8
+ * references only.
  */
-export const loadGuestFacingInvitation = cache(
-  async (slug: string): Promise<GuestFacingInvitation | null> => {
+export const loadInvitationRecord = cache(
+  async (slug: string): Promise<InvitationRecord | null> => {
     // A malformed slug cannot exist, so it is answered without a database round
     // trip. That also means an enumeration attempt of nonsense strings costs
     // the database nothing.
@@ -31,11 +35,32 @@ export const loadGuestFacingInvitation = cache(
       return null;
     }
 
-    const record = await findInvitationBySlug(
-      createServerSupabaseClient(),
-      slug,
-    );
+    return findInvitationBySlug(createServerSupabaseClient(), slug);
+  },
+);
+
+/**
+ * The guest-facing PROJECTION of the same invitation.
+ *
+ * `phone_e164` and `phone_last8` are dropped before anything reaches a
+ * component, so no rendering path has a phone number available to leak.
+ */
+export const loadGuestFacingInvitation = cache(
+  async (slug: string): Promise<GuestFacingInvitation | null> => {
+    const record = await loadInvitationRecord(slug);
 
     return record === null ? null : toGuestFacingInvitation(record);
   },
+);
+
+/**
+ * The owning sender's contact number, for the gate's recovery link.
+ *
+ * Cached per request like the invitation itself: the gate renders once, but a
+ * cached read costs nothing and keeps a future second call from doubling the
+ * query.
+ */
+export const loadOwnerContactPhone = cache(
+  async (senderId: string): Promise<string | null> =>
+    findSenderContactPhone(createServerSupabaseClient(), senderId),
 );

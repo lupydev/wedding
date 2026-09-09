@@ -1341,3 +1341,222 @@ Open Graph assertions under a WhatsApp User-Agent.
 14/14 Work Unit 4c tasks complete. Work units 1, 2, 2b, 3, 3b and 4a unchanged
 (task 2.5 still PARTIAL on its environment-blocked `.env.example` half). Work
 units 4b, 5, 6a, 6b and 7 untouched. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 4b — Phone Gate
+
+**Mode**: Strict TDD (`strict_tdd: true`, `npm test`). Every production file below
+was preceded by a failing test that referenced code which did not exist.
+
+## What the gate is
+
+`/i/[slug]` previously rendered `InvitationBody` directly. It now renders the
+gate first and the body only behind a verified unlock cookie. `InvitationBody`
+is untouched and remains ONE shared component, so Work Unit 6b's admin-only
+route can render the identical thing.
+
+The route reads exactly **one** piece of unlock state: the signed `inv_unlock`
+cookie. No query parameter, header, token or admin session participates, and
+`unlockAction` is the only code that can mint one.
+
+## The streaming-metadata question, measured
+
+Work Unit 4a proved by measurement that this route did not stream its metadata.
+Adding a gate is exactly what could have changed that. It did not, and this was
+measured rather than assumed:
+
+1. `next.config.ts` was replaced with an empty `NextConfig` (no
+   `htmlLimitedBots`) and `e2e/invitation-page-og.spec.ts` was run twice — once
+   normally and once with `CI=1`, which disables `reuseExistingServer` and
+   therefore forces a fresh `npm run build && npm run start`. Port 3000 was
+   confirmed free beforehand so no stale server could have answered.
+2. **12/12 passed both times**, including `does not stream the tags after
+   </head>`.
+3. `next.config.ts` was restored and verified byte-identical by SHA-256
+   (`e4b46dd34e2f7a0140a73128365b8c17a6ea01fb2565da42194ab9ae3440a15d` before
+   and after).
+
+**`htmlLimitedBots` is still NOT load-bearing.** The reason the gate did not
+change this is structural and deliberate: there is no `loading.tsx`, no Suspense
+boundary and no client-side fetch anywhere above `generateMetadata`.
+`InvitationGate` is a synchronous props-only Server Component, and the only
+Client Component (`GateForm`) is passed in as a child and holds no data. The
+config line stays as the guard for the next structural change.
+
+## Files
+
+| File | Action | What |
+|---|---|---|
+| `lib/domain/rate-limit.ts` | Modified | `remainingAttempts(context, now)` — per-IP allowance left, clamped at 0 |
+| `lib/domain/gate-copy.ts` | Created | `GATE_GENERIC_FAILURE`, `gateFeedbackMessages` — the one-message rule and the concrete counts, as pure text |
+| `lib/domain/recovery-message.ts` | Created | `GATE_HELP_TEMPLATE`, `buildGateRecoveryLink` |
+| `lib/server/gate.ts` | Created | `hashClientIp`, `GateAttemptsStore` port, `createGateAttemptsStore`, `attemptUnlock` |
+| `lib/server/cookies.ts` | Created | `signUnlockCookie`, `verifyUnlockCookie`, `unlockCookieUnlocks`, `unlockCookieOptions` |
+| `lib/server/invitations.ts` | Modified | `findSenderContactPhone` — the owning sender's contact, read separately |
+| `components/invitation/InvitationGate.tsx` | Created | Sync props-only gate screen; greeting, then the form, then recovery |
+| `app/i/[slug]/gate-form.tsx` | Created | `'use client'`, `useActionState`; action arrives as a prop |
+| `app/i/[slug]/actions.ts` | Created | `'use server'` `unlockAction(slug, prev, formData)` |
+| `app/i/[slug]/page.tsx` | Modified | Cookie check → body, else gate |
+| `app/i/[slug]/load-invitation.ts` | Modified | `loadInvitationRecord`, `loadOwnerContactPhone`; projection now derives from the cached record |
+| `e2e/helpers/seed.ts` | Modified | `ownerContactPhone` option, so the recovery-link assertion is not vacuous |
+
+## Design decisions worth stating
+
+**No oracle.** `UnlockOutcome.rejected` carries no reason, and
+`GATE_GENERIC_FAILURE` is the single sentence produced by a wrong number, a
+guest with no phone on file, and a nonexistent invitation alike. `gate-copy.spec.ts`
+and an E2E both assert that no reason-naming string ("lista de invitados", "no
+está registrado", "no existe", "sin teléfono") ever appears. A forged action
+call against an unknown slug returns the same rejection shape and records no
+attempt. The friendly unknown-slug page remains the one intentional distinction,
+per design D10, and an E2E pins that it is the ONLY one.
+
+**Concrete numbers, though.** "Te quedan 2 intentos.", "Te queda 1 intento.",
+"Ese fue el último intento disponible por ahora.", "Por seguridad, espera 12
+minutos antes de intentarlo de nuevo." — minutes rounded UP and floored at 1, so
+"espera 0 minutos" is impossible and the guest is never sent back early.
+
+**Lockout before comparison.** `attemptUnlock` reads history, calls
+`evaluateGate`, and returns `locked` BEFORE touching a stored digit. A locked
+attempt is not recorded, so a lockout cannot renew itself against a guest who
+keeps refreshing. Tested with a correct number and with no guests at all.
+
+**`ip_hash`.** `HMAC-SHA256(GATE_IP_PEPPER, ip)` truncated to 32 hex chars, in
+`lib/server/gate.ts` only. `lib/server/env.ts` already refuses a pepper under 32
+characters. The raw address is never stored or logged, and no submitted phone
+appears in any error message or return value.
+
+**Recovery, deliberately without an OTP.** `buildGateRecoveryLink` composes the
+existing `renderMessageTemplate` and `buildWaMeLink` against the OWNING sender's
+`contact_wa_phone_e164`. No one-time password, no email fallback: a prior
+project shipped a complete phone+OTP recovery and its own migration records zero
+rows used across 97 real guests. An E2E asserts no second mechanism is even
+mentioned on the page.
+
+**Greeting before the prompt.** The WhatsApp message promised "your invitation",
+so the household is greeted first and asked second. Asserted structurally by
+`compareDocumentPosition`, not by reading the markup. The greeting name is
+already on the Open Graph card, so it is not a new disclosure.
+
+## Deviations from design and spec
+
+1. **Cookie lifetime is 180 days, not 30.** `specs/phone-gate/spec.md` and task
+   4b.7 say 30 days; the work-unit instruction said months, not days, for an
+   event this far out. 180 days satisfies the spec's only testable claim ("within
+   30 days ... the gate MUST NOT be shown") and is asserted both in
+   `cookies.spec.ts` and in an E2E reading the real `Set-Cookie` expiry. **The
+   spec sentence "valid for 30 days" should be amended to a minimum rather than
+   an exact value.** Flagging rather than silently reinterpreting.
+2. **Re-issue on each successful VISIT is not implemented.** A fresh cookie is
+   minted on each successful UNLOCK. Next.js cannot set a cookie during a Server
+   Component render, so per-visit re-issue would require either middleware or a
+   route handler on this path — both of which introduce a boundary in front of
+   the route whose metadata guarantee this unit was explicitly told to protect.
+   Traded for the 180-day lifetime instead. Stating it rather than describing the
+   weaker guarantee as equivalent.
+3. **Task 4b.12's console-operator half is deferred to 6a**, marked PARTIAL in
+   `tasks.md`. The console and its session do not exist yet, so no operator can
+   be authenticated. What is asserted today is the same invariant from the other
+   side: no session-shaped cookie (`admin_session`, `device_sender`,
+   `sb-access-token`, `unlocked`) and no forged `inv_unlock` bypasses the gate,
+   because the page reads exactly one piece of unlock state.
+4. **Three modules the design did not name**: `lib/domain/gate-copy.ts`,
+   `lib/domain/recovery-message.ts`, and the `GateAttemptsStore` port inside
+   `lib/server/gate.ts`. All three exist to keep logic testable without mocks —
+   the alternative was asserting Spanish pluralization through a rendered DOM and
+   the lockout arithmetic through a mocked PostgREST query builder.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 4b.1–4b.2 | `lib/server/gate.spec.ts` | Integration (node) | N/A (new) | Written | Passed | 5 matching cases | Clean |
+| 4b.3–4b.4 | `lib/server/gate.spec.ts` | Integration (node) | N/A (new) | Written | Passed | 6 rate-limit cases | Clean |
+| 4b.5 | `lib/server/gate.spec.ts` | Unit | N/A (new) | Written | Passed | 6 hash cases | Clean |
+| (support) | `lib/domain/rate-limit.spec.ts` | Unit | 40/40 green first | Written | Passed | 7 cases | None needed |
+| 4b.6–4b.7 | `lib/server/cookies.spec.ts` | Unit | N/A (new) | Written | Passed | 16 cases | `unlockCookieUnlocks` extracted, 4 more cases |
+| 4b.8 | `app/i/[slug]/gate-form.spec.tsx` | Component (RTL) | N/A (new) | Written | Passed | 6 cases | Clean |
+| (support) | `lib/domain/gate-copy.spec.ts` | Unit | N/A (new) | Written | Passed | 9 cases | Clean |
+| 4b.9–4b.10 | `e2e/phone-gate.spec.ts` | E2E | 22/22 green first | Written | Passed | 28 cases | Clean |
+| 4b.15 | `lib/domain/recovery-message.spec.ts` | Unit | N/A (new) | Written | Passed | 7 cases | Clean |
+| 4b.15 | `components/invitation/InvitationGate.spec.tsx` | Component (RTL) | N/A (new) | Written | Passed | 8 cases | Clean |
+| 4b.11–4b.14, 4b.16–4b.18 | `e2e/phone-gate.spec.ts` | E2E | 22/22 green first | Written | Passed | 28 cases | Clean |
+
+Two RED→GREEN cycles required real fixes rather than test edits:
+
+1. `attemptUnlock` double-counted the attempt it had just recorded. The FAKE was
+   at fault — it returned a live array that `recordAttempt` then mutated — and
+   the fix was to return a snapshot, which is what a database read does anyway.
+2. The E2E lockout loop outran the server: asserting the generic sentence passed
+   against the PREVIOUS render. It now asserts the exact countdown, which is
+   unique per attempt, and therefore also proves the countdown is real.
+
+### Test summary
+
+- Unit/component tests added: **78** (346 → 424)
+- E2E tests added: **28** (22 → 50)
+- Pure functions created: `remainingAttempts`, `gateFeedbackMessages`,
+  `buildGateRecoveryLink`, plus two private helpers
+- Mock count: highest in any new file is **one** fake (`GateAttemptsStore`)
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npx vitest run lib/server/gate.spec.ts lib/server/cookies.spec.ts lib/domain/gate-copy.spec.ts lib/domain/recovery-message.spec.ts "app/i/[slug]/gate-form.spec.tsx" components/invitation/InvitationGate.spec.tsx` — all passed during the cycle |
+| Runtime harness | `npm run e2e -- e2e/phone-gate.spec.ts` → **28 passed**, against a real `next build && next start` and a real local Supabase |
+| Rollback boundary | Delete the 14 new files, revert the 6 modified ones. `InvitationBody`, the OG image route, `robots.ts`, every migration and every Work Unit 1–4c test are untouched. |
+
+## Issues found
+
+1. **`e2e/helpers/seed.ts` hard-coded one owner contact for every fixture.** The
+   recovery-link assertion would have passed even if the link addressed the
+   wrong sender. Fixed by making it a per-fixture option and asserting two
+   different owners.
+2. **`react-hooks/purity` rejects `Date.now()` inside a Server Component.**
+   Correctly: the clock belongs in the adapter (design D2). `unlockCookieUnlocks`
+   owns it now.
+3. **Next.js renders its own empty `role="alert"` route announcer**, so an
+   unscoped `getByRole("alert")` is ambiguous. The E2E scopes it to the form.
+4. **Three Work Unit 3 WARNINGs remain open**, untouched, as instructed.
+
+## Explicitly out of scope, and left alone
+
+RSVP (Work Unit 5), the console (6a), dispatch and previews (6b), the public
+ceremony/Zoom page, reminders, and the three open Work Unit 3 WARNINGs. No
+migration was added or changed; `gate_attempts` already existed from Work Unit 3.
+
+## Workload / PR boundary
+
+- Mode: chained PR slice — PR4b, following PR4c.
+- **Authored lines: ~2,381 (≈780 production, ≈1,601 test).** Far above the
+  400-line default budget. The slice is one cohesive deliverable — a gate whose
+  cookie, rate limiter, copy and route wiring are useless apart — and the test
+  half is two thirds of it. Recommending `size:exception`. If the reviewer
+  prefers a split, the natural seam is (a) `cookies.ts` + `gate.ts` + their
+  specs, then (b) the route, component and E2E.
+- **No commit.** The tree is normalized: `npm run format` and `npm run lint` ran
+  after the last source change and `npm run format:check` is clean.
+
+## Verification — actual output
+
+| Command | Observed result |
+|---|---|
+| `npm test` | `Test Files 30 passed (30)` / `Tests 424 passed (424)` — baseline 24 / 346 |
+| `npm run e2e` | `50 passed (11.1s)` — baseline 22 |
+| `npm run typecheck` | clean, no output |
+| `npm run lint` | clean, no output |
+| `npm run format:check` | `All matched files use Prettier code style!` |
+| `npm run build` | `✓ Compiled successfully`; routes `/`, `/_not-found`, `/i/[slug]`, `/i/[slug]/opengraph-image`, `/robots.txt` |
+
+Re-confirmed inside those runs: the raw-HTML Open Graph assertions under a
+WhatsApp User-Agent including `does not stream the tags after </head>`, no phone
+digits in the page source, the `nullif` mutation test, `service_role`
+append-only, seat parity, and the external anon-key RLS invariants.
+
+## Status
+
+18/18 Work Unit 4b tasks complete (4b.12 PARTIAL — console-operator half
+deferred to 6a). Work units 1, 2, 2b, 3, 3b, 4a and 4c unchanged (task 2.5 still
+PARTIAL). Work units 5, 6a, 6b and 7 untouched. Ready for `sdd-verify`.

@@ -41,6 +41,8 @@ export interface SeededInvitation {
   readonly slug: string;
   readonly greetingName: string;
   readonly displayName: string;
+  /** The OWNING sender's WhatsApp contact, which the gate's recovery link uses. */
+  readonly ownerContactPhone: string;
   readonly guests: readonly SeededGuest[];
   /** Removes the fixture and its owner sender. */
   readonly cleanup: () => Promise<void>;
@@ -72,12 +74,19 @@ export async function seedInvitation(options: {
   greetingName: string;
   displayName?: string;
   seatsAllowed?: number;
+  /**
+   * Fabricated owner contact. Varying it per fixture is what makes the gate's
+   * recovery-link assertion meaningful: a single hard-coded value would pass
+   * even if the link addressed the wrong sender entirely.
+   */
+  ownerContactPhone?: string;
   guests: readonly SeededGuest[];
 }): Promise<SeededInvitation> {
   const db = await connect();
   const suffix = randomBytes(4).toString("hex");
   const slug = makeSlug();
   const displayName = options.displayName ?? options.greetingName;
+  const ownerContactPhone = options.ownerContactPhone ?? "+573005550000";
 
   try {
     const sender = await db.query<{ id: string }>(
@@ -87,7 +96,7 @@ export async function seedInvitation(options: {
       [
         `E2E Sender ${suffix}`,
         `e2e.${suffix}.${Date.now()}@example.test`,
-        "+573005550000",
+        ownerContactPhone,
       ],
     );
     const senderId = sender.rows[0].id;
@@ -123,6 +132,7 @@ export async function seedInvitation(options: {
       slug,
       greetingName: options.greetingName,
       displayName,
+      ownerContactPhone,
       guests: options.guests,
       cleanup: async () => {
         const cleaner = await connect();

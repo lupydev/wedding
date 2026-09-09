@@ -141,3 +141,26 @@ export function evaluateGate(context: GateContext, now: number): GateVerdict {
     retryAfterMs: bindingExpiry - now,
   };
 }
+
+/**
+ * How many attempts this IP has left before the per-IP lockout triggers.
+ *
+ * The gate tells the guest the concrete number rather than "try again later":
+ * a person who mistyped their own number needs to know whether they have six
+ * more tries or one. Only the per-IP scope is reported, because it is the one a
+ * single guest can actually exhaust — the all-IP scope exists to stop an
+ * attacker rotating addresses and is not a budget any guest is spending.
+ *
+ * Clamped at zero: a caller that is already locked out has none left, and a
+ * negative allowance has no meaning to render.
+ */
+export function remainingAttempts(context: GateContext, now: number): number {
+  const recentFailures = context.attempts.filter(
+    (attempt) =>
+      !attempt.succeeded &&
+      attempt.ipHash === context.ipHash &&
+      now - attempt.attemptedAt <= IP_SCOPE.windowMs,
+  ).length;
+
+  return Math.max(0, IP_SCOPE.threshold - recentFailures);
+}

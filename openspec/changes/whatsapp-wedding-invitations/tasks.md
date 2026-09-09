@@ -160,24 +160,24 @@ out of scope and remain open.
 
 ## Phase 4b: Phone Gate (Work Unit 4b)
 
-- [ ] 4b.1 RED — `lib/server/gate.spec.ts`: adapter wiring accepts any-guest match, rejects a near-miss.
-- [ ] 4b.2 GREEN — `lib/server/gate.ts`: `import 'server-only'` first line; `attemptUnlock(invitationId, rawPhone, ipHash, now)`.
-- [ ] 4b.3 RED — `gate.spec.ts` addendum: (invitation, ip_hash) 15 min/8-fail/30 min lockout; (invitation, all-IP) 60 min/30-fail/60 min lockout; a 9th attempt is rejected regardless of correctness.
-- [ ] 4b.4 GREEN — wire `lib/domain/rate-limit.ts`'s `evaluateGate` into `gate.ts` against `gate_attempts`.
-- [ ] 4b.5 GREEN — implement `ip_hash = HMAC-SHA256(GATE_IP_PEPPER, ip)` truncated to 32 hex chars via `node:crypto`, called only from `gate.ts`.
-- [ ] 4b.6 RED — `lib/server/cookies.spec.ts`: unlock-cookie sign/verify round-trip; a tampered payload fails verification; the payload's `invitationId` is cross-checked against the invitation resolved from the current slug.
-- [ ] 4b.7 GREEN — `lib/server/cookies.ts`: `import 'server-only'` first line; `inv_unlock` cookie — `httpOnly`, `secure`, `sameSite: 'lax'` (explicitly Lax, not Strict — the guest arrives via cross-site navigation from WhatsApp, and Strict would drop the cookie on that exact navigation), `path: '/i/' + slug`, `maxAge: 30 days`.
-- [ ] 4b.8 GREEN — `app/i/[slug]/gate-form.tsx`: `'use client'` phone input calling `unlockAction`.
-- [ ] 4b.9 GREEN — `app/i/[slug]/actions.ts`: `'use server'` `unlockAction(slug, rawPhone)`; generic failure message, no leaked digits.
-- [ ] 4b.10 GREEN — wire `page.tsx`: render `gate-form.tsx` when no valid unlock cookie is present; delegate to body content when unlocked.
-- [ ] 4b.11 RED — `e2e/phone-gate.spec.ts`: any guest's last-8 digits unlock; a near-miss is rejected; a failed-attempt response (HTML, inline JSON, network payloads) contains no guest name, no RSVP/dietary/message fields, and no digit sequence matching any stored guest phone.
-- [ ] 4b.12 RED — E2E addendum: `?preview=1`, `?admin=1`, and other query parameters never bypass the gate; an authenticated console operator visiting the public route directly still sees the gate.
-- [ ] 4b.13 RED — E2E addendum: 8 failed attempts within 15 minutes lock out the 9th; the lockout persists across separate requests.
-- [ ] 4b.14 RED — E2E addendum: a successful unlock sets `inv_unlock` with `SameSite=Lax`; a repeat visit within 30 days skips the gate.
-- [ ] 4b.15 GREEN — recovery UI: "¿No puedes entrar?" link via `buildWaMeLink(owner.contact_wa_phone_e164, renderMessageTemplate(HELP_TEMPLATE, { greetingName }))`, resolved server-side against the owning sender.
-- [ ] 4b.16 RED — E2E addendum: the recovery link's recipient digits match the invitation's owning sender's contact number.
-- [ ] 4b.17 RED — E2E addendum: unknown-slug and wrong-phone response shapes are compared; neither reveals invitation existence beyond the intentional friendly-page distinction.
-- [ ] 4b.18 Verify: run `e2e/phone-gate.spec.ts` and `e2e/invitation-page-og.spec.ts` together — confirm 4b.1, 4b.3, 4b.6, 4b.11–4b.14, 4b.16, 4b.17 RED tests pass GREEN and the one-unlock-path invariant holds.
+- [x] 4b.1 RED — `lib/server/gate.spec.ts`: adapter wiring accepts any-guest match, rejects a near-miss.
+- [x] 4b.2 GREEN — `lib/server/gate.ts`: `import 'server-only'` first line; `attemptUnlock(invitationId, rawPhone, ipHash, now)`.
+- [x] 4b.3 RED — `gate.spec.ts` addendum: (invitation, ip_hash) 15 min/8-fail/30 min lockout; (invitation, all-IP) 60 min/30-fail/60 min lockout; a 9th attempt is rejected regardless of correctness.
+- [x] 4b.4 GREEN — wire `lib/domain/rate-limit.ts`'s `evaluateGate` into `gate.ts` against `gate_attempts`.
+- [x] 4b.5 GREEN — implement `ip_hash = HMAC-SHA256(GATE_IP_PEPPER, ip)` truncated to 32 hex chars via `node:crypto`, called only from `gate.ts`.
+- [x] 4b.6 RED — `lib/server/cookies.spec.ts`: unlock-cookie sign/verify round-trip; a tampered payload fails verification; the payload's `invitationId` is cross-checked against the invitation resolved from the current slug.
+- [x] 4b.7 GREEN — `lib/server/cookies.ts`: `import 'server-only'` first line; `inv_unlock` cookie — `httpOnly`, `secure`, `sameSite: 'lax'` (explicitly Lax, not Strict — the guest arrives via cross-site navigation from WhatsApp, and Strict would drop the cookie on that exact navigation), `path: '/i/' + slug`, `maxAge: 30 days`.
+- [x] 4b.8 GREEN — `app/i/[slug]/gate-form.tsx`: `'use client'` phone input calling `unlockAction`.
+- [x] 4b.9 GREEN — `app/i/[slug]/actions.ts`: `'use server'` `unlockAction(slug, rawPhone)`; generic failure message, no leaked digits.
+- [x] 4b.10 GREEN — wire `page.tsx`: render `gate-form.tsx` when no valid unlock cookie is present; delegate to body content when unlocked.
+- [x] 4b.11 RED — `e2e/phone-gate.spec.ts`: any guest's last-8 digits unlock; a near-miss is rejected; a failed-attempt response (HTML, inline JSON, network payloads) contains no guest name, no RSVP/dietary/message fields, and no digit sequence matching any stored guest phone.
+- [x] 4b.12 (PARTIAL — query-parameter half done; the console-operator half is DEFERRED: the console and its session do not exist until Work Unit 6a, so no operator can be authenticated yet. Covered today by an equivalent assertion that no session-shaped cookie — `admin_session`, `device_sender`, `sb-access-token`, `unlocked` — bypasses the gate, plus a forged `inv_unlock`. Re-assert with a real operator session in 6a.) RED — E2E addendum: `?preview=1`, `?admin=1`, and other query parameters never bypass the gate; an authenticated console operator visiting the public route directly still sees the gate.
+- [x] 4b.13 RED — E2E addendum: 8 failed attempts within 15 minutes lock out the 9th; the lockout persists across separate requests.
+- [x] 4b.14 RED — E2E addendum: a successful unlock sets `inv_unlock` with `SameSite=Lax`; a repeat visit within 30 days skips the gate.
+- [x] 4b.15 GREEN — recovery UI: "¿No puedes entrar?" link via `buildWaMeLink(owner.contact_wa_phone_e164, renderMessageTemplate(HELP_TEMPLATE, { greetingName }))`, resolved server-side against the owning sender.
+- [x] 4b.16 RED — E2E addendum: the recovery link's recipient digits match the invitation's owning sender's contact number.
+- [x] 4b.17 RED — E2E addendum: unknown-slug and wrong-phone response shapes are compared; neither reveals invitation existence beyond the intentional friendly-page distinction.
+- [x] 4b.18 Verify: run `e2e/phone-gate.spec.ts` and `e2e/invitation-page-og.spec.ts` together — confirm 4b.1, 4b.3, 4b.6, 4b.11–4b.14, 4b.16, 4b.17 RED tests pass GREEN and the one-unlock-path invariant holds.
 
 ## Phase 5: RSVP (Work Unit 5)
 

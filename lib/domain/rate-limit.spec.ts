@@ -4,6 +4,7 @@ import {
   INVITATION_SCOPE,
   IP_SCOPE,
   evaluateGate,
+  remainingAttempts,
   type GateAttempt,
 } from "./rate-limit";
 
@@ -196,5 +197,51 @@ describe("evaluateGate — purity", () => {
     expect(evaluateGate({ ipHash: IP, attempts }, NOW)).toEqual(
       evaluateGate({ ipHash: IP, attempts }, NOW),
     );
+  });
+});
+
+describe("remainingAttempts", () => {
+  it("reports the full per-IP allowance when there is no history", () => {
+    expect(remainingAttempts({ ipHash: IP, attempts: [] }, NOW)).toBe(8);
+  });
+
+  it("counts down as this IP accumulates failures inside the window", () => {
+    expect(remainingAttempts({ ipHash: IP, attempts: failures(6) }, NOW)).toBe(
+      2,
+    );
+  });
+
+  it("reports one remaining attempt after seven failures", () => {
+    expect(remainingAttempts({ ipHash: IP, attempts: failures(7) }, NOW)).toBe(
+      1,
+    );
+  });
+
+  it("never reports a negative allowance once the threshold is passed", () => {
+    expect(remainingAttempts({ ipHash: IP, attempts: failures(11) }, NOW)).toBe(
+      0,
+    );
+  });
+
+  it("ignores failures that have aged out of the 15 minute window", () => {
+    const stale = failures(6, { minutesAgo: 20, spacingMinutes: 1 });
+
+    expect(remainingAttempts({ ipHash: IP, attempts: stale }, NOW)).toBe(8);
+  });
+
+  it("ignores failures made from another IP", () => {
+    const others = failures(6, { ipHash: OTHER_IP });
+
+    expect(remainingAttempts({ ipHash: IP, attempts: others }, NOW)).toBe(8);
+  });
+
+  it("ignores successful attempts, so a guest is never punished for returning", () => {
+    const attempts: GateAttempt[] = [
+      ...failures(3),
+      { ipHash: IP, succeeded: true, attemptedAt: NOW - MINUTE },
+      { ipHash: IP, succeeded: true, attemptedAt: NOW - 2 * MINUTE },
+    ];
+
+    expect(remainingAttempts({ ipHash: IP, attempts }, NOW)).toBe(5);
   });
 });
