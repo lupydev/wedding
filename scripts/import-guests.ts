@@ -51,13 +51,17 @@
 
 import { readFileSync } from "node:fs";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { requiredDefaultPhoneCountry } from "@/lib/server/env";
 import {
   importInvitations,
   listSenderDirectory,
   validateImportRows,
+  type ImportedInvitation,
   type ImportRow,
 } from "@/lib/server/invitations";
+import { warmOgCard } from "@/lib/server/og-warm";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
 /** Repo-relative path of the untracked guest source. Git-ignored by design. */
@@ -90,6 +94,47 @@ export function parseGuestSource(contents: string): ImportRow[] {
   }
 
   return invitations as ImportRow[];
+}
+
+/** The warming call, injectable so the import can be tested without a network. */
+export type WarmCard = (
+  client: SupabaseClient,
+  slug: string,
+) => Promise<boolean>;
+
+/**
+ * Warms the Open Graph card of every household this run actually created.
+ *
+ * Only the created ones: `next/og` answers immutable, so a household that was
+ * already present had its card warmed when it was first created and re-fetching
+ * it buys nothing.
+ *
+ * Runs AFTER the import transaction has committed, and its outcome cannot
+ * affect that transaction. A failed warm leaves `og_warmed_at` null, which the
+ * console surfaces as a "preview not warmed" badge — and previewing warms it,
+ * so the badge clears by itself the first time an operator looks at the row.
+ */
+export async function warmCreatedInvitations(
+  client: SupabaseClient,
+  imported: readonly ImportedInvitation[],
+  warm: WarmCard = warmOgCard,
+): Promise<number> {
+  let warmed = 0;
+
+  // Sequential on purpose: this is a courtesy pass over a few hundred rows at
+  // most, and a burst of parallel cold generations is exactly the load the
+  // strategy exists to avoid.
+  for (const invitation of imported) {
+    if (!invitation.created) {
+      continue;
+    }
+
+    if (await warm(client, invitation.slug)) {
+      warmed += 1;
+    }
+  }
+
+  return warmed;
 }
 
 async function main(): Promise<void> {
@@ -126,6 +171,12 @@ async function main(): Promise<void> {
   const created = imported.filter((invitation) => invitation.created).length;
   console.log(
     `Imported ${created} new invitations; ${imported.length - created} were already present.`,
+  );
+
+  // Everything below is best-effort. The import is already committed.
+  const warmed = await warmCreatedInvitations(client, imported);
+  console.log(
+    `Warmed ${warmed} of ${created} preview cards. Any that failed warm themselves the first time they are previewed.`,
   );
 }
 

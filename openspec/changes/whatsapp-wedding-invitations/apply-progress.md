@@ -866,3 +866,205 @@ migrations re-applied in order, then `npm test` re-run → 244/244.
 8/8 Work Unit 3b tasks complete. Work units 1, 2, 2b and 3 are unchanged
 (task 2.5 still PARTIAL on its environment-blocked `.env.example` half). Work
 units 4a onward are untouched. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 4a — Invitation Page, OG Image, Metadata
+
+**Mode**: Strict TDD (`strict_tdd: true`, `npm test` → `vitest run`).
+**Boundary**: starts at `6f1a440` (clean tree, 244 tests), ends with the
+`/i/[slug]` route, its Open Graph card, `robots.ts`, card warming, and a
+Playwright suite, 296 tests green plus 12 E2E. Nothing committed.
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 4a.4 / 4a.5 | `lib/domain/og-card.spec.ts` | Unit | N/A (new) | Written (module missing) | 8 passed | 8 cases | None needed |
+| 4a.7 | `tools/og-font-coverage.spec.ts` | Unit | N/A (new) | Written (harness missing) | 4 passed | 4 cases incl. a negative | None needed |
+| 4a.10 / 4a.11 | `app/robots.spec.ts` | Unit | N/A (new) | Written (module missing) | 4 passed | 4 cases | None needed |
+| 4a.2 / 4a.9 body | `components/invitation/InvitationBody.spec.tsx` | Component | N/A (new) | Written (component missing) | 10 passed | 10 cases + snapshot | Extracted `seatsSentence` |
+| 4a.9 | `components/invitation/InvitationUnavailable.spec.tsx` | Component | N/A (new) | Written (component missing) | 4 passed | 4 cases | None needed |
+| 4a.12 / 4a.13 | `lib/server/og-warm.spec.ts` | Unit | N/A (new) | Written twice — once for the module, once for the corrected URL contract (8 failed) | 18 passed | 18 cases | Extracted `withoutTrailingSlash`, `advertisedCardUrl` |
+| 4a.14 | `scripts/import-guests.spec.ts` | Unit | 5/5 passing before edit | Written (4 failed) | 9 passed | 4 cases | None needed |
+| 4a.1 / 4a.6 / 4a.8 / 4a.16 | `e2e/invitation-page-og.spec.ts` | E2E | N/A (new) | Written (route missing) | 12 passed | 12 cases | Two assertions tightened after a real RED |
+
+Async Server Components cannot be unit-tested under Vitest, so `page.tsx`,
+`opengraph-image.tsx` and `load-invitation.ts` are covered by Playwright only,
+per the design's Testing Architecture table. No fake unit test was written
+around them.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npm test` → `Test Files 20 passed (20)`, `Tests 296 passed (296)` |
+| Runtime harness | `npm run e2e` → `12 passed (4.6s)`, against `npm run build && npm run start` with a committed Postgres fixture |
+| Rollback boundary | Delete `app/i/`, `app/robots*.ts`, `components/invitation/`, `lib/domain/og-card*.ts`, `lib/server/og-warm*.ts`, `tools/{ttf-cmap.ts,og-font-coverage.spec.ts}`, `e2e/`, and revert the four modified files. No migration, no schema change, no committed data. |
+
+Actual output of the closing verification:
+
+```
+npm test             → Test Files 20 passed (20) | Tests 296 passed (296)
+npm run e2e          → 12 passed (4.6s)
+npm run typecheck    → tsc --noEmit, no output
+npm run lint         → eslint ., no output
+npm run format:check → All matched files use Prettier code style!
+npm run build        → ✓ Compiled successfully; ƒ /i/[slug], ƒ /i/[slug]/opengraph-image, ○ /robots.txt
+```
+
+## The three things this unit measured rather than assumed
+
+### 1. `htmlLimitedBots` is not currently the load-bearing mechanism (task 4a.15)
+
+Key placement was confirmed against the installed declarations:
+`node_modules/next/dist/server/config-shared.d.ts:1624` declares
+`htmlLimitedBots?: RegExp` as the last member of the **top-level** `NextConfig`
+interface in Next.js 16.3.4. Work unit 1's placement is correct.
+
+Then the guard itself was tested by removing it: `htmlLimitedBots` was deleted
+from `next.config.ts`, the whole Playwright suite was re-run against a fresh
+build, and **all tests still passed**, including the ordinary-desktop-UA case
+that the default bot list does not cover.
+
+The honest reading: Next.js 16.3.4 does not stream this route's metadata at all,
+because nothing above it flushes a shell early — there is no `loading.tsx` and
+no Suspense boundary on the path to `generateMetadata`. The E2E therefore proves
+the PRODUCT requirement (per-guest `og:title` and `og:image` inside `<head>` of
+the first response, under a WhatsApp UA and a browser UA alike) but does **not**
+today isolate `htmlLimitedBots` as its cause.
+
+The config line stays, and so does the test. Work unit 4b puts a phone gate in
+front of this body; the moment that introduces a Suspense boundary, streaming
+becomes possible and this test is what catches the tags moving to the end of the
+body. The file records this measurement in a comment so nobody later mistakes a
+passing suite for proof that the config is exercised.
+
+### 2. The design's warm URL would have warmed nothing
+
+Design D9 specifies `fetch(`${origin}/i/${slug}/opengraph-image`)`. The E2E's
+raw HTML shows what Next.js actually advertises:
+
+```
+<meta property="og:image" content="https://boda.e2e.test/i/<slug>/opengraph-image?88f8dd536f697fc4"/>
+```
+
+A build-scoped hash is appended, and a CDN keys its cache on the full URL
+including the query. Warming the bare route path would have warmed an entry no
+crawler ever requests — a warm that reports success and buys nothing, which is
+the exact failure D9's "no cache-busting parameter" rule exists to prevent.
+
+`warmOgCard` therefore fetches the invitation page first, reads `og:image` out
+of it, and warms that exact URL. Because it now follows a URL read out of an
+HTTP response body while holding server credentials, it refuses any advertised
+URL that does not start with `ogCardUrl(origin, slug)`; that refusal has its own
+test.
+
+### 3. The card was not cacheable, so warming was a no-op
+
+Design D9 states `next/og` responds `public, immutable, max-age=31536000`. That
+is true of statically generated cards. Measured against `next start` on this
+dynamic per-slug route:
+
+```
+cache-control: public, max-age=0, must-revalidate
+```
+
+Nothing would have been cached, so every crawler fetch would still have paid a
+cold Satori + Resvg render and warming would have been pure cost. The card route
+now sets `public, immutable, no-transform, max-age=31536000` explicitly, driven
+by a RED E2E assertion that failed with the measured default. `immutable` is
+safe because the URL changes whenever the content can: a rotated slug is a new
+path, and a redeploy changes the build hash.
+
+## Confirmed product decisions honoured
+
+- **Card is names-only.** `buildOgCardModel` is a projection with exactly two
+  output fields, so a field added to the read model later cannot leak by being
+  forgotten. Tests assert the rendered values contain no wedding date, venue
+  name, venue address or phone, using a fixture that deliberately carries all
+  four.
+- **Placeholders, not inventions.** `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`,
+  `{{VENUE_NAME}}` and `{{VENUE_ADDRESS}}` render verbatim and are asserted.
+  Nothing was fabricated.
+- **Spanish guest copy, English code.** All identifiers, comments, tests and
+  docs are English; every rendered string is neutral Spanish.
+- **Friendly page, not a 404.** An unknown, rotated or malformed slug renders
+  `InvitationUnavailable` with HTTP 200. The E2E asserts the framework's
+  `This page could not be found` and `next-error-h1` are absent from the
+  document (scripts stripped, because every App Router response inlines the
+  default not-found subtree as hydration data).
+- **No phone leak.** The route reads through `toGuestFacingInvitation`. The E2E
+  asserts the full E.164, the national number and the last 8 digits of both
+  fixture guests are absent from the page source, inline JSON included.
+- **No preview bypass on the public route.** No parameter, no token, no
+  admin-session branch. `InvitationBody` is one sync props-only component so
+  work unit 6b's `/console/preview/[invitationId]` renders the identical thing,
+  and work unit 4b can insert the gate in front of it without restructuring.
+
+## Accented and enye rendering (4a.6 / 4a.7)
+
+The card ships **no custom font**; it uses the fallback `next/og` bundles.
+Design says that is Noto Sans — in Next.js 16.3.4 it is
+`next/dist/compiled/@vercel/og/Geist-Regular.ttf`. The design's premise (the
+bundled default covers Latin-1) holds; the font's name does not.
+
+Coverage is asserted at the character-map level, which is exactly the condition
+that produces tofu: `tools/og-font-coverage.spec.ts` reads that exact file and
+asserts every Spanish codepoint in both cases, plus every character of the
+fixture name `Ñoño Muñóz`, maps to a non-zero glyph id. It triangulates with a
+CJK ideograph (expected 0) and with `ó` vs `o` (expected different ids), so a
+parser that always answered "present" would fail. The E2E additionally asserts
+the card is a real PNG by magic number and that the accented household renders
+different bytes than a plain-ASCII control.
+
+Font budget: 0 bytes added — no font asset is shipped. The generated card
+measures 32,401 bytes.
+
+## Deviations from design
+
+1. **Warm URL and cache header** — described above. Both are corrections that
+   preserve D9's intent; neither changes the strategy.
+2. **Bundled font is Geist, not Noto Sans.** Framework detail, verified.
+3. **`invitationPageUrl` added** alongside `ogCardUrl`, required by (1).
+4. **`vitest.setup.ts` now calls `cleanup` after each test.** Testing Library
+   only auto-registers cleanup under `globals: true`, which this project does
+   not use; without it, renders accumulated in one document and queries matched
+   elements left by earlier tests. Caught by a real failing run, not predicted.
+5. **`playwright.config.ts` passes `NEXT_PUBLIC_SITE_ORIGIN`** to the web
+   server. The `og:image` contract is an absolute HTTPS URL; the local server
+   necessarily listens on HTTP, so the public origin is injected separately
+   from the address Playwright connects to, mirroring production.
+6. **No styling.** The page carries semantic markup and class hooks only. The
+   final guest-facing design depends on copy the couple has not supplied.
+
+## Issues found
+
+1. **`htmlLimitedBots` is unverified in practice** (see above). Not a defect —
+   a limit on what the suite currently proves. Re-check it in 4b.
+2. **The console's mock bubble (6b) will have the same URL problem.** Design
+   says it renders `<img src={/i/${slug}/opengraph-image}>`, which is now known
+   to be a different cache key than the `og:image` the crawler follows. The
+   claim "previewing IS warming" does not hold for that URL as written. 6b
+   should render the advertised URL.
+3. **Immutable caching makes a household rename stale** until the next deploy
+   changes the build hash. Accepted, and stated at the constant.
+4. **Three work unit 3 WARNINGs remain open**, unchanged by this unit.
+
+## Workload / PR boundary
+
+- Mode: chained PR slice — PR4a.
+- **Authored lines: ~1,540 (≈560 production, ≈980 test).** Above the session's
+  800-line budget. It does not split usefully: the raw-HTML guard cannot be
+  written before the route exists, and the route is meaningless without the
+  card. The excess is test weight, not production weight — production is ~560
+  lines against the design's ~500 estimate. Recommending `size:exception` rather
+  than splitting a single-purpose deliverable.
+- No commit was made. The tree is normalized: `npm run format` and
+  `npm run lint` ran after the last source change and `format:check` is clean.
+
+## Status
+
+16/16 Work Unit 4a tasks complete. Work units 1, 2, 2b, 3 and 3b unchanged
+(task 2.5 still PARTIAL on its environment-blocked `.env.example` half). Work
+units 4b, 5, 6a, 6b and 7 untouched. Ready for `sdd-verify`.

@@ -122,22 +122,22 @@ out of scope and remain open.
 
 ## Phase 4a: Invitation Page, OG Image, Metadata (Work Unit 4a)
 
-- [ ] 4a.1 RED — `e2e/invitation-page-og.spec.ts`: fetch `/i/<slug>` with `User-Agent: WhatsApp/2.23.20.0`, assert `og:title`/`og:image` inside raw `<head>...</head>` before JS runs; repeat with an ordinary browser UA; assert `og:image` starts with `https://` and matches the deployed origin.
-- [ ] 4a.2 GREEN — `app/i/[slug]/page.tsx`: thin async container fetching the invitation by slug and `generateMetadata`.
-- [ ] 4a.3 GREEN — `app/i/[slug]/opengraph-image.tsx`: `next/og`, Node runtime, greeting name + invitation line only, bundled font loaded once at module scope.
-- [ ] 4a.4 RED — Vitest test: the OG image's render props/inputs exclude wedding date, venue name/address, and phone.
-- [ ] 4a.5 GREEN — confirm `opengraph-image.tsx` only receives `greeting_name` + a static invitation line from the repository read.
-- [ ] 4a.6 RED — `e2e/invitation-page-og.spec.ts` addendum: fixture `greeting_name = "Ñoño Muñóz"` returns `content-type: image/png`, non-zero bytes, no tofu/placeholder glyphs.
-- [ ] 4a.7 GREEN — verify/adjust the bundled font subset renders `ñ` and accented vowels correctly.
-- [ ] 4a.8 RED — E2E addendum: `/i/<unknown-slug>` renders a friendly contact page, not the framework's default 404.
-- [ ] 4a.9 GREEN — `page.tsx`: unknown/rotated-slug handling renders a friendly contact component instead of calling `notFound()`.
-- [ ] 4a.10 RED — test for `app/robots.ts`: `/i/` is disallowed while the OG image sub-path stays crawlable.
-- [ ] 4a.11 GREEN — `app/robots.ts`: implement per 4a.10.
-- [ ] 4a.12 RED — `lib/server/og-warm.spec.ts`: warm success sets `og_warmed_at`; warm failure/timeout leaves invitation creation successful and logs only the slug, never a phone.
-- [ ] 4a.13 GREEN — `lib/server/og-warm.ts`: `import 'server-only'` first line; `warmOgCard(slug)` fetches the canonical OG URL with a 5s timeout after the invitation INSERT commits.
-- [ ] 4a.14 GREEN — wire `warmOgCard` into `scripts/import-guests.ts`'s creation path.
-- [ ] 4a.15 Verify: using 4a.1's E2E result as authority, confirm `next.config.ts`'s `htmlLimitedBots` key placement (top-level vs. `experimental`) against `node_modules/next/package.json` (read-only); adjust if tags are still streamed.
-- [ ] 4a.16 Verify: run `e2e/invitation-page-og.spec.ts` — confirm 4a.1, 4a.4, 4a.6, 4a.8, 4a.10 RED tests pass GREEN.
+- [x] 4a.1 RED — `e2e/invitation-page-og.spec.ts`: fetch `/i/<slug>` with `User-Agent: WhatsApp/2.23.20.0`, assert `og:title`/`og:image` inside raw `<head>...</head>` before JS runs; repeat with an ordinary browser UA; assert `og:image` starts with `https://` and matches the deployed origin.
+- [x] 4a.2 GREEN — `app/i/[slug]/page.tsx`: thin async container fetching the invitation by slug and `generateMetadata`.
+- [x] 4a.3 GREEN — `app/i/[slug]/opengraph-image.tsx`: `next/og`, Node runtime, greeting name + invitation line only, bundled font loaded once at module scope.
+- [x] 4a.4 RED — Vitest test: the OG image's render props/inputs exclude wedding date, venue name/address, and phone.
+- [x] 4a.5 GREEN — confirm `opengraph-image.tsx` only receives `greeting_name` + a static invitation line from the repository read.
+- [x] 4a.6 RED — `e2e/invitation-page-og.spec.ts` addendum: fixture `greeting_name = "Ñoño Muñóz"` returns `content-type: image/png`, non-zero bytes, no tofu/placeholder glyphs.
+- [x] 4a.7 GREEN — verify/adjust the bundled font subset renders `ñ` and accented vowels correctly.
+- [x] 4a.8 RED — E2E addendum: `/i/<unknown-slug>` renders a friendly contact page, not the framework's default 404.
+- [x] 4a.9 GREEN — `page.tsx`: unknown/rotated-slug handling renders a friendly contact component instead of calling `notFound()`.
+- [x] 4a.10 RED — test for `app/robots.ts`: `/i/` is disallowed while the OG image sub-path stays crawlable.
+- [x] 4a.11 GREEN — `app/robots.ts`: implement per 4a.10.
+- [x] 4a.12 RED — `lib/server/og-warm.spec.ts`: warm success sets `og_warmed_at`; warm failure/timeout leaves invitation creation successful and logs only the slug, never a phone.
+- [x] 4a.13 GREEN — `lib/server/og-warm.ts`: `import 'server-only'` first line; `warmOgCard(slug)` fetches the canonical OG URL with a 5s timeout after the invitation INSERT commits.
+- [x] 4a.14 GREEN — wire `warmOgCard` into `scripts/import-guests.ts`'s creation path.
+- [x] 4a.15 Verify: using 4a.1's E2E result as authority, confirm `next.config.ts`'s `htmlLimitedBots` key placement (top-level vs. `experimental`) against `node_modules/next/package.json` (read-only); adjust if tags are still streamed.
+- [x] 4a.16 Verify: run `e2e/invitation-page-og.spec.ts` — confirm 4a.1, 4a.4, 4a.6, 4a.8, 4a.10 RED tests pass GREEN.
 
 ## Phase 4b: Phone Gate (Work Unit 4b)
 
