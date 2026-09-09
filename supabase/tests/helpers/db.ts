@@ -139,6 +139,30 @@ export async function seedInvitation(
   return result.rows[0].id;
 }
 
+/**
+ * Inserts `count` named guests on an invitation and returns their ids.
+ *
+ * Fixtures need real guest ids because `enforce_seat_cap` requires a confirmed
+ * RSVP to name exactly as many attendees as the seats it confirms (migration
+ * 0007). A fixture that confirms seats without naming anybody states a row the
+ * product itself is not allowed to write.
+ */
+export async function seedGuests(
+  db: Client,
+  invitationId: string,
+  count: number,
+): Promise<string[]> {
+  const names = Array.from({ length: count }, (_, i) => `Guest ${i + 1}`);
+  const result = await db.query<{ id: string }>(
+    `insert into invitation_guests (invitation_id, full_name)
+     select $1, unnest($2::text[])
+     returning id`,
+    [invitationId, names],
+  );
+
+  return result.rows.map((row) => row.id);
+}
+
 /** The six tables this change owns. Every one must be default-deny. */
 export const OWNED_TABLES = [
   "senders",
@@ -168,9 +192,10 @@ export async function withSeededData<T>(
     const senderId = await seedSender(db);
     const invitationId = await seedInvitation(db, senderId);
 
-    await db.query(
+    const guest = await db.query<{ id: string }>(
       `insert into invitation_guests (invitation_id, full_name, phone_e164)
-       values ($1, 'Seeded Guest', '+573005550000')`,
+       values ($1, 'Seeded Guest', '+573005550000')
+       returning id`,
       [invitationId],
     );
     await db.query(
@@ -179,9 +204,9 @@ export async function withSeededData<T>(
       [invitationId, senderId],
     );
     await db.query(
-      `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
-       values ($1, true, 1)`,
-      [invitationId],
+      `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+       values ($1, true, 1, $2)`,
+      [invitationId, [guest.rows[0].id]],
     );
     await db.query(
       `insert into gate_attempts (invitation_id, ip_hash, succeeded)

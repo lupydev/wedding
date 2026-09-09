@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   captureError,
+  seedGuests,
   seedInvitation,
   seedSender,
   withRollback,
@@ -70,10 +71,11 @@ describe("append-only tables (as service_role)", () => {
     const message = await withRollback(async (db) => {
       const senderId = await seedSender(db);
       const invitationId = await seedInvitation(db, senderId);
+      const guestIds = await seedGuests(db, invitationId, 2);
       await db.query(
-        `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
-         values ($1, true, 2)`,
-        [invitationId],
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+         values ($1, true, 2, $2)`,
+        [invitationId, guestIds],
       );
       await db.query("set local role service_role");
 
@@ -106,15 +108,16 @@ describe("append-only tables (as service_role)", () => {
     const seats = await withRollback(async (db) => {
       const senderId = await seedSender(db);
       const invitationId = await seedInvitation(db, senderId);
+      const guestIds = await seedGuests(db, invitationId, 3);
       await db.query("set local role service_role");
       // Explicit timestamps: both statements run inside one transaction, where
       // `now()` is the transaction start time, so the default would tie and the
       // "latest row wins" ordering would be arbitrary. Real submissions arrive
       // in separate transactions.
       await db.query(
-        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, submitted_at)
-         values ($1, true, 3, timestamptz '2026-01-01 10:00:00+00')`,
-        [invitationId],
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at)
+         values ($1, true, 3, $2, timestamptz '2026-01-01 10:00:00+00')`,
+        [invitationId, guestIds],
       );
       await db.query(
         `insert into rsvp_responses (invitation_id, attending, seats_confirmed, submitted_at)
@@ -240,15 +243,11 @@ describe("cascade delete vs. direct delete (as service_role)", () => {
          values ($1, $2, 'marked_sent'), ($1, $2, 'resent')`,
         [invitationId, senderId],
       );
+      const guestIds = await seedGuests(db, invitationId, 2);
       await db.query(
-        `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
-         values ($1, true, 2)`,
-        [invitationId],
-      );
-      await db.query(
-        `insert into invitation_guests (invitation_id, full_name)
-         values ($1, 'Guest One')`,
-        [invitationId],
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+         values ($1, true, 2, $2)`,
+        [invitationId, guestIds],
       );
       await db.query("set local role service_role");
 
@@ -316,11 +315,12 @@ describe("cascade delete vs. direct delete (as service_role)", () => {
     const outcome = await withRollback(async (db) => {
       const senderId = await seedSender(db);
       const invitationId = await seedInvitation(db, senderId);
+      const guestIds = await seedGuests(db, invitationId, 1);
       const response = await db.query<{ id: string }>(
-        `insert into rsvp_responses (invitation_id, attending, seats_confirmed)
-         values ($1, true, 1)
+        `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+         values ($1, true, 1, $2)
          returning id`,
-        [invitationId],
+        [invitationId, guestIds],
       );
       await db.query("set local role service_role");
       await db.query("savepoint probe");

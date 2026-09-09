@@ -53,6 +53,10 @@ import { readFileSync } from "node:fs";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  classifyPhoneDispatchability,
+  type PhoneLineType,
+} from "@/lib/domain/phone-reachability";
 import { requiredDefaultPhoneCountry } from "@/lib/server/env";
 import {
   importInvitations,
@@ -60,6 +64,7 @@ import {
   validateImportRows,
   type ImportedInvitation,
   type ImportRow,
+  type NewInvitation,
 } from "@/lib/server/invitations";
 import { warmOgCard } from "@/lib/server/og-warm";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
@@ -94,6 +99,133 @@ export function parseGuestSource(contents: string): ImportRow[] {
   }
 
   return invitations as ImportRow[];
+}
+
+/** One guest whose stored number cannot receive a WhatsApp message. */
+export interface UndispatchableGuest {
+  readonly displayName: string;
+  readonly fullName: string;
+  readonly lineType: PhoneLineType;
+}
+
+/** One household whose seat allowance disagrees with the names entered. */
+export interface SeatMismatch {
+  readonly displayName: string;
+  readonly seatsAllowed: number;
+  readonly namedGuests: number;
+}
+
+export interface ImportAdvisory {
+  readonly householdCount: number;
+  readonly guestCount: number;
+  readonly undispatchablePhones: readonly UndispatchableGuest[];
+  readonly seatMismatches: readonly SeatMismatch[];
+}
+
+/**
+ * Inspects a validated guest list for the two faults that stay invisible until
+ * the day they matter. Pure: it reads the rows and writes nothing.
+ *
+ * ADVISORY, never a rejection. The import is atomic, so refusing the file over
+ * one aunt's landline would refuse the entire guest list, and a landline guest
+ * is still a real guest — they open their own invitation at the phone gate, they
+ * simply receive the link some other way. What must not happen is the product
+ * building a `wa.me` link from that number, recording a dispatch event and
+ * reporting it as sent while the message reaches nothing.
+ *
+ * The seat check exists because every seat in this guest list corresponds to a
+ * named person. A household whose `seats_allowed` disagrees with the number of
+ * names is therefore a data-entry typo, and it surfaces later as a guest who
+ * cannot confirm their own household. It is not a database constraint on
+ * purpose: a partially entered household must still be savable.
+ */
+export function buildImportAdvisory(
+  invitations: readonly NewInvitation[],
+  defaultCountry: string,
+): ImportAdvisory {
+  const undispatchablePhones: UndispatchableGuest[] = [];
+  const seatMismatches: SeatMismatch[] = [];
+  let guestCount = 0;
+
+  for (const invitation of invitations) {
+    guestCount += invitation.guests.length;
+
+    if (invitation.seatsAllowed !== invitation.guests.length) {
+      seatMismatches.push({
+        displayName: invitation.displayName,
+        seatsAllowed: invitation.seatsAllowed,
+        namedGuests: invitation.guests.length,
+      });
+    }
+
+    for (const guest of invitation.guests) {
+      if (guest.phoneE164 === null) {
+        // No phone is not a broken phone: a child or a household member who
+        // shares the link has no dispatch that could fail.
+        continue;
+      }
+
+      const { dispatchable, lineType } = classifyPhoneDispatchability(
+        guest.phoneE164,
+        defaultCountry,
+      );
+
+      if (!dispatchable) {
+        undispatchablePhones.push({
+          displayName: invitation.displayName,
+          fullName: guest.fullName,
+          lineType,
+        });
+      }
+    }
+  }
+
+  return {
+    householdCount: invitations.length,
+    guestCount,
+    undispatchablePhones,
+    seatMismatches,
+  };
+}
+
+/**
+ * Renders the advisory as console lines.
+ *
+ * Names are included because an operator cannot fix a row they cannot find, and
+ * the import already names households in its error messages. Digits never are:
+ * this output reaches logs, and a phone number is personal data.
+ */
+export function formatImportAdvisory(advisory: ImportAdvisory): string[] {
+  const lines: string[] = [];
+
+  if (advisory.undispatchablePhones.length === 0) {
+    lines.push(
+      `Reachability: every stored phone can receive WhatsApp (${advisory.guestCount} guests checked).`,
+    );
+  } else {
+    lines.push(
+      `Reachability: ${advisory.undispatchablePhones.length} of ${advisory.guestCount} stored phones CANNOT receive WhatsApp. ` +
+        "Their invitations must be delivered another way; do not report them as sent.",
+    );
+    for (const guest of advisory.undispatchablePhones) {
+      lines.push(
+        `  - ${guest.displayName} / ${guest.fullName}: ${guest.lineType}`,
+      );
+    }
+  }
+
+  if (advisory.seatMismatches.length > 0) {
+    lines.push(
+      `Seats: ${advisory.seatMismatches.length} of ${advisory.householdCount} households name a number of guests that differs from their seat allowance.`,
+    );
+    for (const mismatch of advisory.seatMismatches) {
+      lines.push(
+        `  - ${mismatch.displayName}: seats_allowed ${mismatch.seatsAllowed}, names entered ${mismatch.namedGuests}`,
+      );
+    }
+  }
+
+  return lines;
 }
 
 /** The warming call, injectable so the import can be tested without a network. */
@@ -148,6 +280,14 @@ async function main(): Promise<void> {
   // Validate everything first. This catches an unusable row without touching
   // the database at all; the write itself is atomic regardless.
   const validated = validateImportRows(rows, senders, defaultCountry);
+
+  // Reported before the write, so `--dry-run` surfaces it too and an operator
+  // can correct the source before a single household lands.
+  for (const line of formatImportAdvisory(
+    buildImportAdvisory(validated, defaultCountry),
+  )) {
+    console.log(line);
+  }
 
   if (dryRun) {
     console.log(

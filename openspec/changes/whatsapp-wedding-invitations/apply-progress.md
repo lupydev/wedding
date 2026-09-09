@@ -1068,3 +1068,276 @@ measures 32,401 bytes.
 16/16 Work Unit 4a tasks complete. Work units 1, 2, 2b, 3 and 3b unchanged
 (task 2.5 still PARTIAL on its environment-blocked `.env.example` half). Work
 units 4b, 5, 6a, 6b and 7 untouched. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 4c — Field-Learned Corrections
+
+Five defects, each one derived from analysing a real shipped project that
+solved the same problem for 97 real guests. Nothing here was speculative: every
+item is something someone already paid to learn.
+
+**Mode**: Strict TDD. RED before GREEN, per fix.
+**Store**: hybrid. **Attempt**: `sha256:2a0385d8…961f`, `state: proceed`.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 4c.1–4c.2 | `lib/domain/phone-reachability.spec.ts` | Unit | N/A (new file) | ✅ module did not exist | ✅ 14 passed | ✅ 11 table rows + 2 predicate cases | ➖ none needed |
+| 4c.3–4c.4 | `scripts/import-guests.spec.ts` | Unit | ✅ 9/9 before | ✅ 6 failed | ✅ 15 passed | ✅ 6 cases (landline, phone-less, seat typo, clean, two format shapes) | ➖ none needed |
+| 4c.5–4c.6 | `lib/domain/rsvp-deadline.spec.ts` | Unit | N/A (new file) | ✅ module did not exist | ✅ 11 passed | ✅ 11 cases incl. both sides of the Bogota midnight boundary | ➖ none needed |
+| 4c.7–4c.9 | `supabase/tests/seat-parity.spec.ts` | DB (real Postgres) | ✅ 25/25 before | ✅ 1 failed — **the database ACCEPTED "2 seats, 1 name"** (error was `null`) | ✅ 7 passed | ✅ 7 cases, each asserted at both enforcement points | ✅ 4 fixtures corrected + `seedGuests` helper |
+| 4c.10–4c.11 | `app/i/[slug]/error.spec.tsx` | Component (RTL) | N/A (new file) | ✅ module did not exist | ✅ 12 passed | ✅ 6 predicate cases + 4 reload cases + 2 render cases | ➖ none needed |
+| 4c.12–4c.13 | `e2e/invariants/rls.spec.ts` | E2E (Playwright, anon key) | N/A (new file) | ✅ 2 failed on first run (see below) | ✅ 10 passed | ✅ 4 verbs × 6 tables + 4 verbs on a post-migration table | ✅ made serial, transaction-wrapped |
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npm test` → **24 files, 346 tests passed** (baseline 20 / 296) |
+| Runtime harness | `npm run e2e` → **22 passed** (baseline 12); real local Supabase + production `next build`/`next start` |
+| Rollback boundary | Delete `lib/domain/phone-reachability.*`, `lib/domain/rsvp-deadline.*`, `app/i/[slug]/error.*`, `e2e/invariants/`, `supabase/tests/seat-parity.spec.ts`; apply `supabase/down/0007_seat_attendee_parity_down.sql`; revert the advisory block in `scripts/import-guests.*` and the fixture corrections in `supabase/tests/{append-only.spec.ts,helpers/db.ts}`. No earlier work unit is touched. |
+
+## Fix 1 — Reachability is not validity
+
+`parsed.isValid()` answers "can this become E.164?", and a Colombian landline
+answers **yes**. `+57 601 234 5678` would have been stored, turned into
+`wa.me/576012345678`, stamped with a dispatch event, and delivered to nothing —
+while the console showed it as sent.
+
+**Measured, not assumed**: `libphonenumber-js`'s default ("min") metadata
+carries no line types at all. `getType()` returns `undefined` for *every*
+Colombian number, mobile and landline alike. Only the `max` metadata
+distinguishes them:
+
+```
+["+57 601 234 5678","CO"]  min → null   max → FIXED_LINE
+["+573001234567","CO"]     min → null   max → MOBILE
+```
+
+So `lib/domain/phone-reachability.ts` imports `libphonenumber-js/max`
+explicitly, and `lib/domain/phone.ts` deliberately stays on the default
+metadata: `normalizePhone`'s contract, and the set of inputs it accepts, does
+not move. The five Colombian shapes in its table are untouched and still green.
+
+Only `MOBILE` and `FIXED_LINE_OR_MOBILE` are dispatchable. An `unknown` line
+type is NOT dispatchable, because "the metadata does not say" is not
+substantiation for claiming a delivery.
+
+**Import behaviour is flag-and-count, not reject.** The brief allowed either.
+Rejecting was refused for two reasons: the import is one atomic transaction, so
+refusing the file over one aunt's landline refuses all 97 households; and a
+landline guest is still a real guest — they open their own invitation at the
+phone gate on the last eight digits, they simply receive the link another way.
+What must not happen is the product *claiming* the send. `buildImportAdvisory`
+therefore returns the count and the offending households, and
+`formatImportAdvisory` prints it before the write so `--dry-run` surfaces it
+too. Names are printed because an operator cannot fix a row they cannot find;
+digits never are, and a test asserts no run of 7+ digits appears in the output.
+
+## Fix 2 — The deadline cut guests off early
+
+`invitations.rsvp_deadline` is a bare `date`, which is the **right type** — the
+couple chose a day, not an instant. The defect was in reading it: compared
+against a timestamp, `2026-05-01` is 2026-05-01T00:00:00Z, which is 19:00 on 30
+April in Bogota. The form would close five hours before the chosen day began.
+
+`isRsvpOpen(deadline, now, timeZone = "America/Bogota")` compares the *civil
+calendar date* at `now` in the zone against the deadline. ISO days sort
+lexicographically in chronological order, so the comparison needs no date
+arithmetic. The zone is encoded, never the offset: Colombia does not observe DST
+today, so `-05:00` would give identical answers — until the day it does not, and
+then every boundary case is silently an hour wrong.
+
+Boundary cases asserted on both sides:
+
+| Instant (UTC) | Bogota | Deadline `2026-05-01` |
+|---|---|---|
+| `2026-05-02T02:00:00Z` | 1 May, 21:00 | **open** |
+| `2026-05-02T04:59:59.999Z` | 1 May, 23:59:59 | **open** |
+| `2026-05-02T05:00:00Z` | 2 May, 00:00 | **closed** |
+
+**No schema migration.** `date` is genuinely zone-free and is the correct
+column type; the fault was entirely in evaluation. The RSVP form itself is Work
+Unit 5 and remains unbuilt, so this unit ships the rule the form will consume
+(task 5.7), tested at the layer that exists today.
+
+## Fix 3 — The seats domain and the seats trigger disagreed
+
+**Direction corrected mid-unit.** The initial instruction was to loosen the
+domain (`seats_allowed` as a maximum, unnamed seats legal). The orchestrator
+then supplied a product fact that invalidates it: **the couple has the name of
+every guest**, so each invitation's seat count is exactly known and there is no
+"Familia Pérez, 4 seats, 2 names" case in this data. Equality is therefore a
+real invariant, not an over-restriction.
+
+`lib/domain/seats.ts` was never modified — the relaxation was not written and
+nothing had to be reverted. The **database** moved instead, because it was the
+loose one.
+
+`supabase/migrations/0007_seat_attendee_parity.sql` adds to `enforce_seat_cap`:
+
+```sql
+if named <> new.seats_confirmed then
+  raise exception 'seats_confirmed % does not match attendee_guest_ids of length %', ...
+```
+
+evaluated **after** the hard cap, so an over-cap submission still fails for the
+cap's own reason. The hard cap is untouched. A decline is unaffected: 0 = 0.
+
+The RED run is the interesting evidence — the failure was not an assertion
+mismatch but `captureError` returning `null`:
+
+```
+AssertionError: the given combination of arguments (null and string) is invalid
+```
+
+The database had **accepted** the row `lib/domain/seats.ts` rejects. That is the
+disagreement, observed rather than argued.
+
+Down/up round trip run: applying `0007…_down.sql` makes exactly that one test
+fail again; re-applying `0007` makes it pass. Four fixtures in
+`append-only.spec.ts` and one in `withSeededData` confirmed seats while naming
+nobody — rows the product itself may no longer write — and were corrected with
+a new `seedGuests` helper.
+
+**Advisory, not a constraint** (per the corrected instruction):
+`buildImportAdvisory` also reports households where `seats_allowed` differs from
+the number of names entered. A hard constraint would make a partially entered
+household impossible to save.
+
+## Fix 4 — No error boundary on the invitation route
+
+`app/i/[slug]/error.tsx` did not exist. A deploy while a guest has the page open
+404s a chunk from the previous build, and the guest reads the framework's
+English *"Application error: a client-side exception has occurred"* with no way
+out. The detail that decides the copy: **the RSVP write has usually already
+succeeded — only the screen died.**
+
+`isChunkLoadError` matches by name *and* by message, because the wording belongs
+to the bundler and the browser, not to us: webpack's `ChunkLoadError`, webpack's
+`Loading chunk N failed`, the ESM loader's `Failed to fetch dynamically imported
+module`, and Safari's `Importing a module script failed`. All four are asserted;
+two ordinary errors are asserted NOT to match, including a bare `Failed to
+fetch`, so the predicate cannot pass by being permissive.
+
+`attemptChunkReload(error, { storage, reload })` reloads once, guarded by
+`sessionStorage`. The ports are injected so the once-only decision is unit
+tested without a real navigation — jsdom cannot perform one. Storage that throws
+(private browsing, locked-down WebViews) is treated as *cannot record*, so no
+reload happens at all: an unrecorded reload is precisely the infinite loop the
+guard exists to prevent, which would be a worse failure than the wall.
+
+Everything else renders calm Spanish that does not over-claim: *"Si ya
+confirmaste tu asistencia, tu respuesta quedó guardada"* — conditional, because
+a guest who never answered has nothing saved and telling them otherwise is a
+lie. A `reset()` button is the way forward.
+
+## Fix 5 — Nothing proved the RLS posture from outside
+
+Every existing RLS test runs with privileged access, which is exactly the access
+an attacker does not have. `e2e/invariants/rls.spec.ts` holds **only the
+publishable key** and asserts all four verbs against all six owned tables:
+SELECT returns nothing, INSERT/UPDATE/DELETE are refused `42501`. UPDATE and
+DELETE were the real gap — the existing Vitest suite covered only SELECT and
+INSERT.
+
+Non-vacuity is proved twice over:
+
+1. Every table is seeded with a **committed** row and that row is proved visible
+   to a privileged reader first. Without it, "anon returned no rows" is
+   satisfied by an empty database.
+2. After the four verb sweeps, the database is read directly to confirm nothing
+   was mutated or removed. A refusal that arrived after a partial write would
+   look identical in the response.
+
+The post-migration block creates a table under **reinstated default grants**,
+which is the only way to exercise the `0004` event trigger — a table created by
+`postgres` under the current ACLs would be born with no `anon` grant anyway and
+the probe would prove nothing. It then asserts the grant is absent (only the
+trigger can have removed it), that PostgREST really exposes the table (polled,
+so an anon 404 cannot masquerade as a pass), that all four verbs are refused,
+and that `service_role` still works, so the revoke was surgical.
+
+**Two real failures were hit and fixed, not worked around:**
+
+1. `alter default privileges` raised `tuple concurrently updated` — Playwright's
+   `fullyParallel` ran `beforeAll` in two workers, which collided on the same
+   catalog row. Both describes are now `mode: "serial"`.
+2. The first run left the grant reinstated after a mid-setup failure. The setup
+   is now **one transaction**: grant, create, insert, revoke, commit. A failure
+   anywhere leaves the database exactly as it was rather than leaving a live
+   instance permissive. Verified afterwards — `pg_default_acl` for `public`
+   shows `{postgres, service_role}` only, and the probe table is gone.
+
+## Deviations from design
+
+1. **`libphonenumber-js/max` is a second metadata set** (~156 KB) alongside the
+   default. It lives in its own module so no bundle that does not classify
+   reachability pulls it in. Design D1 named the library, not the metadata
+   profile.
+2. **No schema migration for the deadline.** `date` is the correct type; the
+   defect was in evaluation. Stated above.
+3. **`0007` tightens a `0003` trigger.** Design D6 called the seat allowance a
+   hard cap and said nothing about parity; parity is the newly confirmed product
+   fact, and the design should be read as amended by it.
+4. **Reachability is advisory at import, not a hard reject.** Reasoned above.
+
+## Issues found
+
+1. **`supabase_migrations.schema_migrations` records only `0001`–`0003`.**
+   Migrations `0004`–`0006` are applied to the running instance but not
+   recorded, so `0007` was applied the same way (directly) to stay consistent.
+   A clean-database bootstrap has never been exercised end to end. Worth
+   settling before the first deploy; out of scope here.
+2. **The `sessionStorage` reload flag is never cleared.** It dies with the tab,
+   which is acceptable, but a guest who hits two separate stale-chunk failures
+   in one long-lived tab gets the message rather than a second reload. That is
+   the safe side of the trade.
+3. **`npm run build` run by hand rebuilds `.next` without
+   `NEXT_PUBLIC_SITE_ORIGIN`**, and Playwright's `reuseExistingServer` will then
+   serve that build — which failed the `og:image` absolute-origin E2E once. Not
+   a product defect; a local-harness sharp edge. The suite is green when
+   Playwright owns the server, as it does in CI.
+4. **Three Work Unit 3 WARNINGs remain open**, untouched by this unit, as
+   instructed.
+
+## Explicitly out of scope, and left alone
+
+No reminder/resend UI (`'resent'` remains reserved and unused), no public
+ceremony/stream page, no Work Unit 3 WARNING or SUGGESTION work, and no start on
+Work Units 4b, 5, 6a or 6b.
+
+## Workload / PR boundary
+
+- Mode: chained PR slice — PR4c, a correction unit between PR4a and PR4b.
+- **Authored lines: ~1,686 (≈514 production, ≈1,172 test).** Far above the
+  session's 800-line budget. It does not split usefully as delivered: it is five
+  independent corrections mandated as one unit, and each is small on its own
+  (the largest single production file is 132 lines). Recommending
+  `size:exception`, or a split into five PRs if the reviewer prefers — the five
+  fixes share no code and could each stand alone.
+- **No commit.** The tree is normalized: `npm run format` and `npm run lint` ran
+  after the last source change, and `npm run format:check` is clean.
+
+## Verification — actual output
+
+| Command | Observed result |
+|---|---|
+| `npm test` | `Test Files 24 passed (24)` / `Tests 346 passed (346)` — baseline was 20 / 296 |
+| `npm run e2e` | `22 passed (7.0s)` — baseline was 12 |
+| `npm run typecheck` | clean, no output |
+| `npm run lint` | clean, no output |
+| `npm run format:check` | `All matched files use Prettier code style!` |
+| `npm run build` | `✓ Compiled successfully`; routes `/`, `/_not-found`, `/i/[slug]`, `/i/[slug]/opengraph-image`, `/robots.txt` |
+
+Existing guarantees re-confirmed inside those runs: the `nullif` mutation test,
+the `service_role` append-only tests, `anon` reaching nothing, and the raw-HTML
+Open Graph assertions under a WhatsApp User-Agent.
+
+## Status
+
+14/14 Work Unit 4c tasks complete. Work units 1, 2, 2b, 3, 3b and 4a unchanged
+(task 2.5 still PARTIAL on its environment-blocked `.env.example` half). Work
+units 4b, 5, 6a, 6b and 7 untouched. Ready for `sdd-verify`.

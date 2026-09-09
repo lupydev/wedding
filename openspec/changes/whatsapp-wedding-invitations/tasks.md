@@ -139,6 +139,25 @@ out of scope and remain open.
 - [x] 4a.15 Verify: using 4a.1's E2E result as authority, confirm `next.config.ts`'s `htmlLimitedBots` key placement (top-level vs. `experimental`) against `node_modules/next/package.json` (read-only); adjust if tags are still streamed.
 - [x] 4a.16 Verify: run `e2e/invitation-page-og.spec.ts` — confirm 4a.1, 4a.4, 4a.6, 4a.8, 4a.10 RED tests pass GREEN.
 
+## Phase 4c: Field-Learned Corrections (Work Unit 4c)
+
+> Five defects derived from a real shipped project that solved the same problem for 97 guests. Each one is something someone already paid to learn. `seats_allowed` parity direction was corrected mid-unit by the orchestrator: the couple has every guest's name, so equality is a real invariant and the DATABASE moves to match the domain, not the other way round.
+
+- [x] 4c.1 RED — `lib/domain/phone-reachability.spec.ts`: table-driven; a Colombian landline (`+57 601 234 5678`, bare `6012345678`, `+57 604 444 5555`) is NOT dispatchable while a mobile (`+573001234567`, `3001234567`, `300 123 4567`) is; a misconfigured default country throws.
+- [x] 4c.2 GREEN — `lib/domain/phone-reachability.ts`: `classifyPhoneDispatchability` / `isDispatchablePhone` via `libphonenumber-js/max`'s `getType()`; only `MOBILE` and `FIXED_LINE_OR_MOBILE` are dispatchable; `normalizePhone`'s contract and metadata are left untouched.
+- [x] 4c.3 RED — `scripts/import-guests.spec.ts`: `buildImportAdvisory` flags a landline, ignores a phone-less guest, and flags a household whose `seats_allowed` differs from the names entered; `formatImportAdvisory` names households but emits no digits.
+- [x] 4c.4 GREEN — `scripts/import-guests.ts`: `buildImportAdvisory` / `formatImportAdvisory`, reported before the write so `--dry-run` surfaces both counts; advisory only, never a rejection.
+- [x] 4c.5 RED — `lib/domain/rsvp-deadline.spec.ts`: a timestamp that is still the deadline day in Bogota but already the next day in UTC leaves the RSVP OPEN; the first second of the next Bogota day closes it; the zone is a parameter, not an offset.
+- [x] 4c.6 GREEN — `lib/domain/rsvp-deadline.ts`: `isRsvpOpen(deadline, now, timeZone = RSVP_TIME_ZONE)` and `calendarDateInZone` via `Intl`, comparing ISO calendar days; `America/Bogota` encoded as a zone, never as `-05:00`.
+- [x] 4c.7 RED — `supabase/tests/seat-parity.spec.ts`: the same three cases asserted against BOTH enforcement points — 2 seats/2 names accepted, 2 seats/1 name rejected, 3 names against a 2-seat cap still rejected for the cap's own reason — with the DB cases run as `service_role`.
+- [x] 4c.8 GREEN — `supabase/migrations/0007_seat_attendee_parity.sql` (+ down script): `enforce_seat_cap` additionally requires `cardinality(attendee_guest_ids) = seats_confirmed`, evaluated AFTER the hard cap so an over-cap row still fails for the cap. `lib/domain/seats.ts` is deliberately UNCHANGED.
+- [x] 4c.9 GREEN — correct the fixtures that relied on the looser rule: `seedGuests` helper in `supabase/tests/helpers/db.ts`, and four `rsvp_responses` fixtures in `append-only.spec.ts` now name as many attendees as they confirm.
+- [x] 4c.10 RED — `app/i/[slug]/error.spec.tsx`: chunk-load failures are recognized by name and by all three bundler/browser wordings; `attemptChunkReload` reloads once, refuses a second reload, never reloads an ordinary error, and does nothing when storage throws; the rendered copy is Spanish, says the answer was kept, and is never the framework's English wall.
+- [x] 4c.11 GREEN — `app/i/[slug]/error.tsx`: `'use client'` error boundary; `isChunkLoadError`, `attemptChunkReload` with a `sessionStorage` guard and injected ports, calm Spanish copy plus a `reset()` button.
+- [x] 4c.12 RED/GREEN — `e2e/invariants/rls.spec.ts`: external suite holding only the publishable key; every owned table is seeded with a committed row proved visible to a privileged reader, then SELECT returns nothing and INSERT, UPDATE and DELETE are all refused `42501`; a database read confirms nothing was mutated.
+- [x] 4c.13 RED/GREEN — same file: a table created AFTER the migrations, born under reinstated default grants inside one transaction, has no `anon` grant (the `0004` event trigger removed it), is reachable through PostgREST so the probe is not vacuous, refuses the publishable key all four verbs, and stays usable by `service_role`.
+- [x] 4c.14 Verify: `npm test` (346, up from 296), `npm run e2e` (22, up from 12), `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm run build` all clean; 0007 rolled down and back up with the parity test failing in between.
+
 ## Phase 4b: Phone Gate (Work Unit 4b)
 
 - [ ] 4b.1 RED — `lib/server/gate.spec.ts`: adapter wiring accepts any-guest match, rejects a near-miss.
