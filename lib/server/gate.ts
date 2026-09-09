@@ -4,6 +4,7 @@ import { createHmac } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { GateFeedback } from "@/lib/domain/gate-copy";
 import { matchesInvitation, type GuestPhoneRef } from "@/lib/domain/phone";
 import {
   INVITATION_SCOPE,
@@ -34,8 +35,14 @@ import { gateIpPepper } from "./env";
  *     cannot use a correct guess to learn anything or to get in.
  */
 
-/** The furthest back any scope counts, so one read serves both. */
-const HISTORY_WINDOW_MS = Math.max(
+/**
+ * The furthest back any scope counts, so one read serves both.
+ *
+ * Exported because `decoy-gate.ts` must prune its in-memory history on exactly
+ * the same horizon; a decoy that remembered longer than the real gate would be
+ * distinguishable by waiting.
+ */
+export const GATE_HISTORY_WINDOW_MS = Math.max(
   IP_SCOPE.windowMs,
   INVITATION_SCOPE.windowMs,
 );
@@ -164,6 +171,25 @@ export type UnlockOutcome =
   | { readonly status: "rejected"; readonly attemptsRemaining: number }
   | { readonly status: "locked"; readonly retryAfterMs: number };
 
+/** Every outcome that leaves the guest outside the gate. */
+export type FailedUnlockOutcome = Exclude<
+  UnlockOutcome,
+  { readonly status: "unlocked" }
+>;
+
+/**
+ * The failed outcome, as the feedback the form renders.
+ *
+ * One function rather than a mapping written out at each call site, because the
+ * real gate and the unknown-invitation decoy in `decoy-gate.ts` must produce
+ * byte-identical feedback. Two hand-written mappings drift; one cannot.
+ */
+export function toGateFeedback(outcome: FailedUnlockOutcome): GateFeedback {
+  return outcome.status === "locked"
+    ? { status: "locked", retryAfterMs: outcome.retryAfterMs }
+    : { status: "rejected", attemptsRemaining: outcome.attemptsRemaining };
+}
+
 /**
  * Attempts to unlock one invitation with one submitted phone.
  *
@@ -180,7 +206,7 @@ export async function attemptUnlock(
 
   const attempts = await store.recentAttempts(
     invitationId,
-    now - HISTORY_WINDOW_MS,
+    now - GATE_HISTORY_WINDOW_MS,
   );
   const context = { ipHash, attempts };
   const verdict = evaluateGate(context, now);

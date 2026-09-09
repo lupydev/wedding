@@ -179,6 +179,21 @@ out of scope and remain open.
 - [x] 4b.17 RED — E2E addendum: unknown-slug and wrong-phone response shapes are compared; neither reveals invitation existence beyond the intentional friendly-page distinction.
 - [x] 4b.18 Verify: run `e2e/phone-gate.spec.ts` and `e2e/invitation-page-og.spec.ts` together — confirm 4b.1, 4b.3, 4b.6, 4b.11–4b.14, 4b.16, 4b.17 RED tests pass GREEN and the one-unlock-path invariant holds.
 
+## Phase 4d: Phone Gate Hardening (Work Unit 4d)
+
+Three fixes from the Work Unit 4b reliability review. Two are security defects
+in the gate that unit built; the third is an unasserted attribute.
+
+- [x] 4d.1 RED — `lib/server/decoy-gate.spec.ts`: the SAME sequence of forged attempts against an unknown slug and against a real invitation with wrong numbers is compared step by step — outcome values, the attempts countdown, the lockout attempt, the retry duration and the rendered Spanish copy must be equal at every step, with a negative control proving the shipped constant-zero behaviour was separable on the first call.
+- [x] 4d.2 GREEN — `lib/server/decoy-gate.ts`: an unknown slug is answered by running the REAL gate (`attemptUnlock`, `evaluateGate`, `remainingAttempts`) against an empty guest list, so the counter, the lockout moment and the wait are identical by construction rather than by a second hand-written mapping. History lives in a bounded LRU keyed by slug; nothing is persisted, because writing `gate_attempts` rows for attacker-chosen slugs would trade an existence oracle for an unauthenticated storage-abuse channel. Residual gap recorded in `apply-progress.md`.
+- [x] 4d.3 GREEN — `lib/server/gate.ts`: export `GATE_HISTORY_WINDOW_MS` and add `toGateFeedback` / `FailedUnlockOutcome`, so the real path and the decoy share ONE outcome-to-copy mapping. Two hand-written mappings are how the values drifted apart the first time.
+- [x] 4d.4 RED — `lib/server/client-ip.spec.ts`: a forged `x-forwarded-for` (and `forwarded`, `x-client-ip`, `true-client-ip`, `cf-connecting-ip`, `x-cluster-client-ip`) never moves the rate-limit bucket; off Vercel every header is ignored and one shared bucket is used.
+- [x] 4d.5 GREEN — `lib/server/client-ip.ts`: `trustedClientIp` reads only `x-vercel-forwarded-for` then `x-real-ip`, and only when `process.env.VERCEL === "1"`; otherwise the constant `shared-untrusted-origin` bucket. `x-forwarded-for` is never read: Vercel's Trusted Proxy feature makes it customer-proxy input on Enterprise, and a security property that depends on a billing plan is not one.
+- [x] 4d.6 GREEN — `app/i/[slug]/actions.ts`: delete the left-most-`x-forwarded-for` reader, take one clock reading and one bucket per request, and route BOTH the real and the unknown-slug outcome through `toGateFeedback`.
+- [x] 4d.7 RED — `e2e/phone-gate.spec.ts` addendum: eight failures split across two browser contexts each announcing a different `x-forwarded-for` still walk one countdown 7 → 0; a third forged address is refused by the lockout; a forged address plus the CORRECT number still cannot reach the invitation body.
+- [x] 4d.8 RED/GREEN — `lib/server/cookies.spec.ts` addendum: `unlockCookieOptions().secure` asserted in BOTH branches — true under `NODE_ENV=production`, false under `development` and `test` — with a mutation run confirming each branch kills its mutant.
+- [x] 4d.9 Verify: `npm test` (451, up from 424), `npm run e2e` (53, up from 50), `npm run typecheck`, `npm run lint`, `npm run format:check` and `npm run build` all clean.
+
 ## Phase 5: RSVP (Work Unit 5)
 
 - [ ] 5.1 RED — `lib/server/rsvp.spec.ts`: a submission without a valid unlock cookie is rejected and creates no `rsvp_responses` row.

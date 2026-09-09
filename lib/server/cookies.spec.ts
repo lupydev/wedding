@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   UNLOCK_COOKIE_MAX_AGE_SECONDS,
@@ -34,6 +34,7 @@ const DAY = 86_400_000;
 process.env.UNLOCK_COOKIE_SECRET = SECRET;
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   process.env = { ...ORIGINAL_ENV, UNLOCK_COOKIE_SECRET: SECRET };
 });
 
@@ -153,6 +154,30 @@ describe("unlockCookieOptions", () => {
 
   it("is named inv_unlock", () => {
     expect(UNLOCK_COOKIE_NAME).toBe("inv_unlock");
+  });
+
+  // `secure` is the attribute that keeps the cookie off plain HTTP. It was
+  // written correctly and then never asserted, which is the same as not having
+  // it: a refactor could flip it to a constant in either direction and every
+  // test would still pass. Both branches are pinned here.
+  it("sets Secure in production, so the cookie never travels in the clear", () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    expect(unlockCookieOptions(SLUG).secure).toBe(true);
+  });
+
+  it("omits Secure outside production, so plain-HTTP local development works", () => {
+    // A `Secure` cookie is discarded by the browser on `http://localhost`, so
+    // hard-coding `true` would silently break every developer's unlock.
+    vi.stubEnv("NODE_ENV", "development");
+
+    expect(unlockCookieOptions(SLUG).secure).toBe(false);
+  });
+
+  it("omits Secure under the test runner too, for the same reason", () => {
+    vi.stubEnv("NODE_ENV", "test");
+
+    expect(unlockCookieOptions(SLUG).secure).toBe(false);
   });
 });
 

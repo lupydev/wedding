@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { seedInvitation, type SeededInvitation } from "./helpers/seed";
 
@@ -448,6 +448,112 @@ test.describe("the lockout", () => {
       await submitPhone(page, "3005551111");
 
       await expect(gateAlert(page)).toContainText("Por seguridad");
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+test.describe("a client-supplied forwarding header", () => {
+  test.describe.configure({ mode: "serial" });
+
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation?.cleanup();
+  });
+
+  /**
+   * `count` failed attempts from a browser claiming to be `forgedIp`.
+   *
+   * `startIndex` continues the countdown across contexts: the exact remaining
+   * count is the assertion that matters, because a fresh bucket would restart
+   * it at seven and a shared bucket keeps walking it down.
+   */
+  async function failFrom(
+    browser: Browser,
+    forgedIp: string,
+    startIndex: number,
+    count: number,
+  ) {
+    const context = await browser.newContext({
+      extraHTTPHeaders: { "x-forwarded-for": forgedIp },
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`/i/${invitation.slug}`);
+
+      for (let offset = 0; offset < count; offset += 1) {
+        const attempt = startIndex + offset;
+        const left = 7 - attempt;
+        const countdown =
+          left === 0
+            ? "Ese fue el último intento disponible por ahora."
+            : left === 1
+              ? "Te queda 1 intento."
+              : `Te quedan ${left} intentos.`;
+
+        await submitPhone(page, `30055570${String(attempt).padStart(2, "0")}`);
+        await expect(gateAlert(page)).toContainText(countdown);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+
+  test("does not buy a fresh rate-limit bucket for each request", async ({
+    browser,
+  }) => {
+    // Vercel overwrites `x-forwarded-for` with the real client address to
+    // prevent spoofing, and the app now reads only headers the platform
+    // computed — so a visitor announcing a new address per request keeps
+    // spending the SAME allowance. Under the previous left-most-entry read,
+    // the second context would have restarted the countdown at seven.
+    await failFrom(browser, "203.0.113.1", 0, 4);
+    await failFrom(browser, "198.51.100.2", 4, 4);
+  });
+
+  test("cannot escape the resulting lockout by claiming a third address", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      extraHTTPHeaders: { "x-forwarded-for": "192.0.2.3, 203.0.113.9" },
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`/i/${invitation.slug}`);
+      await submitPhone(page, "3005557099");
+
+      await expect(gateAlert(page)).toContainText(
+        /Por seguridad, espera \d+ minutos? antes de intentarlo de nuevo\./,
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("cannot use one to reach the invitation body either", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      extraHTTPHeaders: { "x-forwarded-for": "192.0.2.4" },
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`/i/${invitation.slug}`);
+      await submitPhone(page, "3005551111");
+
+      await expect(gateAlert(page)).toContainText("Por seguridad");
+      await expect(page.getByText("Nos alegra mucho invitarlos")).toHaveCount(
+        0,
+      );
     } finally {
       await context.close();
     }

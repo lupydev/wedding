@@ -5,15 +5,18 @@ import { redirect } from "next/navigation";
 
 import type { GateFeedback } from "@/lib/domain/gate-copy";
 import { toGatePhoneRefs } from "@/lib/server/invitations";
+import { trustedClientIp } from "@/lib/server/client-ip";
 import {
   UNLOCK_COOKIE_NAME,
   signUnlockCookie,
   unlockCookieOptions,
 } from "@/lib/server/cookies";
+import { decoyUnlockOutcome } from "@/lib/server/decoy-gate";
 import {
   attemptUnlock,
   createGateAttemptsStore,
   hashClientIp,
+  toGateFeedback,
 } from "@/lib/server/gate";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
@@ -34,37 +37,14 @@ import { loadInvitationRecord } from "./load-invitation";
  */
 
 /**
- * The feedback a failed attempt against an unknown invitation produces.
+ * The requesting address, hashed, as the rate limiter's bucket.
  *
- * Reaching it requires forging an action call, since an unknown slug renders
- * the friendly contact page and no form. It exists so that even a forged call
- * cannot distinguish "no such invitation" from "wrong number": both come back
- * as the same generic rejection, with no attempt recorded because there is no
- * invitation to record it against.
+ * The raw value is never stored or logged, and — the part that makes the
+ * per-IP scope a lock rather than a decoration — it is never a value the client
+ * chose. `lib/server/client-ip.ts` carries the reasoning and the citations.
  */
-const UNKNOWN_INVITATION: GateFeedback = {
-  status: "rejected",
-  attemptsRemaining: 0,
-};
-
-/**
- * The requesting address, as the platform reports it.
- *
- * Only ever passed to `hashClientIp`; the raw value is never stored or logged.
- * A missing header yields a constant bucket rather than an error: on a platform
- * that does not forward one, every visitor shares a lockout scope, which is
- * conservative in the right direction.
- */
-async function clientIp(): Promise<string> {
-  const headerList = await headers();
-  const forwarded = headerList.get("x-forwarded-for");
-
-  if (forwarded) {
-    // The left-most entry is the original client; the rest are proxies.
-    return forwarded.split(",")[0].trim();
-  }
-
-  return headerList.get("x-real-ip")?.trim() || "unknown";
+async function clientIpHash(): Promise<string> {
+  return hashClientIp(trustedClientIp(await headers()));
 }
 
 /**
@@ -81,9 +61,18 @@ export async function unlockAction(
 ): Promise<GateFeedback> {
   const rawPhone = String(formData.get("phone") ?? "");
   const record = await loadInvitationRecord(slug);
+  const ipHash = await clientIpHash();
+  const now = Date.now();
 
   if (record === null) {
-    return UNKNOWN_INVITATION;
+    // Reaching this needs a forged action call: an unknown slug renders the
+    // friendly contact page with no form. The decoy answers it with the same
+    // counter, the same lockout and the same Spanish copy a real invitation
+    // gives a wrong number, so a forged sequence learns nothing. See
+    // `lib/server/decoy-gate.ts` for what it does and does not guarantee.
+    return toGateFeedback(
+      await decoyUnlockOutcome({ slug, rawPhone, ipHash, now }),
+    );
   }
 
   const client = createServerSupabaseClient();
@@ -91,25 +80,21 @@ export async function unlockAction(
     invitationId: record.id,
     guests: toGatePhoneRefs(record),
     rawPhone,
-    ipHash: hashClientIp(await clientIp()),
-    now: Date.now(),
+    ipHash,
+    now,
   });
 
-  if (outcome.status === "locked") {
-    return { status: "locked", retryAfterMs: outcome.retryAfterMs };
-  }
-
-  if (outcome.status === "rejected") {
-    return {
-      status: "rejected",
-      attemptsRemaining: outcome.attemptsRemaining,
-    };
+  if (outcome.status !== "unlocked") {
+    // The SAME mapping the decoy above goes through, deliberately: two
+    // hand-written translations of the same outcome are how the values drifted
+    // apart the first time.
+    return toGateFeedback(outcome);
   }
 
   const cookieStore = await cookies();
   cookieStore.set(
     UNLOCK_COOKIE_NAME,
-    signUnlockCookie(record.id, Date.now()),
+    signUnlockCookie(record.id, now),
     unlockCookieOptions(slug),
   );
 

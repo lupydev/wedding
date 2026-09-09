@@ -1560,3 +1560,244 @@ append-only, seat parity, and the external anon-key RLS invariants.
 18/18 Work Unit 4b tasks complete (4b.12 PARTIAL — console-operator half
 deferred to 6a). Work units 1, 2, 2b, 3, 3b, 4a and 4c unchanged (task 2.5 still
 PARTIAL). Work units 5, 6a, 6b and 7 untouched. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 4d — Phone Gate Hardening
+
+Three fixes from the Work Unit 4b reliability review. Two are security defects
+in the gate that unit built; the third is a correct line nothing asserted.
+
+## Fix 1 — `R3-unknown-invitation-oracle`
+
+### What was wrong
+
+`app/i/[slug]/actions.ts` answered an unknown invitation with a constant
+`{ status: "rejected", attemptsRemaining: 0 }`, and its own comment claimed an
+unknown slug and a wrong number therefore "both come back as the same generic
+rejection". The SHAPE matched. The VALUES did not. A real invitation answers a
+wrong number with a counter that walks 7, 6, 5 … 0 and then a lockout, so the
+very first forged call separated the two: "te quedan 7 intentos" meant the slug
+was real. The oracle leaked through the data, not the structure — which is
+exactly why a single-call, shape-only assertion never caught it.
+
+### What was done
+
+The decoy no longer re-implements the rejection. It runs the REAL gate:
+`attemptUnlock` with the real `evaluateGate` and `remainingAttempts`, against a
+household with an EMPTY guest list. `matchesInvitation` over an empty list is
+false for every input, so every attempt is a rejection and the counter, the
+lockout moment and the retry duration are identical **by construction** rather
+than by two implementations agreeing. `toGateFeedback` was extracted into
+`lib/server/gate.ts` so both branches of the action share one outcome-to-copy
+mapping — two hand-written mappings are precisely how the values drifted apart
+the first time.
+
+The test compares whole SEQUENCES, twelve steps deep, plus the rendered Spanish
+at every step, plus the exact lockout attempt and duration. It carries two
+guards against vacuity: one asserting the decoy counter actually walks down
+(so the equality cannot pass because both sides are flat), and one negative
+control asserting the shipped constant-zero value is separable from the real
+first response.
+
+### The honest constraint, and the residual gap
+
+Nothing is persisted for a slug with no row, and nothing should be: writing
+`gate_attempts` rows for attacker-chosen slugs would hand an unauthenticated
+caller an unbounded write channel into the table that exists to slow attackers
+down. That trades an existence oracle for a storage-abuse vector. So the decoy
+counts in bounded process memory (LRU, `DECOY_SLUG_CAPACITY = 512` slugs).
+
+**A perfectly indistinguishable counter is therefore not achievable here, and
+this is not it.** What remains observable, stated plainly rather than described
+as equivalent:
+
+1. **Cold starts and horizontal scale.** A real invitation's counter lives in
+   Postgres and is shared by every serverless instance. The decoy's lives in one
+   instance's memory. An attacker whose requests land on a fresh instance sees
+   the decoy counter restart while a real one would not.
+2. **LRU eviction.** Probing ~512 other unknown slugs evicts this one and resets
+   its counter for free. A real invitation cannot be reset that way. This is
+   asserted directly in `decoy-gate.spec.ts` rather than left implicit, together
+   with the companion test showing an actively probed slug stays resident.
+3. **Latency.** The real path costs two extra Postgres round trips (the attempt
+   read and the insert) that the decoy does not. Closing this would mean issuing
+   decoy queries driven by attacker-chosen slugs — real database load bought
+   with a forged request — so it was left open deliberately.
+4. **Pre-existing, not introduced here:** a malformed slug is rejected by
+   `isWellFormedSlug` with no database round trip at all, which is a coarser
+   timing distinction than any of the above. It predates this unit and was left
+   alone.
+
+Every one of these is a far weaker signal than a constant zero on the first
+call, and reading any of them requires an attacker who is already forging Server
+Action calls against an 80-bit slug they have no reason to believe exists.
+
+## Fix 2 — `R3-client-ip-untrusted-and-untested`
+
+### What was actually verified, not assumed
+
+The instruction was explicit about not taking the diagnosis on trust. Sources
+read directly:
+
+- **`https://vercel.com/docs/headers/request-headers`** (page states "Last
+  updated December 13, 2025"), fetched and read:
+  - `x-forwarded-for` — "If you are trying to use Vercel behind a proxy, we
+    currently overwrite the X-Forwarded-For header and do not forward external
+    IPs. **This restriction is in place to prevent IP spoofing.**"
+  - The same page then documents **"Custom X-Forwarded-For IP"**: "Trusted Proxy
+    is available on Enterprise plans. Enterprise customers can purchase and
+    enable a trusted proxy to allow your custom X-Forwarded-For IP."
+  - `x-vercel-forwarded-for` — "This header is identical to the x-forwarded-for
+    header. However, x-forwarded-for could be overwritten if you're using a proxy
+    on top of Vercel."
+  - `x-real-ip` — "This header is identical to the x-forwarded-for header."
+- **`@vercel/functions@3.9.6`**, downloaded with `npm pack` and read: `headers.js`
+  defines `const IP_HEADER_NAME = "x-real-ip"` and `ipAddress()` returns
+  `getHeader(headers, IP_HEADER_NAME)` — that header and nothing else, with no
+  comma splitting and no `x-forwarded-for` fallback. `headers.d.ts` documents it
+  as "Client IP as calculated by Vercel Proxy". The package is NOT a project
+  dependency and was not added; it was read as evidence of what Vercel itself
+  trusts.
+- **`https://vercel.com/docs/environment-variables/system-environment-variables`**:
+  `VERCEL = 1`, "Available at: Both build and runtime".
+
+**Where the review's premise needs a correction.** On a default Vercel
+deployment the reviewer's specific claim — that anyone can send
+`X-Forwarded-For: 1.2.3.4` and get a fresh bucket — is FALSE, because Vercel
+overwrites that header expressly to prevent spoofing. The finding is still
+correct that the code was wrong, for two other reasons: the left-most-entry
+parse is a parser for a list only an untrusted intermediary produces, and
+Trusted Proxy turns that header back into customer-proxy input on Enterprise. A
+security property that depends on a billing plan is not one. This was reported
+rather than quietly implemented as if the original diagnosis had been exact.
+
+### What was done
+
+`lib/server/client-ip.ts` reads `x-vercel-forwarded-for`, then `x-real-ip`, and
+only when `process.env.VERCEL === "1"`. `x-forwarded-for` is never read at all.
+Whole trimmed values are used; nothing is split on a comma. Off Vercel — local
+development, any self-hosted Node process — no header is trustworthy, so every
+visitor shares the constant `shared-untrusted-origin` bucket. That is coarse and
+it is the correct direction to fail: a shared lockout inconveniences visitors
+who share an origin, a client-chosen bucket removes the lock entirely.
+
+Local development is unaffected in practice, because `next dev` and `next start`
+set none of these headers, so the previous code was already producing its
+`"unknown"` constant there.
+
+### Residual gap
+
+If Vercel's system environment variables are switched off for the project,
+`VERCEL` is absent and every visitor falls into the shared bucket. That costs
+bucket granularity, never safety, and is the deliberate fail-closed direction.
+
+## Fix 3 — `R3-unlock-cookie-secure-unasserted`
+
+`secure: process.env.NODE_ENV === "production"` was correct and untested, which
+for a security attribute is the same as absent — a refactor could pin it to a
+constant in either direction and every test would still pass. Both branches are
+now asserted, plus the `test` branch. Because the production code already
+existed, RED was demonstrated by mutation instead: `secure: true` fails 2 of the
+3 new tests, `secure: false` fails 1, and the unmutated line passes 23/23.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 4d.1–4d.3 | `lib/server/decoy-gate.spec.ts` | Integration (node) | 73/73 green first | Written first — `Cannot find module './decoy-gate'` | Passed, 12 tests | 12 cases: 12-step sequence equality, non-flatness guard, negative control, copy equality, lockout equality, real-guest number, four never-unlock inputs, per-slug scoping, per-address allowance, window expiry, LRU eviction, LRU hotness | `toGateFeedback` extracted so both paths share one mapping |
+| 4d.4–4d.6 | `lib/server/client-ip.spec.ts` | Unit | N/A (new) | Written first — `Cannot find module './client-ip'` | Passed, 12 tests | 12 cases across 2 platforms and 6 forgeable headers | Clean |
+| 4d.7 | `e2e/phone-gate.spec.ts` | E2E | 50/50 green first | Ran against the restored defective reader — FAILED with `Expected "Te quedan 3 intentos." / Received "…Te quedan 7 intentos."` | Passed, 3 tests | 3 cases: split-context countdown, third address vs lockout, forged address + correct number | Clean |
+| 4d.8 | `lib/server/cookies.spec.ts` | Unit | 23/23 green first | Mutation-proved (see below) | Passed, 3 new tests | 3 branches: production, development, test | Clean |
+
+### Mutation proof for 4d.8 and 4d.7
+
+RED for an already-correct line cannot come from a missing module, so the
+assertions were proved non-vacuous by breaking the production code instead:
+
+| Mutation | Result |
+|---|---|
+| `secure: true` | 2 failed, 21 passed |
+| `secure: false` | 1 failed, 22 passed |
+| unmutated | 23 passed |
+| `clientIpHash` restored to the left-most `x-forwarded-for` read | new E2E group FAILED at the second context's first attempt |
+| fix restored | new E2E group 3 passed |
+
+### Test summary
+
+- Unit tests added: **27** (424 → 451)
+- E2E tests added: **3** (50 → 53)
+- Pure functions created: `trustedClientIp`, `toGateFeedback`
+- Mock count: highest in any new file is **one** fake (`GateAttemptsStore`)
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npx vitest run lib/server/` → **127 passed** |
+| Runtime harness | `npm run e2e -- e2e/phone-gate.spec.ts -g "client-supplied forwarding header"` → RED 1 failed / 2 did not run against the restored defect, then **3 passed** against the fix, on a real `next build && next start` and a real local Supabase |
+| Rollback boundary | Delete `lib/server/client-ip.ts`, `lib/server/client-ip.spec.ts`, `lib/server/decoy-gate.ts`, `lib/server/decoy-gate.spec.ts`; revert `app/i/[slug]/actions.ts`, `lib/server/gate.ts`, `lib/server/cookies.spec.ts` and the one added describe in `e2e/phone-gate.spec.ts`. Nothing from work units 1–4c is touched, no migration is added or changed, and no RSVP/console file exists yet to disturb. |
+
+## Issues found
+
+1. **Lint caught a false claim in a comment.** `decoy-gate.ts` imported
+   `GATE_HISTORY_WINDOW_MS` and its comment said pruning used it directly. It
+   does not — the horizon arrives as the `since` argument `attemptUnlock`
+   computes, which is better (one source, not a copy). The import was dead and
+   the comment was wrong; both were fixed rather than the import being "used" to
+   silence the warning.
+2. **Two of my own test expectations were arithmetically wrong** and were
+   corrected against production behaviour, not the reverse: the ninth attempt's
+   `retryAfterMs` is `30 min − 1 s` (thirty minutes from the eighth failure at
+   `NOW + 7 s`, asked at `NOW + 8 s`), and the LRU-hotness case leaves 4
+   attempts, not 3. In both, the primary assertion — decoy equals real — had
+   already passed; only the redundant absolute values were off.
+3. **The review's `x-forwarded-for` premise is inexact on Vercel** (see Fix 2).
+   Reported rather than implemented silently.
+4. **Fix 1 has no E2E.** Reaching the unknown-invitation path requires forging a
+   Server Action call with a build-specific `Next-Action` id; an unknown slug
+   renders the friendly page with no form. It is covered at the unit layer,
+   which is where a whole-sequence comparison belongs anyway.
+5. **The three open Work Unit 3 WARNINGs and the three SUGGESTION findings from
+   this review were left untouched**, as instructed.
+
+## Explicitly out of scope, and left alone
+
+The three SUGGESTION findings from the 4b review, the three open Work Unit 3
+WARNINGs, RSVP (Work Unit 5), the console (6a), dispatch and previews (6b), the
+public ceremony page, and reminders.
+
+## Workload / PR boundary
+
+- Mode: chained PR slice — PR4d, following PR4b.
+- Authored lines: ~700 (≈180 production, ≈520 test and documentation). Above the
+  400-line default budget, and the test half is three quarters of it. The slice
+  is one cohesive deliverable: three findings from one review of one module,
+  each with its own rollback boundary. Recommending `size:exception`. If a split
+  is preferred, the natural seam is (a) `client-ip.ts` + `cookies.spec.ts`, then
+  (b) `decoy-gate.ts`.
+- **No commit.** The tree is normalized: `prettier --write` ran after the last
+  source change and `npm run format:check` is clean.
+
+## Verification — actual output
+
+| Command | Observed result |
+|---|---|
+| `npm test` | `Test Files 32 passed (32)` / `Tests 451 passed (451)` — baseline 30 / 424 |
+| `npm run e2e` | `53 passed (11.3s)` — baseline 50 |
+| `npm run typecheck` | clean, no output, exit 0 |
+| `npm run lint` | clean, no output (after fixing the unused import it surfaced) |
+| `npm run format:check` | `All matched files use Prettier code style!` |
+| `npm run build` | `✓ Generating static pages using 8 workers (5/5)`; routes `/`, `/_not-found`, `/i/[slug]`, `/i/[slug]/opengraph-image`, `/robots.txt` |
+
+Re-confirmed inside those runs: the raw-HTML Open Graph assertions under a
+WhatsApp User-Agent including `does not stream the tags after </head>`, no phone
+digits in the page source, exactly one unlock path with no query-parameter
+bypass, the `nullif` mutation test, `service_role` append-only, seat parity, and
+the external anon-key RLS invariants.
+
+## Status
+
+9/9 Work Unit 4d tasks complete. Work units 1, 2, 2b, 3, 3b, 4a, 4b and 4c
+unchanged (task 2.5 and 4b.12 still PARTIAL). Work units 5, 6a, 6b and 7
+untouched. Ready for `sdd-verify`.
