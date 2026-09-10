@@ -10,6 +10,7 @@ import {
   type GuestFacingInvitation,
   type InvitationRecord,
 } from "@/lib/server/invitations";
+import { getCurrentRsvp, type RsvpResponseRecord } from "@/lib/server/rsvp";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
 /**
@@ -63,4 +64,18 @@ export const loadGuestFacingInvitation = cache(
 export const loadOwnerContactPhone = cache(
   async (senderId: string): Promise<string | null> =>
     findSenderContactPhone(createServerSupabaseClient(), senderId),
+);
+
+/**
+ * The household's CURRENT RSVP, or `null` if they have not answered.
+ *
+ * Cached per request like everything else here. It reads `rsvp_latest`
+ * (migration 0008), never `rsvp_responses`: the table is append-only history,
+ * so "the answer" is a reduction to one row per invitation, and doing that
+ * reduction at the call site is how the same product gets two screens that
+ * disagree about how many people are coming.
+ */
+export const loadCurrentRsvp = cache(
+  async (invitationId: string): Promise<RsvpResponseRecord | null> =>
+    getCurrentRsvp(createServerSupabaseClient(), invitationId),
 );

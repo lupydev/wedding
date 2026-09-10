@@ -50,6 +50,20 @@ async function submitPhone(page: Page, value: string) {
 }
 
 /**
+ * The household's own guest list, inside the invitation body.
+ *
+ * Scoped, because since the RSVP shipped a guest's name appears TWICE on an
+ * unlocked page: once in the list of who the invitation is for, and once as the
+ * label of their RSVP checkbox. An unscoped query matches both, and Playwright's
+ * strict mode is right to refuse it — "the name is somewhere on the page" would
+ * be satisfied by the form alone, even if the body had stopped naming the
+ * household at all, which is exactly what these tests are checking.
+ */
+function householdList(page: Page) {
+  return page.locator("section.invitation__household");
+}
+
+/**
  * The gate's own feedback region.
  *
  * Scoped to the form because Next.js renders its own empty `role="alert"` route
@@ -114,7 +128,7 @@ test.describe("unlocking with a guest's number", () => {
     await submitPhone(page, "3005552222");
 
     await expect(page.getByText("Nos alegra mucho invitarlos")).toBeVisible();
-    await expect(page.getByText(GUEST_TWO)).toBeVisible();
+    await expect(householdList(page).getByText(GUEST_TWO)).toBeVisible();
   });
 
   test("unlocks a second household with its own first guest's number", async ({
@@ -131,7 +145,9 @@ test.describe("unlocking with a guest's number", () => {
       await page.goto(`/i/${other.slug}`);
       await submitPhone(page, "+57 301 555 3333");
 
-      await expect(page.getByText("Elena Restrepo")).toBeVisible();
+      await expect(
+        householdList(page).getByText("Elena Restrepo"),
+      ).toBeVisible();
     } finally {
       await context.close();
       await other.cleanup();
@@ -359,7 +375,7 @@ test.describe("the unlock cookie", () => {
 
     await page.goto(`/i/${invitation.slug}`);
 
-    await expect(page.getByText(GUEST_ONE)).toBeVisible();
+    await expect(householdList(page).getByText(GUEST_ONE)).toBeVisible();
     await expect(page.getByLabel(/Número de celular/)).toHaveCount(0);
   });
 
@@ -538,9 +554,14 @@ test.describe("a client-supplied forwarding header", () => {
     }
   });
 
-  test("cannot use one to reach the invitation body either", async ({
+  test("does not open for a CORRECT number while the lockout holds", async ({
     browser,
   }) => {
+    // The number submitted here is Camila's real one, and the lockout still
+    // wins — which is the property worth having: the gate consults the lockout
+    // BEFORE it compares anything, so a locked-out attacker learns nothing even
+    // from a correct guess, and cannot get in with one either. A forged
+    // forwarding header does not buy a way around that.
     const context = await browser.newContext({
       extraHTTPHeaders: { "x-forwarded-for": "192.0.2.4" },
     });
@@ -548,12 +569,14 @@ test.describe("a client-supplied forwarding header", () => {
     try {
       const page = await context.newPage();
       await page.goto(`/i/${invitation.slug}`);
-      await submitPhone(page, "3005551111");
+      await submitPhone(page, PHONE_ONE.replace("+57", ""));
 
-      await expect(gateAlert(page)).toContainText("Por seguridad");
-      await expect(page.getByText("Nos alegra mucho invitarlos")).toHaveCount(
-        0,
+      await expect(gateAlert(page)).toContainText(
+        /Por seguridad, espera \d+ minutos? antes de intentarlo de nuevo\./,
       );
+      for (const gated of GATED_TEXT) {
+        await expect(page.getByText(gated)).toHaveCount(0);
+      }
     } finally {
       await context.close();
     }

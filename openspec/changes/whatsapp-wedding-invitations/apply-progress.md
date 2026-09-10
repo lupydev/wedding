@@ -1801,3 +1801,228 @@ the external anon-key RLS invariants.
 9/9 Work Unit 4d tasks complete. Work units 1, 2, 2b, 3, 3b, 4a, 4b and 4c
 unchanged (task 2.5 and 4b.12 still PARTIAL). Work units 5, 6a, 6b and 7
 untouched. Ready for `sdd-verify`.
+
+# Work Unit 5 — RSVP
+
+Phase 5 (tasks 5.1–5.9), plus the four leftover findings from the Work Unit 4d
+review. Strict TDD active; test runner `npm test`; local Supabase up.
+
+## What this unit delivers
+
+Without it the product does nothing: a guest could open their invitation and had
+no way to answer it. Now they can, and the answer reaches Postgres through one
+authorized path.
+
+## The aggregate rule, and why it is a database object
+
+`rsvp_responses` is append-only by trigger. A guest who changes her mind writes a
+SECOND row and the first one stays, because "she said yes, then cancelled" is
+information the couple wants. That history is correct, and it is also the shape
+that makes the obvious query wrong: `count(*) where attending` over the raw table
+counts every mind ever changed, and `sum(seats_confirmed)` totals seats released
+weeks ago. A reference project's dashboard reported 47 confirmed from 17 answers
+and shipped the defect twice, in two screens, because the reduction was
+re-derived at every call site.
+
+So the reduction is one object. `supabase/migrations/0008_rsvp_latest.sql` adds:
+
+```sql
+create view rsvp_latest with (security_invoker = true) as
+select distinct on (invitation_id) ... from rsvp_responses
+order by invitation_id, submitted_at desc, id desc;
+```
+
+Three decisions inside that, each load-bearing:
+
+- **`distinct on`** keeps exactly one row per invitation, in the database,
+  evaluated once — not a window function whose partition a later `where` can
+  silently widen.
+- **`id desc` after `submitted_at desc`.** `submitted_at` defaults to `now()`,
+  which is the TRANSACTION timestamp: two rows written in one transaction carry
+  the identical value to the microsecond, and the winner would be left to the
+  planner — stable in a test, arbitrary in production, different after a plan
+  change. The second key makes the ordering total.
+- **`security_invoker = true`.** A view runs with its OWNER's privileges by
+  default, so an ordinary view over an RLS-protected table is a hole straight
+  through that protection. The 0004 event trigger additionally revokes
+  `anon`/`authenticated` on it at creation; both guards are kept, because either
+  one alone has been the missing one somewhere.
+
+Every RSVP count, list and total — here, in the console (6a), and in anything
+added later — MUST start from `rsvp_latest`. `rsvp_responses` stays correct for
+exactly one thing: showing the history AS history.
+
+The RED test is the one that would have caught the reference defect: seed, submit
+yes, submit no, then assert the aggregate reports ONE response and reports it as
+no. `supabase/tests/rsvp-latest.spec.ts` also measures the defect directly —
+`naiveAttending === 1` and `naiveSeats === 2` over the raw table beside
+`reducedAttending === 0` and `reducedSeats === 0` over the view — and
+`e2e/rsvp.spec.ts` repeats the two-submission sequence through a real browser.
+A test that submits once cannot detect this class of bug at all: the naive count
+and the correct one agree on every household that never changed its mind.
+
+## Seats are derived, never typed
+
+The database enforces two rules that must agree with the form: the hard cap
+(`seats_confirmed <= seats_allowed`, 0003) and parity (`seats_confirmed =
+cardinality(attendee_guest_ids)`, 0007). Every seat on this guest list belongs to
+a named person, so the honest input is the set of checked boxes and nothing else.
+`seats_confirmed` is computed from that set inside `submitRsvp`. There is no
+field on the wire that reaches that column — a payload adding `seatsConfirmed` is
+not rejected, it is simply never read — so a mismatch cannot be submitted, not
+merely cannot be submitted by the form.
+
+A consequence worth recording: because the seat count IS the attendee count, an
+over-cap submission always trips `seats_exceed_allowed` first, and
+`attendees_exceed_allowed` is unreachable from this module. Both map to one guest
+sentence, and `lib/server/rsvp.spec.ts` states the reason in a comment rather than
+leaving a reader to wonder which fires.
+
+Check ORDER inside `submitRsvp` is the security property, exactly as it is in the
+gate: cookie → deadline → parse → seat validation → household membership → write.
+An unauthorized caller learns nothing about the invitation, including whether it
+is closed. Shape is checked before identity, matching `validateRsvpSelection`'s
+own ordering: five names against three seats is over the cap whoever those five
+people are, and answering "we do not recognize one of them" would report a
+downstream symptom.
+
+## Authorization
+
+The write goes through a Server Action behind the signed unlock cookie, and the
+cookie is verified against THIS invitation's id. A direct client insert would
+need an `anon` INSERT policy on `rsvp_responses` keyed on a slug the caller
+already holds — an unauthenticated write endpoint whose only credential is the
+value being checked, which is a spam channel rather than authorization.
+
+`attendee_guest_ids` is a uuid array, not a foreign key, so the database cannot
+notice a stranger being seated with a household. The action passes
+`record.guests.map(g => g.id)` and `submitRsvp` refuses anything outside it. Both
+halves are tested, and the E2E injects a real guest id from a DIFFERENT seeded
+household to prove it end to end.
+
+## Deadline
+
+`rsvpIsOpenNow` in `lib/server/rsvp.ts` is the adapter that supplies the clock to
+the existing `isRsvpOpen`, mirroring `unlockCookieUnlocks`. No offset is
+hard-coded and the Bogota day-end rule is untouched. Past the deadline the page
+renders `RsvpClosed` INSTEAD OF the form — not a disabled form, not one whose
+submissions are dropped, because a household that fills in a discarded form
+believes they answered and nobody finds out until the seating chart is wrong.
+The E2E asserts `form.rsvp__form` has count 0.
+
+## The four Work Unit 4d findings
+
+### 1. `R3-action-wiring-unproved`
+
+New `app/i/[slug]/actions.spec.ts`, ten tests on the actions themselves. The
+seam is now asserted in both directions: an unknown slug reaches
+`decoyUnlockOutcome` and never `attemptUnlock`, a known one the reverse, and both
+paths produce byte-identical feedback and identical Spanish copy for the same
+outcome. RED was demonstrated by mutation, because the production code already
+existed: changing line 70 to `if (record === null && false)` fails 2 of the 10.
+
+### 2. `R3-e2e-third-case-asserts-lockout-not-its-name`
+
+The test was named "cannot use one to reach the invitation body either" while
+what it actually proves is stronger and different: it submits Camila's CORRECT
+number and the lockout still wins, because the gate consults the lockout before
+it compares anything. Renamed to "does not open for a CORRECT number while the
+lockout holds", the number is now derived from `PHONE_ONE` so the intent is
+visible at the call site, the regex assertion matches the sibling test, and every
+entry in `GATED_TEXT` is asserted absent rather than one hard-coded sentence.
+
+### 3. `R3-lru-test-coupled-to-scope-tuning`
+
+The two eviction tests asserted literal `attemptsRemaining: 7` and `4`, which are
+`IP_SCOPE.threshold` arithmetic. They now derive from a local `remainingAfter()`
+helper. **Proven, not assumed**: retuning `IP_SCOPE.threshold` from 8 to 6 fails
+7 of the 12 decoy tests and the two LRU tests are not among them. The
+sequence-equality tests deliberately KEEP their literals — what those assert IS
+the exact counter a guest sees, and deriving them from the same constant the
+production code uses would let both drift together in silence.
+
+### 4. `R3-shared-bucket-collapses-per-ip-scope`
+
+Behaviour unchanged, as instructed. The tradeoff is now stated at the exact line
+that makes it (`trustedClientIp`'s early return) rather than only in the module
+header a reader may not reach, and a new test pins it as INTENT: two different
+visitors off Vercel resolve to the SAME bucket. Mutation check: making that
+branch read `x-real-ip` fails 3 tests, including the new one.
+
+## Deviations from design
+
+- **`rsvp_latest` is new.** `design.md` names the index
+  `rsvp_responses_latest_idx` and the "latest row wins" rule but no view. The
+  view was added because the rule needs one owner: two screens re-deriving it is
+  precisely how the reference project double-counted. The index still serves the
+  leading keys of the view's ordering.
+- **`components/invitation/RsvpClosed.tsx` is new**, not in the design's file
+  table. It exists so the deadline surface is unit-testable; the page itself is
+  an async Server Component and cannot be.
+- **`InvitationBody` gained an optional `rsvp` slot.** The design has the form
+  living inside the body, and `components/**` may not import `lib/server/**`, so
+  the route composes the bound action and the body decides only where the answer
+  belongs. With no slot passed the rendered markup is byte-identical — the
+  approved snapshot passes unchanged, and a second snapshot asserts it.
+- **`zod` moved from a dev-only transitive dependency to a declared runtime
+  dependency**, which `openspec/config.yaml` already listed under
+  `testing.runtime_dependencies` and task 5.4 required.
+- **Three assertions in `e2e/phone-gate.spec.ts` are now scoped** to
+  `section.invitation__household`. Guest names appear twice on an unlocked page
+  since the RSVP shipped — once in the household list, once as a checkbox label —
+  and Playwright's strict mode was right to refuse the ambiguous query: "the name
+  is somewhere on the page" would have been satisfied by the form alone.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| aggregate rule | `supabase/tests/rsvp-latest.spec.ts` | Integration (real Postgres) | 451/451 green first | ✅ 5 failed — `relation "rsvp_latest" does not exist` | ✅ 5/5 after `supabase db reset` applied 0008 | 5 cases: latest wins, naive-vs-reduced counter-measurement, same-instant tie-break, per-invitation isolation, anon/invoker posture | ➖ view written once |
+| 5.1–5.4 | `lib/server/rsvp.spec.ts` | Unit (port) | 456/456 | ✅ `Cannot find module './rsvp'` | ✅ 23/23, then 27/27 | 27 cases across authorization, derivation, optional fields, append-only, deadline | ✅ seat validation reordered before membership so the reported reason is the first thing actually wrong |
+| store adapter | `supabase/tests/rsvp-store.spec.ts` | Integration (PostgREST + secret key) | — | ✅ mutation: `.from("rsvp_latest")` → `"rsvp_responses"` fails 2 of 5 | ✅ 5/5 | 5 cases: no answer, round-trip, changed answer, `service_role` update refused, cap refused | ➖ |
+| copy | `lib/domain/rsvp-copy.spec.ts` | Unit (pure) | — | ✅ `Cannot find module './rsvp-copy'` | ✅ 15/15 | 15 cases incl. every rejection reason mapped | ➖ |
+| 5.5 | `components/invitation/RsvpForm.spec.tsx` | Component (jsdom) | — | ✅ `Failed to resolve import "./RsvpForm"` | ✅ 18/18 | 18 cases: cap, decline, derivation, optional fields, pre-fill, feedback | ➖ |
+| 5.7 | `components/invitation/RsvpClosed.spec.tsx` | Component (jsdom) | — | ✅ `Failed to resolve import "./RsvpClosed"` | ✅ 2/2 | 2 cases | ➖ |
+| slot | `components/invitation/InvitationBody.spec.tsx` | Component (jsdom) | 11/11 | ✅ 1 failed — no `rsvp` prop | ✅ 12/12 | 2 cases incl. unchanged-markup snapshot | ➖ |
+| 5.6 + finding 1 | `app/i/[slug]/actions.spec.ts` | Unit (mocked boundaries) | — | ✅ 4 failed — `submitRsvpAction is not a function`; and mutation on line 70 fails 2 | ✅ 10/10 | 10 cases across both actions | ➖ |
+| 5.8 | `e2e/rsvp.spec.ts` | E2E (Playwright + real DB) | 53/53 | ✅ file absent | ✅ 10/10 | 10 cases: derivation, pre-fill, changed answer, cap, DOM-tampered over-cap, foreign guest, three deadline states, lost session | ➖ |
+| finding 3 | `lib/server/decoy-gate.spec.ts` | Integration (node) | 12/12 | ✅ retuning `IP_SCOPE.threshold` 8→6 fails 7 of 12, and NOT the two LRU tests | ✅ 12/12 | — | ✅ literals replaced by `remainingAfter()` |
+| finding 4 | `lib/server/client-ip.spec.ts` | Unit | 12/12 | ✅ mutation: reading `x-real-ip` off Vercel fails 3 | ✅ 13/13 | — | ➖ behaviour deliberately unchanged |
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npx vitest run lib/server/rsvp.spec.ts` → `Tests 27 passed (27)`; `npm run e2e -- e2e/rsvp.spec.ts` → `10 passed` |
+| Runtime harness | `supabase db reset` applied `0001`–`0008` in order; `supabase/tests/rsvp-latest.spec.ts` and `rsvp-store.spec.ts` ran against that live instance, the latter over PostgREST with the real secret key; the full E2E suite ran against `npm run build && npm run start` |
+| Rollback boundary | Revert `lib/server/rsvp.ts`, `lib/domain/rsvp-copy.ts`, `components/invitation/Rsvp*.tsx`, `e2e/rsvp.spec.ts`, the `submitRsvpAction` block in `actions.ts`, the `loadCurrentRsvp` block in `load-invitation.ts`, the unlocked branch of `page.tsx`, the `rsvp` slot in `InvitationBody.tsx`, and run `supabase/down/0008_rsvp_latest_down.sql`. Nothing in work units 1–4d depends on any of it. The three finding fixes are independently revertible and touch tests plus one comment |
+
+## Verification
+
+| Command | Observed result |
+|---|---|
+| `npm test` | `Test Files 39 passed (39)` / `Tests 536 passed (536)` — baseline 32 / 451 |
+| `npm run e2e` | `63 passed (11.8s)` — baseline 53 |
+| `npm run typecheck` | clean, no output, exit 0 |
+| `npm run lint` | clean, no output, exit 0 |
+| `npm run format:check` | `All matched files use Prettier code style!` (after one `npm run format` pass over 6 new files) |
+| `npm run build` | `✓ Compiled successfully`; `✓ Generating static pages using 8 workers (5/5)`; routes `/`, `/_not-found`, `/i/[slug]`, `/i/[slug]/opengraph-image`, `/robots.txt` |
+| `npm run test:coverage` (task 5.9) | `Tests 536 passed (536)`; `All files 94.07% stmts / 88.51% branch`; `rsvp.ts 95.23 / 95.45` |
+
+Two E2E tests in `phone-gate.spec.ts` failed on the first full run — strict-mode
+violations from guest names now appearing twice on an unlocked page. Scoped to
+the household list and re-run green; this is recorded rather than quietly fixed
+because it is a real consequence of shipping the form, not a flake.
+
+Re-confirmed inside those runs: the raw-HTML Open Graph assertions under a
+WhatsApp User-Agent including that the tags do not appear after `</head>`, no
+phone digits in the page source, exactly one unlock path with no query-parameter
+bypass, the `nullif` mutation test, `service_role` append-only, seat parity, and
+the external anon-key RLS invariants.
+
+## Status
+
+9/9 Work Unit 5 tasks complete. Work units 1, 2, 2b, 3, 3b, 4a, 4b, 4c and 4d
+unchanged (task 2.5 and 4b.12 still PARTIAL). Work units 6a, 6b and 7 untouched;
+the console, dispatch, the public ceremony page, reminders and the three open WU3
+WARNINGs remain out of scope. Ready for `sdd-verify`.

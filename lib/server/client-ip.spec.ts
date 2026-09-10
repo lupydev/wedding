@@ -172,6 +172,31 @@ describe("trustedClientIp off Vercel", () => {
     ).toBe(SHARED_RATE_LIMIT_BUCKET);
   });
 
+  it("collapses two different visitors into one bucket, deliberately", () => {
+    // The cost of the branch above, pinned as INTENT rather than left to be
+    // rediscovered as a surprise: off Vercel two unrelated visitors share a
+    // lockout, so eight failures from one of them lock the gate for the other.
+    //
+    // That is the fail-closed direction and it is chosen, not overlooked. The
+    // alternative is reading a header the visitor controls, which does not
+    // degrade the per-IP scope — it deletes it, because an attacker then picks
+    // a fresh bucket per request and the counter never reaches its threshold.
+    // Production is Vercel, where the platform computes a trustworthy address
+    // and this branch is not taken.
+    //
+    // If this test ever fails, the change under it is a change to that
+    // decision. It is not a test to update so the suite goes green.
+    vi.stubEnv("VERCEL", "");
+
+    const visitor = trustedClientIp(headers({ "x-real-ip": "203.0.113.7" }));
+    const somebodyElse = trustedClientIp(
+      headers({ "x-real-ip": "198.51.100.22" }),
+    );
+
+    expect(visitor).toBe(somebodyElse);
+    expect(visitor).toBe(SHARED_RATE_LIMIT_BUCKET);
+  });
+
   it("shares one bucket when VERCEL is set to anything but 1", () => {
     vi.stubEnv("VERCEL", "0");
 

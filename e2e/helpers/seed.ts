@@ -37,13 +37,33 @@ export interface SeededGuest {
   readonly isChild?: boolean;
 }
 
+export interface SeededRsvpRow {
+  readonly attending: boolean;
+  readonly seatsConfirmed: number;
+  readonly attendeeGuestIds: readonly string[];
+  readonly dietaryNotes: string | null;
+  readonly message: string | null;
+}
+
 export interface SeededInvitation {
   readonly slug: string;
+  /** The invitation's own id, for assertions that reach past the page. */
+  readonly invitationId: string;
   readonly greetingName: string;
   readonly displayName: string;
   /** The OWNING sender's WhatsApp contact, which the gate's recovery link uses. */
   readonly ownerContactPhone: string;
   readonly guests: readonly SeededGuest[];
+  /** Every stored response, oldest first. The append-only history itself. */
+  readonly responseHistory: () => Promise<readonly SeededRsvpRow[]>;
+  /**
+   * The household's CURRENT answer, read through `rsvp_latest`.
+   *
+   * Through the view rather than by ordering the table here, because a test
+   * that re-implements the reduction it is checking proves only that the test
+   * agrees with itself.
+   */
+  readonly currentResponse: () => Promise<SeededRsvpRow | null>;
   /** Removes the fixture and its owner sender. */
   readonly cleanup: () => Promise<void>;
 }
@@ -80,6 +100,8 @@ export async function seedInvitation(options: {
    * even if the link addressed the wrong sender entirely.
    */
   ownerContactPhone?: string;
+  /** ISO calendar day, or omitted for an invitation that never closes. */
+  rsvpDeadline?: string | null;
   guests: readonly SeededGuest[];
 }): Promise<SeededInvitation> {
   const db = await connect();
@@ -102,8 +124,8 @@ export async function seedInvitation(options: {
     const senderId = sender.rows[0].id;
 
     const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
-       values ($1, $2, $3, $4, $5)
+      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed, rsvp_deadline)
+       values ($1, $2, $3, $4, $5, $6)
        returning id`,
       [
         slug,
@@ -111,6 +133,7 @@ export async function seedInvitation(options: {
         displayName,
         options.greetingName,
         options.seatsAllowed ?? options.guests.length,
+        options.rsvpDeadline ?? null,
       ],
     );
     const invitationId = invitation.rows[0].id;
@@ -130,16 +153,38 @@ export async function seedInvitation(options: {
 
     return {
       slug,
+      invitationId,
       greetingName: options.greetingName,
       displayName,
       ownerContactPhone,
       guests: options.guests,
+      responseHistory: async () =>
+        readResponses(
+          "select attending, seats_confirmed, attendee_guest_ids, dietary_notes, message " +
+            "from rsvp_responses where invitation_id = $1 order by submitted_at, id",
+          invitationId,
+        ),
+
+      currentResponse: async () => {
+        const rows = await readResponses(
+          "select attending, seats_confirmed, attendee_guest_ids, dietary_notes, message " +
+            "from rsvp_latest where invitation_id = $1",
+          invitationId,
+        );
+
+        return rows[0] ?? null;
+      },
+
       cleanup: async () => {
         const cleaner = await connect();
         try {
           // User triggers are suspended for this session only: the child tables
           // are append-only by trigger and would refuse their own teardown.
           await cleaner.query("set session_replication_role = replica");
+          await cleaner.query(
+            "delete from rsvp_responses where invitation_id = $1",
+            [invitationId],
+          );
           await cleaner.query(
             "delete from invitation_guests where invitation_id = $1",
             [invitationId],
@@ -154,6 +199,60 @@ export async function seedInvitation(options: {
         }
       },
     };
+  } finally {
+    await db.end();
+  }
+}
+
+interface RsvpRow {
+  attending: boolean;
+  seats_confirmed: number;
+  attendee_guest_ids: string[];
+  dietary_notes: string | null;
+  message: string | null;
+}
+
+/** Runs one RSVP read on its own connection and maps it to the test's shape. */
+async function readResponses(
+  sql: string,
+  invitationId: string,
+): Promise<readonly SeededRsvpRow[]> {
+  const db = await connect();
+
+  try {
+    const result = await db.query<RsvpRow>(sql, [invitationId]);
+
+    return result.rows.map((row) => ({
+      attending: row.attending,
+      seatsConfirmed: row.seats_confirmed,
+      attendeeGuestIds: row.attendee_guest_ids,
+      dietaryNotes: row.dietary_notes,
+      message: row.message,
+    }));
+  } finally {
+    await db.end();
+  }
+}
+
+/**
+ * The guest ids on one invitation, keyed by name.
+ *
+ * By NAME rather than by position: the page renders whatever order PostgREST
+ * returns, and a test that assumed insertion order would be asserting against
+ * an ordering nothing guarantees.
+ */
+export async function seededGuestIds(
+  invitationId: string,
+): Promise<ReadonlyMap<string, string>> {
+  const db = await connect();
+
+  try {
+    const result = await db.query<{ id: string; full_name: string }>(
+      "select id, full_name from invitation_guests where invitation_id = $1",
+      [invitationId],
+    );
+
+    return new Map(result.rows.map((row) => [row.full_name, row.id]));
   } finally {
     await db.end();
   }

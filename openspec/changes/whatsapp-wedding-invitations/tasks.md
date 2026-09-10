@@ -196,15 +196,15 @@ in the gate that unit built; the third is an unasserted attribute.
 
 ## Phase 5: RSVP (Work Unit 5)
 
-- [ ] 5.1 RED — `lib/server/rsvp.spec.ts`: a submission without a valid unlock cookie is rejected and creates no `rsvp_responses` row.
-- [ ] 5.2 GREEN — `lib/server/rsvp.ts`: `import 'server-only'` first line; `submitRsvp` verifies the unlock cookie via `cookies.ts` before any write.
-- [ ] 5.3 RED — `rsvp.spec.ts` addendum: the server re-validates seats/attendee count against `seats_allowed` and rejects an over-cap submission even bypassing the client form; every submission inserts a new row, never updates/deletes existing ones; current state is the latest row by `submitted_at`; blank optional fields succeed with null/empty values.
-- [ ] 5.4 GREEN — wire `lib/domain/seats.ts`'s `validateRsvpSelection` into `rsvp.ts`; implement append-only insert + `getCurrentRsvp(invitationId)`; zod schema with dietary/message optional, matching the DB `char_length` limits.
-- [ ] 5.5 GREEN — `components/invitation/RsvpForm.tsx`: `'use client'`; attendee checkboxes capped at `seats_allowed` with no over-cap affordance; dietary/message fields; calls `submitRsvpAction`.
-- [ ] 5.6 GREEN — `app/i/[slug]/actions.ts`: add `submitRsvpAction` calling `lib/server/rsvp.ts`.
-- [ ] 5.7 GREEN — deadline behavior: past-deadline shows a contact message instead of `RsvpForm`; pre-deadline or no-deadline shows and accepts the form.
-- [ ] 5.8 RED — `e2e/rsvp.spec.ts`: the form never renders more than `seats_allowed` options; a tampered over-cap direct submission is rejected server-side with no row created; a changed answer produces two rows with the latest reflecting the new answer; past-deadline shows the contact message; pre-deadline/no-deadline shows and accepts the form.
-- [ ] 5.9 Verify: run `e2e/rsvp.spec.ts` and full `npm run test:coverage` — confirm 5.1, 5.3, 5.8 RED tests pass GREEN.
+- [x] 5.1 RED — `lib/server/rsvp.spec.ts`: a submission without a valid unlock cookie is rejected and creates no `rsvp_responses` row.
+- [x] 5.2 GREEN — `lib/server/rsvp.ts`: `import 'server-only'` first line; `submitRsvp` verifies the unlock cookie via `cookies.ts` before any write.
+- [x] 5.3 RED — `rsvp.spec.ts` addendum: the server re-validates seats/attendee count against `seats_allowed` and rejects an over-cap submission even bypassing the client form; every submission inserts a new row, never updates/deletes existing ones; current state is the latest row by `submitted_at`; blank optional fields succeed with null/empty values.
+- [x] 5.4 GREEN — wire `lib/domain/seats.ts`'s `validateRsvpSelection` into `rsvp.ts`; implement append-only insert + `getCurrentRsvp(invitationId)`; zod schema with dietary/message optional, matching the DB `char_length` limits.
+- [x] 5.5 GREEN — `components/invitation/RsvpForm.tsx`: `'use client'`; attendee checkboxes capped at `seats_allowed` with no over-cap affordance; dietary/message fields; calls `submitRsvpAction`.
+- [x] 5.6 GREEN — `app/i/[slug]/actions.ts`: add `submitRsvpAction` calling `lib/server/rsvp.ts`.
+- [x] 5.7 GREEN — deadline behavior: past-deadline shows a contact message instead of `RsvpForm`; pre-deadline or no-deadline shows and accepts the form.
+- [x] 5.8 RED — `e2e/rsvp.spec.ts`: the form never renders more than `seats_allowed` options; a tampered over-cap direct submission is rejected server-side with no row created; a changed answer produces two rows with the latest reflecting the new answer; past-deadline shows the contact message; pre-deadline/no-deadline shows and accepts the form.
+- [x] 5.9 Verify: run `e2e/rsvp.spec.ts` and full `npm run test:coverage` — confirm 5.1, 5.3, 5.8 RED tests pass GREEN.
 
 ## Phase 6a: Console Auth, Guest List, Device Declaration (Work Unit 6a)
 

@@ -83,6 +83,19 @@ function onVercel(): boolean {
  */
 export function trustedClientIp(headers: RequestHeaders): string {
   if (!onVercel()) {
+    // THE TRADEOFF, STATED WHERE IT IS MADE. Off Vercel every visitor collapses
+    // into ONE rate-limit bucket, so eight failures from anyone lock the gate
+    // for everyone sharing this deployment. That is a real cost and it is the
+    // deliberate direction to fail: a shared lockout inconveniences honest
+    // visitors, while trusting a client-settable header removes the lock
+    // altogether — the attacker simply sends a new address per request and the
+    // per-IP scope counts nothing.
+    //
+    // Production is Vercel, where the platform computes the headers below, so
+    // this branch is local development and self-hosted runs. It is pinned by
+    // "collapses two different visitors into one bucket" in `client-ip.spec.ts`
+    // as INTENDED behaviour: if that test ever fails, the question to ask is
+    // which trustworthy source appeared, not how to make the test pass.
     return SHARED_RATE_LIMIT_BUCKET;
   }
 

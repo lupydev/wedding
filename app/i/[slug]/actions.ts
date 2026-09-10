@@ -1,9 +1,12 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import type { GateFeedback } from "@/lib/domain/gate-copy";
+import type { RsvpFeedback } from "@/lib/domain/rsvp-copy";
+import { createRsvpStore, submitRsvp } from "@/lib/server/rsvp";
 import { toGatePhoneRefs } from "@/lib/server/invitations";
 import { trustedClientIp } from "@/lib/server/client-ip";
 import {
@@ -103,4 +106,61 @@ export async function unlockAction(
   // an ordinary unlocked visit and follows exactly the same code path as every
   // later return visit. One path, tested once.
   redirect(`/i/${slug}`);
+}
+
+/**
+ * Records the household's RSVP.
+ *
+ * The slug is BOUND on the server by `page.tsx`, exactly as it is for the
+ * unlock, and the invitation is read from it here. Nothing the caller submits
+ * names a household: a payload carrying an `invitationId` has nowhere to put
+ * that claim, because this action never reads one.
+ *
+ * The write goes through `lib/server/rsvp.ts` rather than a client-side
+ * Supabase insert. The browser holds no Supabase client for guest data at all,
+ * and an `anon` INSERT policy keyed on a slug the caller already holds would be
+ * an unauthenticated write endpoint, not authorization.
+ */
+export async function submitRsvpAction(
+  slug: string,
+  _previous: RsvpFeedback,
+  formData: FormData,
+): Promise<RsvpFeedback> {
+  const record = await loadInvitationRecord(slug);
+
+  if (record === null) {
+    // An unknown slug renders the friendly contact page with no form, so
+    // reaching this needs a forged action call. Unlike the gate, there is no
+    // oracle to protect here — the caller is not asking whether the slug
+    // exists, they are asking to write against it, and both answers are "no".
+    return { status: "not_authorized" };
+  }
+
+  const outcome = await submitRsvp(
+    createRsvpStore(createServerSupabaseClient()),
+    {
+      invitation: {
+        id: record.id,
+        seatsAllowed: record.seatsAllowed,
+        rsvpDeadline: record.rsvpDeadline,
+        // Every guest named on this invitation, and nobody else. The array
+        // column `attendee_guest_ids` is not a foreign key, so this list is the
+        // only thing standing between a forged payload and a stranger being
+        // seated with this household.
+        guestIds: record.guests.map((guest) => guest.id),
+      },
+      unlockCookie: (await cookies()).get(UNLOCK_COOKIE_NAME)?.value ?? "",
+      formData,
+      now: new Date(),
+    },
+  );
+
+  if (outcome.status === "recorded") {
+    // So the page re-reads the household's CURRENT answer. Without this the
+    // guest sees their old answer echoed back beside the confirmation that the
+    // new one was saved, which reads as the save having failed.
+    revalidatePath(`/i/${slug}`);
+  }
+
+  return outcome;
 }

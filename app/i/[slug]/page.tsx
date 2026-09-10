@@ -4,13 +4,17 @@ import { cookies } from "next/headers";
 import { InvitationBody } from "@/components/invitation/InvitationBody";
 import { InvitationGate } from "@/components/invitation/InvitationGate";
 import { InvitationUnavailable } from "@/components/invitation/InvitationUnavailable";
+import { RsvpClosed } from "@/components/invitation/RsvpClosed";
+import { RsvpForm } from "@/components/invitation/RsvpForm";
 import { buildInvitationMetadataText } from "@/lib/domain/og-card";
 import { buildGateRecoveryLink } from "@/lib/domain/recovery-message";
 import { UNLOCK_COOKIE_NAME, unlockCookieUnlocks } from "@/lib/server/cookies";
+import { rsvpIsOpenNow } from "@/lib/server/rsvp";
 
-import { unlockAction } from "./actions";
+import { submitRsvpAction, unlockAction } from "./actions";
 import { GateForm } from "./gate-form";
 import {
+  loadCurrentRsvp,
   loadGuestFacingInvitation,
   loadInvitationRecord,
   loadOwnerContactPhone,
@@ -101,9 +105,42 @@ export default async function InvitationPage({ params }: RouteParams) {
   // from sending household A's cookie to household B, but a person can hold
   // both links and the server must not depend on the browser for that.
   if (unlockCookieUnlocks(unlockCookie, record.id)) {
+    // The deadline decides which surface the body gets, and it decides it on
+    // the SERVER. A form rendered past the deadline and refused on submit is a
+    // form a household fills in believing they answered.
+    const open = rsvpIsOpenNow(invitation.rsvpDeadline);
+    const current = open ? await loadCurrentRsvp(record.id) : null;
+
     return (
       <main>
-        <InvitationBody invitation={invitation} />
+        <InvitationBody
+          invitation={invitation}
+          rsvp={
+            open ? (
+              // The slug is bound on the SERVER here too: the form never
+              // supplies it, so a client cannot aim an RSVP at another
+              // household.
+              <RsvpForm
+                guests={invitation.guests}
+                seatsAllowed={invitation.seatsAllowed}
+                current={
+                  current === null
+                    ? null
+                    : {
+                        attending: current.attending,
+                        seatsConfirmed: current.seatsConfirmed,
+                        attendeeGuestIds: current.attendeeGuestIds,
+                        dietaryNotes: current.dietaryNotes,
+                        message: current.message,
+                      }
+                }
+                action={submitRsvpAction.bind(null, slug)}
+              />
+            ) : (
+              <RsvpClosed />
+            )
+          }
+        />
       </main>
     );
   }

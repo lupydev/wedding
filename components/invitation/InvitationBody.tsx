@@ -53,8 +53,21 @@ function seatsSentence(seatsAllowed: number): string {
 
 export function InvitationBody({
   invitation,
+  rsvp,
 }: {
   invitation: InvitationBodyInvitation;
+  /**
+   * The RSVP surface, composed by the route.
+   *
+   * A slot rather than the form itself, for the reason this component is
+   * props-only in the first place: the RSVP needs a bound Server Action and the
+   * household's current answer, and `components/**` may not reach into
+   * `lib/server/**`. The body decides only WHERE an answer belongs — after the
+   * guest list, before the deadline line — and the public route fills it with
+   * the form or the closed message. The operator preview passes nothing, and
+   * then nothing renders: a preview must not show a control no guest can use.
+   */
+  rsvp?: React.ReactNode;
 }) {
   return (
     <article className="invitation">
@@ -85,6 +98,10 @@ export function InvitationBody({
           ))}
         </ul>
       </section>
+
+      {rsvp === undefined ? null : (
+        <section className="invitation__rsvp">{rsvp}</section>
+      )}
 
       {invitation.rsvpDeadline === null ? null : (
         <p className="invitation__deadline">

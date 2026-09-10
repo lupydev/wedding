@@ -128,3 +128,28 @@ describe("InvitationBody", () => {
     expect(container.innerHTML).toMatchSnapshot();
   });
 });
+
+describe("InvitationBody's RSVP slot", () => {
+  it("renders whatever the route puts in the RSVP slot", () => {
+    // A slot rather than the form itself: `components/**` may not reach into
+    // `lib/server/**`, and the RSVP needs a bound Server Action and the
+    // household's current answer. The route composes those; the body only
+    // decides WHERE the answer belongs, which is after the guest list.
+    render(
+      <InvitationBody
+        invitation={household}
+        rsvp={<p>Aquí va la confirmación</p>}
+      />,
+    );
+
+    expect(screen.getByText("Aquí va la confirmación")).toBeInTheDocument();
+  });
+
+  it("renders exactly as before when the route supplies nothing", () => {
+    // The operator preview has no RSVP to show. An empty section or a stray
+    // heading would put a control in the preview that no guest can use.
+    const { container } = render(<InvitationBody invitation={household} />);
+
+    expect(container.innerHTML).toMatchSnapshot();
+  });
+});

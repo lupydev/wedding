@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { gateFeedbackMessages } from "@/lib/domain/gate-copy";
-import type { GateAttempt } from "@/lib/domain/rate-limit";
+import { IP_SCOPE, type GateAttempt } from "@/lib/domain/rate-limit";
 
 import {
   DECOY_SLUG_CAPACITY,
@@ -45,6 +45,21 @@ const OTHER_IP = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const NOW = Date.UTC(2026, 8, 9, 12, 0, 0);
 const SECOND = 1_000;
 const MINUTE = 60_000;
+
+/**
+ * How many tries the per-IP scope still allows after `failures` of them.
+ *
+ * Derived rather than written out, for the eviction tests below only. Those
+ * tests are about the LRU — whether an entry survives — and a literal 7 there
+ * makes them fail the day the per-IP threshold is retuned, reporting an
+ * eviction defect that does not exist. The sequence-equality tests above keep
+ * their literals on purpose: what those assert IS the exact counter a guest
+ * sees, and deriving it from the same constant the code uses would let both
+ * drift together in silence.
+ */
+function remainingAfter(failures: number): number {
+  return Math.max(0, IP_SCOPE.threshold - failures);
+}
 
 /** A real household. One guest has no stored phone, as real data does. */
 const GUESTS = [
@@ -301,7 +316,12 @@ describe("the decoy cannot be used to exhaust memory", () => {
       now: NOW + DECOY_SLUG_CAPACITY * SECOND,
     });
 
-    expect(evicted).toEqual({ status: "rejected", attemptsRemaining: 7 });
+    // A fresh entry: the five earlier failures were evicted with the slug, so
+    // this reads as the FIRST failure from this address.
+    expect(evicted).toEqual({
+      status: "rejected",
+      attemptsRemaining: remainingAfter(1),
+    });
   });
 
   it("keeps an actively probed slug hot instead of evicting it first", async () => {
@@ -331,10 +351,15 @@ describe("the decoy cannot be used to exhaust memory", () => {
       now: NOW + DECOY_SLUG_CAPACITY * SECOND,
     });
 
-    // Four, not seven: the three original failures from this address are still
-    // remembered and this is the fourth. Seven would mean the entry had been
-    // evicted and the attacker had reset their own counter for free — which is
-    // exactly what the previous test shows happens once a slug goes cold.
-    expect(stillCounting).toEqual({ status: "rejected", attemptsRemaining: 4 });
+    // The fourth failure, not the first: the three original failures from this
+    // address are still remembered. A first-failure reading would mean the
+    // entry had been evicted and the attacker had reset their own counter for
+    // free — which is exactly what the previous test shows happens once a slug
+    // goes cold.
+    expect(stillCounting).toEqual({
+      status: "rejected",
+      attemptsRemaining: remainingAfter(4),
+    });
+    expect(remainingAfter(4)).not.toBe(remainingAfter(1));
   });
 });
