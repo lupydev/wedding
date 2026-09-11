@@ -106,6 +106,9 @@ describe("row level security", () => {
       dispatch_events: 1,
       rsvp_responses: 1,
       gate_attempts: 1,
+      // Seeded by migration 0009 itself, not by the fixture: the ceremony row
+      // is a singleton the schema owns.
+      ceremony: 1,
     });
     // Either shape is acceptable: an outright permission error, or an empty
     // result. What is NOT acceptable is a row reaching the publishable key.
@@ -116,6 +119,7 @@ describe("row level security", () => {
       dispatch_events: 0,
       rsvp_responses: 0,
       gate_attempts: 0,
+      ceremony: 0,
     });
   });
 
@@ -142,6 +146,12 @@ describe("row level security", () => {
       dispatch_events: { kind: "link_opened" },
       rsvp_responses: { attending: true, seats_confirmed: 1 },
       gate_attempts: { ip_hash: "0".repeat(32), succeeded: true },
+      ceremony: {
+        ceremony_date: "fecha intrusa",
+        ceremony_time: "hora intrusa",
+        stream_meeting_id: "id intruso",
+        stream_passcode: "clave intrusa",
+      },
     };
 
     const codes: Record<string, string> = {};
@@ -158,6 +168,7 @@ describe("row level security", () => {
       dispatch_events: "42501",
       rsvp_responses: "42501",
       gate_attempts: "42501",
+      ceremony: "42501",
     });
   });
 });

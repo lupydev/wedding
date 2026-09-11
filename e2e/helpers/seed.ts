@@ -42,7 +42,6 @@ export interface SeededRsvpRow {
   readonly seatsConfirmed: number;
   readonly attendeeGuestIds: readonly string[];
   readonly dietaryNotes: string | null;
-  readonly message: string | null;
 }
 
 export interface SeededInvitation {
@@ -160,14 +159,14 @@ export async function seedInvitation(options: {
       guests: options.guests,
       responseHistory: async () =>
         readResponses(
-          "select attending, seats_confirmed, attendee_guest_ids, dietary_notes, message " +
+          "select attending, seats_confirmed, attendee_guest_ids, dietary_notes " +
             "from rsvp_responses where invitation_id = $1 order by submitted_at, id",
           invitationId,
         ),
 
       currentResponse: async () => {
         const rows = await readResponses(
-          "select attending, seats_confirmed, attendee_guest_ids, dietary_notes, message " +
+          "select attending, seats_confirmed, attendee_guest_ids, dietary_notes " +
             "from rsvp_latest where invitation_id = $1",
           invitationId,
         );
@@ -209,7 +208,6 @@ interface RsvpRow {
   seats_confirmed: number;
   attendee_guest_ids: string[];
   dietary_notes: string | null;
-  message: string | null;
 }
 
 /** Runs one RSVP read on its own connection and maps it to the test's shape. */
@@ -227,7 +225,6 @@ async function readResponses(
       seatsConfirmed: row.seats_confirmed,
       attendeeGuestIds: row.attendee_guest_ids,
       dietaryNotes: row.dietary_notes,
-      message: row.message,
     }));
   } finally {
     await db.end();
@@ -253,6 +250,55 @@ export async function seededGuestIds(
     );
 
     return new Map(result.rows.map((row) => [row.full_name, row.id]));
+  } finally {
+    await db.end();
+  }
+}
+
+/** The ceremony and its stream details, exactly as the singleton row holds them. */
+export interface SeededCeremony {
+  readonly ceremonyDate: string;
+  readonly ceremonyTime: string;
+  readonly streamMeetingId: string;
+  readonly streamPasscode: string;
+}
+
+/**
+ * Reads the `ceremony` row (migration 0009).
+ *
+ * Read rather than hard-coded, for the reason the row exists at all: an
+ * expectation that restated the seeded placeholders would be a second copy of
+ * the same four facts, and the assertion would keep passing after the couple
+ * changed them.
+ */
+export async function readCeremony(): Promise<SeededCeremony> {
+  const db = await connect();
+
+  try {
+    const result = await db.query<{
+      ceremony_date: string;
+      ceremony_time: string;
+      stream_meeting_id: string;
+      stream_passcode: string;
+    }>(
+      "select ceremony_date, ceremony_time, stream_meeting_id, stream_passcode from ceremony",
+    );
+
+    if (result.rows.length !== 1) {
+      throw new Error(
+        `Expected exactly one ceremony row, found ${result.rows.length}. ` +
+          "Run `supabase db reset` so migration 0009 seeds it.",
+      );
+    }
+
+    const row = result.rows[0];
+
+    return {
+      ceremonyDate: row.ceremony_date,
+      ceremonyTime: row.ceremony_time,
+      streamMeetingId: row.stream_meeting_id,
+      streamPasscode: row.stream_passcode,
+    };
   } finally {
     await db.end();
   }

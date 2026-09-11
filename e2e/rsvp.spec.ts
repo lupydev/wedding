@@ -1,8 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import {
+  readCeremony,
   seedInvitation,
   seededGuestIds,
+  type SeededCeremony,
   type SeededInvitation,
 } from "./helpers/seed";
 
@@ -68,6 +70,25 @@ function submit(page: Page) {
   return page.getByRole("button", { name: "Enviar respuesta" }).click();
 }
 
+/**
+ * Declining. ONE tap, and no submit button anywhere in it.
+ *
+ * A helper rather than a repeated line, so the auto-submit is stated once: if
+ * this ever needs a second click again, exactly one place changes and every
+ * test that relies on the behaviour fails together.
+ */
+function decline(page: Page) {
+  return page.getByRole("radio", { name: /No podremos acompañarlos/ }).check();
+}
+
+function accept(page: Page) {
+  return page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+}
+
+function streamCard(page: Page) {
+  return page.getByRole("group", { name: /transmisión/i });
+}
+
 function rsvpAlert(page: Page) {
   return page.locator("form.rsvp__form").getByRole("alert");
 }
@@ -110,7 +131,6 @@ test.describe("answering the invitation", () => {
     expect(history[0].seatsConfirmed).toBe(2);
     expect(history[0].attendeeGuestIds).toHaveLength(2);
     expect(history[0].dietaryNotes).toBe("Sara no come mariscos.");
-    expect(history[0].message).toBeNull();
   });
 
   test("shows the household what they already answered", async ({ page }) => {
@@ -132,11 +152,10 @@ test.describe("answering the invitation", () => {
     // their mind.
     await unlock(page, invitation);
 
-    await page.getByRole("radio", { name: /No podremos acompañarlos/ }).check();
-    await submit(page);
-    await expect(rsvpAlert(page)).toContainText(
-      "¡Listo! Guardamos su respuesta.",
-    );
+    // One tap. No submit click follows, and the stream card appearing is the
+    // proof the answer actually reached the server.
+    await decline(page);
+    await expect(streamCard(page)).toBeVisible();
 
     const history = await invitation.responseHistory();
     const current = await invitation.currentResponse();
@@ -151,6 +170,106 @@ test.describe("answering the invitation", () => {
     expect(current).not.toBeNull();
     expect(current?.attending).toBe(false);
     expect(current?.seatsConfirmed).toBe(0);
+  });
+
+  test("lets a declined household come back and accept after all", async ({
+    page,
+  }) => {
+    // A decline auto-submits, so a mis-tap is recorded instantly. This is the
+    // way back, end to end: the correction is a THIRD append-only row, and the
+    // reduced view must report the acceptance rather than the decline that
+    // preceded it. A view that ordered by anything less than total would be
+    // free to return either.
+    await unlock(page, invitation);
+
+    // They land on the stream, because the answer on file is a decline.
+    await expect(streamCard(page)).toBeVisible();
+    await page.getByRole("button", { name: "Volver a responder" }).click();
+
+    // Nothing preselected: a mis-tap must not be one tap from repeating itself.
+    await expect(
+      page.getByRole("radio", { name: /No podremos acompañarlos/ }),
+    ).not.toBeChecked();
+
+    await accept(page);
+    await attendeeBox(page, GUEST_ONE).check();
+    await submit(page);
+
+    await expect(rsvpAlert(page)).toContainText(
+      "¡Listo! Guardamos su respuesta.",
+    );
+
+    const history = await invitation.responseHistory();
+    const current = await invitation.currentResponse();
+
+    expect(history.map((row) => row.attending)).toEqual([true, false, true]);
+    expect(current?.attending).toBe(true);
+    expect(current?.seatsConfirmed).toBe(1);
+  });
+});
+
+/**
+ * A household that cannot come in person becomes a stream viewer.
+ *
+ * Rather than maintaining a second audience list — which goes out of date the
+ * moment the first one changes — declining a personal invitation IS the
+ * subscription. So the Zoom details replace the form, and for these guests they
+ * sit behind the phone gate rather than on the public page that will serve
+ * everyone else later.
+ */
+test.describe("declining and the ceremony stream", () => {
+  test.describe.configure({ mode: "serial" });
+
+  let invitation: SeededInvitation;
+  let ceremony: SeededCeremony;
+
+  test.beforeAll(async () => {
+    invitation = await household({ greetingName: "Familia Lejana" });
+    // Read from the row, never restated here: an expectation holding its own
+    // copy of these four facts would keep passing after the couple changed them.
+    ceremony = await readCeremony();
+  });
+
+  test.afterAll(async () => {
+    await invitation?.cleanup();
+  });
+
+  test("records the decline on the first tap, with no second click", async ({
+    page,
+  }) => {
+    await unlock(page, invitation);
+    await decline(page);
+
+    await expect(streamCard(page)).toBeVisible();
+
+    const history = await invitation.responseHistory();
+
+    expect(history).toHaveLength(1);
+    expect(history[0].attending).toBe(false);
+    // A decline holds no seats and names nobody, by construction.
+    expect(history[0].seatsConfirmed).toBe(0);
+    expect(history[0].attendeeGuestIds).toEqual([]);
+  });
+
+  test("shows the stream details instead of the form", async ({ page }) => {
+    await unlock(page, invitation);
+
+    const card = streamCard(page);
+
+    await expect(card).toContainText(ceremony.ceremonyDate);
+    await expect(card).toContainText(ceremony.ceremonyTime);
+    await expect(card).toContainText(ceremony.streamMeetingId);
+    await expect(card).toContainText(ceremony.streamPasscode);
+
+    // Not a form beside the card, and not a disabled copy of it. No form.
+    await expect(page.locator("form.rsvp__form")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Enviar respuesta" }),
+    ).toHaveCount(0);
+    // And the answer is explicitly not final.
+    await expect(
+      page.getByText(/Si cambian de opinión, pueden volver a responder/),
+    ).toBeVisible();
   });
 });
 
@@ -195,6 +314,14 @@ test.describe("the seat cap", () => {
     await expect(attendeeBox(page, "Ana Restrepo")).toBeDisabled();
     // And no affordance anywhere for asking for more.
     await expect(page.getByRole("spinbutton")).toHaveCount(0);
+
+    // Nor a message box. The guest reached this page from their own WhatsApp
+    // thread with the couple, so a free-text field here competes with the chat
+    // they are already in — and loses. `dietary_notes` stays, because that is
+    // operational data the catering needs rather than a message.
+    await expect(page.getByLabel(/Mensaje/i)).toHaveCount(0);
+    await expect(page.locator('[name="message"]')).toHaveCount(0);
+    await expect(page.getByLabel(/Restricciones alimentarias/)).toBeVisible();
   });
 
   test("refuses a tampered over-cap submission server-side", async ({
@@ -305,14 +432,9 @@ test.describe("the RSVP deadline", () => {
     try {
       await unlock(page, invitation);
 
-      await page
-        .getByRole("radio", { name: /No podremos acompañarlos/ })
-        .check();
-      await submit(page);
+      await decline(page);
 
-      await expect(rsvpAlert(page)).toContainText(
-        "¡Listo! Guardamos su respuesta.",
-      );
+      await expect(streamCard(page)).toBeVisible();
       await expect(invitation.responseHistory()).resolves.toHaveLength(1);
     } finally {
       await invitation.cleanup();
@@ -357,16 +479,20 @@ test.describe("answering without a session", () => {
 
     try {
       await unlock(page, invitation);
-      await page
-        .getByRole("radio", { name: /No podremos acompañarlos/ })
-        .check();
-
       await context.clearCookies();
-      await submit(page);
+
+      // The decline submits itself, so the throw-away happens FIRST. The action
+      // must refuse — the cookie IS the authorization, and it is checked
+      // against this invitation on every write, not only at render.
+      await decline(page);
 
       await expect(rsvpAlert(page)).toContainText(
         "Tu sesión ya no está activa.",
       );
+      // A refusal keeps the form. Swapping in the stream card would tell a
+      // household they are expected on a call while the couple's list still has
+      // them as unanswered.
+      await expect(streamCard(page)).toHaveCount(0);
       await expect(invitation.responseHistory()).resolves.toHaveLength(0);
     } finally {
       await invitation.cleanup();

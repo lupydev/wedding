@@ -163,7 +163,14 @@ export async function seedGuests(
   return result.rows.map((row) => row.id);
 }
 
-/** The six tables this change owns. Every one must be default-deny. */
+/**
+ * Every table this change owns. Every one must be default-deny.
+ *
+ * `ceremony` is here for the same reason as the other six, and its inclusion is
+ * the point: it was created by migration 0009, LONG after `0002_rls.sql`
+ * revoked the grants that existed when it ran. A new table that nobody added to
+ * this list is a table whose posture nothing checks.
+ */
 export const OWNED_TABLES = [
   "senders",
   "invitations",
@@ -171,6 +178,7 @@ export const OWNED_TABLES = [
   "dispatch_events",
   "rsvp_responses",
   "gate_attempts",
+  "ceremony",
 ] as const;
 
 /**

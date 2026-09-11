@@ -10,6 +10,7 @@ import {
   type GuestFacingInvitation,
   type InvitationRecord,
 } from "@/lib/server/invitations";
+import { getCeremony, type CeremonyDetails } from "@/lib/server/ceremony";
 import { getCurrentRsvp, type RsvpResponseRecord } from "@/lib/server/rsvp";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
@@ -78,4 +79,16 @@ export const loadOwnerContactPhone = cache(
 export const loadCurrentRsvp = cache(
   async (invitationId: string): Promise<RsvpResponseRecord | null> =>
     getCurrentRsvp(createServerSupabaseClient(), invitationId),
+);
+
+/**
+ * The ceremony and its stream details.
+ *
+ * Cached per request like everything else here. It reads the singleton
+ * `ceremony` row (migration 0009) rather than an environment variable, because
+ * the public ceremony page — a later work unit — needs exactly the same four
+ * values and a fact stored in two places is a fact that will drift.
+ */
+export const loadCeremony = cache(async (): Promise<CeremonyDetails> =>
+  getCeremony(createServerSupabaseClient()),
 );

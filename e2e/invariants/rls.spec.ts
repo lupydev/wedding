@@ -29,7 +29,15 @@ const LOCAL_DB_URL =
   "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const LOCAL_API_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
 
-/** The six tables this change owns. Every one must be default-deny. */
+/**
+ * Every table this change owns. Every one must be default-deny.
+ *
+ * `ceremony` (migration 0009) is the one that matters most to this file. It was
+ * created long after `0002_rls.sql` revoked the grants that existed when it
+ * ran, so its posture rests entirely on the `0004` event trigger — and it holds
+ * the ceremony stream credentials, which are meant to sit BEHIND the phone gate
+ * rather than be readable by anyone holding the publishable key.
+ */
 const OWNED_TABLES = [
   "senders",
   "invitations",
@@ -37,6 +45,7 @@ const OWNED_TABLES = [
   "dispatch_events",
   "rsvp_responses",
   "gate_attempts",
+  "ceremony",
 ] as const;
 
 type OwnedTable = (typeof OWNED_TABLES)[number];
@@ -65,6 +74,12 @@ const INSERT_PAYLOADS: Record<OwnedTable, object> = {
   dispatch_events: { kind: "link_opened" },
   rsvp_responses: { attending: true, seats_confirmed: 0 },
   gate_attempts: { ip_hash: "0".repeat(32), succeeded: true },
+  ceremony: {
+    ceremony_date: "fecha intrusa",
+    ceremony_time: "hora intrusa",
+    stream_meeting_id: "id intruso",
+    stream_passcode: "clave intrusa",
+  },
 };
 
 /** A column every owned table has, cheap to attempt an UPDATE against. */
@@ -75,6 +90,9 @@ const UPDATE_PAYLOADS: Record<OwnedTable, object> = {
   dispatch_events: { kind: "marked_sent" },
   rsvp_responses: { attending: false },
   gate_attempts: { succeeded: true },
+  // The passcode is the value an attacker would actually want to change: a
+  // stream everyone can reach is the same outage as a stream nobody can.
+  ceremony: { stream_passcode: "clave intrusa" },
 };
 
 const SLUG_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
@@ -214,6 +232,9 @@ test.describe("RLS invariants held against the publishable key", () => {
       dispatch_events: 1,
       rsvp_responses: 1,
       gate_attempts: 1,
+      // Seeded by migration 0009 itself, not by `beforeAll`: the ceremony row
+      // is a singleton the schema owns.
+      ceremony: 1,
     });
   });
 
@@ -232,6 +253,7 @@ test.describe("RLS invariants held against the publishable key", () => {
       dispatch_events: 0,
       rsvp_responses: 0,
       gate_attempts: 0,
+      ceremony: 0,
     });
   });
 
@@ -302,6 +324,15 @@ test.describe("RLS invariants held against the publishable key", () => {
         attending: true,
         rows: "1",
       });
+
+      // The ceremony row is a singleton nothing above may have touched: still
+      // exactly one row, and still not the passcode the anon key tried to set.
+      const ceremony = await db.query<{ stream_passcode: string }>(
+        "select stream_passcode from ceremony",
+      );
+
+      expect(ceremony.rows).toHaveLength(1);
+      expect(ceremony.rows[0].stream_passcode).not.toBe("clave intrusa");
     } finally {
       await db.end();
     }

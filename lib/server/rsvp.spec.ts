@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { signUnlockCookie } from "./cookies";
 import {
   DIETARY_NOTES_MAX_LENGTH,
-  MESSAGE_MAX_LENGTH,
   rsvpIsOpenNow,
   submitRsvp,
   type NewRsvpResponse,
@@ -94,7 +93,6 @@ function form(fields: {
   attending?: string;
   attendees?: readonly string[];
   dietaryNotes?: string;
-  message?: string;
 }): FormData {
   const data = new FormData();
 
@@ -108,10 +106,6 @@ function form(fields: {
 
   if (fields.dietaryNotes !== undefined) {
     data.set("dietaryNotes", fields.dietaryNotes);
-  }
-
-  if (fields.message !== undefined) {
-    data.set("message", fields.message);
   }
 
   return data;
@@ -220,7 +214,6 @@ describe("submitRsvp seat derivation", () => {
         attendeeGuestIds: [GUEST_ONE, GUEST_TWO],
         seatsConfirmed: 2,
         dietaryNotes: null,
-        message: null,
       },
     ]);
   });
@@ -361,7 +354,7 @@ describe("submitRsvp seat derivation", () => {
 });
 
 describe("submitRsvp optional fields", () => {
-  it("stores null for both when they are left blank", async () => {
+  it("stores null for dietary notes when they are left blank", async () => {
     const { store, inserted } = fakeStore();
 
     const outcome = await submit({
@@ -369,14 +362,12 @@ describe("submitRsvp optional fields", () => {
       formData: form({
         attending: "yes",
         attendees: [GUEST_ONE],
-        dietaryNotes: "",
-        message: "   ",
+        dietaryNotes: "   ",
       }),
     });
 
     expect(outcome).toEqual({ status: "recorded" });
     expect(inserted[0].dietaryNotes).toBeNull();
-    expect(inserted[0].message).toBeNull();
   });
 
   it("trims and stores what the guest actually wrote", async () => {
@@ -388,12 +379,10 @@ describe("submitRsvp optional fields", () => {
         attending: "yes",
         attendees: [GUEST_ONE],
         dietaryNotes: "  Sara es alérgica a los mariscos.  ",
-        message: "  ¡Nos vemos allá!  ",
       }),
     });
 
     expect(inserted[0].dietaryNotes).toBe("Sara es alérgica a los mariscos.");
-    expect(inserted[0].message).toBe("¡Nos vemos allá!");
   });
 
   it("accepts exactly the length the database column accepts", async () => {
@@ -405,42 +394,60 @@ describe("submitRsvp optional fields", () => {
         attending: "yes",
         attendees: [GUEST_ONE],
         dietaryNotes: "a".repeat(DIETARY_NOTES_MAX_LENGTH),
-        message: "b".repeat(MESSAGE_MAX_LENGTH),
       }),
     });
 
     expect(inserted[0].dietaryNotes).toHaveLength(DIETARY_NOTES_MAX_LENGTH);
-    expect(inserted[0].message).toHaveLength(MESSAGE_MAX_LENGTH);
   });
 
   it("refuses one character more, rather than letting Postgres do it", async () => {
-    // The `char_length` CHECK constraints would catch this anyway, but as a 500
-    // with a Postgres message. Matching the limits here turns it into feedback.
+    // The `char_length` CHECK constraint would catch this anyway, but as a 500
+    // with a Postgres message. Matching the limit here turns it into feedback.
     const { store, inserted } = fakeStore();
 
-    for (const formData of [
-      form({
+    const outcome = await submit({
+      store,
+      formData: form({
         attending: "yes",
         attendees: [GUEST_ONE],
         dietaryNotes: "a".repeat(DIETARY_NOTES_MAX_LENGTH + 1),
       }),
-      form({
-        attending: "yes",
-        attendees: [GUEST_ONE],
-        message: "b".repeat(MESSAGE_MAX_LENGTH + 1),
-      }),
-    ]) {
-      const outcome = await submit({ store, formData });
+    });
 
-      expect(outcome).toEqual({ status: "rejected", reason: "invalid_input" });
-    }
-
+    expect(outcome).toEqual({ status: "rejected", reason: "invalid_input" });
     expect(inserted).toEqual([]);
   });
 
-  it("matches the char_length limits the schema declares", () => {
+  it("has no message field at all, and ignores one a payload invents", async () => {
+    // The free-text message to the couple is GONE, form and column both. The
+    // whole flow begins in the guest's own WhatsApp thread with the couple, so
+    // a box in this form competes with the chat they are already in — and
+    // loses, because a WhatsApp reply reaches the couple where they actually
+    // are while a form field waits for somebody to remember to check it.
+    //
+    // Ignored rather than rejected, exactly like `seatsConfirmed`: nothing
+    // reads the field, so there is no value to validate and nowhere for it to
+    // land. `dietary_notes` stays, because that is not a message — it is
+    // operational data the caterer needs and a guest would not send unprompted.
+    const { store, inserted } = fakeStore();
+    const formData = form({ attending: "yes", attendees: [GUEST_ONE] });
+    formData.set("message", "¡Gracias por invitarnos!");
+
+    const outcome = await submit({ store, formData });
+
+    expect(outcome).toEqual({ status: "recorded" });
+    expect(inserted).toHaveLength(1);
+    expect(Object.keys(inserted[0]).sort()).toEqual([
+      "attendeeGuestIds",
+      "attending",
+      "dietaryNotes",
+      "invitationId",
+      "seatsConfirmed",
+    ]);
+  });
+
+  it("matches the char_length limit the schema declares", () => {
     expect(DIETARY_NOTES_MAX_LENGTH).toBe(500);
-    expect(MESSAGE_MAX_LENGTH).toBe(1000);
   });
 });
 

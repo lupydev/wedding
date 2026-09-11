@@ -2026,3 +2026,244 @@ the external anon-key RLS invariants.
 unchanged (task 2.5 and 4b.12 still PARTIAL). Work units 6a, 6b and 7 untouched;
 the console, dispatch, the public ceremony page, reminders and the three open WU3
 WARNINGs remain out of scope. Ready for `sdd-verify`.
+
+
+---
+
+# Work Unit 5b — Decline-to-Stream, Ceremony Row, Message Removal
+
+Appended. Work units 1, 2, 2b, 3, 3b, 4a, 4b, 4c, 4d and 5 above are unchanged;
+tasks 2.5 and 4b.12 remain PARTIAL. The console (6a), dispatch (6b), reminders,
+the public ceremony page and the three open WU3 WARNINGs stay out of scope.
+
+## The four deliverables
+
+### 1. Declining auto-submits
+
+`components/invitation/RsvpAnswer.tsx` (renamed from `RsvpForm.tsx`, because it
+is no longer always a form). Choosing "No podremos acompañarlos" submits on the
+first tap. Accepting still requires the explicit button, because there the
+household must first choose who is coming.
+
+The submit is fired from an EFFECT rather than from the change handler. A
+synchronous `requestSubmit()` runs before React has re-rendered, so the attendee
+fieldset is still enabled and the payload would carry whatever boxes the
+household had checked under a previous "yes". The server drops them anyway
+(`payload.attending ? ids : []`), but a payload that says "we cannot come, and
+here are two of us" is one refactor away from reaching the database and failing
+`rsvp_declined_has_zero_seats` as a 500. A test pins the ordering: check two
+people under "yes", then decline, and the submitted `attendee` list is empty.
+
+The trigger is a COUNTER, not a boolean. Two declines in a row are two distinct
+requests, and a boolean already `true` produces no change for the effect to act on.
+
+### 2. The stream replaces the form
+
+`components/invitation/CeremonyStream.tsx` — props-only, no data access, its
+prop type has no field for a phone number. Date, time, meeting id and passcode,
+each rendered beside its own `<dt>`.
+
+The surface follows the RECORDED answer, never the tap: `answerOnFile` moves
+only when the action returns `recorded`. A refusal keeps the form, because
+swapping in the stream card on a refused decline would tell a household they are
+expected on a call while the couple's list still has them as unanswered. That is
+an explicit test, and so is the second-identical-decline case — a component that
+only reacted to a CHANGED result would stall on the form there. The unit test's
+fake action returns a FRESH object per call for that reason, matching what the
+real one does across the RSC boundary.
+
+### 3. The answer stays changeable
+
+"Volver a responder" returns the form with NOTHING preselected: a mis-tap must
+not be one more tap away from repeating itself, and re-choosing "no" has to be a
+real change that fires the auto-submit again.
+
+`e2e/rsvp.spec.ts` proves the round trip against the real database — decline,
+reconsider, accept — and asserts the history is `[true, false, true]` while
+`rsvp_latest` reports the acceptance with one seat.
+
+### 4. The message field is gone, column included
+
+`0010_drop_rsvp_message.sql`. The reasoning is recorded in the migration itself:
+the flow begins in the guest's own WhatsApp thread and arrives from the couple's
+own numbers, so a box here competes with the chat they are already in and loses.
+Removing the field but keeping the column would leave a second inbox nobody
+reads and a column any future writer can quietly start filling.
+
+`rsvp_latest` selects `message`, so the DROP is wrapped in an explicit
+drop-and-recreate of the view. NOT `drop column ... cascade`, which would take
+the view with it and leave every RSVP aggregate re-deriving "latest row wins" at
+its own call site — the exact defect 0008 exists to end.
+
+**`dietary_notes` STAYS.** Not a message: operational data the catering needs
+that a guest will not send unprompted. Asserted positively in three places so
+"no message column" can never be satisfied by a query that was looking in the
+wrong table.
+
+A `message` field on the wire is IGNORED, not rejected — the same treatment
+`seatsConfirmed` gets, for the same reason: nothing reads it, so there is
+nothing to validate and nowhere for it to land.
+
+## The ceremony row
+
+`0009_ceremony.sql`. One row, `id boolean primary key default true` plus a
+`ceremony_is_singleton` CHECK, so a second row is a primary-key violation and an
+`id = false` row is a check violation. Singularity is enforced, not agreed.
+
+Columns are `text`, and the seeded values are `{{CEREMONY_DATE}}`,
+`{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}`, `{{ZOOM_PASSCODE}}` — the same
+visibly-unfinished form `{{WEDDING_DATE}}` already uses. A `date` column would
+have demanded a plausible date, and a plausible date is a wrong invitation that
+reads as a correct one. Nothing was invented.
+
+**The `0004` event trigger was VERIFIED, not assumed.** `0009` deliberately
+writes NO revoke of its own, and `supabase/tests/ceremony.spec.ts` asserts the
+`anon`/`authenticated` grant list on `ceremony` is empty. A revoke in the
+migration would have satisfied that test on its own and hidden the answer. The
+down/forward replay below re-created the table at a completely different point
+in time and the grant list was empty again.
+
+`ceremony` was added to `OWNED_TABLES` in BOTH `supabase/tests/helpers/db.ts`
+and `e2e/invariants/rls.spec.ts`, with insert and update payloads, plus a direct
+database read proving the row still holds its own passcode after all four anon
+verbs were refused.
+
+## Mutation checks (RED where production code already existed)
+
+| Mutation | Observed |
+|---|---|
+| `alter table ceremony disable row level security` on the live instance | 2 of 17 fail, including `supabase/tests/rls.spec.ts`'s posture assertion — the `alter table` line in 0009 is load-bearing |
+| `supabase/tests/ceremony.spec.ts` written before `lib/server/ceremony.ts` | `Cannot find package '@/lib/server/ceremony'` |
+| `message` expectations inverted before 0010 existed | 5 failed across `lib/server/rsvp.spec.ts` and `supabase/tests/rsvp-store.spec.ts` |
+| `RsvpAnswer.spec.tsx` written before the component was renamed/rewritten | 27 failed — `Element type is invalid` |
+| `CeremonyStream.spec.tsx` written before the component | `Failed to resolve import "./CeremonyStream"` |
+
+## Migration replay, proved twice
+
+Both down-scripts were APPLIED and then re-applied forward against the live
+instance, and the schema probed at each step:
+
+```
+after migrations   : message columns = []                              | ceremony rows = 1
+after 0010 down    : message columns = [rsvp_latest, rsvp_responses]   | ceremony rows = 1
+after 0010 forward : message columns = []                              | ceremony rows = 1
+after 0009 down    : message columns = []                              | ceremony table = 0
+after 0009 forward : message columns = []                              | ceremony rows = 1
+anon grants on the RE-created ceremony table: []
+```
+
+`supabase db reset` then applied `0001`–`0010` in order from an empty database,
+and the full unit suite ran green against it.
+
+## Deviations from design and spec
+
+- **`openspec/.../specs/rsvp/spec.md` was edited.** The "Optional extra fields"
+  requirement said the form MUST offer exactly TWO optional fields including a
+  free-text message (decision A8). This work unit removes one of them, so the
+  requirement was superseded in place with the reasoning recorded, and three new
+  requirements were added for the decline-to-stream flow and the ceremony row's
+  default-deny posture. Flagged rather than done silently: rewriting a spec is
+  normally the spec phase's job, and leaving a requirement that contradicts the
+  shipped code would have handed `sdd-verify` a guaranteed failure with no
+  record of why.
+- **`components/invitation/RsvpForm.tsx` was renamed to `RsvpAnswer.tsx`** (and
+  its spec with it). A component called `RsvpForm` that sometimes renders no
+  form is a name that lies. The `form.rsvp__form` class the E2E locates is
+  unchanged, so no test outside the two renamed files was affected by the rename
+  itself.
+- **`ceremony` is not yet the source for `{{WEDDING_DATE}}`.** `InvitationBody`
+  still states the wedding date as its own constant, so that fact now exists in
+  two places — precisely what this table was created to prevent. Collapsing it
+  is task 5b.15, deliberately deferred rather than done here: `InvitationBody`
+  is props-only and shared with the console preview, so making it read the row
+  is a change to that component's contract and belongs with the work unit that
+  builds the public ceremony page. It is recorded as a live risk, not as done.
+- **`ceremony` has no `updated_at`.** Considered and dropped: without a trigger
+  to maintain it the column would lie, and adding one was more surface than this
+  unit needs.
+
+## Environment finding (not a code defect)
+
+The first full E2E run reported 1 failure — `invitation-page-og.spec.ts` "emits
+an absolute https og:image on the deployed origin". Cause: a `next dev` server
+had been listening on port 3000 for twelve hours, and `playwright.config.ts` sets
+`reuseExistingServer: !process.env.CI`, so Playwright attached to it instead of
+building. That server never received the `NEXT_PUBLIC_SITE_ORIGIN` the config
+injects, so `metadataBase` was unset and `og:image` came back relative.
+
+Recorded rather than quietly worked around, because the same trap silently
+invalidates every raw-HTML assertion in the suite. Every reported E2E result
+below is from `PORT=3100 npm run e2e`, which built and started a production
+server on a free port. The developer's own dev server was left running.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 5b.1–5b.2 | `supabase/tests/ceremony.spec.ts` | Integration (real Postgres + PostgREST) | 536/536 green first | ✅ `Cannot find package '@/lib/server/ceremony'` | ✅ 9/9 after `supabase db reset` applied 0009 | 9 cases: row count, duplicate PK, `id = false`, placeholder shape, UPDATE still allowed, RLS posture, anon grants, anon SELECT vs. privileged SELECT, adapter mapping | ➖ |
+| 5b.3–5b.4 | same | same | — | ✅ mutation: disabling RLS on `ceremony` fails 2 of 17 | ✅ | — | ➖ |
+| 5b.5 | `e2e/invariants/rls.spec.ts`, `supabase/tests/rls.spec.ts` | E2E + Integration (publishable key) | 8/8, 63 E2E | ✅ `ceremony` absent from `OWNED_TABLES` meant zero coverage | ✅ 8/8 and 66/66 | 4 verbs plus a database read proving the row is untouched | ➖ |
+| 5b.6–5b.7 | `lib/server/rsvp.spec.ts`, `supabase/tests/rsvp-store.spec.ts` | Unit (port) + Integration | 536/536 | ✅ 5 failed — column still present, write still accepted | ✅ 40/40 across three files | `dietary_notes` asserted present on BOTH relations so the query is proved non-vacuous; wire-level `message` ignored not rejected | ✅ `MESSAGE_MAX_LENGTH` and the message branch removed from the zod schema, port types and both selects |
+| 5b.8–5b.9 | `components/invitation/CeremonyStream.spec.tsx` | Component (jsdom) | N/A (new) | ✅ `Failed to resolve import "./CeremonyStream"` | ✅ 5/5 | 5 cases: label/value pairing, placeholder passthrough, reconsider sentence, callback fires once, callback does not fire early | ✅ first draft queried `getByRole("term", { name })`; `dt` has no accessible name, so the assertion became an ordered label→value pairing, which is strictly stronger |
+| 5b.10–5b.11 | `components/invitation/RsvpAnswer.spec.tsx` | Component (jsdom) | 18/18 as `RsvpForm.spec.tsx` | ✅ 27 failed — `Element type is invalid` | ✅ 27/27 | 27 cases; the six new ones cover first-tap submit, no names after a prior "yes", surface swap, refusal keeps the form, empty form on reconsider, second identical decline | ✅ auto-submit moved out of the change handler into an effect |
+| 5b.12 | `e2e/rsvp.spec.ts` | E2E (Playwright + real DB) | 63/63 | ✅ old decline tests still clicked a submit button that no longer runs the flow | ✅ 66/66 | — | ➖ |
+| 5b.13 | `e2e/rsvp.spec.ts` | E2E | — | ✅ file had no stream or reconsider coverage | ✅ 66/66 | 3 new cases: first-tap decline, stream details read FROM the row, decline→reconsider→accept reducing to the acceptance | ➖ |
+
+### Test Summary
+
+- **Total tests written**: 26 net new unit/component/integration (536 → 562), 3 net new E2E (63 → 66)
+- **Total tests passing**: 562 unit + 66 E2E
+- **Layers used**: Unit (1), Component (2), Integration/real Postgres (3), E2E (2)
+- **Approval tests**: none — no pure-refactoring task in this unit
+- **Pure functions created**: none; `getCeremony` is an adapter and `CeremonyStream` is a props-only component
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npx vitest run supabase/tests/ceremony.spec.ts` → `Tests 9 passed (9)`; `npx vitest run components/invitation/RsvpAnswer.spec.tsx` → `Tests 27 passed (27)` |
+| Runtime harness | `supabase db reset` applied `0001`–`0010` in order from an empty database; both down-scripts applied and re-applied forward with the schema probed at each step; the full E2E suite ran against `npm run build && npm run start` on port 3100 |
+| Rollback boundary | Revert `components/invitation/CeremonyStream.tsx`, `lib/server/ceremony.ts`, the `RsvpAnswer` rename, the `message` deletions in `lib/server/rsvp.ts`, the `loadCeremony`/`ceremony` wiring in `load-invitation.ts` and `page.tsx`, the `ceremony` entries in both `OWNED_TABLES`, and run `supabase/down/0010_drop_rsvp_message_down.sql` then `supabase/down/0009_ceremony_down.sql` (in that order). Nothing in work units 1–5 depends on any of it; the two down-scripts were proved to run |
+
+## Verification
+
+Every command run in the foreground.
+
+| Command | Observed result |
+|---|---|
+| `npm test` | `Test Files 41 passed (41)` / `Tests 562 passed (562)` — baseline 39 / 536 |
+| `npm run e2e` (as `PORT=3100 npm run e2e`) | `66 passed (11.7s)` — baseline 63 |
+| `npm run typecheck` | clean, no output, exit 0 |
+| `npm run lint` | clean, no output, exit 0 |
+| `npm run format:check` | `All matched files use Prettier code style!` (after one `npm run format` pass over 6 files) |
+| `npm run build` | `✓ Compiled successfully`; `✓ Generating static pages using 8 workers (5/5)`; routes `/`, `/_not-found`, `/i/[slug]`, `/i/[slug]/opengraph-image`, `/robots.txt` |
+| `supabase db reset` | applied `0001` through `0010` in order from an empty database, no errors |
+| `npm test` after that reset | `Test Files 41 passed (41)` / `Tests 562 passed (562)` |
+
+Re-confirmed inside those runs: the raw-HTML Open Graph assertions under a
+WhatsApp User-Agent including that the tags do not appear after `</head>`, no
+phone digits in the page source, exactly one unlock path with no query-parameter
+bypass, the `nullif` mutation test, `service_role` append-only, seat parity,
+`rsvp_latest` reducing to one row per invitation with `security_invoker`, and the
+external anon-key RLS invariants — now including `ceremony`.
+
+## Workload / PR boundary
+
+- Mode: **`size:exception` RECOMMENDED — this unit does not fit the 800-line
+  session budget.**
+- Authored lines: **1625** (`git diff --numstat HEAD` plus the eight new files),
+  of which 78 are OpenSpec planning artifacts and roughly 1030 are tests.
+- Why it will not shrink: the four deliverables are one atomic change. Dropping
+  `rsvp_responses.message` requires recreating `rsvp_latest`, which touches the
+  adapter, which touches the port types, which touches the form. The decline
+  auto-submit is meaningless without somewhere for a decline to land, and the
+  stream card is meaningless without the row that feeds it. Splitting it would
+  ship a schema whose only writer disagrees with it.
+- Nothing was compressed to reach a number: no comment, blank line, doc or test
+  was removed for budget reasons.
+
+## Status
+
+14/15 Work Unit 5b tasks complete. Task 5b.15 is deliberately open — it belongs
+with the couple's real details (task 7.1) and with the public ceremony page.
+Working tree left uncommitted and fully normalized. Ready for `sdd-verify`.

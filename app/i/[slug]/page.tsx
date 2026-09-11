@@ -4,8 +4,8 @@ import { cookies } from "next/headers";
 import { InvitationBody } from "@/components/invitation/InvitationBody";
 import { InvitationGate } from "@/components/invitation/InvitationGate";
 import { InvitationUnavailable } from "@/components/invitation/InvitationUnavailable";
+import { RsvpAnswer } from "@/components/invitation/RsvpAnswer";
 import { RsvpClosed } from "@/components/invitation/RsvpClosed";
-import { RsvpForm } from "@/components/invitation/RsvpForm";
 import { buildInvitationMetadataText } from "@/lib/domain/og-card";
 import { buildGateRecoveryLink } from "@/lib/domain/recovery-message";
 import { UNLOCK_COOKIE_NAME, unlockCookieUnlocks } from "@/lib/server/cookies";
@@ -14,6 +14,7 @@ import { rsvpIsOpenNow } from "@/lib/server/rsvp";
 import { submitRsvpAction, unlockAction } from "./actions";
 import { GateForm } from "./gate-form";
 import {
+  loadCeremony,
   loadCurrentRsvp,
   loadGuestFacingInvitation,
   loadInvitationRecord,
@@ -110,17 +111,23 @@ export default async function InvitationPage({ params }: RouteParams) {
     // form a household fills in believing they answered.
     const open = rsvpIsOpenNow(invitation.rsvpDeadline);
     const current = open ? await loadCurrentRsvp(record.id) : null;
+    // Read whenever the answer surface exists, because a household that
+    // declines becomes a stream viewer without another round trip to the
+    // server: the details must already be in the tree when the form is
+    // replaced. Behind the phone gate, which is the better protected of the two
+    // places these values are shown.
+    const ceremony = open ? await loadCeremony() : null;
 
     return (
       <main>
         <InvitationBody
           invitation={invitation}
           rsvp={
-            open ? (
+            open && ceremony !== null ? (
               // The slug is bound on the SERVER here too: the form never
               // supplies it, so a client cannot aim an RSVP at another
               // household.
-              <RsvpForm
+              <RsvpAnswer
                 guests={invitation.guests}
                 seatsAllowed={invitation.seatsAllowed}
                 current={
@@ -131,9 +138,9 @@ export default async function InvitationPage({ params }: RouteParams) {
                         seatsConfirmed: current.seatsConfirmed,
                         attendeeGuestIds: current.attendeeGuestIds,
                         dietaryNotes: current.dietaryNotes,
-                        message: current.message,
                       }
                 }
+                ceremony={ceremony}
                 action={submitRsvpAction.bind(null, slug)}
               />
             ) : (

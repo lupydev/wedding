@@ -206,6 +206,24 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 5.8 RED — `e2e/rsvp.spec.ts`: the form never renders more than `seats_allowed` options; a tampered over-cap direct submission is rejected server-side with no row created; a changed answer produces two rows with the latest reflecting the new answer; past-deadline shows the contact message; pre-deadline/no-deadline shows and accepts the form.
 - [x] 5.9 Verify: run `e2e/rsvp.spec.ts` and full `npm run test:coverage` — confirm 5.1, 5.3, 5.8 RED tests pass GREEN.
 
+## Phase 5b: Decline-to-Stream, Ceremony Row, Message Removal (Work Unit 5b)
+
+- [x] 5b.1 RED — `supabase/tests/ceremony.spec.ts`: exactly one row after the migrations; a second row is refused by the primary key and an `id = false` row by the singleton CHECK; the seeded values are `{{...}}` placeholders, never invented details; an UPDATE still works.
+- [x] 5b.2 RED — `ceremony.spec.ts` addendum: RLS enabled with zero policies; the table was born with NO anon grant even though `0009` writes no revoke of its own, which is the verification that the `0004` event trigger really covers a plain `CREATE TABLE`; the publishable key selects nothing while a privileged reader sees the row.
+- [x] 5b.3 GREEN — `supabase/migrations/0009_ceremony.sql` + `supabase/down/0009_ceremony_down.sql`: single-row `ceremony` table (`id boolean primary key` + `ceremony_is_singleton` CHECK), RLS on, zero policies, seeded with `{{CEREMONY_DATE}}`, `{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}`, `{{ZOOM_PASSCODE}}`.
+- [x] 5b.4 GREEN — `lib/server/ceremony.ts`: `import 'server-only'` first line; `getCeremony(client)` maps the row and throws loudly when it is missing.
+- [x] 5b.5 GREEN — extend the anon-key RLS invariants to `ceremony`: `OWNED_TABLES` in `supabase/tests/helpers/db.ts` and in `e2e/invariants/rls.spec.ts`, with insert/update payloads and an assertion that the row survives all four verbs untouched.
+- [x] 5b.6 RED — `lib/server/rsvp.spec.ts` + `supabase/tests/rsvp-store.spec.ts`: no `message` column on `rsvp_responses` or `rsvp_latest` (with `dietary_notes` asserted present on both, so the query is proved to be looking); a write naming `message` is refused; a `message` field on the wire is IGNORED rather than rejected, exactly like `seatsConfirmed`.
+- [x] 5b.7 GREEN — `supabase/migrations/0010_drop_rsvp_message.sql` + matching down-script: drop and recreate `rsvp_latest` around `alter table rsvp_responses drop column message` (never `cascade`, which would silently take the view); remove `message` from `lib/server/rsvp.ts`, its zod schema, its port types and both selects.
+- [x] 5b.8 RED — `components/invitation/CeremonyStream.spec.tsx`: all four details rendered each beside its own label; placeholders rendered verbatim; the reconsider control calls back exactly once and not before.
+- [x] 5b.9 GREEN — `components/invitation/CeremonyStream.tsx`: props-only, no data access, Spanish neutral copy including "si cambian de opinión, pueden volver a responder".
+- [x] 5b.10 RED — `components/invitation/RsvpAnswer.spec.tsx` (renamed from `RsvpForm.spec.tsx`): declining submits on the first tap with no second click and names nobody even after boxes were checked; the stream replaces the form; a REFUSED decline keeps the form; reconsidering returns an empty form; a second identical decline still returns to the stream; there is no message field.
+- [x] 5b.11 GREEN — `components/invitation/RsvpAnswer.tsx`: auto-submit from an effect so the payload is built after the fieldset is disabled; the surface follows the RECORDED answer, never the tap; message field removed.
+- [x] 5b.12 GREEN — `app/i/[slug]/load-invitation.ts` `loadCeremony` (React `cache`) and `app/i/[slug]/page.tsx` passing it to `RsvpAnswer`.
+- [x] 5b.13 RED — `e2e/rsvp.spec.ts`: a decline auto-submits and shows the stream details read FROM the row; a decline followed by an acceptance leaves `rsvp_latest` reporting the acceptance over a three-row history; the form carries no message box.
+- [x] 5b.14 Verify: `npm test`, `npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`, plus `supabase db reset` followed by `npm test` so 0009 and 0010 are proved to replay from an empty database in order.
+- [ ] 5b.15 Task 7.1 addendum — when the couple supplies the real details, `UPDATE` the `ceremony` row and collapse `InvitationBody`'s `{{WEDDING_DATE}}` into `ceremony_date` rather than leaving the date stated in two places.
+
 ## Phase 6a: Console Auth, Guest List, Device Declaration (Work Unit 6a)
 
 - [ ] 6a.1 RED — `lib/server/auth.spec.ts`: an unallowlisted email is denied and creates no session mapped to any sender; an allowlisted email resolves to exactly one `senders.auth_user_id` identity.
@@ -244,6 +262,6 @@ in the gate that unit built; the third is an unasserted attribute.
 
 ## Phase 7: Placeholders and Finalization (non-blocking, no dependent tasks)
 
-- [ ] 7.1 Once the couple supplies `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`, `{{VENUE_NAME}}`, `{{VENUE_ADDRESS}}`, `{{APPROX_GUEST_COUNT}}`, replace every placeholder occurrence in invitation copy, message templates, and RSVP deadline defaults. Do not invent values; do not block any other work unit on this.
+- [ ] 7.1 Once the couple supplies `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`, `{{VENUE_NAME}}`, `{{VENUE_ADDRESS}}`, `{{APPROX_GUEST_COUNT}}`, `{{CEREMONY_DATE}}`, `{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}` and `{{ZOOM_PASSCODE}}` (the last four are an `UPDATE` on the `ceremony` row, not a code edit), replace every placeholder occurrence in invitation copy, message templates, and RSVP deadline defaults. Do not invent values; do not block any other work unit on this.
 - [ ] 7.2 Set `NEXT_PUBLIC_SITE_ORIGIN` before the first deploy; confirm `metadataBase`/`og:image` resolve to the real deployed origin.
 - [ ] 7.3 Finalize the OG-card font choice (bundled Noto Sans vs. a custom ≤500 KB subset covering `ñ` and accented vowels); update `opengraph-image.tsx` if a custom font is chosen.

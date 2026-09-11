@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import {
   currentRsvpSentence,
@@ -9,8 +9,10 @@ import {
   type RsvpFeedback,
 } from "@/lib/domain/rsvp-copy";
 
+import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
+
 /**
- * The RSVP form.
+ * The RSVP surface.
  *
  * The second and last Client Component on the public route, and — like
  * `GateForm` — it holds no invitation data beyond what it renders and receives
@@ -29,47 +31,64 @@ import {
  * seats" control, because the cap is a confirmed product decision rather than a
  * suggestion, and a control that always fails is worse than no control.
  *
+ * THERE IS NO MESSAGE BOX. This whole flow begins in the guest's own WhatsApp
+ * thread and arrives from the couple's own personal numbers, so the guest
+ * already holds their contact. A free-text field here competes with the chat
+ * they are already in — and loses, because a WhatsApp reply reaches the couple
+ * where they actually are, while a form field waits for somebody to remember to
+ * check it. Migration 0010 removed the column too. `dietaryNotes` STAYS: that
+ * is not a message, it is operational data the catering needs and a guest will
+ * not think to send unprompted.
+ *
+ * A DECLINE IS NOT A FORM. It submits on the first tap and the answer is
+ * replaced by the ceremony stream details — see `declineNow` and
+ * `CeremonyStream` below for both halves of the reasoning.
+ *
  * Guest-facing copy is Spanish, neutral register. Identifiers and comments
  * stay English.
  */
 
 /** One named person on the invitation. No phone field exists on this type. */
-export interface RsvpFormGuest {
+export interface RsvpAnswerGuest {
   readonly id: string;
   readonly fullName: string;
   readonly isChild?: boolean;
 }
 
 /** The household's answer as it currently stands, or `null` if they have none. */
-export interface RsvpFormCurrent {
+export interface RsvpAnswerCurrent {
   readonly attending: boolean;
   readonly seatsConfirmed: number;
   readonly attendeeGuestIds: readonly string[];
   readonly dietaryNotes: string | null;
-  readonly message: string | null;
 }
 
-export type RsvpFormAction = (
+export type RsvpAnswerAction = (
   previous: RsvpFeedback,
   formData: FormData,
 ) => Promise<RsvpFeedback>;
 
 const IDLE: RsvpFeedback = { status: "idle" };
 
-/** Mirrors the `char_length` CHECK constraints on `rsvp_responses`. */
+/** Mirrors the `char_length` CHECK constraint on `rsvp_responses`. */
 const DIETARY_NOTES_MAX_LENGTH = 500;
-const MESSAGE_MAX_LENGTH = 1000;
 
-export function RsvpForm({
+/** What the household has answered, as far as this page knows. */
+type Answer = "yes" | "no" | "";
+
+export function RsvpAnswer({
   guests,
   seatsAllowed,
   current,
+  ceremony,
   action,
 }: {
-  readonly guests: readonly RsvpFormGuest[];
+  readonly guests: readonly RsvpAnswerGuest[];
   readonly seatsAllowed: number;
-  readonly current: RsvpFormCurrent | null;
-  readonly action: RsvpFormAction;
+  readonly current: RsvpAnswerCurrent | null;
+  /** The ceremony stream, shown in place of the form to a declining household. */
+  readonly ceremony: CeremonyStreamDetails;
+  readonly action: RsvpAnswerAction;
 }) {
   const [feedback, submit, pending] = useActionState(action, IDLE);
 
@@ -78,17 +97,59 @@ export function RsvpForm({
   // declining disables the list, and spending the allowance disables what is
   // left of it. A disabled control that the browser then omits from the
   // payload is exactly the behaviour wanted here — a decline submits no names.
-  const [attending, setAttending] = useState<"yes" | "no" | "">(
+  const [attending, setAttending] = useState<Answer>(
     current === null ? "" : current.attending ? "yes" : "no",
   );
   const [selected, setSelected] = useState<readonly string[]>(
     current?.attendeeGuestIds ?? [],
   );
 
+  // The answer ON FILE, which is what decides the surface. It starts as the row
+  // the server sent and moves only when a submission is actually RECORDED —
+  // never on the tap. A refusal that swapped in the stream card would tell a
+  // household they are expected on a call while the couple's list still has
+  // them as unanswered.
+  const [answerOnFile, setAnswerOnFile] = useState<Answer>(
+    current === null ? "" : current.attending ? "yes" : "no",
+  );
+  const [reconsidering, setReconsidering] = useState(false);
+  const submittedAnswer = useRef<Answer>("");
+
+  const formRef = useRef<HTMLFormElement>(null);
+  // A counter rather than a boolean: two declines in a row are two distinct
+  // requests, and a boolean that is already `true` would produce no change for
+  // the effect below to act on.
+  const [declineRequests, setDeclineRequests] = useState(0);
+
+  useEffect(() => {
+    if (declineRequests === 0) {
+      return;
+    }
+
+    // Submitted from an effect, not from the change handler, so the browser
+    // builds the payload AFTER React has disabled the attendee fieldset. A
+    // synchronous `requestSubmit` would send the boxes the household had
+    // checked under their previous "yes" — the server drops them anyway, but a
+    // payload that says "we cannot come, and here are two of us" is a payload
+    // one refactor away from reaching the database and failing its
+    // `rsvp_declined_has_zero_seats` constraint as a 500.
+    formRef.current?.requestSubmit();
+  }, [declineRequests]);
+
+  useEffect(() => {
+    if (feedback.status !== "recorded") {
+      return;
+    }
+
+    setAnswerOnFile(submittedAnswer.current);
+    setReconsidering(false);
+  }, [feedback]);
+
   const isAttending = attending === "yes";
   const allowanceSpent = selected.length >= seatsAllowed;
   const answered = currentRsvpSentence(current);
   const messages = rsvpFeedbackMessages(feedback);
+  const showStream = answerOnFile === "no" && !reconsidering;
 
   function toggle(guestId: string, checked: boolean) {
     setSelected((previous) =>
@@ -100,8 +161,50 @@ export function RsvpForm({
     );
   }
 
+  /**
+   * Declining answers the whole question, so it submits itself.
+   *
+   * There is genuinely nothing left to fill in: a decline confirms zero seats
+   * and names nobody, so the seat cap (0003) and the seat/attendee parity rule
+   * (0007) are both satisfied trivially. A second click would be a button whose
+   * only job is to ask "are you sure" without saying so.
+   *
+   * Accepting still requires the explicit submit, because there the household
+   * must first choose who is coming.
+   */
+  function declineNow() {
+    setAttending("no");
+    setDeclineRequests((requests) => requests + 1);
+  }
+
+  function record(formData: FormData) {
+    submittedAnswer.current = formData.get("attending") === "no" ? "no" : "yes";
+    submit(formData);
+  }
+
+  /**
+   * Back to the form, with nothing preselected.
+   *
+   * Auto-submitting means one mis-tap records a decline instantly, so the way
+   * back sits beside the consequence. Clearing the choice is deliberate: a
+   * mis-tap must not be one more tap away from repeating itself, and
+   * re-choosing "no" has to be a real change that fires the auto-submit again.
+   *
+   * Responses are append-only, so a correction writes a NEW row. The couple
+   * still sees that the household changed its mind, which is the information
+   * they want and the reason offering this is safe.
+   */
+  function reconsider() {
+    setReconsidering(true);
+    setAttending("");
+  }
+
+  if (showStream) {
+    return <CeremonyStream ceremony={ceremony} onReconsider={reconsider} />;
+  }
+
   return (
-    <form action={submit} className="rsvp__form">
+    <form ref={formRef} action={record} className="rsvp__form">
       <h2>Confirmen su asistencia</h2>
 
       {answered === null ? null : <p className="rsvp__current">{answered}</p>}
@@ -125,7 +228,7 @@ export function RsvpForm({
             name="attending"
             value="no"
             checked={attending === "no"}
-            onChange={() => setAttending("no")}
+            onChange={declineNow}
             required
           />
           No podremos acompañarlos
@@ -168,14 +271,6 @@ export function RsvpForm({
         name="dietaryNotes"
         maxLength={DIETARY_NOTES_MAX_LENGTH}
         defaultValue={current?.dietaryNotes ?? ""}
-      />
-
-      <label htmlFor="rsvp-message">Mensaje para los novios (opcional)</label>
-      <textarea
-        id="rsvp-message"
-        name="message"
-        maxLength={MESSAGE_MAX_LENGTH}
-        defaultValue={current?.message ?? ""}
       />
 
       <button type="submit" disabled={pending}>

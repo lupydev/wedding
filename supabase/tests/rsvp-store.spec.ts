@@ -102,7 +102,6 @@ describe("createRsvpStore", () => {
       attendeeGuestIds: [guestIds[0], guestIds[1]],
       seatsConfirmed: 2,
       dietaryNotes: "Sin mariscos.",
-      message: "¡Allá nos vemos!",
     });
 
     await expect(store.latestResponse(invitationId)).resolves.toMatchObject({
@@ -111,7 +110,6 @@ describe("createRsvpStore", () => {
       attendeeGuestIds: [guestIds[0], guestIds[1]],
       seatsConfirmed: 2,
       dietaryNotes: "Sin mariscos.",
-      message: "¡Allá nos vemos!",
     });
   });
 
@@ -125,7 +123,6 @@ describe("createRsvpStore", () => {
       attendeeGuestIds: [],
       seatsConfirmed: 0,
       dietaryNotes: null,
-      message: null,
     });
 
     const current = await store.latestResponse(invitationId);
@@ -161,10 +158,64 @@ describe("createRsvpStore", () => {
         attendeeGuestIds: [...guestIds, ...guestIds],
         seatsConfirmed: 6,
         dietaryNotes: null,
-        message: null,
       }),
     ).rejects.toThrow(/exceeds seats_allowed/);
 
     await expect(rawResponseCount()).resolves.toBe(before);
+  });
+});
+
+/**
+ * The free-text message to the couple, removed from the schema itself.
+ *
+ * Taking the field out of the form alone would leave a column that silently
+ * accepts whatever any future writer puts in it, and the couple with a second
+ * inbox they have no reason to check. The flow begins in the guest's own
+ * WhatsApp thread with the couple and arrives from the couple's own numbers, so
+ * the reply channel that reaches them is the one they are already holding.
+ *
+ * `dietary_notes` is untouched on purpose: it is not a message, it is
+ * operational data the catering needs and a guest will not send unprompted.
+ */
+describe("the removed message column", () => {
+  it("is gone from rsvp_responses and from the view that reduces it", async () => {
+    const columns = await withDb(async (db) => {
+      const result = await db.query<{
+        table_name: string;
+        column_name: string;
+      }>(
+        `select table_name, column_name
+         from information_schema.columns
+         where table_schema = 'public'
+           and table_name in ('rsvp_responses', 'rsvp_latest')
+           and column_name in ('message', 'dietary_notes')
+         order by table_name, column_name`,
+      );
+
+      return result.rows;
+    });
+
+    // `dietary_notes` present on BOTH proves the query is really looking, so
+    // "no message column" cannot be explained by a typo in the table names.
+    expect(columns).toEqual([
+      { table_name: "rsvp_latest", column_name: "dietary_notes" },
+      { table_name: "rsvp_responses", column_name: "dietary_notes" },
+    ]);
+  });
+
+  it("refuses a write that still names it, rather than dropping it quietly", async () => {
+    const { error } = await client.from("rsvp_responses").insert({
+      invitation_id: invitationId,
+      attending: false,
+      seats_confirmed: 0,
+      attendee_guest_ids: [],
+      message: "por la puerta de atrás",
+    });
+
+    // 42703 is Postgres' undefined_column, surfaced by PostgREST as PGRST204.
+    expect([error?.code, error?.message ?? ""]).toEqual([
+      expect.stringMatching(/^(42703|PGRST204)$/),
+      expect.stringContaining("message"),
+    ]);
   });
 });

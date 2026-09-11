@@ -47,9 +47,6 @@ import { verifyUnlockCookie } from "./cookies";
 /** `rsvp_responses.dietary_notes` CHECK limit, restated where input is parsed. */
 export const DIETARY_NOTES_MAX_LENGTH = 500;
 
-/** `rsvp_responses.message` CHECK limit, restated where input is parsed. */
-export const MESSAGE_MAX_LENGTH = 1000;
-
 /** The form field carrying one checked attendee. Repeated, once per person. */
 export const ATTENDEE_FIELD = "attendee";
 
@@ -59,13 +56,18 @@ export const ATTENDEE_FIELD = "attendee";
  * `seats_confirmed` is deliberately absent: it is derived below. A tampered
  * payload that adds it is not rejected, it is simply not read, which is the
  * stronger outcome — there is nothing to validate because there is nothing to
- * validate against.
+ * validate against. A `message` field is absent for the same reason and gets
+ * the same treatment, since migration 0010 removed both the form field and the
+ * column: the free-text note to the couple competed with the WhatsApp thread
+ * this whole flow already lives in, and lost.
  *
- * The optional fields are trimmed and then emptied to `null`, so a guest who
- * types only spaces is stored the same way as a guest who typed nothing. The
- * length bounds match the `char_length` CHECK constraints in migration 0001:
- * Postgres would refuse an over-long value anyway, but as a 500 carrying a
- * database message instead of a sentence the guest can act on.
+ * `dietary_notes` is the one optional field that remains, because it is not a
+ * message — it is operational data the catering needs and a guest will not
+ * think to send unprompted. It is trimmed and then emptied to `null`, so a
+ * guest who types only spaces is stored the same way as one who typed nothing.
+ * The length bound matches the `char_length` CHECK constraint in migration
+ * 0001: Postgres would refuse an over-long value anyway, but as a 500 carrying
+ * a database message instead of a sentence the guest can act on.
  */
 const optionalText = (max: number) =>
   z
@@ -78,7 +80,6 @@ const rsvpPayloadSchema = z.object({
   attending: z.enum(["yes", "no"]),
   attendeeGuestIds: z.array(z.uuid()),
   dietaryNotes: optionalText(DIETARY_NOTES_MAX_LENGTH).nullable(),
-  message: optionalText(MESSAGE_MAX_LENGTH).nullable(),
 });
 
 /** A row on its way into `rsvp_responses`. There is no update counterpart. */
@@ -88,7 +89,6 @@ export interface NewRsvpResponse {
   readonly attendeeGuestIds: readonly string[];
   readonly seatsConfirmed: number;
   readonly dietaryNotes: string | null;
-  readonly message: string | null;
 }
 
 /** A stored response, as `rsvp_latest` returns it. */
@@ -146,7 +146,6 @@ interface RsvpPayload {
   readonly attending: boolean;
   readonly attendeeGuestIds: readonly string[];
   readonly dietaryNotes: string | null;
-  readonly message: string | null;
 }
 
 /**
@@ -162,7 +161,6 @@ function parsePayload(formData: FormData): RsvpPayload | null {
     attending: formData.get("attending"),
     attendeeGuestIds: formData.getAll(ATTENDEE_FIELD),
     dietaryNotes: formData.get("dietaryNotes"),
-    message: formData.get("message"),
   });
 
   if (!parsed.success) {
@@ -173,7 +171,6 @@ function parsePayload(formData: FormData): RsvpPayload | null {
     attending: parsed.data.attending === "yes",
     attendeeGuestIds: parsed.data.attendeeGuestIds,
     dietaryNotes: parsed.data.dietaryNotes,
-    message: parsed.data.message,
   };
 }
 
@@ -248,7 +245,6 @@ export async function submitRsvp(
     attendeeGuestIds,
     seatsConfirmed: attendeeGuestIds.length,
     dietaryNotes: payload.dietaryNotes,
-    message: payload.message,
   });
 
   return { status: "recorded" };
@@ -261,13 +257,12 @@ interface RsvpLatestRow {
   attendee_guest_ids: string[];
   seats_confirmed: number;
   dietary_notes: string | null;
-  message: string | null;
   submitted_at: string;
 }
 
 const RSVP_LATEST_SELECT =
   "id, invitation_id, attending, attendee_guest_ids, seats_confirmed, " +
-  "dietary_notes, message, submitted_at";
+  "dietary_notes, submitted_at";
 
 /** The Supabase-backed response log. */
 export function createRsvpStore(client: SupabaseClient): RsvpStore {
@@ -279,7 +274,6 @@ export function createRsvpStore(client: SupabaseClient): RsvpStore {
         attendee_guest_ids: row.attendeeGuestIds,
         seats_confirmed: row.seatsConfirmed,
         dietary_notes: row.dietaryNotes,
-        message: row.message,
       });
 
       if (error) {
@@ -314,7 +308,6 @@ export function createRsvpStore(client: SupabaseClient): RsvpStore {
         attendeeGuestIds: data.attendee_guest_ids,
         seatsConfirmed: data.seats_confirmed,
         dietaryNotes: data.dietary_notes,
-        message: data.message,
         submittedAt: data.submitted_at,
       };
     },
