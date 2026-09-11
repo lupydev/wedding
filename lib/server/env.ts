@@ -74,22 +74,79 @@ export function gateIpPepper(): string {
  * file-convention `og:image` relative too, which WhatsApp cannot fetch.
  */
 export function siteOrigin(): string {
-  const value = requireEnv("NEXT_PUBLIC_SITE_ORIGIN");
+  return requireAbsoluteOrigin("NEXT_PUBLIC_SITE_ORIGIN");
+}
+
+/**
+ * The origin the operator console is reachable at.
+ *
+ * Usually the same as the public site origin, and it defaults to it. It is
+ * separable because the magic link is EMAILED: the origin baked into that link
+ * has to be an address the operator's browser can actually open, and the public
+ * invitation origin is not always that address — a preview deployment, a
+ * tunnel, or the end-to-end server on a free port all serve the console
+ * somewhere else. Deriving it from the request's own `Origin` header was
+ * rejected: that header is visitor-controlled, and this value decides where a
+ * one-time sign-in link points.
+ */
+export function consoleOrigin(): string {
+  if (process.env.CONSOLE_ORIGIN?.trim()) {
+    return requireAbsoluteOrigin("CONSOLE_ORIGIN");
+  }
+
+  return siteOrigin();
+}
+
+function requireAbsoluteOrigin(name: string): string {
+  const value = requireEnv(name);
 
   let parsed: URL;
   try {
     parsed = new URL(value);
   } catch {
     throw new Error(
-      `NEXT_PUBLIC_SITE_ORIGIN must be an absolute origin, for example https://example.com. Received: ${value}`,
+      `${name} must be an absolute origin, for example https://example.com. Received: ${value}`,
     );
   }
 
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error(
-      `NEXT_PUBLIC_SITE_ORIGIN must be an absolute http(s) origin. Received: ${value}`,
+      `${name} must be an absolute http(s) origin. Received: ${value}`,
     );
   }
 
   return value.replace(/\/+$/, "");
+}
+
+/**
+ * The Supabase publishable key, for the client that acts AS the operator.
+ *
+ * Deliberately not the secret key: that one bypasses RLS, and the auth client
+ * built from this value is handed to the middleware, which runs before any
+ * authorization decision has been made. The publishable key is the key a
+ * browser would hold anyway, which is exactly the privilege level an
+ * unauthenticated session-refresh pass should have.
+ */
+export function supabasePublishableKey(): string {
+  const value = requireEnv("SUPABASE_PUBLISHABLE_KEY");
+
+  if (value.startsWith("sb_secret_")) {
+    throw new Error(
+      "SUPABASE_PUBLISHABLE_KEY holds the secret key. The operator auth client requires the publishable key.",
+    );
+  }
+
+  return value;
+}
+
+/**
+ * HMAC key for the operator identity the middleware forwards to the route that
+ * renders.
+ *
+ * A forwarded header is only trustworthy while every reader sits behind the
+ * middleware that writes it, and the console matcher is deliberately narrow.
+ * Signing the value removes that coupling, and this is the key that does it.
+ */
+export function operatorSessionSecret(): string {
+  return requireSecret("OPERATOR_SESSION_SECRET");
 }

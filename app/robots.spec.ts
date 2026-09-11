@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import robots, {
+  CONSOLE_PATH_PREFIX,
   INVITATION_PATH_PREFIX,
   OG_IMAGE_ALLOW_PATTERN,
 } from "./robots";
@@ -45,6 +46,20 @@ describe("robots.txt", () => {
     // An `Allow: /i/` would re-open exactly what the disallow above closes.
     expect(single.allow).not.toContain(INVITATION_PATH_PREFIX);
     expect(single.allow).not.toContain("/i/*");
+  });
+
+  it("disallows the operator console too", () => {
+    // The console is an authenticated surface, so indexing it leaks nothing
+    // directly — but an indexed login page advertises to anyone searching that
+    // this wedding has an operator panel, and invites the credential-stuffing
+    // traffic that follows.
+    const single = robots().rules as Exclude<
+      ReturnType<typeof robots>["rules"],
+      unknown[]
+    >;
+
+    expect(single.disallow).toContain(CONSOLE_PATH_PREFIX);
+    expect(single.allow).not.toContain(CONSOLE_PATH_PREFIX);
   });
 
   it("targets the card path under the invitation prefix, not a sibling", () => {

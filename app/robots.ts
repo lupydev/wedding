@@ -19,12 +19,21 @@ export const INVITATION_PATH_PREFIX = "/i/";
  */
 export const OG_IMAGE_ALLOW_PATTERN = "/i/*/opengraph-image";
 
+/**
+ * The operator console prefix.
+ *
+ * Authenticated, so indexing it exposes no guest data — but a login page in a
+ * search index is an advertisement that this wedding has an operator panel,
+ * and it attracts the automated traffic that follows one.
+ */
+export const CONSOLE_PATH_PREFIX = "/console";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
       allow: [OG_IMAGE_ALLOW_PATTERN],
-      disallow: [INVITATION_PATH_PREFIX],
+      disallow: [INVITATION_PATH_PREFIX, CONSOLE_PATH_PREFIX],
     },
   };
 }

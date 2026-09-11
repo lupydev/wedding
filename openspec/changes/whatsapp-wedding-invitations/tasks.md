@@ -224,12 +224,31 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 5b.14 Verify: `npm test`, `npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`, plus `supabase db reset` followed by `npm test` so 0009 and 0010 are proved to replay from an empty database in order.
 - [ ] 5b.15 Task 7.1 addendum — when the couple supplies the real details, `UPDATE` the `ceremony` row and collapse `InvitationBody`'s `{{WEDDING_DATE}}` into `ceremony_date` rather than leaving the date stated in two places.
 
+## Phase 6a-i: Console Authentication and Session Survival (Work Unit 6a-i)
+
+> Work Unit 6a was split again at apply time: the ledger ceiling refused an elevation, so
+> authentication and session survival land here and the guest list plus the device
+> declaration (`6a.5`–`6a.12`) land in Work Unit 6a-ii. `6a.13`/`6a.14` are therefore split
+> too: the auth half of the console E2E lands here, the list/device half in 6a-ii.
+
+- [x] 6a-i.1 RED — `lib/domain/operator-session.spec.ts`: console redirect routing is a pure decision; a forwarded operator identity is signed, verified, and stripped from inbound request headers before anything trusts it.
+- [x] 6a-i.2 GREEN — `lib/domain/operator-session.ts`: pure routing + Web Crypto HMAC sign/verify of the forwarded identity, usable from both the edge middleware and Node.
+- [x] 6a-i.3 RED — `lib/server/auth.spec.ts`: an unallowlisted email is denied and creates no session mapped to any sender; an allowlisted email resolves to exactly one `senders.auth_user_id` identity; the magic-link request returns a byte-identical acknowledgement whether or not the address is an operator.
+- [x] 6a-i.4 GREEN — `lib/server/auth.ts`: `import 'server-only'` first line; `resolveOperator` binds `auth_user_id` on first allowlisted login; `requireOperator()` re-checks the SESSION identity and signs out on mismatch; `readSessionIdentity()` keeps a non-header `getUser()` fallback.
+- [x] 6a-i.5 RED — `supabase/tests/operator-session-refresh.spec.ts`: a stale access token with a live refresh token, driven through the middleware handler, must put TWO session `Set-Cookie` headers on the response — including on a REDIRECT — and the rotated refresh token must reach the browser.
+- [x] 6a-i.6 GREEN — `proxy.ts` + `lib/proxy/operator-session.ts` (Next 16.3 deprecated the `middleware` file convention in favour of `proxy`): one response is built and every return path carries the cookies Supabase wrote; the matcher is scoped to `/console/:path*` so the guest gate never pays for an auth round-trip.
+- [x] 6a-i.7 GREEN — `app/console/login/**` and `app/console/auth/callback/route.ts`: magic-link entry and exchange, with the allowlist checked server-side before any mail is sent.
+- [x] 6a-i.8 GREEN — `app/console/layout.tsx` and a minimal authenticated `app/console/page.tsx` landing that proves the session works.
+- [x] 6a-i.9 RED — `e2e/console-auth.spec.ts`: an unauthenticated visitor cannot reach `/console`; an unallowlisted address gets the same response as an operator address and receives no mail; an allowlisted address completes the magic link, reaches the console, and binds `senders.auth_user_id`.
+- [x] 6a-i.10 GREEN — `playwright.config.ts` may no longer attach to a foreign dev server; the E2E suite always builds and starts its own.
+- [x] 6a-i.11 Verify: `npm test`, `npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`.
+
 ## Phase 6a: Console Auth, Guest List, Device Declaration (Work Unit 6a)
 
-- [ ] 6a.1 RED — `lib/server/auth.spec.ts`: an unallowlisted email is denied and creates no session mapped to any sender; an allowlisted email resolves to exactly one `senders.auth_user_id` identity.
-- [ ] 6a.2 GREEN — `lib/server/auth.ts`: `import 'server-only'` first line; Supabase Auth magic-link helpers; `requireOperator()` resolves via `senders.allowlisted_email`/`auth_user_id`, binding `auth_user_id` on first allowlisted login.
-- [ ] 6a.3 GREEN — `app/console/login/page.tsx` and `app/console/auth/callback/route.ts`: magic-link entry/exchange.
-- [ ] 6a.4 GREEN — `app/console/layout.tsx`: calls `requireOperator()`; redirects unauthenticated/non-allowlisted visitors to `/console/login`.
+- [x] 6a.1 (Done by 6a-i.3.) RED — `lib/server/auth.spec.ts`: an unallowlisted email is denied and creates no session mapped to any sender; an allowlisted email resolves to exactly one `senders.auth_user_id` identity.
+- [x] 6a.2 (Done by 6a-i.4.) GREEN — `lib/server/auth.ts`: `import 'server-only'` first line; Supabase Auth magic-link helpers; `requireOperator()` resolves via `senders.allowlisted_email`/`auth_user_id`, binding `auth_user_id` on first allowlisted login.
+- [x] 6a.3 (Done by 6a-i.7.) GREEN — `app/console/login/page.tsx` and `app/console/auth/callback/route.ts`: magic-link entry/exchange.
+- [x] 6a.4 (Done by 6a-i.8.) GREEN — `app/console/layout.tsx`: calls `requireOperator()`; redirects unauthenticated/non-allowlisted visitors to `/console/login`.
 - [ ] 6a.5 RED — `lib/server/invitations.spec.ts` addendum: a sender's default query returns only `owner_sender_id`-matching invitations; the shared dashboard query returns aggregate counts across all invitations.
 - [ ] 6a.6 GREEN — add partitioned + shared-dashboard query functions to `lib/server/invitations.ts`.
 - [ ] 6a.7 RED — RTL test: a non-owned row renders no send/dispatch button and shows an "owned by {name}" label.
@@ -238,7 +257,7 @@ in the gate that unit built; the third is an unasserted attribute.
 - [ ] 6a.10 GREEN — add device-cookie helpers to `lib/server/cookies.ts`.
 - [ ] 6a.11 GREEN — `app/console/device/page.tsx`: per-device WhatsApp-account picker writing the signed `device_sender` cookie (`httpOnly`, `path=/console`, 1 year).
 - [ ] 6a.12 GREEN — wire `app/console/layout.tsx`: an absent device cookie redirects to `/console/device` (never a silent default); a mismatch renders a non-dismissible interstitial blocking dispatch while the read-only progress view stays available.
-- [ ] 6a.13 RED — `e2e/console-auth.spec.ts`: unallowlisted email denied; allowlisted sender reaches their dashboard; default view lists only owned invitations; shared dashboard shows all; non-owner sees no send button; device mismatch blocks dispatch with the interstitial and a match allows it to proceed.
+- [ ] 6a.13 (PARTIAL — the auth half landed in 6a-i.9; the list/device half is Work Unit 6a-ii.) RED — `e2e/console-auth.spec.ts`: unallowlisted email denied; allowlisted sender reaches their dashboard; default view lists only owned invitations; shared dashboard shows all; non-owner sees no send button; device mismatch blocks dispatch with the interstitial and a match allows it to proceed.
 - [ ] 6a.14 Verify: run `e2e/console-auth.spec.ts` — confirm 6a.1, 6a.5, 6a.7, 6a.9, 6a.13 RED tests pass GREEN.
 
 ## Phase 6b: Dispatch and Previews (Work Unit 6b)
