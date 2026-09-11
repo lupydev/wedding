@@ -7,6 +7,7 @@ import {
   type ConsoleListRow,
 } from "@/lib/domain/console-list";
 import { consoleDispatchPath } from "@/lib/domain/dispatch-message";
+import { consolePreviewPath } from "@/lib/domain/operator-session";
 
 import { GuestPhoneField } from "./GuestPhoneField";
 
@@ -134,6 +135,23 @@ export function GuestList({
               href={consoleDispatchPath(row.invitationId)}
             >
               Preparar envío para {row.greetingName}
+            </a>
+          )}
+
+          {/*
+            The preview is a READ, so unlike the send affordance above it
+            survives a device-declaration mismatch: looking at an invitation
+            sends nothing from any account, and the operator on the wrong
+            handset is precisely the one who may still want to check the copy.
+            Owned-only, though, because the route answers `notFound()` for
+            anything else and a link to a 404 is an affordance that lies.
+          */}
+          {row.ownedByViewer && (
+            <a
+              className="guest-list__preview-link"
+              href={consolePreviewPath(row.invitationId)}
+            >
+              Ver la invitación de {row.greetingName}
             </a>
           )}
         </li>

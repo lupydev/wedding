@@ -124,6 +124,71 @@ describe("GuestList", () => {
   });
 
   /**
+   * The body preview, which is a READ and not a send.
+   *
+   * It is offered on an owned row exactly like the send affordance, and unlike
+   * it, it survives a device-declaration mismatch. Looking at an invitation
+   * sends nothing from any account, and the operator who is on the wrong
+   * handset is precisely the one who may still need to check the copy before
+   * the other one sends it.
+   */
+  it("offers a body preview on a row the operator owns", () => {
+    renderList([row()]);
+
+    expect(
+      screen.getByRole("link", { name: /Ver la invitación/i }),
+    ).toHaveAttribute(
+      "href",
+      "/console/preview/11111111-1111-4111-8111-111111111111",
+    );
+  });
+
+  it("points each row's preview at its own invitation", () => {
+    renderList([row({ invitationId: "22222222-2222-4222-8222-222222222222" })]);
+
+    expect(
+      screen.getByRole("link", { name: /Ver la invitación/i }),
+    ).toHaveAttribute(
+      "href",
+      "/console/preview/22222222-2222-4222-8222-222222222222",
+    );
+  });
+
+  it("offers NO body preview on a row owned by the other operator", () => {
+    // The route itself is owned-only and answers `notFound()`. A link that led
+    // to a 404 would be an affordance that lies.
+    renderList([
+      row({
+        ownedByViewer: false,
+        ownerSenderId: BETO,
+        ownerDisplayName: "Beto Operador",
+      }),
+    ]);
+
+    expect(
+      screen.queryByRole("link", { name: /Ver la invitación/i }),
+    ).toBeNull();
+  });
+
+  it("keeps the body preview while the device declaration blocks sending", () => {
+    renderList([row()], { dispatchBlocked: true });
+
+    expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /Ver la invitación/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("never links to the public invitation URL from the list", () => {
+    // Reading the invitation from the console goes through the console's own
+    // route. A public `/i/{slug}` link in a row would be a guest-facing URL
+    // sitting in an operator surface, and the one people would copy.
+    const { container } = renderList([row()]);
+
+    expect(container.querySelector('a[href^="/i/"]')).toBeNull();
+  });
+
+  /**
    * The fix from the Work Unit 6a-ii review, asserted rather than described.
    *
    * The device gate exists so a message does not leave from the wrong WhatsApp

@@ -39,6 +39,51 @@ export const CONSOLE_AUTH_PATH_PREFIX = "/console/auth";
  * REQUEST, never response. The same header on a response would ship the
  * operator's id and address to the browser for no reason at all.
  */
+/**
+ * The operator's body-preview route for one invitation.
+ *
+ * A SEPARATE admin-only route, deliberately, and the separation is the whole
+ * security decision. Three alternatives were considered for previewing the
+ * unlocked invitation body and all three were rejected:
+ *
+ *  - `?preview=1` on the public route — a guessable, permanently open hole
+ *    appended to a URL every guest already holds;
+ *  - a signed short-lived preview token — still a second unlock path on the
+ *    public route, and a token that unlocks a real guest's invitation is the
+ *    same capability as the phone gate with no rate limit, leaking through
+ *    browser history and `Referer`;
+ *  - an admin-session bypass inside the public route — no new secret, but it
+ *    makes the public route's authorization depend on two independent
+ *    identities, which is exactly where authorization bugs live.
+ *
+ * This adds no new authorization axis at all: it is an ordinary console page
+ * behind the same `requireOperator()` as every other one, and the public gated
+ * route is never taught the word "preview". Only the UNLOCKED body needs it —
+ * the gate screen itself needs no preview mechanism, because an operator can
+ * open `/i/{slug}` and read it exactly as a guest does.
+ */
+export function consolePreviewPath(invitationId: string): string {
+  return `${CONSOLE_ROOT_PATH}/preview/${invitationId}`;
+}
+
+/**
+ * Console routes that answer machines rather than people.
+ *
+ * Everything under here is a route handler, and every one of them authenticates
+ * itself and answers with a STATUS. The proxy must not redirect them, because a
+ * redirect to a login form is meaningless to a machine caller — worse than
+ * meaningless: `navigator.sendBeacon` follows it, receives the login page with
+ * a 200, and reports success while nothing was recorded at all. The beacon
+ * route's 401 was written for exactly that reason and was unreachable until
+ * this exemption existed.
+ *
+ * The obligation this creates is explicit: a route handler added under
+ * `/console/api` gets NO redirect from the proxy and MUST establish the
+ * operator itself, the way `app/console/api/dispatch-event/route.ts` does with
+ * `currentOperator()`.
+ */
+export const CONSOLE_API_PATH_PREFIX = "/console/api";
+
 export const OPERATOR_IDENTITY_HEADER = "x-operator-identity";
 
 /** Who is operating, as established by Supabase Auth. Not yet authorized. */
@@ -76,6 +121,16 @@ export function resolveConsoleRedirect(
   if (
     pathname === CONSOLE_AUTH_PATH_PREFIX ||
     pathname.startsWith(`${CONSOLE_AUTH_PATH_PREFIX}/`)
+  ) {
+    return null;
+  }
+
+  // Machine callers, never redirected. The `/` in the prefix test is
+  // load-bearing: a bare `startsWith` would also exempt a page called
+  // `/console/apiary` and leave it with no login bounce at all.
+  if (
+    pathname === CONSOLE_API_PATH_PREFIX ||
+    pathname.startsWith(`${CONSOLE_API_PATH_PREFIX}/`)
   ) {
     return null;
   }

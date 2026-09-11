@@ -2965,3 +2965,191 @@ refresh test.
 17/17 Work Unit 6b-i tasks complete; tasks `6b.1`–`6b.7` are now closed.
 `6b.8`–`6b.16` remain for Work Unit 6b-ii. Working tree left uncommitted and
 fully normalized. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 6b-ii — The Two Console Preview Surfaces
+
+**Mode**: Strict TDD. **Runner**: `npm test` (Vitest) + `PORT=3100 npm run e2e`
+(Playwright against a production build). Local Supabase up.
+**Baseline before this unit**: 819 unit / 102 E2E, tree clean at `4bfcba8`.
+**After**: 933 unit / 124 E2E.
+
+The last unit of the original plan, minus Supabase Realtime (see "Not done").
+
+## What this unit delivered
+
+### Surface 1 — the message preview (`components/console/WhatsAppBubble.tsx`)
+
+A mock chat bubble showing the exact prefilled draft, the raw `wa.me` URL, a
+character count with a soft warning, and the link card.
+
+**The one deviation from `tasks.md`, and it is the point of the unit.** Task
+`6b.9` and `design.md` both specify `<img src="/i/{slug}/opengraph-image">`. That
+is wrong, and Work Unit 4a had already established why by measurement: Next.js
+appends a build-scoped hash to the `og:image` it emits, and a CDN keys its cache
+on the full URL including that query. The bare route path is therefore a
+DIFFERENT cache entry from the one WhatsApp's crawler fetches — the operator
+would see a genuine card while the crawler's entry stayed cold, and the
+exploration's claim that "previewing IS warming" would be false as written.
+
+So the `<img src>` is the ADVERTISED `og:image`, reduced to a same-origin path.
+`lib/server/og-warm.ts` already extracted that URL from the page for warming;
+that extractor is now shared rather than duplicated, and
+`resolveAdvertisedCardPath` returns it as a path. No cache-busting parameter is
+added anywhere — one would be a third cache entry, warmed by nobody.
+
+Two origins are involved and they are not always the same. The URL the page
+ADVERTISES is built on `NEXT_PUBLIC_SITE_ORIGIN` (`metadataBase`); the origin the
+server can REACH to read that page is `consoleOrigin()`. In production they are
+one value; under the E2E server, behind a tunnel, or on a preview deployment they
+are not, and fetching the advertised origin there would reach nothing. Returning
+a PATH makes the browser resolve it back to the advertised absolute URL wherever
+the console is actually served.
+
+Resolution can fail. It then returns `null` and the pane says the card could not
+be loaded. It does NOT fall back to the bare path: a fallback would warm the
+wrong entry and silently re-introduce the exact bug this design exists to avoid.
+
+The pane is labelled **"Aproximado — el resultado real varía según el
+dispositivo"** and states all six known divergences uncollapsed (no `<details>`;
+a disclosure nobody opens is not a disclosure): undocumented "Ver más" folding
+thresholds, behavioural large-vs-small card selection, iOS/Android/Web
+differences, first-URL-only previews, the card appearing only once the sender's
+own client has fetched it, and Twemoji in the card versus native emoji in the
+text. They live in `lib/domain/message-preview.ts`, pinned by tests, so a markup
+refactor cannot quietly drop one.
+
+### Surface 2 — the body preview (`app/console/(authenticated)/preview/[invitationId]/page.tsx`)
+
+A separate admin-only route, inside the `(authenticated)` group so the same
+`requireOperator()` that guards every other console page guards it. **No new
+authorization axis exists**, and the public route is never taught the word
+"preview". The three rejected bypasses are recorded in the route's own header
+comment and in `consolePreviewPath`'s: `?preview=1` is a guessable permanently
+open hole on a URL every guest holds; a signed preview token is the phone gate's
+capability with no rate limit, leaking through history and `Referer`; an
+admin-session bypass makes the public route's authorization depend on two
+independent identities.
+
+It renders `InvitationBody` — already shared with `/i/[slug]` — from the same
+`toGuestFacingInvitation` projection, re-read through the guest-facing path
+rather than reshaped from the console row (which carries `phone_e164`). The RSVP
+slot is left empty: a preview must not offer a control that would write a
+household's answer for them. There is no gate preview, because an operator can
+open `/i/{slug}` and read the gate exactly as a guest does; the page links to it.
+
+Owned-only, and "does not exist", "is not yours" and "is not an identifier at
+all" are one answer.
+
+### The three WU6b-i findings — all closed
+
+| Finding | Closed by |
+|---|---|
+| `R3-dispatch-action-guard-unproved` | `app/console/(authenticated)/actions.spec.ts`, 21 tests. Mutation-checked: disabling the declaration gate and the ownership refusal fails 5 tests. |
+| `R3-beacon-route-refusals-unproved` | `app/console/api/dispatch-event/route.spec.ts`, 17 tests, plus 3 E2E. |
+| `R3-malformed-invitation-id-500` | `isWellFormedUuid` guard in `listConsoleInvitations`, before the round trip. |
+
+## Two defects found while proving the above
+
+**1. The beacon route's 401 was unreachable in production.** Writing the E2E half
+of `R3-beacon-route-refusals-unproved` produced a **307**, not a 401. The proxy
+matcher is `/console/:path*` and `resolveConsoleRedirect` bounced the
+unauthenticated beacon to the login form before the route handler ran. That is
+precisely the failure the route's own comment says it avoids: `sendBeacon`
+follows the redirect, receives the login page with a 200, and reports success
+while nothing was recorded. Fixed by exempting `/console/api/**` from the
+redirect — with the separator in the prefix test, so a page named
+`/console/apiary` does not inherit the exemption. The obligation this creates is
+stated in the constant's comment: a handler added under `/console/api` gets no
+redirect and MUST authenticate itself.
+
+**2. A pre-existing E2E fixture collision, ~2.8% of runs.** `seedOperator` built
+`contactPhone` as `+5730055{two digits}00`, which draws `+57300555100` about once
+in thirty runs. That string is a PREFIX of `+573005551001`, a guest number seeded
+by `console-guest-list.spec.ts` and legitimately rendered on the shared
+dashboard, so `console-auth.spec.ts`'s "no operator contact in console page
+source" assertion failed on a substring of somebody else's number — reporting a
+personal-data leak that had not happened. Measured at 5525/200000 draws before
+fixing. Moved to `+57301990####`, which shares no prefix with any guest fixture,
+so that assertion now fails only when the operator's own contact really is on the
+page. This was NOT caused by this unit's changes: the colliding guest number
+predates it.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 6b-ii.1 | `lib/domain/uuid.spec.ts` | Unit | N/A (new) | Import failed | 10 passed | 10 cases | Shared into 2 call sites |
+| 6b-ii.2 | `lib/server/invitations.spec.ts` | Unit + local Supabase | 37/37 | 2 failed (`22P02` raised) | 41 passed | 4 cases incl. a refusing client proving no round trip | Guard placed before query build |
+| 6b-ii.3 | `app/console/(authenticated)/actions.spec.ts` | Integration (mocked seams) | N/A (new) | Approval tests over an untested guard; mutation-checked → 5 failed with guards disabled | 21 passed | 21 cases | None needed |
+| 6b-ii.4 | `app/console/api/dispatch-event/route.spec.ts` | Integration (mocked seams) | N/A (new) | 1 failed (bad assertion, corrected) | 17 passed | 17 cases | Route switched to shared `isWellFormedUuid` |
+| 6b-ii.5 | `lib/domain/operator-session.spec.ts` | Unit | 48/48 | 2 failed | 53 passed | 6 cases incl. the `/console/apiary` negative | None needed |
+| 6b-ii.6 | `lib/server/og-warm.spec.ts` | Unit | 18/18 | 12 failed | 30 passed | 12 cases | One `og:image` extractor now shared with `warmOgCard` |
+| 6b-ii.7 | `lib/domain/message-preview.spec.ts` | Unit | N/A (new) | Import failed | 18 passed | 18 cases | None needed |
+| 6b-ii.8 | `components/console/WhatsAppBubble.spec.tsx` | Component (RTL) | N/A (new) | Import failed, then 2 ambiguous-query failures corrected | 18 passed | 18 cases + snapshot | Length assertions scoped to their own element |
+| 6b-ii.11 | `components/console/GuestList.spec.tsx` | Component (RTL) | 14/14 | 3 failed | 19 passed | 5 cases | None needed |
+| 6b-ii.12 | `e2e/console-preview.spec.ts` | E2E (Playwright) | 102 E2E | 1 failed (hydration markers), then 1 failed (the 307 defect) | 22 passed | 22 cases | Normalisation narrowed to `<!-- -->` only |
+
+### Test summary
+
+- Unit/component tests added: **114** (819 → 933)
+- E2E tests added: **22** (102 → 124)
+- Layers: Unit (85), Component (23 across two files), Integration-with-mocked-seams (38), E2E (22)
+- Approval tests over existing untested code: 38 (the two `R3-*-unproved` findings)
+- Pure functions created: `isWellFormedUuid`, `describeMessageLength`, `consolePreviewPath`
+
+### A note on the body-equality E2E
+
+The first run of "renders exactly what a guest sees after unlocking" failed on a
+single difference: React's empty `<!-- -->` text separators. React emits them
+only where a tree must stay hydratable, so the public route (which carries client
+components) gets them and the preview (which carries none) does not. They render
+nothing and are invisible to a reader. The comparison strips exactly that marker
+and the RSVP slot, and nothing else — element names, attributes, ordering,
+whitespace and every character of copy are still compared exactly. Everything
+else matched on the first attempt, including seat count, guest ordering and the
+unresolved placeholders.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npx vitest run components/console/WhatsAppBubble.spec.tsx lib/domain/message-preview.spec.ts lib/server/og-warm.spec.ts` — all passed |
+| Runtime harness | `PORT=3100 npx playwright test e2e/console-preview.spec.ts` — **22 passed** against a real production build, a real Postgres and a real magic-link session |
+| Rollback boundary | Deleting `components/console/WhatsAppBubble.*`, `lib/domain/message-preview.*`, `lib/domain/uuid.*`, `app/console/(authenticated)/preview/`, `e2e/console-preview.spec.ts`, and reverting the seven touched files restores `4bfcba8` exactly. Nothing in the database changed; no migration was added. |
+
+## Verification — actual observed output
+
+- `npm test`: **62 files, 933 passed** (baseline 819)
+- `PORT=3100 npm run e2e`: **124 passed** (baseline 102)
+- `npm run typecheck`: clean, exit 0
+- `npm run lint`: clean, exit 0
+- `npm run format:check`: "All matched files use Prettier code style!", exit 0
+- `npm run build`: succeeded; `/console/preview/[invitationId]` present in the route table as `ƒ` (dynamic)
+
+Every standing invariant re-ran green inside those suites: raw-HTML Open Graph
+under a WhatsApp User-Agent with no tags after `</head>`; no guest phone digits
+in guest-facing page source; exactly one unlock path with no query-parameter
+bypass and no console session becoming an unlock (now also asserted from the
+console side, with a live operator session, in `console-preview.spec.ts`); the
+`nullif` mutation test; `service_role` append-only; seat parity; `rsvp_latest`
+reducing to one row; external anon-key RLS; and the operator-session refresh test.
+
+## Not done, deliberately
+
+**`6b.15` — Supabase Realtime on `dispatch_events`.** Excluded from this unit. It
+is a live-update concern rather than a preview surface, it needs a publication
+and RLS decision plus probably a migration, and adding it would have pushed this
+unit past its changed-line ceiling. It is now the only item of the original Work
+Unit 6b left outstanding, and it is recorded as `6b-ii.14`.
+
+Also untouched, as instructed: the public ceremony page, reminders and resend,
+rehearsal mode, the two SUGGESTION findings from WU6b-i, and the three open WU3
+WARNINGs.
+
+## Status
+
+13/14 Work Unit 6b-ii tasks complete; `6b.8`–`6b.14` and `6b.16` are now closed.
+Only `6b.15` (Realtime) remains open in Phase 6b. Working tree left uncommitted
+and fully normalized. Ready for `sdd-verify`.

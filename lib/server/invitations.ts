@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain/console-list";
 import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
 import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
+import { isWellFormedUuid } from "@/lib/domain/uuid";
 
 /**
  * Invitation repository and import validation.
@@ -667,6 +668,21 @@ export async function listConsoleInvitations(
   client: SupabaseClient,
   options: ConsoleListOptions,
 ): Promise<readonly ConsoleListRow[]> {
+  // A malformed id cannot name a row, so it is answered WITHOUT a round trip —
+  // the same reasoning, and the same shape of guard, as `isWellFormedSlug` on
+  // the public invitation route. `invitations.id` is a `uuid` column and
+  // Postgres answers an unparseable value with `22P02 invalid input syntax for
+  // type uuid` rather than with zero rows; passed through, that became a thrown
+  // error and a 500, so a mistyped console URL reported a broken server instead
+  // of a missing invitation. Catching `22P02` after the fact would give the same
+  // answer while still paying for every probe.
+  if (
+    options.invitationId !== undefined &&
+    !isWellFormedUuid(options.invitationId)
+  ) {
+    return [];
+  }
+
   let query = client
     .from("invitations")
     .select(CONSOLE_INVITATION_SELECT)

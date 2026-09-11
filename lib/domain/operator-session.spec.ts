@@ -5,6 +5,7 @@ import {
   CONSOLE_ROOT_PATH,
   OPERATOR_IDENTITY_HEADER,
   applyOperatorIdentityHeader,
+  consolePreviewPath,
   isConsolePath,
   normalizeAllowlistEmail,
   readOperatorIdentityHeader,
@@ -226,5 +227,98 @@ describe("normalizeAllowlistEmail", () => {
     { raw: undefined, reason: "undefined" },
   ])("rejects $reason", ({ raw }) => {
     expect(normalizeAllowlistEmail(raw)).toBeNull();
+  });
+});
+
+/**
+ * The operator's body-preview route.
+ *
+ * A SEPARATE admin-only path, and that separation is the security decision the
+ * exploration settled. Three alternatives were considered and rejected for the
+ * public route: `?preview=1` is a guessable, permanently open hole on a URL
+ * every guest already holds; a signed preview token is the same capability as
+ * the phone gate with no rate limit, and it leaks through history and referrers;
+ * and an admin-session bypass would make the public route's authorization depend
+ * on two independent identities, which is exactly where authorization bugs live.
+ * A separate console path adds no new authorization axis at all — it is behind
+ * the same `requireOperator()` as every other console page.
+ */
+describe("consolePreviewPath", () => {
+  it("builds the preview path for one invitation", () => {
+    expect(consolePreviewPath("11111111-1111-4111-8111-111111111111")).toBe(
+      "/console/preview/11111111-1111-4111-8111-111111111111",
+    );
+  });
+
+  it("builds a different path for a different invitation", () => {
+    expect(consolePreviewPath("22222222-2222-4222-8222-222222222222")).toBe(
+      "/console/preview/22222222-2222-4222-8222-222222222222",
+    );
+  });
+
+  it("stays inside the console, so the console's auth gate covers it", () => {
+    expect(
+      isConsolePath(consolePreviewPath("11111111-1111-4111-8111-111111111111")),
+    ).toBe(true);
+  });
+
+  it("carries no query parameter, because it needs no bypass", () => {
+    // The public route is never told the word "preview". This path is a
+    // different route, not a different mode of the gated one.
+    expect(
+      consolePreviewPath("11111111-1111-4111-8111-111111111111"),
+    ).not.toContain("?");
+  });
+});
+
+/**
+ * Console API routes must never be redirected.
+ *
+ * Found by the end-to-end test for the beacon route's refusals, and it was a
+ * real defect rather than a test detail. `app/console/api/dispatch-event`
+ * deliberately answers an unauthenticated post with 401 and never with a
+ * redirect, because `navigator.sendBeacon` cannot act on a redirect: it follows
+ * it, receives the login page with a 200, and reports success while nothing was
+ * recorded at all. The proxy sat in front of that route and redirected first,
+ * so the 401 the route was written to send was unreachable in production and
+ * every unauthenticated `link_opened` was silently lost.
+ *
+ * The redirect exists to put a PERSON in front of a login form. A machine
+ * caller is not a person, and these routes each authenticate themselves.
+ */
+describe("resolveConsoleRedirect — console API routes", () => {
+  it("never redirects an unauthenticated console API request", () => {
+    expect(
+      resolveConsoleRedirect("/console/api/dispatch-event", false),
+    ).toBeNull();
+  });
+
+  it("never redirects an authenticated console API request either", () => {
+    expect(
+      resolveConsoleRedirect("/console/api/dispatch-event", true),
+    ).toBeNull();
+  });
+
+  it("leaves any other console API route alone as well", () => {
+    expect(resolveConsoleRedirect("/console/api", false)).toBeNull();
+    expect(
+      resolveConsoleRedirect("/console/api/anything/else", false),
+    ).toBeNull();
+  });
+
+  it("still redirects an unauthenticated console PAGE to the login form", () => {
+    // The complement: the exemption must be the API prefix and not the console.
+    expect(resolveConsoleRedirect("/console", false)).toBe(CONSOLE_LOGIN_PATH);
+    expect(resolveConsoleRedirect("/console/preview/abc", false)).toBe(
+      CONSOLE_LOGIN_PATH,
+    );
+  });
+
+  it("does not exempt a page whose name merely starts with the prefix", () => {
+    // `/console/apiary` is a page, not an API route. A `startsWith` without the
+    // separator would hand it the exemption and leave it unguarded.
+    expect(resolveConsoleRedirect("/console/apiary", false)).toBe(
+      CONSOLE_LOGIN_PATH,
+    );
   });
 });

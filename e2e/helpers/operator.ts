@@ -53,7 +53,17 @@ export async function seedOperator(
   const suffix = randomBytes(4).toString("hex");
   const allowlistedEmail = `operator.${suffix}.${Date.now()}@example.test`;
   const displayName = options.displayName ?? `Operadora ${suffix}`;
-  const contactPhone = `+5730055${suffix.slice(0, 2).replace(/\D/g, "1")}00`;
+  // A block no GUEST fixture uses. The previous value was
+  // `+5730055{two digits}00`, which drew `+57300555100` about once every thirty
+  // runs — and that string is a PREFIX of `+573005551001`, a guest number seeded
+  // by `console-guest-list.spec.ts` and legitimately rendered in the shared
+  // dashboard. The console-auth assertion that no operator contact appears in
+  // console page source then failed on a substring of somebody else's number,
+  // reporting a personal-data leak that had not happened. `+57301990####` shares
+  // no prefix with any guest fixture, so that assertion now fails only when the
+  // operator's own contact really is on the page. Fabricated, like every number
+  // in this suite: a real guest number must never enter a fixture.
+  const contactPhone = `+57301990${suffix.slice(0, 4).replace(/\D/g, "1")}`;
   const db = await connect();
 
   let senderId: string;

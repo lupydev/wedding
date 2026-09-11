@@ -946,4 +946,79 @@ describe("listConsoleInvitations (local Supabase)", () => {
       ).toBeNull();
     });
   });
+
+  /**
+   * A malformed id is a MISSING invitation, not a broken server.
+   *
+   * `invitations.id` is a `uuid` column, and Postgres answers a value it cannot
+   * parse with `22P02 invalid input syntax for type uuid` rather than with zero
+   * rows. Passed straight through, that became a thrown error and a 500 — so a
+   * mistyped console URL reported that the application was down, and every probe
+   * with a nonsense id cost a round trip and an error log entry.
+   *
+   * The route already answers "does not exist" and "belongs to the other
+   * operator" identically. A malformed id belongs in that same answer.
+   */
+  it("answers a malformed invitation id as not-found instead of raising", async () => {
+    await withConsoleFixture(async (fixture) => {
+      expect(
+        await findConsoleInvitation(createServerSupabaseClient(), {
+          invitationId: "not-a-uuid",
+          viewerSenderId: fixture.anaId,
+          defaultCountry: "CO",
+        }),
+      ).toBeNull();
+    });
+  });
+
+  it("answers an empty invitation id as not-found instead of raising", async () => {
+    await withConsoleFixture(async (fixture) => {
+      expect(
+        await findConsoleInvitation(createServerSupabaseClient(), {
+          invitationId: "",
+          viewerSenderId: fixture.anaId,
+          defaultCountry: "CO",
+        }),
+      ).toBeNull();
+    });
+  });
+
+  it("answers a malformed id without querying the database at all", async () => {
+    await withConsoleFixture(async (fixture) => {
+      // The guard is worth having only if it runs BEFORE the round trip: a
+      // version that caught `22P02` afterwards would still pay for every probe.
+      // A client whose `from` throws proves nothing was asked.
+      const refusingClient = {
+        from: () => {
+          throw new Error(
+            "the database must not be queried for a malformed id",
+          );
+        },
+      } as never;
+
+      expect(
+        await findConsoleInvitation(refusingClient, {
+          invitationId: "11111111-1111-4111-8111-11111111111",
+          viewerSenderId: fixture.anaId,
+          defaultCountry: "CO",
+        }),
+      ).toBeNull();
+    });
+  });
+
+  it("still queries for a well-formed id", async () => {
+    // The complement of the test above: the guard must not have become a
+    // blanket refusal that returns null for everything.
+    await withConsoleFixture(async (fixture) => {
+      expect(
+        (
+          await findConsoleInvitation(createServerSupabaseClient(), {
+            invitationId: fixture.anaInvitationId,
+            viewerSenderId: fixture.anaId,
+            defaultCountry: "CO",
+          })
+        )?.invitationId,
+      ).toBe(fixture.anaInvitationId);
+    });
+  });
 });

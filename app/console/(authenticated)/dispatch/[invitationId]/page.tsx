@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation";
 
 import { DispatchLauncher } from "@/components/console/DispatchLauncher";
+import { WhatsAppBubble } from "@/components/console/WhatsAppBubble";
 import { dispatchIsBlockedBy } from "@/lib/domain/device-declaration";
 import {
   DISPATCH_EVENT_BEACON_PATH,
   buildInvitationDispatchLink,
+  buildInvitationMessage,
   selectDispatchRecipient,
 } from "@/lib/domain/dispatch-message";
+import { buildInvitationMetadataText } from "@/lib/domain/og-card";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
 import {
   requireDeclaredDevice,
@@ -14,7 +17,10 @@ import {
 } from "@/lib/server/console-session";
 import { requiredDefaultPhoneCountry, siteOrigin } from "@/lib/server/env";
 import { findConsoleInvitation } from "@/lib/server/invitations";
-import { invitationPageUrl } from "@/lib/server/og-warm";
+import {
+  invitationPageUrl,
+  resolveAdvertisedCardPath,
+} from "@/lib/server/og-warm";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
 import {
@@ -41,6 +47,15 @@ import {
  * greeting and the invitation URL. That is enforced in `dispatch-message.ts` and
  * explained there; the consequence for this file is that it passes a URL and a
  * name and has nothing else to pass.
+ *
+ * THE PREVIEW PANE RESOLVES THE CARD URL HERE, AND ONLY HERE. The mock bubble's
+ * one real claim is that its image is the bytes WhatsApp will fetch, and that
+ * holds only while it requests the URL the invitation page ADVERTISES rather
+ * than the bare route path — Next appends a build-scoped hash and a CDN keys on
+ * the full URL. Resolving it needs a server-side read of the page, so it happens
+ * in this async container and arrives at the props-only component as a string.
+ * A failure yields `null`, and the pane says the card could not be loaded rather
+ * than falling back to a URL nothing will ever request.
  */
 
 export default async function DispatchPage({
@@ -104,6 +119,12 @@ export default async function DispatchPage({
     );
   }
 
+  const invitationUrl = invitationPageUrl(siteOrigin(), invitation.slug);
+  const cardText = buildInvitationMetadataText(invitation);
+  // Resolved from the page itself rather than assembled here: the advertised
+  // query is a property of the build, not something this route can derive.
+  const cardImagePath = await resolveAdvertisedCardPath(invitation.slug);
+
   return (
     <main className="console__main">
       <DispatchLauncher
@@ -113,12 +134,30 @@ export default async function DispatchPage({
         waUrl={buildInvitationDispatchLink({
           recipientE164: recipient.phoneE164,
           greetingName: invitation.greetingName,
-          invitationUrl: invitationPageUrl(siteOrigin(), invitation.slug),
+          invitationUrl,
         })}
         beaconPath={DISPATCH_EVENT_BEACON_PATH}
         dispatchState={invitation.dispatchState}
         markSentAction={markDispatchSentAction}
         markFailedAction={markDispatchFailedAction}
+      />
+
+      {/* The same two pure builders the launcher's link came from, so the text
+          the operator reads and the text that gets sent cannot disagree. */}
+      <WhatsAppBubble
+        messageText={buildInvitationMessage({
+          greetingName: invitation.greetingName,
+          invitationUrl,
+        })}
+        waUrl={buildInvitationDispatchLink({
+          recipientE164: recipient.phoneE164,
+          greetingName: invitation.greetingName,
+          invitationUrl,
+        })}
+        cardImagePath={cardImagePath}
+        cardTitle={cardText.title}
+        cardDescription={cardText.description}
+        cardLinkLabel={new URL(siteOrigin()).host}
       />
 
       <a href={CONSOLE_ROOT_PATH}>Volver al panel</a>

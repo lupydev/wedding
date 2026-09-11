@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
-import { invitationPageUrl, ogCardUrl, warmOgCard } from "./og-warm";
+import {
+  invitationPageUrl,
+  ogCardUrl,
+  resolveAdvertisedCardPath,
+  warmOgCard,
+} from "./og-warm";
 
 /**
  * Warming exists because of one asymmetry: `next/og` answers with
@@ -376,5 +381,209 @@ describe("warmOgCard", () => {
     // Warm logs reach ordinary log storage. A guest phone must never be in one,
     // including one an underlying library happened to put in an error message.
     expect(line).not.toMatch(/\d{7,}/);
+  });
+});
+
+/**
+ * The resolver the console's message preview reads.
+ *
+ * The preview's whole claim is that the image the operator is looking at is the
+ * image WhatsApp will fetch. That is only true if the browser requests the
+ * SAME URL the crawler will — which means the advertised one, hash query and
+ * all, because a CDN keys on the full URL. Pointing an `<img>` at the bare route
+ * path would be a second cache entry and pointing it at a cache-busted one would
+ * be a third: both would show the operator a real card and warm nothing.
+ *
+ * Two origins are involved and they are not always the same one. The URL the
+ * page ADVERTISES is built on the public origin (`metadataBase`), while the
+ * origin the server can actually REACH to read that page is the console's own.
+ * In production they are one value; on a preview deployment, behind a tunnel, or
+ * under the end-to-end server they are not. So the resolver reads from the
+ * reachable origin and returns the advertised URL as a same-origin PATH, which
+ * resolves back to the advertised absolute URL wherever the console is served.
+ */
+describe("resolveAdvertisedCardPath", () => {
+  const REACHABLE = "http://127.0.0.1:3100";
+
+  it("returns the advertised path including the build hash query", async () => {
+    const { impl } = fakeFetch({
+      page: html(pageAdvertising(ADVERTISED_CARD_URL)),
+    });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: ORIGIN,
+        fetchImpl: impl,
+      }),
+    ).toBe(`/i/${SLUG}/opengraph-image?88f8dd536f697fc4`);
+  });
+
+  it("returns the bare path when the page advertises no query", async () => {
+    // Whether Next appends a hash is a property of the build, not a promise.
+    // Either way the answer is exactly what the page advertises.
+    const { impl } = fakeFetch({ page: html(pageAdvertising(CARD_URL)) });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: ORIGIN,
+        fetchImpl: impl,
+      }),
+    ).toBe(`/i/${SLUG}/opengraph-image`);
+  });
+
+  it("reads the page from the reachable origin, not the advertised one", async () => {
+    const { impl, requested } = fakeFetch({
+      page: html(pageAdvertising(ADVERTISED_CARD_URL)),
+    });
+
+    await resolveAdvertisedCardPath(SLUG, {
+      origin: ORIGIN,
+      readOrigin: REACHABLE,
+      fetchImpl: impl,
+    });
+
+    expect(requested).toEqual([`${REACHABLE}/i/${SLUG}`]);
+  });
+
+  it("still returns the advertised path when the two origins differ", async () => {
+    const { impl } = fakeFetch({
+      page: html(pageAdvertising(ADVERTISED_CARD_URL)),
+    });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: REACHABLE,
+        fetchImpl: impl,
+      }),
+    ).toBe(`/i/${SLUG}/opengraph-image?88f8dd536f697fc4`);
+  });
+
+  it("never fetches the card itself — the browser is what warms it", async () => {
+    // If this resolver fetched the card, the preview would warm the entry twice
+    // and the `<img>` would still have to point somewhere. It resolves only.
+    const { impl, requested } = fakeFetch({
+      page: html(pageAdvertising(ADVERTISED_CARD_URL)),
+    });
+
+    await resolveAdvertisedCardPath(SLUG, {
+      origin: ORIGIN,
+      readOrigin: ORIGIN,
+      fetchImpl: impl,
+    });
+
+    expect(requested.some((url) => url.includes("/opengraph-image"))).toBe(
+      false,
+    );
+  });
+
+  it("adds no cache-busting parameter of its own", async () => {
+    const { impl } = fakeFetch({ page: html(pageAdvertising(CARD_URL)) });
+
+    const resolved = await resolveAdvertisedCardPath(SLUG, {
+      origin: ORIGIN,
+      readOrigin: ORIGIN,
+      fetchImpl: impl,
+    });
+
+    expect(resolved).not.toMatch(/[?&](t|v|cb|_)=/);
+  });
+
+  it("returns null when the page advertises no og:image", async () => {
+    const log = vi.fn();
+    const { impl } = fakeFetch({
+      page: html("<html><head></head><body></body></html>"),
+    });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: ORIGIN,
+        fetchImpl: impl,
+        log,
+      }),
+    ).toBeNull();
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null when the advertised card belongs to another invitation", async () => {
+    // The preview follows a URL read out of an HTTP response body. It follows
+    // it only when it is this invitation's own card on our own origin.
+    const { impl } = fakeFetch({
+      page: html(
+        pageAdvertising(`${ORIGIN}/i/zzzzzzzzzzzzzzzz/opengraph-image?abc`),
+      ),
+    });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: ORIGIN,
+        fetchImpl: impl,
+        log: vi.fn(),
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when the advertised card is on a foreign origin", async () => {
+    const { impl } = fakeFetch({
+      page: html(
+        pageAdvertising(`https://evil.example/i/${SLUG}/opengraph-image`),
+      ),
+    });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: ORIGIN,
+        fetchImpl: impl,
+        log: vi.fn(),
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when the page cannot be read at all", async () => {
+    const { impl } = fakeFetch({ page: new Error("connection refused") });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: ORIGIN,
+        fetchImpl: impl,
+        log: vi.fn(),
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when the page responds with an error status", async () => {
+    const { impl } = fakeFetch({ page: html("gone", 404) });
+
+    expect(
+      await resolveAdvertisedCardPath(SLUG, {
+        origin: ORIGIN,
+        readOrigin: ORIGIN,
+        fetchImpl: impl,
+        log: vi.fn(),
+      }),
+    ).toBeNull();
+  });
+
+  it("scrubs digit runs out of anything it logs", async () => {
+    const log = vi.fn();
+    const { impl } = fakeFetch({
+      page: new Error("failed for +573001234567"),
+    });
+
+    await resolveAdvertisedCardPath(SLUG, {
+      origin: ORIGIN,
+      readOrigin: ORIGIN,
+      fetchImpl: impl,
+      log,
+    });
+
+    expect(String(log.mock.calls[0][0])).not.toContain("3001234567");
+    expect(String(log.mock.calls[0][0])).toContain("[redacted]");
   });
 });

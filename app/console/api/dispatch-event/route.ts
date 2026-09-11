@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isWellFormedUuid } from "@/lib/domain/uuid";
 import { currentOperator } from "@/lib/server/console-session";
 import { recordLinkOpened } from "@/lib/server/dispatch";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
@@ -34,10 +35,6 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
  * reads this response in any case — a beacon has no reader.
  */
 
-/** A v4-shaped identifier. Both fields are ids, and neither may be free text. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 interface BeaconPayload {
   readonly invitationId: string;
   readonly clientEventId: string;
@@ -69,8 +66,11 @@ async function readPayload(request: Request): Promise<BeaconPayload | null> {
   if (
     typeof invitationId !== "string" ||
     typeof clientEventId !== "string" ||
-    !UUID_PATTERN.test(invitationId) ||
-    !UUID_PATTERN.test(clientEventId)
+    // Both fields are ids, and neither may be free text: an unshaped value
+    // would reach the driver and return `22P02`, turning "that is not an
+    // identifier" into a 500. The same guard the console reads apply here.
+    !isWellFormedUuid(invitationId) ||
+    !isWellFormedUuid(clientEventId)
   ) {
     return null;
   }

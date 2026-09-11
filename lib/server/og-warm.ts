@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { siteOrigin } from "@/lib/server/env";
+import { consoleOrigin, siteOrigin } from "@/lib/server/env";
 
 /**
  * Open Graph card warming.
@@ -97,6 +97,104 @@ function advertisedCardUrl(pageHtml: string): string | null {
   const content = /content="([^"]*)"/i.exec(tag[0]);
 
   return content === null ? null : content[1];
+}
+
+export interface AdvertisedCardOptions {
+  /** The origin the card URL is ADVERTISED on. Defaults to the site origin. */
+  readonly origin?: string;
+  /**
+   * The origin the page is READ from.
+   *
+   * Defaults to the console's origin, which is the address this server is
+   * reachable at. In production it equals `origin`; on a preview deployment,
+   * behind a tunnel, or under the end-to-end server it does not, and fetching
+   * the advertised origin there would reach nothing.
+   */
+  readonly readOrigin?: string;
+  readonly timeoutMs?: number;
+  readonly fetchImpl?: typeof fetch;
+  /** Receives one structured warning line per failure. */
+  readonly log?: (line: string) => void;
+}
+
+/**
+ * The card URL one invitation page advertises, as a SAME-ORIGIN path.
+ *
+ * This is what the console's message preview points its `<img>` at, and the
+ * reason it exists as its own function is that the preview's entire claim is
+ * that the operator is looking at the bytes WhatsApp will fetch. That claim
+ * survives only if the browser requests the URL the crawler will request, hash
+ * query included, because a CDN keys on the full URL. The bare route path is a
+ * second cache entry; a cache-busted URL would be a third. Both would render a
+ * real card and warm nothing — which is also why the console preview genuinely
+ * doubles as a warm, rather than merely being described as one.
+ *
+ * A PATH rather than an absolute URL, because the advertised origin is not
+ * always an origin the operator's browser is currently on. Returned relative, it
+ * resolves back to exactly the advertised absolute URL wherever the console is
+ * served from, and it stays loadable everywhere else.
+ *
+ * Returns `null` on every failure, having logged a scrubbed reason. A preview
+ * that cannot prove which URL the crawler will fetch must say so, not guess:
+ * guessing is what produces the wrong cache entry this whole function exists to
+ * avoid.
+ */
+export async function resolveAdvertisedCardPath(
+  slug: string,
+  options: AdvertisedCardOptions = {},
+): Promise<string | null> {
+  const doFetch = options.fetchImpl ?? fetch;
+
+  let origin: string;
+  let readOrigin: string;
+  try {
+    origin = options.origin ?? siteOrigin();
+    readOrigin = options.readOrigin ?? consoleOrigin();
+  } catch (cause) {
+    warnOnce(options.log, slug, (cause as Error).message);
+    return null;
+  }
+
+  const canonicalPrefix = ogCardUrl(origin, slug);
+
+  try {
+    const page = await doFetch(invitationPageUrl(readOrigin, slug), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(options.timeoutMs ?? OG_WARM_TIMEOUT_MS),
+    });
+
+    if (!page.ok) {
+      warnOnce(options.log, slug, `invitation page responded ${page.status}`);
+      return null;
+    }
+
+    const advertised = advertisedCardUrl(await page.text());
+
+    if (advertised === null) {
+      warnOnce(
+        options.log,
+        slug,
+        "the invitation page advertises no og:image, so there is no card to preview",
+      );
+      return null;
+    }
+
+    // The URL was read out of an HTTP response body. It is used only when it is
+    // this invitation's own card on our own origin.
+    if (!advertised.startsWith(canonicalPrefix)) {
+      warnOnce(
+        options.log,
+        slug,
+        "the advertised og:image does not belong to this invitation",
+      );
+      return null;
+    }
+
+    return advertised.slice(origin.length);
+  } catch (cause) {
+    warnOnce(options.log, slug, (cause as Error).message);
+    return null;
+  }
 }
 
 /**
