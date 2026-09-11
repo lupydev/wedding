@@ -1,3 +1,4 @@
+import { DispatchPreflight } from "@/components/console/DispatchPreflight";
 import { GuestList } from "@/components/console/GuestList";
 import { ProgressSummary } from "@/components/console/ProgressSummary";
 import {
@@ -7,6 +8,7 @@ import {
   summarizeConsoleList,
 } from "@/lib/domain/console-list";
 import { dispatchIsBlockedBy } from "@/lib/domain/device-declaration";
+import { buildDispatchPreflight } from "@/lib/domain/dispatch-preflight";
 import {
   requireDeclaredDevice,
   requireOperator,
@@ -42,7 +44,11 @@ import { updateGuestPhoneAction } from "./actions";
 export default async function ConsolePage() {
   const operator = await requireOperator();
   const declaration = await requireDeclaredDevice(operator.id);
-  const readOnly = dispatchIsBlockedBy(declaration.status);
+  // Blocks the send affordance and nothing else. Editing a phone number sends
+  // no message, so the declaration gate has no business stopping it — and a
+  // mismatched handset is exactly when the preflight is telling the operator to
+  // go and fix numbers.
+  const dispatchBlocked = dispatchIsBlockedBy(declaration.status);
 
   const client = createServerSupabaseClient();
   const defaultCountry = requiredDefaultPhoneCountry();
@@ -73,10 +79,17 @@ export default async function ConsolePage() {
           )}
         />
 
+        <DispatchPreflight
+          preflight={buildDispatchPreflight(
+            mine,
+            ownedPopulation(operator.displayName),
+          )}
+        />
+
         <GuestList
           rows={mine}
           updatePhoneAction={updateGuestPhoneAction}
-          readOnly={readOnly}
+          dispatchBlocked={dispatchBlocked}
           emptyMessage="Todavía no hay invitaciones a tu nombre."
         />
       </section>
@@ -106,6 +119,7 @@ export default async function ConsolePage() {
           // other operator's partition, and `updateGuestPhoneAction` refuses
           // them on the server anyway.
           readOnly={true}
+          dispatchBlocked={true}
           emptyMessage="La otra cuenta todavía no tiene invitaciones a su nombre."
         />
       </section>

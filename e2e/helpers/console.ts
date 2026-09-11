@@ -78,6 +78,14 @@ export interface ConsoleInvitationSeed {
   ) => Promise<void>;
   /** The stored E.164 number of one guest, read straight from the row. */
   readonly storedPhone: (fullName: string) => Promise<string | null>;
+  /** The whole dispatch log for this invitation, oldest first. */
+  readonly dispatchEvents: () => Promise<
+    readonly {
+      kind: string;
+      actorSenderId: string;
+      clientEventId: string | null;
+    }[]
+  >;
   readonly cleanup: () => Promise<void>;
 }
 
@@ -174,6 +182,29 @@ export async function seedConsoleInvitation(options: {
           );
 
           return result.rows[0]?.phone_e164 ?? null;
+        } finally {
+          await reader.end();
+        }
+      },
+
+      dispatchEvents: async () => {
+        const reader = await connect();
+        try {
+          const result = await reader.query<{
+            kind: string;
+            actor_sender_id: string;
+            client_event_id: string | null;
+          }>(
+            `select kind, actor_sender_id, client_event_id
+             from dispatch_events where invitation_id = $1 order by occurred_at`,
+            [invitationId],
+          );
+
+          return result.rows.map((row) => ({
+            kind: row.kind,
+            actorSenderId: row.actor_sender_id,
+            clientEventId: row.client_event_id,
+          }));
         } finally {
           await reader.end();
         }

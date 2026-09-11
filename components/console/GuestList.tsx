@@ -6,6 +6,7 @@ import {
   RSVP_ANSWER_LABELS,
   type ConsoleListRow,
 } from "@/lib/domain/console-list";
+import { consoleDispatchPath } from "@/lib/domain/dispatch-message";
 
 import { GuestPhoneField } from "./GuestPhoneField";
 
@@ -40,8 +41,22 @@ export interface GuestListProps {
   readonly rows: readonly ConsoleListRow[];
   /** Bound Server Action for the inline phone editor. */
   readonly updatePhoneAction: (formData: FormData) => void | Promise<void>;
-  /** True while the device declaration blocks dispatch; the list stays readable. */
+  /**
+   * True for a partition this operator may not edit at all — the other
+   * operator's households. `updateGuestPhoneAction` refuses them server-side
+   * too; withdrawing the control is the layer a person sees.
+   */
   readonly readOnly?: boolean;
+  /**
+   * True while this device's WhatsApp declaration disagrees with the session.
+   *
+   * DELIBERATELY SEPARATE FROM `readOnly`. The device gate exists so a message
+   * does not leave from the wrong WhatsApp account; correcting a typo in a phone
+   * number sends nothing, so that gate has no business blocking it. Wiring the
+   * two together meant being on the wrong handset prevented fixing the very data
+   * the send preflight was telling the operator to go and fix.
+   */
+  readonly dispatchBlocked?: boolean;
   readonly emptyMessage: string;
 }
 
@@ -61,6 +76,7 @@ export function GuestList({
   rows,
   updatePhoneAction,
   readOnly = false,
+  dispatchBlocked = false,
   emptyMessage,
 }: GuestListProps) {
   if (rows.length === 0) {
@@ -109,14 +125,13 @@ export function GuestList({
 
           {/*
             The send affordance exists only for a row this operator owns, and
-            only while the device declaration agrees with the session. Its
-            target — the compose view — is work unit 6b; this unit decides who
-            may reach it.
+            only while the device declaration agrees with the session — the one
+            thing that gate is for. Editing a number stays available either way.
           */}
-          {row.ownedByViewer && !readOnly && (
+          {row.ownedByViewer && !dispatchBlocked && (
             <a
               className="guest-list__dispatch-link"
-              href={`/console/dispatch/${row.invitationId}`}
+              href={consoleDispatchPath(row.invitationId)}
             >
               Preparar envío para {row.greetingName}
             </a>

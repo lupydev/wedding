@@ -2715,3 +2715,253 @@ invariants; and the operator-session refresh test from 6a-i.
 
 12/12 Work Unit 6a-ii tasks complete; tasks `6a.5`–`6a.14` are now closed. Working tree
 left uncommitted and fully normalized. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 6b-i — Dispatch and the Send Preflight
+
+The first half of Work Unit 6b. It makes the console send something: a `wa.me`
+link addressed to a household, opened by a human, recorded in two steps. Both
+preview surfaces, the `InvitationBody` extraction and Realtime are deliberately
+left to Work Unit 6b-ii. It also carries one fix from the 6a-ii review.
+
+## Why the dispatch is two steps and not one
+
+The application has no sensor for a delivery. Opening `wa.me` hands a draft to
+WhatsApp and a human presses the button — or does not, or picks the wrong chat,
+or runs out of battery. So `link_opened` claims exactly one thing, that WhatsApp
+was opened, and `countsAsOperatorAssertedSend` keeps refusing it. The send itself
+is an explicit confirmation from the only sensor this design has, and the compose
+view says so in words rather than letting an opened link quietly read as a
+delivery.
+
+## The ordering, which is the most important thing in the unit
+
+Navigating to `wa.me` LEAVES the page. An ordinary `fetch` is cancelled on
+unload; an awaited one delays the navigation the operator just asked for. So:
+
+1. `postEventBeacon` writes `link_opened` FIRST and returns synchronously.
+2. `browserNavigation.assign(waUrl)` runs next, unconditionally — never guarded
+   by the write's result and never after an `await`.
+3. `openWhatsApp` is deliberately NOT `async`. An `async` handler invites an
+   `await` between those two statements, and one `await` is all it takes to make
+   a guest wait on a logging endpoint for their invitation.
+
+Two tests hold that line. One records the call order and asserts
+`["beacon", "navigate"]`. The other clicks with `fireEvent`, which does not flush
+microtasks, and asserts the navigation already happened — if anything were
+awaited, it would not have.
+
+`lib/browser/navigation.ts` exists only to be that seam. jsdom implements no
+navigation, so a component assigning `window.location.href` inline could only be
+tested against a "Not implemented" warning. It has no unit test of its own, is
+one branchless assignment, and the E2E follows it for real.
+
+## Why the retry is unconditional
+
+The design asks the console to re-post the stashed `client_event_id` "only if no
+matching row exists yet". That check is exactly what
+`dispatch_events_client_event_idx` performs — atomically, server-side. A
+read-then-write in the browser would be the same deduplication with a race added
+and an extra round trip before it. So the retry is unconditional,
+`recordDispatchEvent` catches SQLSTATE `23505` and reports `recorded: false`, and
+the E2E asserts that opening once and returning leaves exactly one `link_opened`
+row. **This is a deviation from `design.md`'s wording and not from its intent**;
+task `6b.6` is annotated accordingly.
+
+## The preflight
+
+Built because a reference project's most useful screen was not a rendered
+preview — it was the readiness check that ran before anything was spent. Three
+groups, because each is a different piece of work for a person:
+
+| Group | What it means | What the operator does |
+|---|---|---|
+| `no_phone_on_file` | Nobody in the household has a number | Type one into the row |
+| `no_reachable_phone` | The number is valid and cannot carry WhatsApp | Find a mobile |
+| `already_dispatched` | Somebody already confirmed this one went out | Do not send it again |
+
+`no_reachable_phone` reuses `classifyPhoneDispatchability`: a Colombian landline
+is a perfectly valid E.164 number that no WhatsApp will ever answer, and
+dispatching to it records a send nobody receives. `already_dispatched` uses
+`countsAsOperatorAssertedSend`, so `link_opened` and `marked_failed` stay in the
+ready list — both households are still waiting for an invitation.
+
+Classification precedence (already-dispatched wins) is deliberately NOT the
+display order (most actionable first), and both are documented on
+`PREFLIGHT_BLOCKER_ORDER`.
+
+**Names, never digits.** Every group names the household and the people involved
+and prints no stored number. Two tests hold it: one over every string the
+preflight builds, one over the rendered DOM, both with the same `/\d{7,}/` line
+the importer's output carries. The unit test excludes invitation ids explicitly —
+they are opaque and never rendered, and a UUID contains seven consecutive digits
+often enough by chance that including them would make the assertion a coin toss.
+
+## The message
+
+`{{greeting_name}}` and `{{invitation_url}}`, and nothing else. No date, no time,
+no venue, no address — a reference project hard-coded those into an approved
+template, the event moved, and delivered messages kept announcing the old venue
+while the page they linked to showed the new one. The rule is enforced rather
+than reviewed: a test asserts that removing the URL from a rendered message
+leaves no digit at all, so a hard-coded date cannot pass.
+
+`buildInvitationMessage` also refuses a message containing two URLs. Only the
+FIRST URL in a WhatsApp message produces a preview card, so a second link costs
+the card instead of adding one — and a household name is operator-entered text
+that could carry one.
+
+No couple names appear: nothing in this repository knows them, and
+`renderMessageTemplate` fails loudly rather than shipping `{{COUPLE_NAMES}}` to a
+guest. Task 7.1 is where a signature would be added.
+
+## Rehearsal mode: NOT built, on purpose
+
+A rehearsal would need its own `dispatch_events.kind`, because the reference
+project's sentinel-timestamp approach failed exactly as briefed — Postgres
+returned the sentinel in a different format than the app wrote it, the string
+comparison never matched, and the preflight counted rehearsals as real sends. A
+new kind means migration `0011` plus a matching down-script plus the RLS and
+append-only assertions every table in this repository carries, and this unit is
+already over its line ceiling. It is skipped entirely rather than half-built.
+
+## The 6a-ii review fix
+
+`updateGuestPhoneAction` no longer checks the device declaration. The gate exists
+so a message does not leave from the wrong WhatsApp account; correcting a typo in
+a phone number sends nothing, from any account. As originally wired, being on the
+wrong handset prevented fixing exactly the data the preflight tells the operator
+to go and fix — which is the state where entering it matters most.
+
+`GuestList` therefore takes two flags instead of one: `readOnly` for the other
+operator's partition (no editor at all) and `dispatchBlocked` for the declaration
+mismatch (no send affordance, editor intact). Dispatch stays blocked on mismatch
+at the server too, in `requireOwnedDispatch`, because the absent button is markup
+and markup is not a boundary. An E2E edits a number under an active mismatch and
+reads the stored E.164 back out.
+
+## Structure
+
+| Layer | Files |
+|---|---|
+| Domain (pure) | `lib/domain/dispatch-message.ts`, `lib/domain/dispatch-preflight.ts` |
+| Browser seams | `lib/browser/beacon.ts`, `lib/browser/navigation.ts` |
+| Adapters | `lib/server/dispatch.ts`, `findConsoleInvitation` in `lib/server/invitations.ts` |
+| Presentational | `components/console/{DispatchLauncher,DispatchPreflight}.tsx` |
+| Delivery | `app/console/(authenticated)/dispatch/[invitationId]/page.tsx`, `app/console/api/dispatch-event/route.ts`, `app/console/(authenticated)/actions.ts` |
+
+The compose view sits INSIDE the `(authenticated)` group so the device gate and
+the interstitial hold above it. The beacon route sits outside it, because a route
+handler takes no layout and needs none: it calls `currentOperator()` itself and
+answers 401 rather than redirecting, since a redirect is meaningless to a beacon.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 6b-i.1/6b-i.2 (message) | `lib/domain/dispatch-message.spec.ts` | Unit | N/A (new) | Import failed, 0 tests ran | 15 passed, then 17 | 17 cases | Route constants lifted out of `GuestList` |
+| 6b-i.3/6b-i.4 (preflight) | `lib/domain/dispatch-preflight.spec.ts` | Unit | N/A (new) | Import failed, 0 tests ran | 14 passed | 14 cases | `countSentence` extracted; `GROUP_COPY` table |
+| 6b-i.5 (beacon) | `lib/browser/beacon.spec.ts` | Unit (jsdom docblock) | N/A (new) | Import failed, 0 tests ran | 8 passed | 8 cases | Mocks retyped by signature to clear lint |
+| 6b-i.6/6b-i.7 (dispatch log) | `lib/server/dispatch.spec.ts` | DB (local Supabase) | N/A (new) | Import failed, then 12 failed on unset env | 12 passed | 12 cases | `storedEvents` reader extracted |
+| 6b-i.9/6b-i.10 (launcher) | `components/console/DispatchLauncher.spec.tsx` | Component (RTL) | N/A (new) | Import failed, 0 tests ran | 16 passed, then 17 | 17 cases | Mount reconcile deferred by a microtask |
+| 6b-i.11 (preflight UI) | `components/console/DispatchPreflight.spec.tsx` | Component (RTL) | N/A (new) | Import failed, 0 tests ran | 7 passed | 7 cases | `HouseholdLine` extracted |
+| 6b-i.12 (single read) | `lib/server/invitations.spec.ts` | DB | 34/34 pre-existing green | 3 failed / 34 passed | 37 passed | 3 cases | `invitationId` reuses the list's `WHERE` |
+| 6b-i.15 (list decoupling) | `components/console/GuestList.spec.tsx` | Component (RTL) | 19/19 pre-existing green (with `GuestPhoneField`) | 1 failed / 13 passed | 14 passed | 2 cases | `readOnly` split from `dispatchBlocked` |
+| 6b-i.13/6b-i.14/6b-i.16 (routes) | `e2e/console-dispatch.spec.ts` | E2E (Playwright) | 88/88 pre-existing green | 2 successive genuine failures | 14 passed | 14 scenarios | Operator display names made unique per run |
+
+### Test summary
+
+- Tests written: **80 unit/component** (739 → 819) and **14 E2E** (88 → 102).
+- Layers: Unit 39, Component 24, DB 12 (inside the unit runner), jsdom-in-unit 8,
+  E2E 14.
+- Pure functions created: 7 (`buildInvitationMessage`,
+  `buildInvitationDispatchLink`, `selectDispatchRecipient`,
+  `consoleDispatchPath`, `buildDispatchPreflight`, `postEventBeacon` — pure in
+  its decision, not its effect — and the private `classify`).
+- Approval tests: none. The one refactoring task (`GuestList`'s flag split) was a
+  deliberate behaviour CHANGE, so it took a RED test rather than an approval one.
+
+## Three genuine findings the tests produced
+
+1. **A `sendBeacon` assertion cannot be read once.** The first E2E read
+   `dispatch_events` immediately after the navigation and found nothing. That was
+   the test being wrong, not the product: the user agent queues the beacon and
+   delivers it on its own schedule, and that asynchrony is the entire reason the
+   transport was chosen. The assertion now polls. A synchronous read would have
+   been a test asserting the opposite of the design.
+2. **Leftover fixtures made the device picker ambiguous.** A fixed operator
+   display name plus an aborted run left two `Ana Envíos` rows, and
+   `getByLabel(displayName).check()` failed strict mode — which looks exactly
+   like the picker rendering the wrong thing. Names are now unique per run and
+   `afterAll` cleans up the operators as well as their invitations.
+3. **Setting state inside an effect body is a lint error in this project, and it
+   had a real answer.** The mount-time reconciliation posts to the network and
+   then reveals the confirm prompt; running it synchronously in the effect body
+   sets state during the commit that mounted the component. It is deferred by a
+   microtask, which is what it always should have been, and the deferral gained
+   its own test (a stash left by a previous visit is reconciled on mount).
+
+## Verification
+
+Every command run in the foreground, against local Supabase, with the user's own
+`next dev` left alone on port 3000:
+
+| Command | Observed result |
+|---|---|
+| `npm test` | 57 files, **819 passed** (baseline 739) |
+| `PORT=3100 npm run e2e` | **102 passed** (baseline 88) |
+| `npm run typecheck` | clean, no output |
+| `npm run lint` | clean, 0 errors 0 warnings |
+| `npm run format:check` | "All matched files use Prettier code style!" |
+| `npm run build` | compiled successfully; `/console/dispatch/[invitationId]` and `/console/api/dispatch-event` both dynamic |
+
+No migration was added — see "Rehearsal mode" above — so `supabase db reset` was
+not required.
+
+Re-confirmed inside those runs: the raw-HTML Open Graph assertions under a
+WhatsApp User-Agent with no tags after `</head>`; no guest phone digits in any
+guest-facing page source; exactly one unlock path with no query-parameter bypass
+and no console session that becomes one; the `nullif` mutation test;
+`service_role` append-only; seat parity; `rsvp_latest` reducing to one row per
+invitation; the external anon-key RLS invariants; and the operator-session
+refresh test.
+
+## Workload / PR boundary
+
+- Mode: **chained PR slice** — PR6b-i, base PR6a-ii. PR6b-ii follows.
+- Boundary: starts from a console that lists and counts but sends nothing; ends
+  with a console that checks readiness before spending anything, builds a `wa.me`
+  draft for one household, opens it, records the open before leaving, reconciles
+  on return, and records what the operator says actually happened.
+- Rollback: delete `lib/domain/dispatch-{message,preflight}.ts`, `lib/browser/**`,
+  `lib/server/dispatch.ts`, `components/console/Dispatch*.tsx`,
+  `app/console/api/dispatch-event/**`,
+  `app/console/(authenticated)/dispatch/**`, `e2e/console-dispatch.spec.ts`;
+  revert `findConsoleInvitation` in `lib/server/invitations.ts`, the two mark
+  actions in `actions.ts`, the `dispatchBlocked` split in `GuestList.tsx`, and
+  the preflight in `page.tsx`. The 6a-ii list survives that revert intact —
+  except that reverting `actions.ts` would restore the device-declaration check
+  on `updateGuestPhoneAction`, which is the defect this unit fixed.
+- **Changed lines: 3673**, as the attempt ledger counted them at settle
+  (`changed_line_budget_exceeded`), against the **3000-line ceiling** the brief
+  set and said would not be raised. My own pre-settle estimate was ~3389; the
+  ledger's figure is the authoritative one and it is higher because it also
+  charges deletions and the two OpenSpec documents (`tasks.md` and this file,
+  together ≈320 lines). About half the total (≈1883 lines) is test files.
+  Nothing was compressed to reach a number: no comment, blank line, doc or test
+  was removed for budget reasons, per the apply skill's explicit rule. Reported
+  rather than negotiated, as instructed — the objective now reads
+  `decision_required: true`, `next_action: reset`, and that reset is a
+  maintainer's call, not mine. The most separable remaining piece is the preflight
+  (`dispatch-preflight.{ts,spec.ts}` plus `DispatchPreflight.{tsx,spec.tsx}`,
+  ≈848 lines), which could ship as its own slice — but it reads the same
+  `ConsoleListRow` the dispatch action consumes and its whole value is being
+  available BEFORE the first send, so splitting it would ship the sending half
+  first and the check that protects it second.
+
+## Status
+
+17/17 Work Unit 6b-i tasks complete; tasks `6b.1`–`6b.7` are now closed.
+`6b.8`–`6b.16` remain for Work Unit 6b-ii. Working tree left uncommitted and
+fully normalized. Ready for `sdd-verify`.

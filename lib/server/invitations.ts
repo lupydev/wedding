@@ -647,6 +647,8 @@ export interface ConsoleListOptions {
   readonly viewerSenderId: string;
   /** `true` for the operator's own partition, `false` for the shared dashboard. */
   readonly ownedOnly: boolean;
+  /** Narrows to one invitation. Applied as a `WHERE`, like the partition. */
+  readonly invitationId?: string;
   readonly defaultCountry: CountryCode;
 }
 
@@ -672,6 +674,10 @@ export async function listConsoleInvitations(
 
   if (options.ownedOnly) {
     query = query.eq("owner_sender_id", options.viewerSenderId);
+  }
+
+  if (options.invitationId !== undefined) {
+    query = query.eq("id", options.invitationId);
   }
 
   const { data, error } = await query.returns<ConsoleInvitationRow[]>();
@@ -836,4 +842,34 @@ export async function findGuestInvitationOwner(
   }
 
   return data?.invitations?.owner_sender_id ?? null;
+}
+
+/**
+ * One invitation the signed-in operator owns, or `null`.
+ *
+ * The compose view's read. Both the id and the ownership go into the same query
+ * rather than into a comparison afterwards: the id arrives from the URL, which
+ * is a value the browser holds, and a fetch-then-compare would already have read
+ * another operator's household into memory before deciding it should not have.
+ *
+ * Reduced by exactly the same code path as the list — same join, same
+ * `rsvp_latest` read, same `deriveDispatchState` — so the compose view cannot
+ * show a state the list disagrees with.
+ */
+export async function findConsoleInvitation(
+  client: SupabaseClient,
+  options: {
+    readonly invitationId: string;
+    readonly viewerSenderId: string;
+    readonly defaultCountry: CountryCode;
+  },
+): Promise<ConsoleListRow | null> {
+  const rows = await listConsoleInvitations(client, {
+    viewerSenderId: options.viewerSenderId,
+    ownedOnly: true,
+    invitationId: options.invitationId,
+    defaultCountry: options.defaultCountry,
+  });
+
+  return rows[0] ?? null;
 }

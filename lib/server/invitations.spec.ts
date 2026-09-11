@@ -13,6 +13,7 @@ import {
   findInvitationBySlug,
   findGuestInvitationOwner,
   importInvitations,
+  findConsoleInvitation,
   listConsoleInvitations,
   listOperatorProfiles,
   listSenderDirectory,
@@ -897,6 +898,52 @@ describe("listConsoleInvitations (local Supabase)", () => {
         true,
       );
       expect(JSON.stringify(profiles)).not.toContain("+57300111");
+    });
+  });
+
+  /**
+   * The compose view's read.
+   *
+   * Ownership is a `WHERE`, not a check after the fetch. The invitation id comes
+   * out of the URL — a value the browser holds — so a compose view that fetched
+   * first and compared afterwards would already have read another operator's
+   * household into memory before deciding it should not have.
+   */
+  it("returns one owned invitation, reduced exactly as the list reduces it", async () => {
+    await withConsoleFixture(async (fixture) => {
+      const found = await findConsoleInvitation(createServerSupabaseClient(), {
+        invitationId: fixture.anaInvitationId,
+        viewerSenderId: fixture.anaId,
+        defaultCountry: "CO",
+      });
+
+      expect(found?.invitationId).toBe(fixture.anaInvitationId);
+      expect(found?.ownedByViewer).toBe(true);
+      expect(found?.guests.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("returns nothing for an invitation the signed-in operator does not own", async () => {
+    await withConsoleFixture(async (fixture) => {
+      expect(
+        await findConsoleInvitation(createServerSupabaseClient(), {
+          invitationId: fixture.betoInvitationId,
+          viewerSenderId: fixture.anaId,
+          defaultCountry: "CO",
+        }),
+      ).toBeNull();
+    });
+  });
+
+  it("returns nothing for an invitation id that does not exist", async () => {
+    await withConsoleFixture(async (fixture) => {
+      expect(
+        await findConsoleInvitation(createServerSupabaseClient(), {
+          invitationId: "99999999-9999-4999-8999-999999999999",
+          viewerSenderId: fixture.anaId,
+          defaultCountry: "CO",
+        }),
+      ).toBeNull();
     });
   });
 });

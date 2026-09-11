@@ -59,12 +59,16 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
   };
 }
 
-function renderList(rows: readonly ConsoleListRow[], readOnly = false) {
+function renderList(
+  rows: readonly ConsoleListRow[],
+  flags: { readOnly?: boolean; dispatchBlocked?: boolean } = {},
+) {
   return render(
     <GuestList
       rows={rows}
       updatePhoneAction={vi.fn<(formData: FormData) => void>()}
-      readOnly={readOnly}
+      readOnly={flags.readOnly ?? false}
+      dispatchBlocked={flags.dispatchBlocked ?? false}
       emptyMessage="No hay invitaciones en esta vista."
     />,
   );
@@ -114,9 +118,34 @@ describe("GuestList", () => {
   });
 
   it("withdraws the send affordance from every row while the device declaration blocks it", () => {
-    renderList([row()], true);
+    renderList([row()], { dispatchBlocked: true });
 
     expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+  });
+
+  /**
+   * The fix from the Work Unit 6a-ii review, asserted rather than described.
+   *
+   * The device gate exists so a message does not leave from the wrong WhatsApp
+   * account. Correcting a typo in a phone number sends nothing, so it is not
+   * what that gate is for — and as originally wired, being on the wrong handset
+   * prevented fixing the very data the preflight is telling the operator to fix.
+   * Dispatch stays blocked; data entry does not.
+   */
+  it("keeps the inline phone editor available while the declaration blocks dispatch", () => {
+    renderList([row()], { dispatchBlocked: true });
+
+    expect(
+      screen.getAllByRole("button", { name: /Editar|Añadir/i }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("withdraws the editor only where the whole list is read-only", () => {
+    // The other operator's partition. `updateGuestPhoneAction` refuses these
+    // households on the server too; hiding the control is the visible layer.
+    renderList([row({ ownedByViewer: false })], { readOnly: true });
+
+    expect(screen.queryByRole("button", { name: /Editar|Añadir/i })).toBeNull();
   });
 
   it("labels an opened link as an unconfirmed send, never as a send", () => {
