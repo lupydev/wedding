@@ -6,11 +6,17 @@ import {
   withRollback,
 } from "../../supabase/tests/helpers/db";
 import { resolveLocalKeys } from "../../supabase/tests/helpers/local-keys";
+import { summarizeConsoleList } from "@/lib/domain/console-list";
+
 import {
   createInvitation,
   findInvitationBySlug,
+  findGuestInvitationOwner,
   importInvitations,
+  listConsoleInvitations,
+  listOperatorProfiles,
   listSenderDirectory,
+  updateGuestPhone,
   toGatePhoneRefs,
   toGuestFacingInvitation,
   validateImportRow,
@@ -20,6 +26,23 @@ import {
   type SenderDirectory,
 } from "./invitations";
 import { createServerSupabaseClient } from "./supabase";
+
+/** Base32 alphabet the `invitations.slug` CHECK constraint accepts. */
+const CONSOLE_SLUG_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
+
+/** A well-formed slug for a console fixture. Random, so parallel files cannot collide. */
+function makeConsoleSlug(): string {
+  let slug = "";
+
+  for (let index = 0; index < 16; index += 1) {
+    slug +=
+      CONSOLE_SLUG_ALPHABET[
+        Math.floor(Math.random() * CONSOLE_SLUG_ALPHABET.length)
+      ];
+  }
+
+  return slug;
+}
 
 const SENDERS: SenderDirectory = {
   "ana@example.test": "11111111-1111-4111-8111-111111111111",
@@ -556,5 +579,324 @@ describe("importInvitations — atomic and idempotent (local Supabase)", () => {
     });
 
     expect(message).toMatch(/permission denied/i);
+  });
+});
+
+/**
+ * The console guest list, against the real local stack.
+ *
+ * These read through PostgREST rather than over the `pg` connection, so the
+ * fixtures are COMMITTED and removed in `finally`. A rolled-back fixture would
+ * be invisible to the HTTP client and every assertion would be measuring an
+ * empty result set.
+ */
+describe("listConsoleInvitations (local Supabase)", () => {
+  interface ConsoleFixture {
+    readonly anaId: string;
+    readonly betoId: string;
+    readonly anaInvitationId: string;
+    readonly betoInvitationId: string;
+    readonly anaGuestId: string;
+  }
+
+  async function withConsoleFixture(
+    body: (fixture: ConsoleFixture) => Promise<void>,
+  ): Promise<void> {
+    const { secretKey } = resolveLocalKeys();
+    process.env.SUPABASE_URL = "http://127.0.0.1:54321";
+    process.env.SUPABASE_SECRET_KEY = secretKey;
+
+    const suffix = `${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+    const fixture = await withDb(async (db) => {
+      const senders = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana Operadora', 'partner_a', $1, '+573001110000'),
+                ('Beto Operador', 'partner_b', $2, '+573001110001')
+         returning id`,
+        [`ana.${suffix}@example.test`, `beto.${suffix}@example.test`],
+      );
+      const [anaId, betoId] = senders.rows.map((sender) => sender.id);
+
+      const invitations = await db.query<{ id: string }>(
+        `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
+         values ($1, $3, 'Familia Muñóz', 'Familia Muñóz', 2),
+                ($2, $4, 'Familia Peña', 'Familia Peña', 3)
+         returning id`,
+        [makeConsoleSlug(), makeConsoleSlug(), anaId, betoId],
+      );
+      const [anaInvitationId, betoInvitationId] = invitations.rows.map(
+        (invitation) => invitation.id,
+      );
+
+      const guests = await db.query<{ id: string }>(
+        `insert into invitation_guests (invitation_id, full_name, phone_e164, is_primary)
+         values ($1, 'Ana Muñóz', '+573001234567', true)
+         returning id`,
+        [anaInvitationId],
+      );
+
+      return {
+        anaId,
+        betoId,
+        anaInvitationId,
+        betoInvitationId,
+        anaGuestId: guests.rows[0].id,
+      };
+    });
+
+    try {
+      await body(fixture);
+    } finally {
+      await withDb(async (db) => {
+        await db.query("set session_replication_role = replica");
+        await db.query(
+          "delete from rsvp_responses where invitation_id = any($1)",
+          [[fixture.anaInvitationId, fixture.betoInvitationId]],
+        );
+        await db.query(
+          "delete from dispatch_events where invitation_id = any($1)",
+          [[fixture.anaInvitationId, fixture.betoInvitationId]],
+        );
+        await db.query(
+          "delete from invitation_guests where invitation_id = any($1)",
+          [[fixture.anaInvitationId, fixture.betoInvitationId]],
+        );
+        await db.query("delete from invitations where id = any($1)", [
+          [fixture.anaInvitationId, fixture.betoInvitationId],
+        ]);
+        await db.query("delete from senders where id = any($1)", [
+          [fixture.anaId, fixture.betoId],
+        ]);
+        await db.query("reset session_replication_role");
+      });
+    }
+  }
+
+  it("lists only the signed-in operator's own invitations by default", async () => {
+    await withConsoleFixture(async (fixture) => {
+      const rows = await listConsoleInvitations(createServerSupabaseClient(), {
+        viewerSenderId: fixture.anaId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+
+      expect(rows.map((row) => row.invitationId)).toEqual([
+        fixture.anaInvitationId,
+      ]);
+      expect(rows[0].ownedByViewer).toBe(true);
+      expect(rows[0].ownerDisplayName).toBe("Ana Operadora");
+    });
+  });
+
+  it("lists both partitions on the shared dashboard, attributing each to its owner", async () => {
+    await withConsoleFixture(async (fixture) => {
+      const rows = await listConsoleInvitations(createServerSupabaseClient(), {
+        viewerSenderId: fixture.anaId,
+        ownedOnly: false,
+        defaultCountry: "CO",
+      });
+      const mine = rows.find(
+        (row) => row.invitationId === fixture.anaInvitationId,
+      );
+      const theirs = rows.find(
+        (row) => row.invitationId === fixture.betoInvitationId,
+      );
+
+      expect(mine?.ownedByViewer).toBe(true);
+      expect(theirs?.ownedByViewer).toBe(false);
+      expect(theirs?.ownerDisplayName).toBe("Beto Operador");
+    });
+  });
+
+  /**
+   * The rule this suite exists for.
+   *
+   * `rsvp_responses` is append-only: a household that says yes and then no has
+   * TWO rows. Counting over the raw table reports that household twice, once in
+   * each bucket — the defect that had a reference project's dashboard reporting
+   * 47 confirmed from 17 answers. `rsvp_latest` is one row per invitation by
+   * construction, and the console must read nothing else.
+   */
+  it("counts a household that changed its mind ONCE, as its latest answer", async () => {
+    await withConsoleFixture(async (fixture) => {
+      await withDb(async (db) => {
+        await db.query(
+          `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at)
+           values ($1, true, 1, $2, now() - interval '2 days')`,
+          [fixture.anaInvitationId, [fixture.anaGuestId]],
+        );
+        await db.query(
+          `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at)
+           values ($1, false, 0, '{}', now() - interval '1 day')`,
+          [fixture.anaInvitationId],
+        );
+      });
+
+      const rows = await listConsoleInvitations(createServerSupabaseClient(), {
+        viewerSenderId: fixture.anaId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+
+      // One household, not two.
+      expect(rows).toHaveLength(1);
+      expect(rows[0].answer).toBe("declined");
+      expect(rows[0].seatsConfirmed).toBe(0);
+
+      const summary = summarizeConsoleList(rows);
+
+      expect(summary.total).toBe(1);
+      expect(summary.declined).toBe(1);
+      expect(summary.attending).toBe(0);
+      expect(summary.seatsConfirmed).toBe(0);
+    });
+  });
+
+  it("keeps an opened link out of the confirmed-send count", async () => {
+    await withConsoleFixture(async (fixture) => {
+      await withDb(async (db) => {
+        await db.query(
+          `insert into dispatch_events (invitation_id, actor_sender_id, kind)
+           values ($1, $2, 'link_opened')`,
+          [fixture.anaInvitationId, fixture.anaId],
+        );
+      });
+
+      const rows = await listConsoleInvitations(createServerSupabaseClient(), {
+        viewerSenderId: fixture.anaId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+
+      expect(rows[0].dispatchState).toBe("link_opened");
+      expect(summarizeConsoleList(rows).operatorAssertedSends).toBe(0);
+    });
+  });
+
+  it("classifies each guest's reachability so a landline is flagged in the row", async () => {
+    await withConsoleFixture(async (fixture) => {
+      await withDb(async (db) => {
+        await db.query(
+          `insert into invitation_guests (invitation_id, full_name, phone_e164)
+           values ($1, 'Casa Muñóz', '+576012345678')`,
+          [fixture.anaInvitationId],
+        );
+      });
+
+      const rows = await listConsoleInvitations(createServerSupabaseClient(), {
+        viewerSenderId: fixture.anaId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+      const landline = rows[0].guests.find(
+        (guest) => guest.fullName === "Casa Muñóz",
+      );
+      const mobile = rows[0].guests.find(
+        (guest) => guest.fullName === "Ana Muñóz",
+      );
+
+      expect(landline).toMatchObject({
+        lineType: "fixed_line",
+        dispatchable: false,
+      });
+      expect(mobile).toMatchObject({ lineType: "mobile", dispatchable: true });
+    });
+  });
+
+  it("stores an edited guest phone in E.164 and refuses an unusable one", async () => {
+    await withConsoleFixture(async (fixture) => {
+      const client = createServerSupabaseClient();
+
+      const updated = await updateGuestPhone(
+        client,
+        fixture.anaGuestId,
+        "300 765 4321",
+        "CO",
+      );
+
+      expect(updated).toBe("+573007654321");
+
+      const stored = await withDb(async (db) => {
+        const result = await db.query<{
+          phone_e164: string | null;
+          phone_last8: string | null;
+        }>(
+          "select phone_e164, phone_last8 from invitation_guests where id = $1",
+          [fixture.anaGuestId],
+        );
+        return result.rows[0];
+      });
+
+      expect(stored.phone_e164).toBe("+573007654321");
+      // The generated column keeps the gate working after an inline edit.
+      expect(stored.phone_last8).toBe("07654321");
+
+      await expect(
+        updateGuestPhone(client, fixture.anaGuestId, "12", "CO"),
+      ).rejects.toThrow();
+    });
+  });
+
+  it("clears a guest phone back to NULL rather than to an empty string", async () => {
+    await withConsoleFixture(async (fixture) => {
+      // The `nullif` in the generated column is what stops an empty submission
+      // from matching at the gate; storing '' here would defeat it.
+      const cleared = await updateGuestPhone(
+        createServerSupabaseClient(),
+        fixture.anaGuestId,
+        "   ",
+        "CO",
+      );
+
+      expect(cleared).toBeNull();
+
+      const stored = await withDb(async (db) => {
+        const result = await db.query<{
+          phone_e164: string | null;
+          phone_last8: string | null;
+        }>(
+          "select phone_e164, phone_last8 from invitation_guests where id = $1",
+          [fixture.anaGuestId],
+        );
+        return result.rows[0];
+      });
+
+      expect(stored.phone_e164).toBeNull();
+      expect(stored.phone_last8).toBeNull();
+    });
+  });
+
+  it("reports which operator owns the household a guest belongs to", async () => {
+    await withConsoleFixture(async (fixture) => {
+      const client = createServerSupabaseClient();
+
+      expect(await findGuestInvitationOwner(client, fixture.anaGuestId)).toBe(
+        fixture.anaId,
+      );
+    });
+  });
+
+  it("reports no owner for a guest id that does not exist", async () => {
+    await withConsoleFixture(async () => {
+      expect(
+        await findGuestInvitationOwner(
+          createServerSupabaseClient(),
+          "99999999-9999-4999-8999-999999999999",
+        ),
+      ).toBeNull();
+    });
+  });
+
+  it("names every operator for the device picker, without exposing their contact number", async () => {
+    await withConsoleFixture(async (fixture) => {
+      const profiles = await listOperatorProfiles(createServerSupabaseClient());
+      const ana = profiles.find((profile) => profile.id === fixture.anaId);
+
+      expect(ana).toEqual({ id: fixture.anaId, displayName: "Ana Operadora" });
+      expect(profiles.some((profile) => profile.id === fixture.betoId)).toBe(
+        true,
+      );
+      expect(JSON.stringify(profiles)).not.toContain("+57300111");
+    });
   });
 });

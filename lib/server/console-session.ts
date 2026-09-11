@@ -6,6 +6,11 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
+  CONSOLE_DEVICE_PATH,
+  classifyDeviceDeclaration,
+  type DeviceDeclarationStatus,
+} from "@/lib/domain/device-declaration";
+import {
   CONSOLE_LOGIN_PATH,
   readOperatorIdentityHeader,
   type OperatorIdentity,
@@ -17,6 +22,7 @@ import {
   supabaseOperatorDirectory,
   type Operator,
 } from "./auth";
+import { DEVICE_SENDER_COOKIE_NAME, readDeviceSenderCookie } from "./cookies";
 import { operatorSessionSecret, supabasePublishableKey } from "./env";
 
 /**
@@ -140,4 +146,71 @@ export async function requireOperator(): Promise<Operator> {
   }
 
   return operator;
+}
+
+/**
+ * ── The per-device WhatsApp declaration ─────────────────────────────────────
+ *
+ * The second of the two questions in `design.md`'s "Operator Identity" table.
+ * Authentication above answers "who is operating?" and is a verified fact. This
+ * answers "which WhatsApp account is installed on this handset?" and is a
+ * self-declaration the server can never check, because `wa.me` has no sender
+ * parameter and the sending account is a physical property of the phone.
+ *
+ * It is therefore NOT an authorization input. It does not narrow the query, it
+ * does not decide whether phone numbers are visible, and it will not decide
+ * `actor_sender_id`. It gates one human-facing interstitial. Making it an
+ * authorization input would mean a value its holder chooses deciding who may
+ * read every guest's phone number.
+ */
+
+/** What this device declared, and how that compares to the session. */
+export interface DeviceDeclaration {
+  readonly status: DeviceDeclarationStatus;
+  /** The declared sender, or `null` when the cookie is absent or unusable. */
+  readonly declaredSenderId: string | null;
+}
+
+/**
+ * Reads this device's declaration and compares it to the signed-in operator.
+ *
+ * Never redirects and never throws: the two callers want different things from
+ * the same answer — the layout redirects an undeclared device to the picker, and
+ * the page renders read-only on a mismatch.
+ */
+export async function readDeviceDeclaration(
+  sessionSenderId: string,
+): Promise<DeviceDeclaration> {
+  const cookieStore = await cookies();
+  const declaredSenderId = readDeviceSenderCookie(
+    cookieStore.get(DEVICE_SENDER_COOKIE_NAME)?.value,
+  );
+
+  return {
+    status: classifyDeviceDeclaration(declaredSenderId, sessionSenderId),
+    declaredSenderId,
+  };
+}
+
+/**
+ * The declaration, or the picker.
+ *
+ * FAILS TO THE PICKER, NEVER TO A DEFAULT. An absent declaration is a question
+ * that has not been answered, so it gets asked again — clearing site data must
+ * not silently nominate whoever happens to be signed in.
+ *
+ * A MISMATCH IS NOT A REDIRECT. It returns, so the caller can render the
+ * interstitial over a read-only view. Bouncing the operator to the picker would
+ * hide the disagreement behind a form, and the disagreement is the finding.
+ */
+export async function requireDeclaredDevice(
+  sessionSenderId: string,
+): Promise<DeviceDeclaration> {
+  const declaration = await readDeviceDeclaration(sessionSenderId);
+
+  if (declaration.status === "undeclared") {
+    redirect(CONSOLE_DEVICE_PATH);
+  }
+
+  return declaration;
 }

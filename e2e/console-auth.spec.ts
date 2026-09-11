@@ -45,7 +45,7 @@ test.describe("console access control", () => {
     await expect(
       page.getByRole("heading", { name: "Panel de envíos" }),
     ).toBeVisible();
-    await expect(page.getByText("Le damos la bienvenida")).toHaveCount(0);
+    await expect(page.getByText("Tus invitaciones")).toHaveCount(0);
   });
 
   test("an anonymous request for the console renders no console content", async ({
@@ -60,7 +60,7 @@ test.describe("console access control", () => {
 
     expect(response.status()).toBe(307);
     expect(response.headers().location).toContain("/console/login");
-    expect(await response.text()).not.toContain("bienvenida al panel");
+    expect(await response.text()).not.toContain("Tus invitaciones");
   });
 
   test("a nested console route is protected too", async ({ page }) => {
@@ -134,11 +134,25 @@ test.describe("magic-link sign-in", () => {
     const magicLink = await waitForMagicLink(operator.allowlistedEmail);
     await page.goto(magicLink);
 
+    // The session works, and the FIRST thing it meets is the per-device
+    // question: which WhatsApp account is installed on this handset. Being
+    // signed in does not answer it — `wa.me` has no sender parameter, so the
+    // sending account is a property of the phone and not of the session.
+    await expect(page).toHaveURL(/\/console\/device$/);
+    await expect(
+      page.getByText(`Sesión iniciada como ${operator.displayName}`),
+    ).toBeVisible();
+
+    await page.getByLabel(operator.displayName).check();
+    await page
+      .getByRole("button", {
+        name: /Guardar la declaración de este dispositivo/i,
+      })
+      .click();
+
     await expect(page).toHaveURL(/\/console$/);
     await expect(
-      page.getByText(
-        `Le damos la bienvenida al panel, ${operator.displayName}`,
-      ),
+      page.getByRole("heading", { name: "Tus invitaciones" }),
     ).toBeVisible();
 
     // The binding the spec demands: exactly one `senders.auth_user_id`, written
@@ -155,13 +169,11 @@ test.describe("magic-link sign-in", () => {
     );
 
     // The session survives an ordinary reload rather than depending on the
-    // redirect that created it.
+    // redirect that created it. So does the device declaration.
     await page.reload();
     await expect(page).toHaveURL(/\/console$/);
     await expect(
-      page.getByText(
-        `Le damos la bienvenida al panel, ${operator.displayName}`,
-      ),
+      page.getByRole("heading", { name: "Tus invitaciones" }),
     ).toBeVisible();
 
     // And signing out actually revokes it.

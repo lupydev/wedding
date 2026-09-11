@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { classifyDeviceDeclaration } from "@/lib/domain/device-declaration";
+
 import {
+  DEVICE_SENDER_COOKIE_MAX_AGE_SECONDS,
   UNLOCK_COOKIE_MAX_AGE_SECONDS,
   UNLOCK_COOKIE_NAME,
+  deviceSenderCookieOptions,
+  readDeviceSenderCookie,
+  signDeviceSenderCookie,
   signUnlockCookie,
   unlockCookieOptions,
   unlockCookieUnlocks,
@@ -32,10 +38,15 @@ const NOW = Date.UTC(2026, 8, 6, 12, 0, 0);
 const DAY = 86_400_000;
 
 process.env.UNLOCK_COOKIE_SECRET = SECRET;
+process.env.OPERATOR_SESSION_SECRET = SECRET;
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  process.env = { ...ORIGINAL_ENV, UNLOCK_COOKIE_SECRET: SECRET };
+  process.env = {
+    ...ORIGINAL_ENV,
+    UNLOCK_COOKIE_SECRET: SECRET,
+    OPERATOR_SESSION_SECRET: SECRET,
+  };
 });
 
 describe("signUnlockCookie / verifyUnlockCookie", () => {
@@ -211,5 +222,90 @@ describe("unlockCookieUnlocks", () => {
 
   it("refuses an absent cookie without throwing", () => {
     expect(unlockCookieUnlocks("", INVITATION)).toBe(false);
+  });
+});
+
+/**
+ * The per-device WhatsApp declaration cookie.
+ *
+ * A different question from the unlock cookie above, on a different surface: it
+ * records which WhatsApp account the operator says is installed on THIS handset.
+ * It is signed for the same reason the unlock cookie is — the browser holds it,
+ * so an unsigned value is a value the holder chooses — but it authorizes
+ * nothing. A forged one buys an attacker the ability to be shown an
+ * interstitial.
+ *
+ * The two failure modes that matter here are distinguishing "nothing was ever
+ * declared on this device" from "something else was declared", because the first
+ * must re-ask and the second must block and explain.
+ */
+describe("the device declaration cookie", () => {
+  const ANA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const BETO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+  it("reads back exactly the sender that was declared", () => {
+    expect(readDeviceSenderCookie(signDeviceSenderCookie(ANA))).toBe(ANA);
+  });
+
+  it("reads back the OTHER sender when that is what was declared", () => {
+    expect(readDeviceSenderCookie(signDeviceSenderCookie(BETO))).toBe(BETO);
+  });
+
+  it("distinguishes an absent declaration from a mismatched one", () => {
+    // Two different outcomes, deliberately: absent must send the operator back
+    // to the picker, mismatched must block with an explanation. Collapsing them
+    // would make clearing site data look like the bride using the groom's phone.
+    expect(classifyDeviceDeclaration(readDeviceSenderCookie(null), ANA)).toBe(
+      "undeclared",
+    );
+    expect(classifyDeviceDeclaration(readDeviceSenderCookie(""), ANA)).toBe(
+      "undeclared",
+    );
+    expect(
+      classifyDeviceDeclaration(
+        readDeviceSenderCookie(signDeviceSenderCookie(BETO)),
+        ANA,
+      ),
+    ).toBe("mismatch");
+  });
+
+  it("refuses a value whose payload was edited", () => {
+    const signed = signDeviceSenderCookie(ANA);
+    const [, signature] = signed.split(".");
+    const forged = `${Buffer.from(JSON.stringify({ senderId: BETO }), "utf8").toString("base64url")}.${signature}`;
+
+    expect(readDeviceSenderCookie(forged)).toBeNull();
+  });
+
+  it("refuses a value signed with a different secret", () => {
+    const signed = signDeviceSenderCookie(ANA);
+    vi.stubEnv("OPERATOR_SESSION_SECRET", OTHER_SECRET);
+
+    expect(readDeviceSenderCookie(signed)).toBeNull();
+  });
+
+  it("refuses a malformed value without throwing", () => {
+    expect(readDeviceSenderCookie("not-a-cookie")).toBeNull();
+    expect(readDeviceSenderCookie(".")).toBeNull();
+    expect(readDeviceSenderCookie("a.b.c")).toBeNull();
+  });
+
+  it("refuses a forwarded operator-identity header as a declaration", () => {
+    // Both values are HMACed with OPERATOR_SESSION_SECRET, so without domain
+    // separation in the signed payload one could be replayed as the other.
+    const identity =
+      "eyJhdXRoVXNlcklkIjoiYWFhIiwiZW1haWwiOiJhbmFAZXhhbXBsZS50ZXN0In0.c2lnbmF0dXJl";
+
+    expect(readDeviceSenderCookie(identity)).toBeNull();
+  });
+
+  it("is scoped to the console, unreadable by scripts, and lasts a year", () => {
+    const options = deviceSenderCookieOptions();
+
+    expect(options.httpOnly).toBe(true);
+    expect(options.path).toBe("/console");
+    expect(options.sameSite).toBe("lax");
+    expect(options.maxAge).toBe(DEVICE_SENDER_COOKIE_MAX_AGE_SECONDS);
+    expect(DEVICE_SENDER_COOKIE_MAX_AGE_SECONDS).toBe(365 * 24 * 60 * 60);
   });
 });

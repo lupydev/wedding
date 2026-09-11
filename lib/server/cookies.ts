@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { unlockCookieSecret } from "./env";
+import { operatorSessionSecret, unlockCookieSecret } from "./env";
 
 /**
  * The signed unlock cookie.
@@ -169,4 +169,137 @@ export function unlockCookieUnlocks(
   invitationId: string,
 ): boolean {
   return verifyUnlockCookie(value, invitationId, Date.now());
+}
+
+/**
+ * ── The per-device WhatsApp declaration cookie ──────────────────────────────
+ *
+ * A second cookie on a different surface, answering a different question: which
+ * WhatsApp account the operator says is installed on THIS handset. It exists
+ * because `wa.me` addresses the recipient only — there is no sender parameter —
+ * so which account sends is a physical property of the phone, not something the
+ * application can route.
+ *
+ * It authorizes NOTHING. Console access, guest-phone visibility and
+ * `actor_sender_id` all come from the verified session; this value gates one
+ * human-facing interstitial (see `lib/domain/device-declaration.ts`). It is
+ * still signed, for the ordinary reason any browser-held value is: an unsigned
+ * one is a value its holder chooses, and a device that could silently claim to
+ * be the other operator would remove the one warning the couple gets.
+ *
+ * `httpOnly` because no script needs it, `path=/console` because no guest route
+ * does, and a year because a phone stays the same phone.
+ */
+
+/** Cookie name. Per device, never per session. */
+export const DEVICE_SENDER_COOKIE_NAME = "device_sender";
+
+/** One year: this is a property of the handset, not of a sign-in. */
+export const DEVICE_SENDER_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
+
+/**
+ * Domain separation for the HMAC.
+ *
+ * This cookie and the forwarded operator-identity header are keyed with the SAME
+ * secret (`OPERATOR_SESSION_SECRET`), because both are console-session plumbing
+ * and a second secret is a second thing to rotate and forget. Signing distinct
+ * message spaces is what keeps one from being replayable as the other: a valid
+ * identity header presented as a device cookie fails the signature check here,
+ * because the string that was signed there never carried this prefix.
+ */
+const DEVICE_SENDER_SIGNING_PREFIX = "device_sender.v1:";
+
+interface DeviceSenderPayload {
+  readonly senderId: string;
+}
+
+function signDeviceSender(encodedPayload: string): string {
+  return createHmac("sha256", operatorSessionSecret())
+    .update(`${DEVICE_SENDER_SIGNING_PREFIX}${encodedPayload}`)
+    .digest("hex");
+}
+
+/** Mints the declaration this device will carry. */
+export function signDeviceSenderCookie(senderId: string): string {
+  const payload: DeviceSenderPayload = { senderId };
+  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString(
+    "base64url",
+  );
+
+  return `${encoded}.${signDeviceSender(encoded)}`;
+}
+
+/**
+ * The sender this device declared, or `null`.
+ *
+ * `null` for every failure AND for no cookie at all, which is deliberate: the
+ * caller does not need to tell a forged declaration from an absent one, because
+ * both mean "this device has not answered the question". It DOES need to tell
+ * either of those from a declaration naming the other operator, and it can —
+ * that one returns a sender id. `classifyDeviceDeclaration` makes the
+ * distinction; see its "fail to the picker, never to a default" rule.
+ *
+ * Never throws. The value is fully browser-controlled.
+ */
+export function readDeviceSenderCookie(
+  value: string | null | undefined,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const parts = value.split(".");
+
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const [encoded, signature] = parts;
+
+  if (encoded === "" || signature === "") {
+    return null;
+  }
+
+  if (!signaturesMatch(signDeviceSender(encoded), signature)) {
+    return null;
+  }
+
+  let payload: DeviceSenderPayload;
+  try {
+    payload = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    ) as DeviceSenderPayload;
+  } catch {
+    return null;
+  }
+
+  if (typeof payload?.senderId !== "string" || payload.senderId.trim() === "") {
+    return null;
+  }
+
+  return payload.senderId;
+}
+
+/** Exactly the attributes `cookies().set` needs for the declaration. */
+export interface DeviceSenderCookieOptions {
+  readonly httpOnly: true;
+  readonly secure: boolean;
+  readonly sameSite: "lax";
+  readonly path: string;
+  readonly maxAge: number;
+}
+
+/** Cookie attributes for the declaration. */
+export function deviceSenderCookieOptions(): DeviceSenderCookieOptions {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    // `lax` rather than `strict`: the operator arrives at the console from a
+    // magic link in their mail client, which is a cross-site top-level
+    // navigation. `strict` would withhold the declaration on exactly that
+    // navigation and re-ask on every sign-in.
+    sameSite: "lax",
+    path: "/console",
+    maxAge: DEVICE_SENDER_COOKIE_MAX_AGE_SECONDS,
+  };
 }

@@ -2517,3 +2517,201 @@ row per invitation, and the external anon-key RLS invariants.
 11/11 Work Unit 6a-i tasks complete. Tasks `6a.5`–`6a.12` remain open for Work Unit
 6a-ii; `6a.13`/`6a.14` are annotated PARTIAL for the same reason. Working tree left
 uncommitted and fully normalized. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 6a-ii — Console Guest List and Per-Device WhatsApp Declaration
+
+**Mode**: Strict TDD (RED → GREEN → TRIANGULATE → REFACTOR). **Store**: hybrid.
+**Baseline before this unit**: 643 unit tests, 72 E2E, tree clean at `af2e3ec`.
+
+## What this unit delivers
+
+The second half of Work Unit 6a. Authentication and session survival landed in 6a-i
+and were reused unchanged — `requireOperator()`, `lib/proxy/operator-session.ts` and
+`proxy.ts` were not reimplemented, only built on.
+
+1. **The partitioned guest list.** `/console` renders the signed-in operator's own
+   invitations by default, filtered by `owner_sender_id` in the SQL rather than in the
+   render, plus a shared section covering every invitation in the event. Each row shows
+   the greeting name, the named guests, the seats, the owning sender, the dispatch state
+   and the current answer. Both operators see phone numbers: the console is the one
+   authorized reader of that data, and the guest-facing projection still has no phone
+   field at all.
+2. **The per-device declaration.** On first console load on a device the operator is
+   asked which WhatsApp account is installed on that handset, and the answer is signed
+   into a `device_sender` cookie (`httpOnly`, `path=/console`, one year).
+
+## The three rules with teeth, and where each one is enforced
+
+**Every aggregate reads `rsvp_latest`, never `rsvp_responses`.** `listConsoleInvitations`
+issues three reads — invitations, `rsvp_latest`, `dispatch_events` — and joins them in a
+pure function. The answers read cannot reach the raw table, and `assembleConsoleRows`
+takes an already-reduced row rather than a history, so there is no signature through
+which a history could be passed and silently reduced twice. Proved at two layers: a
+DB-backed test seeds a household, answers yes, answers no, and asserts one row counted
+once as declined (`lib/server/invitations.spec.ts`); and the E2E asserts the same
+household renders "No asiste" with "Confirmadas: 0 de 3" and "No asisten: 1 de 3".
+
+**The scope is in the label.** `scopedMetrics` has no way to emit a bare number: every
+line it produces is `"{title}: {count} de {outOf} {population}"`, and the population is a
+string the caller must supply. Seats are measured against seats ("2 de 10 lugares
+habilitados en invitaciones de Ana Operadora"), never against households.
+`ProgressSummary` renders `metric.text` verbatim and cannot render `metric.count` on its
+own, so the defect cannot re-enter one component at a time.
+
+**`link_opened` never satisfies a "has been invited" filter.**
+`countsAsOperatorAssertedSend` is the only predicate allowed to answer that question and
+accepts `marked_sent` and `resent` only. `DISPATCH_STATE_LABELS` gives every state its own
+sentence, and the opened-link one says "sin confirmar" out loud. A unit test asserts the
+labels are pairwise distinct, so adding a state without a label is a failing test.
+
+**The inline phone editor.** `GuestPhoneField` edits in the row, because a reference
+project's note is right that a separate screen means the number never gets entered. It
+reuses `classifyPhoneDispatchability` from `lib/domain/phone-reachability.ts`, so a
+landline is flagged where it is fixed. Writes go through `updateGuestPhone`, which uses
+the same strict `normalizeForStorage` the import uses; an empty submission clears to NULL
+rather than `''`, keeping the generated `phone_last8`'s `nullif` load-bearing.
+
+**No popover row menu.** The reference project's three-dot menu was positioned absolutely
+inside `overflow: hidden` and was unreachable for the LAST row. Rather than reimplement
+`getBoundingClientRect()` flipping, the pattern is simply absent: every row action is an
+ordinary in-flow element. A test asserts no `[data-row-menu]` exists and that all three
+rows in a three-row list expose their action.
+
+## Why a mismatch blocks instead of filtering
+
+`wa.me` addresses the recipient only. There is no sender parameter, so the message leaves
+from whichever WhatsApp is installed on the handset — sender routing is physical, not
+addressable. Authentication is a verified fact; the declaration is a self-declaration the
+server can never check, and it is therefore never an authorization input.
+
+Showing only the declared account's invitations would look tidier and would be wrong: a
+silent filter cannot catch "the bride signed in on the groom's phone", because a filtered
+screen is perfectly consistent and ends with a guest receiving an invitation from a number
+they may not know. So a mismatch renders a non-dismissible interstitial naming BOTH sides,
+over a read-only view, with two exits (change the declaration, or sign in as the other
+operator) and nothing that dismisses it.
+
+An absent declaration fails to the picker, never to a default, in three places at once:
+`classifyDeviceDeclaration` returns `undeclared` for null/empty/blank, the picker
+preselects nobody, and the layout redirects. The E2E clears the `device_sender` cookie
+while keeping the session and asserts the console re-asks with nothing preselected.
+
+## Structure
+
+| Layer | Files |
+|---|---|
+| Domain (pure) | `lib/domain/dispatch-state.ts`, `lib/domain/console-list.ts`, `lib/domain/device-declaration.ts` |
+| Adapters | `lib/server/invitations.ts` (console read side), `lib/server/cookies.ts` (device cookie), `lib/server/console-session.ts` (`readDeviceDeclaration`, `requireDeclaredDevice`) |
+| Presentational | `components/console/{GuestList,GuestPhoneField,ProgressSummary,DeviceDeclarationForm,DeviceMismatchNotice}.tsx` |
+| Delivery | `app/console/(authenticated)/{layout,page,actions}.tsx`, `app/console/device/{page,actions}.tsx` |
+
+`/console/device` sits OUTSIDE the `(authenticated)` route group on purpose: the group's
+layout redirects an undeclared device there, so a page inside it would redirect to itself
+forever. It calls `requireOperator()` itself, so it loses no authorization.
+
+`updateGuestPhoneAction` checks four things before writing, none of them from the form:
+the session identity, that the declaration matches, that the guest's household is in THIS
+operator's partition (resolved server-side from the submitted guest id), and strict
+normalization. Without the third, the partitioned list would be presentation only.
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 6a-ii.1/6a-ii.2 (dispatch state) | `lib/domain/dispatch-state.spec.ts` | Unit | N/A (new) | Import failed, 0 tests ran | 13 passed | 13 cases | Ordering extracted to one loop |
+| 6a-ii.1/6a-ii.2 (list + metrics) | `lib/domain/console-list.spec.ts` | Unit | N/A (new) | Import failed, then 6 failed / 14 passed for the assembler | 20 passed | 20 cases | `metric()` factory extracted |
+| 6a-ii.2 (console repository) | `lib/server/invitations.spec.ts` | DB (local Supabase) | 24/24 pre-existing green | 8 failed / 24 passed, then 2 failed / 32 passed | 34 passed | 10 new cases | Three reads split from the pure join |
+| 6a-ii.3/6a-ii.4 (device cookie) | `lib/server/cookies.spec.ts` | Integration | 23/23 pre-existing green | 8 failed / 23 passed | 31 passed | 8 cases | Signing prefix extracted to a named constant |
+| 6a-ii.5/6a-ii.6 (list + editor) | `components/console/{GuestList,GuestPhoneField,ProgressSummary}.spec.tsx` | Component (RTL) | N/A (new) | Import failed, 0 tests ran | 23 passed | 23 cases | Ambiguous listitem query scoped to the household row |
+| 6a-ii.7 (declaration) | `lib/domain/device-declaration.spec.ts`, `components/console/DeviceDeclaration.spec.tsx` | Unit + Component | N/A (new) | Import failed, 0 tests ran | 14 + 8 passed | 22 cases | Paths lifted to `CONSOLE_DEVICE_PATH` / `CONSOLE_SIGN_OUT_HREF` |
+| 6a-ii.8–6a-ii.11 (routes) | `e2e/console-guest-list.spec.ts` | E2E (Playwright) | 72/72 pre-existing green | 2 failed, then 4 successive genuine failures | 88 passed | 16 scenarios | Fixtures extracted to `e2e/helpers/console.ts` |
+
+### Test summary
+
+- Tests written: **96 unit/component** (643 → 739) and **16 E2E** (72 → 88).
+- Layers: Unit 53, Component 31, DB 12 (inside the unit runner), E2E 16.
+- Pure functions created: 9 (`deriveDispatchState`, `countsAsOperatorAssertedSend`,
+  `deriveRsvpAnswer`, `summarizeConsoleList`, `scopedMetrics`, `ownedPopulation`,
+  `assembleConsoleRows`, `classifyDeviceDeclaration`, `dispatchIsBlockedBy`).
+- Approval tests: none — no refactoring task in this unit.
+
+## Four genuine findings the tests produced
+
+1. **The pre-existing console-auth E2E was made stale by this unit, correctly.** It
+   asserted that a signed-in operator lands on `/console` and reads "Le damos la
+   bienvenida al panel". That page no longer exists, and `/console` now redirects a
+   fresh device to `/console/device` — which is the specified behaviour. The test was
+   updated to assert the new chain (sign in → picker → declare → list), keeping every
+   invariant it already held: the binding of `senders.auth_user_id`, no operator contact
+   number in page source, survival across reload, and revocation on sign-out.
+2. **`getByRole("alert")` is ambiguous in a Next.js page.** Next renders
+   `<next-route-announcer role="alert">` on every page, so an assertion that the
+   interstitial is ABSENT could never pass. The E2E now locates the notice by its own
+   class; the `role="alert"` itself is asserted in the component test, in isolation,
+   which is where that assertion means something.
+3. **The declaration helper had a real race.** It clicked submit without awaiting the
+   navigation, so the following `page.goto` aborted the in-flight POST and the
+   declaration silently did not change — which looked exactly like the console ignoring a
+   mismatch. The helper now waits for the action to land.
+4. **A briefed literal number was wrong for the real system, and the invariant was
+   asserted instead.** The brief's shape implied the shared dashboard would show a fixed
+   denominator; in practice the shared scope is genuinely every invitation in the
+   database, and Playwright runs spec files in parallel against one database, so the
+   exact total depends on which other fixtures are alive. The test asserts what must
+   hold — the shared scope is strictly wider than the owned one, at least the four
+   fixtures of this file, and its label names the population — rather than a number that
+   would break whenever another spec file changed.
+
+## Verification
+
+Every command run in the foreground, against local Supabase, with the user's own `next
+dev` left alone on port 3000:
+
+| Command | Observed result |
+|---|---|
+| `npm test` | 51 files, **739 passed** (baseline 643) |
+| `PORT=3100 npm run e2e` | **88 passed** (baseline 72) |
+| `npm run typecheck` | clean, no output |
+| `npm run lint` | clean, 0 errors 0 warnings |
+| `npm run format:check` | "All matched files use Prettier code style!" |
+| `npm run build` | compiled successfully; `/console`, `/console/device` dynamic; proxy present |
+
+No migration was added, so `supabase db reset` was not required.
+
+Re-confirmed inside those runs: the raw-HTML Open Graph assertions under a WhatsApp
+User-Agent including no tags after `</head>`; no guest phone digits in any guest-facing
+page source; exactly one unlock path with no query-parameter bypass — now additionally
+asserted with a REAL authenticated operator session, which closes the half of task 4b.12
+deferred from Work Unit 4b; the `nullif` mutation test; `service_role` append-only; seat
+parity; `rsvp_latest` reducing to one row per invitation; the external anon-key RLS
+invariants; and the operator-session refresh test from 6a-i.
+
+## Workload / PR boundary
+
+- Mode: **chained PR slice** — PR6a-ii, base PR6a-i. PR6b follows.
+- Boundary: starts from a console that authenticates and renders a placeholder; ends with
+  a console that lists the operator's guests over `rsvp_latest`, states every count with
+  its population, edits a phone in the row, and refuses to dispatch from a handset whose
+  declared WhatsApp account is not the signed-in one. It sends nothing.
+- Rollback: delete `lib/domain/{console-list,dispatch-state,device-declaration}.ts`,
+  `components/console/**`, `app/console/device/**`,
+  `app/console/(authenticated)/actions.ts`, `e2e/console-guest-list.spec.ts`,
+  `e2e/helpers/console.ts`; revert the console read side of `lib/server/invitations.ts`,
+  the device section of `lib/server/cookies.ts`, the device helpers in
+  `lib/server/console-session.ts`, and the two `(authenticated)` files. The 6a-i auth
+  chain is untouched by that revert.
+- **Authored lines: ~4207** (1131 tracked changed, ~3076 in new files), which is
+  **over the 3000-line attempt ceiling**. Roughly 60% of it is tests and executable
+  documentation. Nothing was compressed to reach a number: no comment, blank line, doc or
+  test was removed for budget reasons, per the apply skill's explicit rule. The unit is
+  not further splittable without shipping a guest list whose counts nobody can trust or a
+  device gate with no interstitial — the list and the declaration are one deliverable
+  because the declaration only means anything as a gate on the list. Recommend
+  `size:exception` for PR6a-ii.
+
+## Status
+
+12/12 Work Unit 6a-ii tasks complete; tasks `6a.5`–`6a.14` are now closed. Working tree
+left uncommitted and fully normalized. Ready for `sdd-verify`.

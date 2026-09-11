@@ -249,16 +249,36 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 6a.2 (Done by 6a-i.4.) GREEN — `lib/server/auth.ts`: `import 'server-only'` first line; Supabase Auth magic-link helpers; `requireOperator()` resolves via `senders.allowlisted_email`/`auth_user_id`, binding `auth_user_id` on first allowlisted login.
 - [x] 6a.3 (Done by 6a-i.7.) GREEN — `app/console/login/page.tsx` and `app/console/auth/callback/route.ts`: magic-link entry/exchange.
 - [x] 6a.4 (Done by 6a-i.8.) GREEN — `app/console/layout.tsx`: calls `requireOperator()`; redirects unauthenticated/non-allowlisted visitors to `/console/login`.
-- [ ] 6a.5 RED — `lib/server/invitations.spec.ts` addendum: a sender's default query returns only `owner_sender_id`-matching invitations; the shared dashboard query returns aggregate counts across all invitations.
-- [ ] 6a.6 GREEN — add partitioned + shared-dashboard query functions to `lib/server/invitations.ts`.
-- [ ] 6a.7 RED — RTL test: a non-owned row renders no send/dispatch button and shows an "owned by {name}" label.
-- [ ] 6a.8 GREEN — `app/console/page.tsx`: owned guest list with send buttons; non-owned rows show the owner label with no send affordance.
-- [ ] 6a.9 RED — `cookies.spec.ts` addendum: `device_sender` cookie sign/verify round-trip; an absent cookie is distinguished from a mismatched value.
-- [ ] 6a.10 GREEN — add device-cookie helpers to `lib/server/cookies.ts`.
-- [ ] 6a.11 GREEN — `app/console/device/page.tsx`: per-device WhatsApp-account picker writing the signed `device_sender` cookie (`httpOnly`, `path=/console`, 1 year).
-- [ ] 6a.12 GREEN — wire `app/console/layout.tsx`: an absent device cookie redirects to `/console/device` (never a silent default); a mismatch renders a non-dismissible interstitial blocking dispatch while the read-only progress view stays available.
-- [ ] 6a.13 (PARTIAL — the auth half landed in 6a-i.9; the list/device half is Work Unit 6a-ii.) RED — `e2e/console-auth.spec.ts`: unallowlisted email denied; allowlisted sender reaches their dashboard; default view lists only owned invitations; shared dashboard shows all; non-owner sees no send button; device mismatch blocks dispatch with the interstitial and a match allows it to proceed.
-- [ ] 6a.14 Verify: run `e2e/console-auth.spec.ts` — confirm 6a.1, 6a.5, 6a.7, 6a.9, 6a.13 RED tests pass GREEN.
+- [x] 6a.5 (Done by 6a-ii.1/6a-ii.2.) RED — `lib/server/invitations.spec.ts` addendum: a sender's default query returns only `owner_sender_id`-matching invitations; the shared dashboard query returns aggregate counts across all invitations.
+- [x] 6a.6 (Done by 6a-ii.2.) GREEN — add partitioned + shared-dashboard query functions to `lib/server/invitations.ts`.
+- [x] 6a.7 (Done by 6a-ii.5.) RED — RTL test: a non-owned row renders no send/dispatch button and shows an "owned by {name}" label.
+- [x] 6a.8 (Done by 6a-ii.6/6a-ii.10.) GREEN — `app/console/page.tsx`: owned guest list with send buttons; non-owned rows show the owner label with no send affordance.
+- [x] 6a.9 (Done by 6a-ii.3.) RED — `cookies.spec.ts` addendum: `device_sender` cookie sign/verify round-trip; an absent cookie is distinguished from a mismatched value.
+- [x] 6a.10 (Done by 6a-ii.4.) GREEN — add device-cookie helpers to `lib/server/cookies.ts`.
+- [x] 6a.11 (Done by 6a-ii.8.) GREEN — `app/console/device/page.tsx`: per-device WhatsApp-account picker writing the signed `device_sender` cookie (`httpOnly`, `path=/console`, 1 year).
+- [x] 6a.12 (Done by 6a-ii.9.) GREEN — wire `app/console/layout.tsx`: an absent device cookie redirects to `/console/device` (never a silent default); a mismatch renders a non-dismissible interstitial blocking dispatch while the read-only progress view stays available.
+- [x] 6a.13 (The auth half landed in 6a-i.9; the list/device half in 6a-ii.11.) RED — `e2e/console-auth.spec.ts`: unallowlisted email denied; allowlisted sender reaches their dashboard; default view lists only owned invitations; shared dashboard shows all; non-owner sees no send button; device mismatch blocks dispatch with the interstitial and a match allows it to proceed.
+- [x] 6a.14 (Done by 6a-ii.12.) Verify: run the console E2E — confirm 6a.1, 6a.5, 6a.7, 6a.9, 6a.13 RED tests pass GREEN.
+
+## Phase 6a-ii: Console Guest List and Per-Device Declaration (Work Unit 6a-ii)
+
+> The second half of Work Unit 6a. Authentication and session survival landed in 6a-i;
+> this unit adds the partitioned guest list, the scoped progress figures, the inline
+> phone editor and the per-device WhatsApp declaration with its blocking interstitial.
+> It sends nothing: dispatch and both preview surfaces remain Work Unit 6b.
+
+- [x] 6a-ii.1 RED — `lib/domain/dispatch-state.spec.ts` and `lib/domain/console-list.spec.ts`: `link_opened` never satisfies a "has been invited" predicate and carries its own label; every scoped metric states numerator, denominator and population; a reduced answer is projected without re-deriving it from a history.
+- [x] 6a-ii.2 GREEN — `lib/domain/dispatch-state.ts`, `lib/domain/console-list.ts`, and the console read side of `lib/server/invitations.ts` (`listConsoleInvitations`, `listOperatorProfiles`, `findGuestInvitationOwner`, `updateGuestPhone`); every answer read goes through `rsvp_latest`, never `rsvp_responses`.
+- [x] 6a-ii.3 RED — `lib/server/cookies.spec.ts` addendum: `device_sender` sign/verify round-trip; an absent declaration is distinguished from a mismatched one; a forwarded operator-identity header is not accepted as a declaration.
+- [x] 6a-ii.4 GREEN — device-cookie helpers in `lib/server/cookies.ts`, HMACed with `OPERATOR_SESSION_SECRET` under a distinct signing prefix so the two message spaces cannot be replayed into each other.
+- [x] 6a-ii.5 RED — RTL: a non-owned row renders no send affordance and names its owner; an opened link is never labelled as a send; the list uses no popover row menu; the inline editor submits guest id plus phone and flags an unreachable line.
+- [x] 6a-ii.6 GREEN — `components/console/{GuestList,GuestPhoneField,ProgressSummary}.tsx`, props-only, with row actions in normal flow rather than an absolutely positioned menu.
+- [x] 6a-ii.7 RED/GREEN — `lib/domain/device-declaration.ts` + `components/console/{DeviceDeclarationForm,DeviceMismatchNotice}.tsx`: an absent or blank declaration classifies as `undeclared` and never as the signed-in operator; the picker preselects nobody; the interstitial names both sides and offers two exits and no dismissal.
+- [x] 6a-ii.8 GREEN — `app/console/device/{page,actions}.tsx`, outside the `(authenticated)` group so the redirect to it cannot loop; the submitted id is validated against the real sender list before it is signed.
+- [x] 6a-ii.9 GREEN — `lib/server/console-session.ts` gains `readDeviceDeclaration`/`requireDeclaredDevice`; `app/console/(authenticated)/layout.tsx` redirects an undeclared device to the picker and renders the interstitial over a read-only view on a mismatch.
+- [x] 6a-ii.10 GREEN — `app/console/(authenticated)/page.tsx` (owned partition + shared dashboard) and `actions.ts` (`updateGuestPhoneAction`: session identity, declaration match, and server-resolved guest ownership all checked before the write).
+- [x] 6a-ii.11 RED — `e2e/console-guest-list.spec.ts`: an undeclared device is asked rather than defaulted; clearing the declaration re-asks; a match opens the console and a mismatch blocks it with the interstitial; the default view lists only owned invitations; the shared dashboard is strictly wider and offers no send button on the other's rows; a household that answered yes then no is counted once as declined; an opened link is never counted as a send; the inline editor stores E.164 and flags a landline. Also re-asserts the deferred half of 4b.12 with a real operator session.
+- [x] 6a-ii.12 Verify: `npm test`, `PORT=3100 npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`.
 
 ## Phase 6b: Dispatch and Previews (Work Unit 6b)
 
