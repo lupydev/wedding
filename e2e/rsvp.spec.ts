@@ -225,8 +225,18 @@ test.describe("declining and the ceremony stream", () => {
 
   test.beforeAll(async () => {
     invitation = await household({ greetingName: "Familia Lejana" });
-    // Read from the row, never restated here: an expectation holding its own
-    // copy of these four facts would keep passing after the couple changed them.
+    /*
+      Read from the row, never restated here: an expectation holding its own copy
+      of these four facts would keep passing after the couple changed them.
+
+      Nothing in this file locks the row, and nothing needs to. `ceremony` is a
+      singleton and `e2e/console-wedding.spec.ts` edits it through the console —
+      which would race with the assertion below — so that spec runs in its own
+      Playwright project, sequenced AFTER this one by `dependencies` in
+      `playwright.config.ts`. Exclusion by scheduling rather than by locking: a
+      lock would make these two files wait on each other inside Playwright's own
+      test timeout, which is exactly what it does not budget for.
+    */
     ceremony = await readCeremony();
   });
 

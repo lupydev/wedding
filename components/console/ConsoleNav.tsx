@@ -1,4 +1,10 @@
-import { CheckCheck, ListOrdered, Smartphone, Users } from "lucide-react";
+import {
+  CalendarHeart,
+  CheckCheck,
+  ListOrdered,
+  Smartphone,
+  Users,
+} from "lucide-react";
 import type { ComponentType } from "react";
 
 import {
@@ -39,6 +45,7 @@ const ICONS: Record<ConsoleNavIcon, ComponentType<{ className?: string }>> = {
   check: CheckCheck,
   users: Users,
   phone: Smartphone,
+  calendar: CalendarHeart,
 };
 
 /**
@@ -139,11 +146,35 @@ export function ConsoleNav({ pathname }: ConsoleNavProps) {
       {/*
         The sidebar. Hidden below the single breakpoint — `md`, 768px, the one
         number the whole shell changes shape at.
+
+        IT IS PINNED, AND THAT IS NOT DECORATION. It shipped as a plain flex
+        column with no positioning and no height, so it was as tall as its own
+        links and scrolled away with the page. Two hundred households into the
+        guest list the operator's navigation was above the top of the window, and
+        the only route back to it was scrolling the whole list up again.
+
+        STICKY, NOT FIXED. `fixed` takes it out of the flow and the content beside
+        it slides underneath; `sticky` keeps the flex row's geometry intact, so the
+        shell needs no compensating margin that could drift from the width.
+
+        `dvh`, NOT `vh`. `100vh` is the viewport measured with a mobile browser's
+        URL bar EXTENDED and it keeps that value after the bar retracts, so a
+        `h-screen` sidebar is taller than the window holding it and its own last
+        item cannot be reached. The sidebar appears from 768px up, which includes
+        every tablet in portrait, and this shell is phone-first.
+
+        The explicit height is also what makes `sticky` work at all here: a flex
+        item with an `auto` cross size stretches to the row's full height, and an
+        element as tall as its scroll container can never stick to anything.
+
+        `overflow-y-auto` because a pinned element with a fixed height CLIPS
+        whatever does not fit, silently — and the bar below the breakpoint renders
+        the same destinations with no such limit.
       */}
       <nav
         aria-label="Navegación lateral del panel"
         data-slot="console-sidebar"
-        className="hidden w-52 shrink-0 flex-col gap-1 border-r border-border p-3 md:flex"
+        className="hidden w-52 shrink-0 flex-col gap-1 border-r border-border p-3 md:sticky md:top-0 md:flex md:h-dvh md:overflow-y-auto"
       >
         {CONSOLE_NAV_ITEMS.map((item) => (
           <SidebarItem item={item} key={item.key} pathname={pathname} />

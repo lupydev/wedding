@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { InvitationBody } from "@/components/invitation/InvitationBody";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
+import { getCeremony } from "@/lib/server/ceremony";
 import { requireOperator } from "@/lib/server/console-session";
 import { requiredDefaultPhoneCountry, siteOrigin } from "@/lib/server/env";
 import {
@@ -104,6 +105,11 @@ export default async function InvitationPreviewPage({
   }
 
   const invitation = toGuestFacingInvitation(record);
+  // The same `ceremony` row the public route reads. Sharing the ROW is what
+  // makes "identical output" a property rather than a promise: a preview holding
+  // its own copy of the couple and the venue would show the operator copy no
+  // guest receives, which is the one thing a preview must never do.
+  const wedding = await getCeremony(client);
 
   return (
     <div className="console__main console__preview flex flex-col gap-4">
@@ -140,7 +146,7 @@ export default async function InvitationPreviewPage({
         must not do. The console is the back room of this event; this is a window.
       */}
       <div className="console__preview-body paper-surface rounded-lg border border-border px-4 py-6">
-        <InvitationBody invitation={invitation} />
+        <InvitationBody invitation={invitation} wedding={wedding} />
       </div>
 
       <a

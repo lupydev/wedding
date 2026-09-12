@@ -70,7 +70,15 @@ export async function generateMetadata({
     return { title: "Invitación", robots };
   }
 
-  const { title, description } = buildInvitationMetadataText(invitation);
+  // The couple's names come from the `ceremony` row, like every other wedding
+  // fact. Read AFTER the unknown-slug branch above on purpose: a probe for a
+  // nonexistent slug must not cost a second query, and it must not be
+  // distinguishable by timing either.
+  const { coupleNames } = await loadCeremony();
+  const { title, description } = buildInvitationMetadataText({
+    ...invitation,
+    coupleNames,
+  });
 
   return {
     title,
@@ -111,19 +119,21 @@ export default async function InvitationPage({ params }: RouteParams) {
     // form a household fills in believing they answered.
     const open = rsvpIsOpenNow(invitation.rsvpDeadline);
     const current = open ? await loadCurrentRsvp(record.id) : null;
-    // Read whenever the answer surface exists, because a household that
-    // declines becomes a stream viewer without another round trip to the
-    // server: the details must already be in the tree when the form is
-    // replaced. Behind the phone gate, which is the better protected of the two
-    // places these values are shown.
-    const ceremony = open ? await loadCeremony() : null;
+    // Every wedding fact this page shows, from the one row that holds them.
+    // Read unconditionally inside this branch rather than only when the RSVP is
+    // open: the body itself now needs the couple, the date and the venue, so a
+    // closed RSVP still needs the row. The gate branch below needs none of it
+    // and pays for none of it. `generateMetadata` reads the same request-cached
+    // function, so the two together cost one query.
+    const ceremony = await loadCeremony();
 
     return (
       <main>
         <InvitationBody
           invitation={invitation}
+          wedding={ceremony}
           rsvp={
-            open && ceremony !== null ? (
+            open ? (
               // The slug is bound on the SERVER here too: the form never
               // supplies it, so a client cannot aim an RSVP at another
               // household.
@@ -140,6 +150,11 @@ export default async function InvitationPage({ params }: RouteParams) {
                         dietaryNotes: current.dietaryNotes,
                       }
                 }
+                // The stream details, which a declining household sees in
+                // place of the form: the answer is recorded and the only thing
+                // left to say is how to join. Already in the tree, so declining
+                // needs no second round trip. Behind the phone gate, which is
+                // the better protected of the two places these values appear.
                 ceremony={ceremony}
                 action={submitRsvpAction.bind(null, slug)}
               />

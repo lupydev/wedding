@@ -141,6 +141,12 @@ test.describe("the admin-only body preview", () => {
     // The drift guard, and the reason the body is one shared component rather
     // than two. A second implementation would let the operator approve copy no
     // guest ever reads — and nothing would ever report the difference.
+    //
+    // BOTH RENDERS READ THE SINGLETON `ceremony` ROW, so this comparison is only
+    // meaningful while nothing edits it between the two fetches below. The one
+    // spec that does — `console-wedding.spec.ts` — runs in its own Playwright
+    // project, sequenced after this one by `dependencies` in
+    // `playwright.config.ts`. Exclusion by scheduling, not by locking.
     await page.goto(`/console/preview/${household.invitationId}`);
     const previewBody = await bodyWithoutRsvp(page);
 

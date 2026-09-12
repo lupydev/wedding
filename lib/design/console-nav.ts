@@ -1,5 +1,6 @@
 import { CONSOLE_DEVICE_PATH } from "@/lib/domain/device-declaration";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
+import { CONSOLE_WEDDING_PATH } from "@/lib/domain/wedding-facts";
 
 /**
  * The console shell's navigation, as data rather than as markup.
@@ -40,7 +41,7 @@ export const CONSOLE_BREAKPOINT_VARIANT = "md";
 export const CONSOLE_TABBAR_BASE_PX = 56;
 
 /** Which lucide icon a tab draws. Resolved in the component, not here. */
-export type ConsoleNavIcon = "list" | "check" | "users" | "phone";
+export type ConsoleNavIcon = "list" | "check" | "users" | "phone" | "calendar";
 
 export interface ConsoleNavItem {
   readonly key: string;
@@ -57,18 +58,29 @@ export interface ConsoleNavItem {
 }
 
 /**
- * FOUR TABS, AND NO OVERFLOW SHEET.
+ * FIVE TABS, AND STILL NO OVERFLOW SHEET.
  *
- * Four rather than five, and the reason is worth writing down: the console has
- * exactly four destinations that need no invitation id. The compose and preview
- * routes are per-household, and signing out is deliberately NOT here — a bottom
- * bar sits under the operator's thumb, and an accidental sign-out in the middle of
- * a dispatch run costs a re-authentication on a phone in a venue. It lives in the
- * header, where it is reached on purpose.
+ * It was four, and the reason was worth writing down: the console had exactly
+ * four destinations needing no invitation id. Work Unit 9 added the fifth, the
+ * page where either operator edits the wedding's own facts — a real route, not a
+ * fragment, and the only place those facts can be corrected now that no component
+ * holds them.
  *
- * The two in-page destinations are fragments of the console root, which is where
- * those two sections already live. They are navigation, not new routes: this work
- * unit changes no behaviour, adds no route and moves no data.
+ * FIVE IS THE CEILING, AND IT IS NOT AN ARBITRARY ONE. Five labelled tabs fit
+ * across the narrowest phone this console targets while each keeps its 44px touch
+ * target. A sixth would need an overflow sheet, and an overflow sheet is where a
+ * destination goes to be forgotten. `console-nav.spec.ts` asserts the ceiling, so
+ * the next destination has to argue with a failing test rather than with a
+ * comment.
+ *
+ * Signing out is deliberately NOT here — a bottom bar sits under the operator's
+ * thumb, and an accidental sign-out in the middle of a dispatch run costs a
+ * re-authentication on a phone in a venue. It lives in the header, where it is
+ * reached on purpose. The compose and preview routes are per-household and need
+ * an invitation id, so they are reached from a row rather than from the bar.
+ *
+ * Two of the five are fragments of the console root, where those sections already
+ * live. They are navigation within a page, not routes of their own.
  */
 export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
   {
@@ -88,6 +100,15 @@ export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
     href: `${CONSOLE_ROOT_PATH}#evento`,
     label: "Evento",
     icon: "users",
+  },
+  {
+    key: "wedding",
+    href: CONSOLE_WEDDING_PATH,
+    // "Boda" and not "Datos de la boda": the label sits under an icon on the
+    // narrowest phone, and a label that wraps makes the bar taller than the
+    // height the content's bottom padding was calculated from.
+    label: "Boda",
+    icon: "calendar",
   },
   {
     key: "device",

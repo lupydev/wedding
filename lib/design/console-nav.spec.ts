@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { CONSOLE_WEDDING_PATH } from "@/lib/domain/wedding-facts";
+
 import {
   CONSOLE_BREAKPOINT_PX,
   CONSOLE_BREAKPOINT_VARIANT,
@@ -61,6 +63,25 @@ describe("CONSOLE_NAV_ITEMS", () => {
     expect(new Set(CONSOLE_NAV_ITEMS.map((item) => item.href)).size).toBe(
       CONSOLE_NAV_ITEMS.length,
     );
+  });
+
+  /**
+   * THE WEDDING EDITOR IS A DESTINATION, AND THE BAR STILL HAS NO OVERFLOW SHEET.
+   *
+   * The bar held four items because the console had exactly four destinations
+   * needing no invitation id. Work Unit 9 added a fifth: the page where either
+   * operator edits the wedding's own facts. Five labelled tabs still fit across
+   * the narrowest phone this console targets, so the rule that matters — no
+   * overflow sheet, because an overflow sheet is where a destination goes to be
+   * forgotten — is unchanged. Five is the ceiling, asserted above.
+   */
+  it("includes the page where the wedding's own facts are edited", () => {
+    const wedding = CONSOLE_NAV_ITEMS.find(
+      (item) => item.href === CONSOLE_WEDDING_PATH,
+    );
+
+    expect(wedding).toBeDefined();
+    expect(wedding?.label).not.toBe("");
   });
 
   it("points only inside the console", () => {

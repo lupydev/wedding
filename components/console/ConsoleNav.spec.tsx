@@ -127,6 +127,64 @@ describe("ConsoleNav", () => {
     expect(classes).not.toMatch(/bg-primary\//);
   });
 
+  /**
+   * THE SIDEBAR STAYS PUT WHILE THE GUEST LIST SCROLLS UNDER IT.
+   *
+   * It shipped as a plain flex column with no positioning and no height, so it
+   * was as tall as its four links and scrolled away with the page. Two hundred
+   * households in, the operator's navigation was somewhere above the top of the
+   * window and the only way back to it was scrolling up through the whole list.
+   *
+   * `dvh` AND NOT `vh`, AND THAT IS THE PART WORTH A TEST. `100vh` is the
+   * viewport with the mobile browser's URL bar EXTENDED, permanently, even after
+   * it retracts — so a `h-screen` sidebar is taller than the window it sits in
+   * and its own last item is unreachable. This shell is phone-first and the
+   * sidebar appears from 768px up, which includes every tablet in portrait.
+   *
+   * Asserted as classes because jsdom performs no layout: there is no computed
+   * sticky offset to read here. `e2e/console-design.spec.ts` measures the real
+   * thing in a real browser.
+   */
+  it("pins the sidebar so it does not scroll away with the page", () => {
+    const { container } = render(<ConsoleNav pathname="/console" />);
+    const sidebar = container.querySelector("[data-slot='console-sidebar']");
+
+    expect(sidebar).not.toBeNull();
+
+    const classes = (sidebar as HTMLElement).className;
+
+    // Sticky rather than fixed: fixed would take the sidebar out of the flow and
+    // the content beside it would slide underneath.
+    expect(classes).toMatch(/(^|\s)md:sticky(\s|$)/);
+    expect(classes).toMatch(/(^|\s)md:top-0(\s|$)/);
+    expect(classes).toMatch(/(^|\s)md:h-dvh(\s|$)/);
+  });
+
+  it("gives the sidebar its own overflow, so a fifth destination is reachable", () => {
+    const { container } = render(<ConsoleNav pathname="/console" />);
+    const sidebar = container.querySelector("[data-slot='console-sidebar']");
+
+    // A pinned element with a fixed height and no overflow rule CLIPS whatever
+    // does not fit, silently. The bar below the breakpoint has the same number
+    // of destinations and no such constraint, so the two would disagree about
+    // which destinations exist.
+    expect((sidebar as HTMLElement).className).toMatch(
+      /(^|\s)md:overflow-y-auto(\s|$)/,
+    );
+  });
+
+  it("spends no viewport-unit height class anywhere in the navigation", () => {
+    const { container } = render(<ConsoleNav pathname="/console" />);
+    const classes = [...container.querySelectorAll("*")]
+      .map((element) => (element as HTMLElement).className)
+      .join(" ");
+
+    // `h-screen`, `min-h-screen` and `max-h-screen` are all `vh` in Tailwind,
+    // and `vh` is the unit that ignores a retracting URL bar.
+    expect(classes).not.toMatch(/(^|[\s:])(h|min-h|max-h)-screen(\s|$)/);
+    expect(classes).not.toMatch(/\[\d+vh\]/);
+  });
+
   it("keeps every tab's label visible in the bar, with no overflow menu", () => {
     // An overflow sheet is where a destination goes to be forgotten. Four tabs
     // fit, so all four are on the bar.

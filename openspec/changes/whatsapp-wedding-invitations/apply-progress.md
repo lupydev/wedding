@@ -3514,3 +3514,324 @@ were compressed to chase the number.
 
 26/26 Work Unit 8 tasks complete. Working tree left uncommitted and fully
 normalized. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 9 — The Pinned Sidebar and the Editable Wedding
+
+**Mode**: Strict TDD. **Store**: hybrid. **Baseline**: 1215 unit / 136 E2E, tree clean at `9ab478e`.
+
+## What this unit actually changed
+
+Two things, and the second is the one with consequences.
+
+### The sidebar stays put
+
+`components/console/ConsoleNav.tsx` rendered the sidebar as a plain flex column with
+no positioning and no height, so it was as tall as its own four links and scrolled
+away with the page. Two hundred households into the guest list, the operator's
+navigation was above the top of the window and the only route back was scrolling
+the whole list up again.
+
+It is now `md:sticky md:top-0 md:h-dvh md:overflow-y-auto`. Three of those four are
+load-bearing and none is decoration:
+
+- **`sticky`, not `fixed`** — `fixed` takes it out of the flow and the content
+  beside it slides underneath, which would need a compensating margin that can
+  drift from the declared width.
+- **`dvh`, not `vh`** — `100vh` is the viewport measured with a mobile URL bar
+  EXTENDED and keeps that value after it retracts, so a `h-screen` sidebar is
+  taller than the window holding it and its own last item cannot be reached. The
+  sidebar appears from 768px up, which includes every tablet in portrait.
+- **the explicit height is what makes `sticky` work at all** — a flex item with an
+  `auto` cross size stretches to the row's full height, and an element as tall as
+  its scroll container can never stick to anything. This was found while writing
+  the test, not after.
+- **`overflow-y-auto`** because a pinned element with a fixed height clips whatever
+  does not fit, silently, and the bar below the breakpoint has no such limit.
+
+The bottom tab bar is untouched. A standing regression guard was added alongside:
+the navigation may spend no `vh`-based height class anywhere (`h-screen`,
+`min-h-screen`, `max-h-screen`, `[NNvh]`).
+
+### The wedding's facts are data now, not source
+
+`components/invitation/InvitationBody.tsx` declared `COUPLE_NAMES`,
+`WEDDING_DATE`, `VENUE_NAME` and `VENUE_ADDRESS` as module constants at lines
+43–46, and `lib/domain/og-card.ts:24` held `OG_CARD_INVITATION_LINE` with the same
+placeholder inside it. **Both briefed line numbers were correct.** The instinct
+behind them was right — never invent a date, because an invented date ships a
+wrong invitation that reads as a correct one — and the location was wrong: the
+`ceremony` row already held this wedding's date and its stream credentials, so half
+the wedding was correctable with an `UPDATE` and half needed a redeploy, and the
+two halves could describe the same day differently.
+
+`supabase/migrations/0011_wedding_facts.sql` adds `couple_names`, `venue_name` and
+`venue_address` to that row, seeded with the same visibly-unfinished placeholders so
+nothing is invented. There is deliberately **no `wedding_date` column**: the
+ceremony's date IS the wedding's date, which is what task 5b.15 asked for.
+
+Every surface now reads the one row: the invitation body, the Open Graph card and
+the page metadata, the ceremony stream card behind the phone gate, and the WhatsApp
+draft.
+
+## The one deviation worth arguing about
+
+**The WhatsApp draft gained the couple's names and nothing else.**
+
+The brief lists the message template among the four surfaces that must read the
+row. `lib/domain/dispatch-message.ts` carried no event fact at all, for a reason
+recorded in its own header: a reference project hard-coded the date and the venue
+into an approved template, the event moved, the page was corrected in minutes, and
+every already-delivered message kept announcing the old venue with no way to recall
+it.
+
+That invariant is kept. The date, the time, the venue and the address stay out, and
+the unit test still enforces it by counting digits — the only digits a rendered
+message may contain are the ones inside the invitation URL, so a date or a street
+number cannot be added without turning something red. What joined the template is
+`{{couple_names}}`, because a name identifies who is inviting while those four are
+logistics that move. The module's own note had named this as the plan: "adding a
+signature there is a template edit plus one new entry below", once real details had
+somewhere to live. A new test also asserts that no `wedding_date`, `ceremony_date`,
+`ceremony_time`, `venue_name` or `venue_address` variable exists in that template
+or its variable list.
+
+## The editor, and the two warnings that are its point
+
+`/console/wedding` — the fifth nav destination, `Boda`. One form, seven fields, one
+save. Not seven inline editors: every surface reads these values together, and a
+partial save is how the date comes to belong to one correction while the venue
+still belongs to the previous one. (The guest list's inline phone editor is the
+opposite case for the opposite reason, and stays as it is.)
+
+Both operators may edit. There is no ownership axis to check — the row belongs to
+the wedding, not to a sender — and two people getting married do not need an
+approval workflow between them. That absence is asserted, not merely left out.
+
+**Warning one, beside the couple's names.** The Open Graph card is served
+`immutable, max-age=31536000` and WhatsApp caches one preview per URL, so names
+edited after invitations went out leave every delivered card showing the old text
+permanently. The only cure is a new slug — a new URL, therefore a new card — and
+sending again. The warning says both halves: what will not change, and what the
+only fix is. It is a paragraph on the page, not a tooltip and not a `title`
+attribute, because the operators are on phones and a phone cannot hover.
+
+**Warning two, beside the passcode.** Every household that declined already reads
+the Zoom passcode on their own invitation, behind the phone gate. Changing it stops
+the old one working; it does not un-share it, and nobody tells those households.
+
+**The passcode is not a password.** `type="text"`, `autoComplete="off"`, no masking.
+A `type="password"` field makes the browser offer to save a shared meeting passcode
+into the operator's own credential store, where a phone keychain syncs it to every
+device on the account and mixes it in with the credential that actually guards the
+console. Masking would also hide a value the operator is checking against a Zoom
+screen, from nobody. Both the component test and the E2E assert it, and a mutation
+test confirmed the assertion is real: flipping the field to `type="password"` turns
+two tests red.
+
+**Nothing is logged.** The action logs nothing on success and nothing on failure —
+the caught error is deliberately never read, because reading it is one edit away
+from interpolating it. `updateCeremony` interpolates no submitted value into its
+own error either. Two tests spy on five `console` methods to hold this.
+
+## The regression guard
+
+`tools/no-source-placeholders.spec.ts` reads every file under `app/`, `components/`,
+`lib/`, `scripts/` and `tools/` and fails on any `{{UPPER_SNAKE}}` token —
+**comments included**, on purpose: a comment that still calls a value
+`{{VENUE_NAME}}` tells the next reader the venue is a compile-time constant, which
+is the belief this unit exists to remove. It caught three such comments after the
+constants themselves were already gone.
+
+The migration and the test files are exempt. The row's seeded placeholders are
+DATA, in one editable place, which is the whole point rather than a violation of it;
+and a test proving a placeholder passes through verbatim has to name one. The guard
+also tests itself twice: that it still matches a reintroduced constant, and that it
+does not mistake lowercase `{{greeting_name}}` for a wedding fact.
+
+## Structure
+
+| File | Action | What |
+|---|---|---|
+| `supabase/migrations/0011_wedding_facts.sql` | Created | Three columns, seeded placeholders, length checks, non-blank checks on all seven |
+| `supabase/down/0011_wedding_facts_down.sql` | Created | Drops the three columns and 0011's non-blank checks; states honestly that it destroys data |
+| `lib/domain/wedding-facts.ts` | Created | Field list, labels, max lengths, `CONSOLE_WEDDING_PATH`, `parseWeddingFacts` |
+| `lib/domain/wedding-facts.spec.ts` | Created | 53 tests |
+| `components/console/WeddingFactsForm.tsx` | Created | Props-only form, both warnings, per-field errors |
+| `components/console/WeddingFactsForm.spec.tsx` | Created | 20 tests |
+| `app/console/(authenticated)/wedding/{page,actions,wedding-facts-state,wedding-facts-editor}` | Created | Async container, Server Action, state type, `useActionState` wrapper |
+| `app/console/(authenticated)/wedding/actions.spec.ts` | Created | 15 tests |
+| `tools/no-source-placeholders.spec.ts` | Created | 108 assertions over every source file |
+| `e2e/console-wedding.spec.ts` | Created | 16 E2E, own Playwright project |
+| `e2e/helpers/wedding-facts.ts` | Created | Read and restore the singleton |
+| `lib/server/ceremony.ts` | Modified | Seven columns; new `updateCeremony` |
+| `components/invitation/InvitationBody.tsx` | Modified | Four constants deleted, `wedding` prop added |
+| `lib/domain/og-card.ts` | Modified | `OG_CARD_INVITATION_LINE` → `buildOgCardInvitationLine(coupleNames)` |
+| `lib/domain/dispatch-message.ts` | Modified | `{{couple_names}}` added; logistics still excluded |
+| `lib/design/console-nav.ts`, `components/console/ConsoleNav.tsx` | Modified | Pinned sidebar, fifth destination, `calendar` icon |
+| `app/i/[slug]/{page,opengraph-image}.tsx` | Modified | Read the row |
+| `app/console/(authenticated)/{preview,dispatch}/[invitationId]/page.tsx` | Modified | Read the row |
+| `playwright.config.ts` | Modified | Second project for the one spec that writes the singleton; `expect.timeout` raised |
+| `vitest.config.mts` | Modified | `testTimeout`/`hookTimeout` raised, with the measurement recorded |
+| `supabase/tests/ceremony.spec.ts` | Modified | 28 tests: seven columns, blank refusal per column, the write path |
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | Triangulate | Refactor |
+|---|---|---|---|---|---|---|---|
+| 9.1–9.2 sidebar | `components/console/ConsoleNav.spec.tsx` | Integration | ✅ 10/10 | ✅ executed, 2 failed | ✅ 41/41 | ✅ 3 cases (sticky, overflow, no-`vh`) | ➖ none needed |
+| 9.3–9.6 row + adapter | `supabase/tests/ceremony.spec.ts` | Real DB | ✅ 7/7 | ✅ executed, 21 failed | ✅ 28/28 | ✅ 7 columns × blank + whitespace + real value | ✅ shared `CEREMONY_COLUMNS`/`INTRUDER_VALUES` |
+| 9.7–9.8 validation | `lib/domain/wedding-facts.spec.ts` | Unit | N/A (new) | ✅ executed, module absent | ✅ 53/53 | ✅ 7 fields × 4 failure modes | ✅ `fieldError` extracted |
+| 9.9–9.10 body | `components/invitation/InvitationBody.spec.tsx` | Integration | ✅ 12/12 | ✅ executed, 3 failed | ✅ 15/15 | ✅ two different weddings + verbatim placeholder | ➖ snapshots updated deliberately |
+| 9.11–9.12 card | `lib/domain/og-card.spec.ts` | Unit | ✅ 4/13 pre-change | ✅ executed, 9 failed | ✅ 13/13 | ✅ two couples, digit-free, placeholder | ➖ none needed |
+| 9.13–9.14 draft | `lib/domain/dispatch-message.spec.ts` | Unit | ✅ 17/21 pre-change | ✅ executed, 4 failed | ✅ 21/21 | ✅ two couples + empty + forbidden-variable list | ✅ `draft()` helper |
+| 9.15 wiring | `npx tsc --noEmit` + E2E | Compile + E2E | ✅ typecheck clean before | ✅ 6 named call sites failed | ✅ clean | ✅ four routes | ➖ none |
+| 9.16 guard | `tools/no-source-placeholders.spec.ts` | Unit | N/A (new) | ✅ executed, 3 comments failed | ✅ 112/112 | ✅ self-tests both directions | ➖ none |
+| 9.17–9.18 form | `components/console/WeddingFactsForm.spec.tsx` | Integration | N/A (new) | ⚠️ RED by absent module, **not executed separately**; instead a mutation test (`type="text"` → `"password"`) proved the load-bearing assertion turns red | ✅ 20/20 | ✅ 7 fields × 4 attributes, both warnings, error states | ➖ none |
+| 9.19–9.20 action | `app/console/(authenticated)/wedding/actions.spec.ts` | Unit | N/A (new) | ✅ executed, module absent | ✅ 15/15 | ✅ session, 4 refusal shapes, write failure, logging, revalidation | ➖ none |
+| 9.21–9.22 nav | `lib/design/console-nav.spec.ts` | Unit | ✅ 17/18 | ✅ executed, 1 failed | ✅ 18/18 | ➖ single destination | ➖ none |
+| 9.23 round trip | `e2e/console-wedding.spec.ts` | E2E | ✅ 136/136 | ✅ executed, page absent | ✅ 16/16 | ✅ save, guest body, `og:description`, stream card, two refusals, access control | ✅ project split replaced the advisory lock |
+
+**Honest exception**: task 9.17's RED was written before the component existed and
+failed as a missing module, but I did not execute that failure as its own run. The
+mutation test recorded above is what stands in for it, and it is the stronger
+evidence for the assertion that mattered.
+
+### Test summary
+
+- Unit/integration: **1458 passing** (was 1215) — +243
+- E2E: **152 passing** (was 136) — +16
+- New test files: 5. Modified test files: 7.
+- Pure functions created: `parseWeddingFacts`, `buildOgCardInvitationLine`, plus
+  `fieldError` and `characterCount` as private helpers.
+
+## Five genuine findings the tests produced
+
+1. **Adding a `not null` column silently disarmed two singleton tests.**
+   `supabase/tests/ceremony.spec.ts` asserted that a second `ceremony` row is
+   refused by the primary key and that a `false`-keyed row is refused by the check
+   constraint. Both INSERTs named only 0009's four columns, so after 0011 they
+   failed on a missing `couple_names` instead — an incomplete INSERT never reaches
+   either constraint. Had the columns been added without running these, the tests
+   would have stayed green while testing nothing. They now build their column list
+   from the same constant the rest of the file uses.
+
+2. **`sticky` without an explicit height does nothing on a flex item.** A flex item
+   with an `auto` cross size stretches to the row's full height, and an element as
+   tall as its scroll container can never stick. The `md:h-dvh` is not only about
+   the viewport; it is what makes the positioning function.
+
+3. **A character limit measured in `String.length` disagrees with Postgres.**
+   `char_length` counts characters, `.length` counts UTF-16 units, so one emoji
+   costs two. A limit checked with `.length` accepts a 200-character value with
+   astral symbols and lets the database refuse it — which reaches the operator as a
+   constraint name instead of a sentence beside the field. `parseWeddingFacts`
+   counts code points, and a test pins the difference.
+
+4. **A Postgres advisory lock is the wrong tool for Playwright.** `ceremony` is a
+   singleton three other specs read and assert against a later render, so the
+   editor's E2E was first given an advisory lock shared with those specs. The run
+   collapsed: 8 failures and 53 tests that never ran. Playwright budgets a timeout
+   per TEST and knows nothing about a hook waiting on another worker, so the readers
+   failed on their own 30-second clock while the writer still held the row.
+   Replaced with exclusion by SCHEDULING — a second Playwright project declaring
+   `dependencies: ["chromium"]` — after which nothing waits because nothing
+   overlaps.
+
+5. **A failed E2E run poisons the next one.** Playwright fixtures clean up in
+   `afterAll`, which does not run when a test in the block fails, so seven orphaned
+   `senders` rows accumulated across the failed runs above and then broke the device
+   picker in specs that had nothing to do with this unit. `supabase db reset`
+   cleared it and every suite went green. This is a pre-existing property of the
+   fixture design, reported and NOT fixed here: it is a change to five other spec
+   files and belongs to its own unit.
+
+## Two timeout budgets raised, measured rather than guessed
+
+Both are reported as changes to the harness, not to the product, and both were
+verified by running the affected files in isolation first — where every one of them
+passed.
+
+- **`vitest.config.mts`**: `testTimeout` 5s → 15s and `hookTimeout` → 30s for the
+  `unit` project, 10s for `component`. Most `unit` files talk to the real local
+  Supabase stack and a few spawn ESLint with the full typescript-eslint and Next
+  configs. Both costs are paid once per worker by whichever test runs first in its
+  file, and Vitest runs those files in parallel across every core. Under 5s this
+  produced a rotating set of failures — always the FIRST test of a
+  database-touching file, always "Test timed out", never the same file twice, and
+  all 86 of them green when those six files ran together alone. The suite has since
+  run green four consecutive times.
+- **`playwright.config.ts`**: `expect.timeout` 5s → 15s. Most assertions here are
+  not web expectations: `signInAsOperator` waits on a production build's first
+  render of `/console`, whose Server Component then redirects to `/console/device`,
+  so one `toHaveURL` covers two cold renders and two queries. The recorded call
+  logs always showed the URL arriving at the INTERMEDIATE hop before the clock ran
+  out.
+
+Raised rather than hidden behind warm-up hooks or per-call overrides: neither number
+is an assertion about the product, and scattering overrides at the call sites that
+happened to lose the race would have hidden a shared cause.
+
+## Verification — actual observed output
+
+- `npm test`: **89 files, 1458 passed** (was 85 / 1215). Run four times, green each time.
+- `PORT=3100 npm run e2e`: **152 passed** (was 136), 0 failed, 0 skipped, 2.7m.
+- `npm run typecheck`: clean, no output.
+- `npm run lint`: clean, no output.
+- `npm run format:check`: `All matched files use Prettier code style!`
+- `npm run build`: succeeded; `/console/wedding` listed as `ƒ` (dynamic), 11/11 static pages generated.
+- `supabase db reset` then `npm test`: all 11 migrations applied including
+  `0011_wedding_facts.sql`; **89 files, 1458 passed**.
+
+Standing invariants, all re-asserted green by the suites above: raw-HTML Open Graph
+under a WhatsApp UA with no tags after `</head>`; no guest phone digits in
+guest-facing page source; exactly one unlock path, with the console session still
+not being one; the `nullif` mutation test; `service_role` append-only; seat parity;
+`rsvp_latest` reducing to one row; external anon-key RLS (including `ceremony`
+after the migration); the operator-session refresh test; the token contrast test.
+
+## Environment note
+
+`supabase start` failed its health check twice on `analytics` (Logflare) and
+`vector`, tearing the whole stack down each time. Neither is used by any test. The
+stack was brought up with `supabase start -x logflare,vector` and every container
+reported healthy. Worth knowing before the next run; nothing in this repository
+changed for it.
+
+## Not done, deliberately
+
+Creating, editing or deleting invitations and guests; choosing which household
+member receives a dispatch; assigning households between operators — all out of
+scope by the brief and reserved for a full SDD cycle. **No create button that goes
+nowhere was added.** The copy-density pass on the progress summary, the reminders,
+and the three open WU3 WARNINGs are untouched. Guest-facing routes keep their light
+paper palette and were not restyled.
+
+## Rollback boundary
+
+Delete `lib/domain/wedding-facts.{ts,spec.ts}`, `components/console/WeddingFactsForm.{tsx,spec.tsx}`,
+`app/console/(authenticated)/wedding/**`, `tools/no-source-placeholders.spec.ts`,
+`e2e/console-wedding.spec.ts`, `e2e/helpers/wedding-facts.ts`; revert the 24
+modified files; run `supabase/down/0011_wedding_facts_down.sql`. The down script
+destroys whatever the couple typed into the three new columns — capture them first.
+Roll the application back with the schema: after the rollback `getCeremony` fails
+loudly on the missing columns rather than rendering blanks, which is the right
+failure, because the alternative is an invitation with no venue on it.
+
+## Size
+
+Roughly **3.5k authored lines** across 24 modified and 14 new files, far above the
+session's 800-line budget. It does not slice: the four constants cannot leave the
+source without a row to hold them, the row cannot be edited without the editor, the
+editor cannot exist without the nav destination and the validation, and the
+placeholder guard is the only thing that keeps any of it from being undone by the
+next value somebody needs in a hurry. Half of it ships an invitation with no venue
+on it. Recommending `size:exception`; no comment, test or doc was compressed to
+chase the number.
+
+## Status
+
+25/25 Work Unit 9 tasks complete. Tasks 5b.15 and the code half of 7.1 closed; the
+VALUES remain the couple's to supply, now through `/console/wedding` rather than a
+migration. Working tree uncommitted and fully normalized. Ready for `sdd-verify`.

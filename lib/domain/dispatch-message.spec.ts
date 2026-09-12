@@ -40,12 +40,59 @@ function guest(
 
 const INVITATION_URL = "https://boda.example/i/abcdefghijklmn23";
 
+/**
+ * The couple's names, which arrive from the `ceremony` row like every other
+ * wedding fact. Digit-free on purpose: the "no date, no venue" assertion below
+ * works by counting digits, and a couple who put a digit in their own names would
+ * be the one legitimate way to produce one outside the URL.
+ */
+const COUPLE_NAMES = "Ana y Bruno";
+
+/** One complete draft input. Every test varies a single field of it. */
+function draft(overrides: Record<string, string> = {}) {
+  return {
+    greetingName: "Familia Muñóz",
+    invitationUrl: INVITATION_URL,
+    coupleNames: COUPLE_NAMES,
+    ...overrides,
+  };
+}
+
 describe("INVITATION_MESSAGE_TEMPLATE", () => {
-  it("declares exactly two variables, the greeting name and the invitation URL", () => {
+  it("declares exactly three variables: the household, the couple and the link", () => {
     expect([...INVITATION_MESSAGE_VARIABLES].sort()).toEqual([
+      "couple_names",
       "greeting_name",
       "invitation_url",
     ]);
+  });
+
+  /**
+   * THE COUPLE'S NAMES ARE A VARIABLE. THE DATE AND THE VENUE ARE NOT, AND WILL
+   * NOT BE.
+   *
+   * This module's own comment named the plan: "adding a signature there is a
+   * template edit plus one new entry below", once real details existed. They now
+   * do — in the `ceremony` row — so the draft signs off with the couple's names
+   * read from that row rather than restating them or omitting them.
+   *
+   * What does NOT join it is the date, the time, the venue or the address. Those
+   * are the four facts a reference project hard-coded into an approved template;
+   * the event moved, the page was corrected in minutes, and the already-delivered
+   * messages kept announcing the old venue forever. The link resolves to the one
+   * surface that can still be corrected, which is the whole argument.
+   */
+  it("declares no date, time, venue or address variable, and never will", () => {
+    for (const forbidden of [
+      "wedding_date",
+      "ceremony_date",
+      "ceremony_time",
+      "venue_name",
+      "venue_address",
+    ]) {
+      expect(INVITATION_MESSAGE_VARIABLES).not.toContain(forbidden);
+      expect(INVITATION_MESSAGE_TEMPLATE).not.toContain(forbidden);
+    }
   });
 
   it("names every placeholder it actually contains, so none can be forgotten", () => {
@@ -59,20 +106,38 @@ describe("INVITATION_MESSAGE_TEMPLATE", () => {
 
 describe("buildInvitationMessage", () => {
   it("greets the household by the name the operator stored", () => {
-    const message = buildInvitationMessage({
-      greetingName: "Familia Muñóz Aristizábal",
-      invitationUrl: INVITATION_URL,
-    });
+    const message = buildInvitationMessage(
+      draft({ greetingName: "Familia Muñóz Aristizábal" }),
+    );
 
     expect(message).toContain("Familia Muñóz Aristizábal");
     expect(message).not.toContain("{{");
   });
 
+  it("signs off with the couple's names from the ceremony row", () => {
+    expect(buildInvitationMessage(draft())).toContain("Ana y Bruno");
+  });
+
+  it("signs off with a DIFFERENT couple when the row holds different names", () => {
+    const message = buildInvitationMessage(
+      draft({ coupleNames: "Camila y Dario" }),
+    );
+
+    expect(message).toContain("Camila y Dario");
+    expect(message).not.toContain("Ana y Bruno");
+  });
+
+  it("refuses empty couple names rather than drafting an unsigned invitation", () => {
+    // `renderMessageTemplate` treats empty as missing for the same reason it
+    // treats undefined as missing: "Hola, ," reaches a guest and cannot be
+    // recalled.
+    expect(() => buildInvitationMessage(draft({ coupleNames: "" }))).toThrow(
+      /couple_names/,
+    );
+  });
+
   it("carries the invitation URL, and carries it exactly once", () => {
-    const message = buildInvitationMessage({
-      greetingName: "Familia Muñóz",
-      invitationUrl: INVITATION_URL,
-    });
+    const message = buildInvitationMessage(draft());
     const urls = message.match(/https?:\/\/\S+/g) ?? [];
 
     expect(urls).toEqual([INVITATION_URL]);
@@ -82,67 +147,50 @@ describe("buildInvitationMessage", () => {
     // The load-bearing assertion of this file. A hard-coded "14 de marzo de
     // 2026" or a street number would survive review and would keep announcing a
     // detail the invitation page no longer shows.
-    const message = buildInvitationMessage({
-      greetingName: "Familia Muñóz",
-      invitationUrl: INVITATION_URL,
-    });
+    const message = buildInvitationMessage(draft());
 
     expect(message.replace(INVITATION_URL, "")).not.toMatch(/\d/);
   });
 
   it("refuses a second URL, because only the first one gets a preview card", () => {
     expect(() =>
-      buildInvitationMessage({
-        greetingName: "Familia https://otra.example/promo",
-        invitationUrl: INVITATION_URL,
-      }),
+      buildInvitationMessage(
+        draft({ greetingName: "Familia https://otra.example/promo" }),
+      ),
     ).toThrow(/una sola|one URL|single URL/i);
   });
 
   it("refuses an empty household name rather than drafting a broken greeting", () => {
-    expect(() =>
-      buildInvitationMessage({
-        greetingName: "",
-        invitationUrl: INVITATION_URL,
-      }),
-    ).toThrow(/greeting_name/);
+    expect(() => buildInvitationMessage(draft({ greetingName: "" }))).toThrow(
+      /greeting_name/,
+    );
   });
 
   it("refuses a blank invitation URL rather than drafting a message with no link", () => {
-    expect(() =>
-      buildInvitationMessage({
-        greetingName: "Familia Muñóz",
-        invitationUrl: "",
-      }),
-    ).toThrow(/invitation_url/);
+    expect(() => buildInvitationMessage(draft({ invitationUrl: "" }))).toThrow(
+      /invitation_url/,
+    );
   });
 });
 
 describe("buildInvitationDispatchLink", () => {
   it("addresses the recipient and prefills the rendered draft", () => {
     const link = buildInvitationDispatchLink({
+      ...draft(),
       recipientE164: "+573001234567",
-      greetingName: "Familia Muñóz",
-      invitationUrl: INVITATION_URL,
     });
     const url = new URL(link);
 
     expect(url.origin).toBe("https://wa.me");
     expect(url.pathname).toBe("/573001234567");
-    expect(url.searchParams.get("text")).toBe(
-      buildInvitationMessage({
-        greetingName: "Familia Muñóz",
-        invitationUrl: INVITATION_URL,
-      }),
-    );
+    expect(url.searchParams.get("text")).toBe(buildInvitationMessage(draft()));
   });
 
   it("refuses a recipient that never became E.164 instead of cleaning it up", () => {
     expect(() =>
       buildInvitationDispatchLink({
+        ...draft(),
         recipientE164: "300 123 4567",
-        greetingName: "Familia Muñóz",
-        invitationUrl: INVITATION_URL,
       }),
     ).toThrow(/E\.164/);
   });

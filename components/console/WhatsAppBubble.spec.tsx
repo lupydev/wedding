@@ -33,7 +33,7 @@ const PROPS: WhatsAppBubbleProps = {
   waUrl: "https://wa.me/573001234567?text=Hola%2C%20Familia%20Mu%C3%B1%C3%B3z.",
   cardImagePath: ADVERTISED_PATH,
   cardTitle: "Familia Muñóz",
-  cardDescription: "Nos casamos — {{COUPLE_NAMES}}",
+  cardDescription: "Nos casamos — Ana y Bruno",
   cardLinkLabel: "boda.example.test",
 };
 
@@ -118,7 +118,7 @@ describe("WhatsAppBubble — what it shows the operator", () => {
     render(<WhatsAppBubble {...PROPS} />);
 
     expect(screen.getByText("Familia Muñóz")).toBeVisible();
-    expect(screen.getByText("Nos casamos — {{COUPLE_NAMES}}")).toBeVisible();
+    expect(screen.getByText("Nos casamos — Ana y Bruno")).toBeVisible();
   });
 
   it("states the character count of the draft", () => {

@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 import { buildOgCardModel } from "@/lib/domain/og-card";
 
-import { loadGuestFacingInvitation } from "./load-invitation";
+import { loadCeremony, loadGuestFacingInvitation } from "./load-invitation";
 
 /**
  * The per-guest Open Graph card.
@@ -11,9 +11,17 @@ import { loadGuestFacingInvitation } from "./load-invitation";
  * preview card IS the picture the recipient sees, and it is fetched by an
  * unauthenticated crawler from a URL that travels with every forward of the
  * link. That is why the card is NAMES ONLY — no wedding date, no venue name,
- * no venue address, no phone number. What may appear here is decided by
- * `buildOgCardModel`, which projects rather than redacts, so a field added to
- * the read model later cannot leak onto a public card by being forgotten.
+ * no venue address, no phone number.
+ *
+ * The couple's names on it come from the `ceremony` row, and this route is the
+ * reason the console warns about editing them: the response below is served
+ * `immutable, max-age=31536000` and WhatsApp caches a preview per URL, so every
+ * card already delivered keeps the names it was generated with. Nothing here can
+ * change that afterwards — only a rotated slug, which is a new URL.
+ *
+ * What may appear here is decided by `buildOgCardModel`, which projects rather
+ * than redacts, so a field added to the read model later cannot leak onto a
+ * public card by being forgotten.
  *
  * No custom font is loaded. `next/og` bundles a Latin font that already covers
  * accented vowels and both cases of the enye, which `tools/og-font-coverage.spec.ts`
@@ -67,13 +75,18 @@ export default async function OpenGraphImage({
 }) {
   const { slug } = await params;
   const invitation = await loadGuestFacingInvitation(slug);
+  // Read for the unknown slug too, and deliberately: a card that named the
+  // couple only for real invitations would tell a stranger probing slugs which
+  // ones exist, from an image nobody has to authenticate for.
+  const { coupleNames } = await loadCeremony();
 
   // An unknown or rotated slug still gets a card rather than a broken image:
   // the link may already be sitting in a chat. It carries no household name,
   // which is also what keeps it from confirming that any slug exists.
-  const card = buildOgCardModel(
-    invitation ?? { greetingName: UNKNOWN_HOUSEHOLD_GREETING },
-  );
+  const card = buildOgCardModel({
+    greetingName: invitation?.greetingName ?? UNKNOWN_HOUSEHOLD_GREETING,
+    coupleNames,
+  });
 
   return new ImageResponse(
     <div

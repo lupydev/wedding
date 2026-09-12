@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildInvitationMetadataText,
+  buildOgCardInvitationLine,
   buildOgCardModel,
-  OG_CARD_INVITATION_LINE,
 } from "./og-card";
 
 /**
@@ -20,6 +20,11 @@ import {
 /** A read model deliberately carrying every value the card must NOT show. */
 const invitationCarryingPrivateDetails = {
   slug: "abcdefghijklmnop",
+  // The couple's names come from the `ceremony` row, which is why they are an
+  // INPUT here rather than a constant in the module: an immutable card that says
+  // the wrong names cannot be corrected, so the names must at least be editable
+  // in one place before the invitations go out.
+  coupleNames: "Ana y Bruno",
   displayName: "Familia Muñóz",
   greetingName: "Ñoño Muñóz",
   seatsAllowed: 3,
@@ -38,7 +43,7 @@ describe("buildOgCardModel", () => {
 
     expect(model).toEqual({
       greetingName: "Ñoño Muñóz",
-      invitationLine: OG_CARD_INVITATION_LINE,
+      invitationLine: buildOgCardInvitationLine("Ana y Bruno"),
     });
   });
 
@@ -49,7 +54,7 @@ describe("buildOgCardModel", () => {
     });
 
     expect(model.greetingName).toBe("Familia Restrepo");
-    expect(model.invitationLine).toBe(OG_CARD_INVITATION_LINE);
+    expect(model.invitationLine).toBe(buildOgCardInvitationLine("Ana y Bruno"));
   });
 
   it("exposes no field beyond the greeting name and the invitation line", () => {
@@ -59,6 +64,18 @@ describe("buildOgCardModel", () => {
       "greetingName",
       "invitationLine",
     ]);
+  });
+
+  it("carries a different couple's names when the row holds different ones", () => {
+    // The triangulation that proves the line is BUILT rather than looked up: a
+    // module constant would return the same string for both couples.
+    const model = buildOgCardModel({
+      ...invitationCarryingPrivateDetails,
+      coupleNames: "Camila y Dario",
+    });
+
+    expect(model.invitationLine).toContain("Camila y Dario");
+    expect(model.invitationLine).not.toContain("Ana y Bruno");
   });
 
   it("renders no wedding date, venue or phone into any card value", () => {
@@ -79,11 +96,30 @@ describe("buildOgCardModel", () => {
   });
 });
 
-describe("OG_CARD_INVITATION_LINE", () => {
-  it("states the invitation without a date, a venue or a digit", () => {
-    expect(OG_CARD_INVITATION_LINE).toContain("{{COUPLE_NAMES}}");
-    // A digit in the shared line is the shape a leaked date or address takes.
-    expect(OG_CARD_INVITATION_LINE).not.toMatch(/\d/);
+describe("buildOgCardInvitationLine", () => {
+  it("states the invitation and names the couple it was given", () => {
+    expect(buildOgCardInvitationLine("Ana y Bruno")).toContain("Ana y Bruno");
+  });
+
+  it("names a different couple, because the names are not written into it", () => {
+    expect(buildOgCardInvitationLine("Camila y Dario")).toContain(
+      "Camila y Dario",
+    );
+  });
+
+  it("adds no date, no venue and no digit of its own", () => {
+    // A digit in the shared copy is the shape a leaked date or address takes.
+    // Only what the names themselves carry may appear, so the assertion is made
+    // with digit-free names and the line must stay digit-free too.
+    expect(buildOgCardInvitationLine("Ana y Bruno")).not.toMatch(/\d/);
+  });
+
+  it("passes an unfinished value through verbatim rather than hiding it", () => {
+    // The row may still hold its seeded placeholder. A card that silently
+    // omitted it would read as finished and name nobody.
+    expect(buildOgCardInvitationLine("{{COUPLE_NAMES}}")).toContain(
+      "{{COUPLE_NAMES}}",
+    );
   });
 });
 
@@ -93,7 +129,7 @@ describe("buildInvitationMetadataText", () => {
 
     expect(text).toEqual({
       title: "Ñoño Muñóz",
-      description: OG_CARD_INVITATION_LINE,
+      description: buildOgCardInvitationLine("Ana y Bruno"),
     });
   });
 
@@ -104,6 +140,15 @@ describe("buildInvitationMetadataText", () => {
     });
 
     expect(text.title).toBe("Familia Restrepo");
+  });
+
+  it("describes the page with the couple it was given, not a compiled-in name", () => {
+    const text = buildInvitationMetadataText({
+      ...invitationCarryingPrivateDetails,
+      coupleNames: "Camila y Dario",
+    });
+
+    expect(text.description).toContain("Camila y Dario");
   });
 
   it("leaks no wedding date, venue or phone into the metadata text", () => {

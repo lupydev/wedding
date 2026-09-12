@@ -222,7 +222,7 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 5b.12 GREEN — `app/i/[slug]/load-invitation.ts` `loadCeremony` (React `cache`) and `app/i/[slug]/page.tsx` passing it to `RsvpAnswer`.
 - [x] 5b.13 RED — `e2e/rsvp.spec.ts`: a decline auto-submits and shows the stream details read FROM the row; a decline followed by an acceptance leaves `rsvp_latest` reporting the acceptance over a three-row history; the form carries no message box.
 - [x] 5b.14 Verify: `npm test`, `npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`, plus `supabase db reset` followed by `npm test` so 0009 and 0010 are proved to replay from an empty database in order.
-- [ ] 5b.15 Task 7.1 addendum — when the couple supplies the real details, `UPDATE` the `ceremony` row and collapse `InvitationBody`'s `{{WEDDING_DATE}}` into `ceremony_date` rather than leaving the date stated in two places.
+- [x] 5b.15 Task 7.1 addendum — when the couple supplies the real details, `UPDATE` the `ceremony` row and collapse `InvitationBody`'s `{{WEDDING_DATE}}` into `ceremony_date` rather than leaving the date stated in two places.
 
 ## Phase 6a-i: Console Authentication and Session Survival (Work Unit 6a-i)
 
@@ -407,8 +407,40 @@ Presentation only: no route, behaviour, server action or query changed. Two pale
 
 Authored change is roughly 3.7k lines (excluding ~1.1k of vendored shadcn registry files), far above the session's 800-line budget. It is one cohesive foundation — tokens, primitives, shell and the tests that hold them — and cannot be sliced without shipping a half-themed console. Recommend `size:exception`.
 
+## Phase 9: Pinned Sidebar and Editable Wedding Facts (Work Unit 9)
+
+- [x] 9.1 RED — `components/console/ConsoleNav.spec.tsx`: the sidebar declares sticky positioning, a top offset, a full dynamic-viewport height and its own vertical overflow; it spends no `vh`-based height class anywhere.
+- [x] 9.2 GREEN — `components/console/ConsoleNav.tsx`: the sidebar becomes `md:sticky md:top-0 md:h-dvh md:overflow-y-auto`. `dvh` over `vh` because `vh` ignores a retracting mobile URL bar and this shell is phone-first. The bottom tab bar is untouched.
+- [x] 9.3 RED — `supabase/tests/ceremony.spec.ts`: the singleton row also carries `couple_names`, `venue_name` and `venue_address`, all three seeded as visibly-unfinished placeholders; every one of the seven value columns refuses blank text; the singleton and default-deny postures still hold.
+- [x] 9.4 GREEN — `supabase/migrations/0011_wedding_facts.sql` plus `supabase/down/0011_wedding_facts_down.sql`: three new `not null` text columns seeded with placeholders, and a non-empty check on all seven value columns now that a form can write them.
+- [x] 9.5 RED — `supabase/tests/ceremony.spec.ts` addendum: `getCeremony` maps all seven columns; `updateCeremony` writes all seven and a later read returns exactly what was written.
+- [x] 9.6 GREEN — `lib/server/ceremony.ts`: `CeremonyDetails` gains `coupleNames`, `venueName` and `venueAddress`; new `updateCeremony` writes the singleton by its boolean key and logs nothing.
+- [x] 9.7 RED — `lib/domain/wedding-facts.spec.ts`: pure validation trims, refuses blank and over-long values, refuses line breaks and control characters, reports one error per field, and accepts a complete set.
+- [x] 9.8 GREEN — `lib/domain/wedding-facts.ts`: the field list, the max lengths and `parseWeddingFacts`, free of React and of any storage vendor.
+- [x] 9.9 RED — `components/invitation/InvitationBody.spec.tsx`: the body renders the couple, date, venue and address it is GIVEN, renders two different sets for two different props, and the module exports no hard-coded value.
+- [x] 9.10 GREEN — `components/invitation/InvitationBody.tsx`: the four module constants are deleted and a `wedding` prop replaces them.
+- [x] 9.11 RED — `lib/domain/og-card.spec.ts`: the card's one line of copy is built from the couple names supplied to it, and the constant no longer exists.
+- [x] 9.12 GREEN — `lib/domain/og-card.ts`: `buildOgCardInvitationLine(coupleNames)`; `OG_CARD_INVITATION_LINE` deleted; `OgCardSource` gains `coupleNames`.
+- [x] 9.13 RED — `lib/domain/dispatch-message.spec.ts`: the draft signs off with the couple names it is given, still contains exactly one URL, and still carries no digit outside that URL — so no date, time, venue or address entered the template.
+- [x] 9.14 GREEN — `lib/domain/dispatch-message.ts`: `{{couple_names}}` added to the template and to `INVITATION_MESSAGE_VARIABLES`. Date, time, venue and address stay out, for the reason the module already records.
+- [x] 9.15 GREEN — every surface reads the one row: `app/i/[slug]/page.tsx` (body and `generateMetadata`), `app/i/[slug]/opengraph-image.tsx`, `app/console/(authenticated)/preview/[invitationId]/page.tsx` and `.../dispatch/[invitationId]/page.tsx`, all through the request-cached `loadCeremony` or `getCeremony`.
+- [x] 9.16 RED — `tools/no-source-placeholders.spec.ts`: no `{{UPPER_SNAKE}}` token survives anywhere in `app/**`, `components/**` or `lib/**` non-test source, comments included. The migration and the tests are exempt: the row's seeded placeholders are DATA, and that is the whole point.
+- [x] 9.17 RED — `components/console/WeddingFactsForm.spec.tsx`: one form with all seven fields, one save; the immutable-Open-Graph-card warning beside the couple's names and the already-shared-passcode warning beside the passcode, both as text and not as a tooltip; the passcode field is not a browser-savable password; per-field errors render.
+- [x] 9.18 GREEN — `components/console/WeddingFactsForm.tsx` and `app/console/(authenticated)/wedding/wedding-facts-state.ts`.
+- [x] 9.19 RED — `app/console/(authenticated)/wedding/actions.spec.ts`: the action refuses without an operator session, validates on the server and writes nothing when validation fails, writes all seven fields when it passes, and passes no value to any logger.
+- [x] 9.20 GREEN — `app/console/(authenticated)/wedding/actions.ts` and `page.tsx`. Either operator may edit: two people, no approval workflow.
+- [x] 9.21 RED — `lib/design/console-nav.spec.ts`: the wedding editor is a navigation destination, and the bar is still at most five tabs with no overflow sheet.
+- [x] 9.22 GREEN — `lib/design/console-nav.ts`: a fifth item, `Boda`, with a `calendar` icon.
+- [x] 9.23 RED — `e2e/console-wedding.spec.ts`: an operator edits all seven facts through the real form; the invitation body and the page's `og:description` then both show the new couple names; both warnings are on the page; a blank field is refused with the old value still stored.
+- [x] 9.24 Verify: `npm test`, `PORT=3100 npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`, and `supabase db reset` followed by `npm test` again.
+- [x] 9.25 Closes 5b.15 and the code half of 7.1: `{{WEDDING_DATE}}` is collapsed into `ceremony_date` and no wedding fact is stated in source any more. The VALUES are still the couple's to supply — now through the console instead of a migration.
+
+### Work Unit 9 size
+
+Authored change is roughly **3.5k lines** across 24 modified and 14 new files, far above the session's 800-line budget. It does not slice: the four constants cannot leave the source without a row to hold them, the row cannot be edited without the editor, the editor cannot exist without the nav destination and the validation, and the placeholder guard is the only thing that keeps any of it from being undone by the next value somebody needs in a hurry. Half of it would ship an invitation with no venue on it. Recommending `size:exception`; no comment, test or doc was compressed to chase the number.
+
 ## Phase 7: Placeholders and Finalization (non-blocking, no dependent tasks)
 
-- [ ] 7.1 Once the couple supplies `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`, `{{VENUE_NAME}}`, `{{VENUE_ADDRESS}}`, `{{APPROX_GUEST_COUNT}}`, `{{CEREMONY_DATE}}`, `{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}` and `{{ZOOM_PASSCODE}}` (the last four are an `UPDATE` on the `ceremony` row, not a code edit), replace every placeholder occurrence in invitation copy, message templates, and RSVP deadline defaults. Do not invent values; do not block any other work unit on this.
+- [ ] 7.1 (Code half DONE by 9.1–9.25; the VALUES remain the couple's to supply, now through `/console/wedding` instead of a migration.) Once the couple supplies `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`, `{{VENUE_NAME}}`, `{{VENUE_ADDRESS}}`, `{{APPROX_GUEST_COUNT}}`, `{{CEREMONY_DATE}}`, `{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}` and `{{ZOOM_PASSCODE}}` (the last four are an `UPDATE` on the `ceremony` row, not a code edit), replace every placeholder occurrence in invitation copy, message templates, and RSVP deadline defaults. Do not invent values; do not block any other work unit on this.
 - [ ] 7.2 Set `NEXT_PUBLIC_SITE_ORIGIN` before the first deploy; confirm `metadataBase`/`og:image` resolve to the real deployed origin.
 - [ ] 7.3 Finalize the OG-card font choice (bundled Noto Sans vs. a custom ≤500 KB subset covering `ñ` and accented vowels); update `opengraph-image.tsx` if a custom font is chosen.

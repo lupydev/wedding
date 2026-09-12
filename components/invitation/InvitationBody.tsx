@@ -34,16 +34,38 @@ export interface InvitationBodyInvitation {
 }
 
 /**
- * Unresolved values the couple has not supplied yet.
+ * The wedding's own facts, supplied by the route from the `ceremony` row.
  *
- * They are rendered verbatim, as visibly unfinished text. Inventing a date or a
- * venue would ship a wrong invitation that reads as a correct one, and nobody
- * would notice until a guest arrived on the wrong day.
+ * THESE WERE FOUR MODULE CONSTANTS AND THAT WAS THE BUG
+ *
+ * They held four brace-wrapped placeholders awaiting the couple — the right
+ * instinct, since inventing a date ships a wrong invitation that reads as a
+ * correct one, in the wrong place. The `ceremony` row
+ * already held this wedding's date and its stream credentials, so the same event
+ * was described in two places: one an operator can correct with an UPDATE, one
+ * only a redeploy can touch. A fact stored twice is a fact that will drift, and
+ * a reference project's WhatsApp template drifted exactly this way — it kept
+ * announcing a venue the event had already left.
+ *
+ * Values still arrive verbatim, placeholders included. An unfinished value must
+ * stay visibly unfinished; hiding or prettifying it turns an obviously
+ * incomplete invitation into a plausible wrong one.
+ *
+ * FOUR FIELDS AND NOT SEVEN. The row also carries the Zoom meeting id and its
+ * passcode, which this component does not render — so its prop type has no field
+ * for them, exactly as it has no field for a phone number. A component cannot
+ * leak what it was never handed.
  */
-const COUPLE_NAMES = "{{COUPLE_NAMES}}";
-const WEDDING_DATE = "{{WEDDING_DATE}}";
-const VENUE_NAME = "{{VENUE_NAME}}";
-const VENUE_ADDRESS = "{{VENUE_ADDRESS}}";
+export interface InvitationBodyWedding {
+  readonly coupleNames: string;
+  /**
+   * The wedding date. It is `ceremony_date`: one day, one column, one place to
+   * correct it. A second `wedding_date` would be the drift again.
+   */
+  readonly ceremonyDate: string;
+  readonly venueName: string;
+  readonly venueAddress: string;
+}
 
 function seatsSentence(seatsAllowed: number): string {
   return seatsAllowed === 1
@@ -53,9 +75,12 @@ function seatsSentence(seatsAllowed: number): string {
 
 export function InvitationBody({
   invitation,
+  wedding,
   rsvp,
 }: {
   invitation: InvitationBodyInvitation;
+  /** The one row every surface reads. Never restated here. */
+  wedding: InvitationBodyWedding;
   /**
    * The RSVP surface, composed by the route.
    *
@@ -71,7 +96,7 @@ export function InvitationBody({
 }) {
   return (
     <article className="invitation">
-      <p className="invitation__couple">{COUPLE_NAMES}</p>
+      <p className="invitation__couple">{wedding.coupleNames}</p>
       <h1 className="invitation__greeting">{invitation.greetingName}</h1>
       <p className="invitation__lead">
         Nos alegra mucho invitarlos a celebrar nuestro matrimonio.
@@ -79,11 +104,11 @@ export function InvitationBody({
 
       <dl className="invitation__details">
         <dt>Fecha</dt>
-        <dd>{WEDDING_DATE}</dd>
+        <dd>{wedding.ceremonyDate}</dd>
         <dt>Lugar</dt>
-        <dd>{VENUE_NAME}</dd>
+        <dd>{wedding.venueName}</dd>
         <dt>Dirección</dt>
-        <dd>{VENUE_ADDRESS}</dd>
+        <dd>{wedding.venueAddress}</dd>
       </dl>
 
       <section className="invitation__household">

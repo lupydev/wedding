@@ -12,20 +12,45 @@
  */
 
 /**
- * The one line of copy shared by every card.
+ * The one line of copy every card shares, with the couple's names in it.
  *
- * `{{COUPLE_NAMES}}` is an explicit, unresolved placeholder: the couple has not
- * supplied their names yet, and inventing them would ship a wrong invitation
- * that reads as a correct one. It is intentionally free of digits — a date or a
- * street address is exactly what a digit in this line would be.
+ * A FUNCTION AND NOT A CONSTANT, AND THE REASON IS THE CACHE
+ *
+ * It used to be a module constant whose only variable part was a brace-wrapped
+ * placeholder, because the couple had not supplied their names yet. The
+ * instinct was right — inventing names ships a wrong invitation that reads as a
+ * correct one — and the location was wrong. This card is served
+ * `immutable, max-age=31536000` and WhatsApp caches a preview per URL, so the
+ * names on it are the single fact in this product that reaches a guest through a
+ * channel nothing can correct afterwards. Keeping them in the `ceremony` row does
+ * not make an already-delivered card editable, but it does mean they can be
+ * fixed BEFORE the first dispatch without a deploy, and the console can warn
+ * about the cache at the moment somebody edits them.
+ *
+ * The line adds no digits of its own. A digit here is exactly the shape a leaked
+ * date or street address would take, and the card is names-only by confirmed
+ * product decision. Whatever the names themselves carry is passed through
+ * verbatim, placeholders included: a card that quietly omitted an unfinished
+ * value would read as finished and name nobody.
  *
  * Guest-facing copy is Spanish; identifiers and comments stay English.
  */
-export const OG_CARD_INVITATION_LINE = "Nos casamos — {{COUPLE_NAMES}}";
+export function buildOgCardInvitationLine(coupleNames: string): string {
+  return `Nos casamos — ${coupleNames}`;
+}
 
-/** The household identity the card and the metadata are built from. */
+/**
+ * Everything the card and the metadata are built from.
+ *
+ * The household's own name, and the couple's names from the `ceremony` row. Two
+ * inputs, and deliberately no third: the read model this is projected from also
+ * carries an RSVP deadline, and the row it is projected from also carries the
+ * venue, the address and a Zoom passcode. None of them are named here, so none
+ * of them can reach a public card by being forgotten.
+ */
 export interface OgCardSource {
   readonly greetingName: string;
+  readonly coupleNames: string;
 }
 
 /** Exactly what the card renders. Two strings, and nothing else exists. */
@@ -51,7 +76,7 @@ export interface InvitationMetadataText {
 export function buildOgCardModel(invitation: OgCardSource): OgCardModel {
   return {
     greetingName: invitation.greetingName,
-    invitationLine: OG_CARD_INVITATION_LINE,
+    invitationLine: buildOgCardInvitationLine(invitation.coupleNames),
   };
 }
 
@@ -67,6 +92,6 @@ export function buildInvitationMetadataText(
 ): InvitationMetadataText {
   return {
     title: invitation.greetingName,
-    description: OG_CARD_INVITATION_LINE,
+    description: buildOgCardInvitationLine(invitation.coupleNames),
   };
 }

@@ -11,6 +11,7 @@ import {
 } from "@/lib/domain/dispatch-message";
 import { buildInvitationMetadataText } from "@/lib/domain/og-card";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
+import { getCeremony } from "@/lib/server/ceremony";
 import {
   requireDeclaredDevice,
   requireOperator,
@@ -43,10 +44,11 @@ import {
  * dispatch route outside it would be a send affordance with no device gate above
  * it, which is the one place that gate has to hold.
  *
- * THE MESSAGE CARRIES NO EVENT DETAIL. No date, no time, no venue — only the
- * greeting and the invitation URL. That is enforced in `dispatch-message.ts` and
- * explained there; the consequence for this file is that it passes a URL and a
- * name and has nothing else to pass.
+ * THE MESSAGE CARRIES NO EVENT DETAIL. No date, no time, no venue, no address —
+ * the greeting, the couple's names and the invitation URL, and nothing else. That
+ * is enforced in `dispatch-message.ts` and explained there; the consequence for
+ * this file is that the only wedding fact it reads from the `ceremony` row is the
+ * names, and the logistics stay on the surface that can still be corrected.
  *
  * THE PREVIEW PANE RESOLVES THE CARD URL HERE, AND ONLY HERE. The mock bubble's
  * one real claim is that its image is the bytes WhatsApp will fetch, and that
@@ -133,7 +135,13 @@ export default async function DispatchPage({
   }
 
   const invitationUrl = invitationPageUrl(siteOrigin(), invitation.slug);
-  const cardText = buildInvitationMetadataText(invitation);
+  // The couple's names, from the one row every surface reads. The draft signs
+  // off with them and the preview card's description is built from them, so the
+  // text the operator approves and the text the guest receives come from the
+  // same place — which is the whole reason a reference project's template could
+  // announce a venue its invitation page had already corrected.
+  const { coupleNames } = await getCeremony(createServerSupabaseClient());
+  const cardText = buildInvitationMetadataText({ ...invitation, coupleNames });
   // Resolved from the page itself rather than assembled here: the advertised
   // query is a property of the build, not something this route can derive.
   const cardImagePath = await resolveAdvertisedCardPath(invitation.slug);
@@ -148,6 +156,7 @@ export default async function DispatchPage({
           recipientE164: recipient.phoneE164,
           greetingName: invitation.greetingName,
           invitationUrl,
+          coupleNames,
         })}
         beaconPath={DISPATCH_EVENT_BEACON_PATH}
         dispatchState={invitation.dispatchState}
@@ -161,11 +170,13 @@ export default async function DispatchPage({
         messageText={buildInvitationMessage({
           greetingName: invitation.greetingName,
           invitationUrl,
+          coupleNames,
         })}
         waUrl={buildInvitationDispatchLink({
           recipientE164: recipient.phoneE164,
           greetingName: invitation.greetingName,
           invitationUrl,
+          coupleNames,
         })}
         cardImagePath={cardImagePath}
         cardTitle={cardText.title}

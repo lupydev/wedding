@@ -15,8 +15,10 @@ import { buildWaMeLink } from "./wa-link";
  * recalled.
  *
  * So the draft states no date, no time, no venue and no address. It carries a
- * greeting and a link, and the link resolves to the one surface that can be
- * corrected after the fact. `INVITATION_MESSAGE_VARIABLES` is the complete list
+ * greeting, the couple's names and a link, and the link resolves to the one
+ * surface that can be corrected after the fact. The names are the one fact that
+ * joined it, because a name identifies who is inviting while those four are
+ * logistics that move. `INVITATION_MESSAGE_VARIABLES` is the complete list
  * of what may vary, and the unit test asserts that the only digits a rendered
  * message contains are the ones inside the URL — which is what makes "no date
  * in the template" an enforced property rather than a review habit.
@@ -34,21 +36,41 @@ import { buildWaMeLink } from "./wa-link";
 /**
  * The one draft the console sends.
  *
- * Deliberately without the couple's names: nothing in this repository knows them
- * yet, and `renderMessageTemplate` fails loudly on an unresolved placeholder
- * rather than shipping `{{COUPLE_NAMES}}` to a guest. Task 7.1 is where real
- * details arrive, and adding a signature there is a template edit plus one new
- * entry below.
+ * IT SIGNS OFF WITH THE COUPLE'S NAMES, AND THEY COME FROM THE `ceremony` ROW
+ *
+ * It used to carry no names at all, because nothing in this repository knew them:
+ * they were an unresolved brace-wrapped placeholder in a component, and
+ * `renderMessageTemplate` would rather throw than ship a placeholder to a guest.
+ * The note left here said the fix was "a template edit plus one new entry below",
+ * once real details had somewhere to live. They now do — one editable row — so an
+ * unsigned invitation is no longer the safest available draft.
+ *
+ * WHAT STILL DOES NOT ENTER THIS TEMPLATE, AND WHY THAT IS NOT INCONSISTENT
+ *
+ * The date, the time, the venue and the address stay out. The names and those
+ * four facts differ in one decisive way: a name identifies who is inviting, and
+ * the four facts are logistics that CHANGE. A reference project wrote the date
+ * and the venue into an approved template, the event moved, the invitation page
+ * was corrected in minutes, and every already-delivered message kept announcing
+ * the old venue with no way to recall it. The link resolves to the surface that
+ * can still be corrected; the logistics belong there and only there.
+ *
+ * The unit test keeps this honest by counting digits: the only digits a rendered
+ * message may contain are the ones inside the URL, which is a property rather
+ * than a review habit. A date or a street number cannot be added without
+ * breaking it.
  */
 export const INVITATION_MESSAGE_TEMPLATE =
   "Hola, {{greeting_name}}. Nos alegra mucho invitarlos a nuestra boda. " +
   "En este enlace encontrarán la invitación con todos los detalles y el " +
-  "formulario para confirmar su asistencia: {{invitation_url}}";
+  "formulario para confirmar su asistencia: {{invitation_url}} " +
+  "Con cariño, {{couple_names}}.";
 
 /** Everything the draft is allowed to vary by. Nothing else is a variable. */
 export const INVITATION_MESSAGE_VARIABLES: readonly string[] = [
   "greeting_name",
   "invitation_url",
+  "couple_names",
 ];
 
 /** Any absolute http(s) link, however it was introduced into the text. */
@@ -58,6 +80,14 @@ export interface InvitationMessageInput {
   readonly greetingName: string;
   /** The absolute `/i/{slug}` URL. The only link the draft may contain. */
   readonly invitationUrl: string;
+  /**
+   * The couple's names, read from the `ceremony` row by the calling route.
+   *
+   * Required rather than optional. An optional signature is a signature that
+   * some households receive and others do not, decided by whichever call site
+   * was written last.
+   */
+  readonly coupleNames: string;
 }
 
 /**
@@ -71,6 +101,7 @@ export function buildInvitationMessage(input: InvitationMessageInput): string {
   const message = renderMessageTemplate(INVITATION_MESSAGE_TEMPLATE, {
     greeting_name: input.greetingName,
     invitation_url: input.invitationUrl,
+    couple_names: input.coupleNames,
   });
 
   const urls = message.match(URL_PATTERN) ?? [];

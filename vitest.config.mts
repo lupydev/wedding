@@ -29,6 +29,30 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
+          // MEASURED, NOT GUESSED, AND NOT A BEHAVIOURAL ALLOWANCE.
+          //
+          // Most files in this project talk to the real local Supabase stack in
+          // Docker, and a few spawn ESLint with the full typescript-eslint and
+          // Next configs. Both costs are paid ONCE per worker, by whichever test
+          // happens to run first in its file: a TCP connection to Postgres, or an
+          // ESLint config graph. Vitest runs those files in parallel across every
+          // core, so the cold start of one competes with the cold start of the
+          // rest.
+          //
+          // Under the default 5000ms that produced a rotating set of failures —
+          // always the FIRST test of a database-touching file, always
+          // "Test timed out", never the same file twice, and every one of them
+          // green when its file ran alone. Nothing was slow; the budget was
+          // measured against a warm process and spent on a cold one.
+          //
+          // Raised rather than worked around with a shared warm-up hook: a hook
+          // would hide the cost instead of affording it, and the timeout here is
+          // not an assertion about the product. The cost of the larger number is
+          // that a genuinely hung query is reported after 15s instead of 5s.
+          testTimeout: 15_000,
+          // `beforeAll` in these files opens the connection and seeds fixtures,
+          // so it pays the same cold start with more work behind it.
+          hookTimeout: 30_000,
           include: [
             "lib/**/*.spec.{ts,tsx}",
             "supabase/tests/**/*.spec.ts",
@@ -43,6 +67,11 @@ export default defineConfig({
         test: {
           name: "component",
           environment: "jsdom",
+          // The same reasoning, smaller number. These files touch no database,
+          // but `user-event` drives real timers through React transitions while
+          // every core is busy, and a starved worker makes a click look like a
+          // click that never landed.
+          testTimeout: 10_000,
           setupFiles: ["./vitest.setup.ts"],
           include: ["components/**/*.spec.{ts,tsx}", "app/**/*.spec.{ts,tsx}"],
         },

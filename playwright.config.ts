@@ -12,6 +12,30 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",
+  /*
+    MEASURED, NOT GUESSED.
+
+    The default 5000ms is a web-expectation budget, and most assertions here are
+    not web expectations: they are assertions about a server-rendered page that a
+    PRODUCTION build produces on its first request, after a redirect chain, with
+    a Postgres round trip in each hop. `signInAsOperator` is the clearest case —
+    signing in lands on `/console`, whose Server Component then redirects to
+    `/console/device`, so one `toHaveURL` waits on two cold renders and two
+    queries.
+
+    Under 5000ms that produced a rotating set of failures across the console
+    specs: always at a navigation, never the same test twice, and the recorded
+    call log always showed the URL arriving at the INTERMEDIATE hop before the
+    clock ran out. Nothing was broken; the budget was measured against a warm
+    route and spent on a cold one, and a serial `describe` then abandoned its
+    remaining tests, which is where "N did not run" came from.
+
+    Raised rather than papered over with per-call timeouts: the number is not an
+    assertion about the product, and scattering overrides at the call sites that
+    happened to lose the race would hide the shared cause. The cost is that a
+    genuinely broken expectation is reported after 15s instead of 5s.
+  */
+  expect: { timeout: 15_000 },
   use: {
     baseURL,
     trace: "on-first-retry",
@@ -20,6 +44,36 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      // Everything except the one spec that writes the shared singleton.
+      testIgnore: /console-wedding\.spec\.ts/,
+    },
+    {
+      /*
+        THE ONE SPEC THAT EDITS THE `ceremony` ROW, SEQUENCED AFTER EVERYTHING
+        ELSE.
+
+        That row is a singleton every surface reads, so three assertions in the
+        main project compare a value they read earlier against a later render:
+        the stream card in `rsvp.spec.ts`, the preview-versus-guest body
+        comparison in `console-preview.spec.ts`, and the Open Graph description.
+        An edit landing between a read and a render fails them with a value
+        nothing in those files ever wrote.
+
+        A Postgres advisory lock was tried first and was the wrong tool:
+        Playwright budgets a timeout per TEST and knows nothing about a hook
+        waiting on another worker, so the readers failed on their own clock while
+        the writer still held the row. `dependencies` is the mechanism the runner
+        actually has for this — the project below starts only once `chromium` has
+        finished, so nothing waits because nothing overlaps.
+
+        The cost is honest and worth stating: if the main project fails, this
+        project is skipped rather than run. One shared mutable row is the reason,
+        and the alternative was a suite whose red runs get dismissed as flake.
+      */
+      name: "wedding-facts",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /console-wedding\.spec\.ts/,
+      dependencies: ["chromium"],
     },
   ],
   // The highest-value E2E assertions inspect the raw HTML of the first
