@@ -50,5 +50,8 @@ next-env.d.ts
 /blob-report/
 /playwright/.cache/
 
-# guest source data — real phone numbers must never enter the repository
+# Untracked source data. Real guest phone numbers, and the operators' own
+# addresses and contact numbers, must never enter the repository.
 /data/
+data/guests.source.json
+data/operators.source.json

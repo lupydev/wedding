@@ -28,7 +28,7 @@ describe("isConsolePath", () => {
     ["/console", true],
     ["/console/", true],
     ["/console/login", true],
-    ["/console/auth/callback", true],
+    ["/console/auth/sign-out", true],
     ["/console/dispatch/abc", true],
     ["/consolelike", false],
     ["/console-archive", false],
@@ -67,11 +67,11 @@ describe("resolveConsoleRedirect", () => {
     );
   });
 
-  it("never redirects the magic-link callback, authenticated or not", () => {
+  it("never redirects the session-destroying route, authenticated or not", () => {
     // The callback is the route that CREATES the session. Redirecting an
     // unauthenticated request away from it makes signing in impossible.
-    expect(resolveConsoleRedirect("/console/auth/callback", false)).toBeNull();
-    expect(resolveConsoleRedirect("/console/auth/callback", true)).toBeNull();
+    expect(resolveConsoleRedirect("/console/auth/sign-out", false)).toBeNull();
+    expect(resolveConsoleRedirect("/console/auth/sign-out", true)).toBeNull();
   });
 
   it("leaves the guest surface alone, signed in or not", () => {

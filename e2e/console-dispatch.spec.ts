@@ -26,7 +26,7 @@ import { seedOperator, type SeededOperator } from "./helpers/operator";
  * is the part the product is responsible for.
  *
  * Serial, with ONE browser context: every test needs a signed-in operator, and
- * signing in means a real magic link out of a real mailbox.
+ * signing in means a real round trip through the real form.
  */
 
 test.describe.configure({ mode: "serial" });

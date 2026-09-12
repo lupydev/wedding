@@ -347,6 +347,31 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 6b-ii.13 Verify: `npm test` 933 passed, `PORT=3100 npm run e2e` 124 passed, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — all clean.
 - [ ] 6b-ii.14 NOT DONE — 6b.15 Supabase Realtime on `dispatch_events`. Deliberately excluded from this unit: it is a live-update concern rather than a preview surface, it needs a publication/RLS decision and probably a migration, and adding it would have pushed this unit past its changed-line ceiling. It is the only item of the original Work Unit 6b still outstanding.
 
+## Phase 7-auth: Operator Password Sign-In and Seeding (Work Unit 7)
+
+> The sign-in METHOD changes and nothing else. The session rotation fix and its
+> mutation-proven test, the HMAC-signed identity header, the `senders`
+> allowlist (D7), the belt-and-braces session re-check, the device declaration
+> and the `/console/api` redirect exemption are all untouched.
+>
+> Phone auth was considered and rejected: it needs an SMS provider or extra
+> configuration flags, while email and password is what Supabase gives natively
+> with nothing added.
+
+- [x] 7a.1 RED — `lib/server/auth.spec.ts`: the three refusals (a wrong password, a correct password for an address that is not in `senders`, and an address with no account at all) are compared against ONE ANOTHER, not against a literal; a companion asserts the admitted case is the one thing allowed to differ, so "refuse everybody" cannot pass.
+- [x] 7a.2 GREEN — `lib/server/auth.ts`: `MagicLinkMailer`, `MAGIC_LINK_NOTICE` and `requestOperatorMagicLink` are replaced by `OperatorPasswordAuthenticator`, `SIGN_IN_NOTICE` and `signInOperator`. The password is verified FIRST, always — consulting the allowlist first would refuse a non-operator without any password check, which is a timing oracle no identical sentence can hide — and a session created by valid non-operator credentials is destroyed before returning.
+- [x] 7a.3 GREEN — `supabaseOperatorPasswordAuthenticator` replaces `supabaseMagicLinkMailer`: `signInWithPassword`, every Supabase error collapsed to `null`, and `signOut` on the same cookie-bound client. `signInWithPassword` never creates a user, so no `auth.users` row can be made to appear by typing into the form.
+- [x] 7a.4 RED/GREEN — `app/console/login/login-form.{spec.tsx,tsx}`: an email field and a masked `current-password` field, both credentials reaching the action byte for byte (the password is never trimmed), the refusal rendered as `role="status"`, the password never echoed back into the markup, and no sign-up, no reset, no "remember me", no link at all.
+- [x] 7a.5 GREEN — `app/console/login/actions.ts` `signInAction`, and `magic-link-state.ts` renamed to `sign-in-state.ts`. A Server Action may write cookies, which is the whole reason the callback route existed.
+- [x] 7a.6 GREEN — `app/console/auth/callback/route.ts` DELETED, with the E2E test of the tampered code that only it could fail. `e2e/console-auth.spec.ts` asserts the path now answers 404, so its absence is proved rather than assumed.
+- [x] 7a.7 GREEN — `CONSOLE_AUTH_PATH_PREFIX` keeps its exemption for `/console/auth/sign-out`, which is still the only exit from "signed in but not an operator". The two tests that exercised the exemption through the callback path now exercise it through the sign-out path.
+- [x] 7a.8 RED/GREEN — `lib/server/operators.{spec.ts,ts}` against a REAL local Supabase: `seedOperator` creates or updates the auth user through the admin API, upserts the `senders` row, binds `auth_user_id`, and is idempotent by address. The decisive assertion signs in with the seeded password using the PUBLISHABLE key, exactly as the login form does.
+- [x] 7a.9 RED/GREEN — `scripts/seed-operators.{spec.ts,ts}`, following `import-guests.ts`: `parseOperatorSource`, `resolveOperatorSeeds`, `formatSeedOutcomes`. The untracked source (`data/operators.source.json`) carries display name, role, email, contact phone and the NAME of an environment variable; a row carrying a literal `password` key is REFUSED. Passwords come from the environment, never from the file and never from argv. No output line carries an address, a phone number, a run of seven digits, or a password — not even in an error message.
+- [x] 7a.10 GREEN — `npm run seed:operators` wired in `package.json`; `.gitignore` names both untracked source paths explicitly; `.env.example`, `supabase/config.toml`, `playwright.config.ts` and the E2E header comments describe password sign-in rather than a mailbox.
+- [x] 7a.11 RED — `e2e/helpers/operator.ts` seeds a confirmed auth user with a password through the admin API and adds `seedAuthOnlyAccount` (a valid identity that is NOT an operator); `senders.auth_user_id` is still left NULL so the binding is observed rather than assumed. `waitForMagicLink` and `messagesFor` are deleted.
+- [x] 7a.12 RED — `e2e/console-auth.spec.ts`: the three refusals compared against one another as full observable outcomes (notice, landing path, session-cookie count), the stranger's momentary session proved not to survive, the seeded operator signing in and binding, the typed password absent from page source, the callback route 404, and the login page offering no sign-up or reset.
+- [x] 7a.13 Verify: `npm test`, `PORT=3100 npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`.
+
 ## Phase 7: Placeholders and Finalization (non-blocking, no dependent tasks)
 
 - [ ] 7.1 Once the couple supplies `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`, `{{VENUE_NAME}}`, `{{VENUE_ADDRESS}}`, `{{APPROX_GUEST_COUNT}}`, `{{CEREMONY_DATE}}`, `{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}` and `{{ZOOM_PASSCODE}}` (the last four are an `UPDATE` on the `ceremony` row, not a code edit), replace every placeholder occurrence in invitation copy, message templates, and RSVP deadline defaults. Do not invent values; do not block any other work unit on this.

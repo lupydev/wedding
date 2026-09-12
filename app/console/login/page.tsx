@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { requestMagicLinkAction } from "./actions";
+import { signInAction } from "./actions";
 import { LoginForm } from "./login-form";
 
 /**
@@ -33,8 +33,7 @@ export default async function ConsoleLoginPage({
     <main className="console-login">
       <h1>Panel de envíos</h1>
       <p>
-        El acceso es por enlace de un solo uso. Indique el correo electrónico
-        registrado y se le enviará el enlace.
+        Indique el correo electrónico y la contraseña registrados para el panel.
       </p>
 
       {denied ? (
@@ -43,7 +42,7 @@ export default async function ConsoleLoginPage({
         </p>
       ) : null}
 
-      <LoginForm action={requestMagicLinkAction} />
+      <LoginForm action={signInAction} />
     </main>
   );
 }

@@ -296,9 +296,9 @@ describe("updateOperatorSession — routing", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
-  it("never redirects the magic-link callback", async () => {
+  it("never redirects the session-destroying route", async () => {
     const response = await updateOperatorSession(
-      consoleRequest("/console/auth/callback?code=abc"),
+      consoleRequest("/console/auth/sign-out?denied=1"),
     );
 
     expect(response.status).toBe(200);

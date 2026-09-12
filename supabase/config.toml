@@ -159,10 +159,11 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-# The console magic link redirects back to /console/auth/callback, which is
-# served on whatever port the local or end-to-end server happens to use. GoTrue
-# refuses a redirect_to outside this list and silently falls back to site_url,
-# which looks exactly like a broken link.
+# Console sign-in is email and password and never leaves the application, so
+# nothing in this product depends on these entries any more. They are kept as
+# the local-stack defaults for the ports this repository serves on; GoTrue
+# refuses a redirect_to outside this list, so an empty one would be a trap for
+# any future flow that does redirect.
 additional_redirect_urls = [
   "https://127.0.0.1:3000",
   "http://127.0.0.1:3000/**",

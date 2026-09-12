@@ -81,13 +81,13 @@ export function siteOrigin(): string {
  * The origin the operator console is reachable at.
  *
  * Usually the same as the public site origin, and it defaults to it. It is
- * separable because the magic link is EMAILED: the origin baked into that link
- * has to be an address the operator's browser can actually open, and the public
- * invitation origin is not always that address — a preview deployment, a
- * tunnel, or the end-to-end server on a free port all serve the console
- * somewhere else. Deriving it from the request's own `Origin` header was
- * rejected: that header is visitor-controlled, and this value decides where a
- * one-time sign-in link points.
+ * separable because the console is not always served at the public invitation
+ * origin — a preview deployment, a tunnel, or the end-to-end server on a free
+ * port all serve it somewhere else — and the server has to be able to REACH it:
+ * `resolveAdvertisedCardPath` fetches a console-rendered page over HTTP to read
+ * the `og:image` it advertises, and the public origin may not resolve from
+ * inside the deployment at all. Deriving it from the request's own `Origin`
+ * header was rejected: that header is visitor-controlled.
  */
 export function consoleOrigin(): string {
   if (process.env.CONSOLE_ORIGIN?.trim()) {

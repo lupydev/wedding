@@ -4,7 +4,7 @@
  * TWO DIFFERENT QUESTIONS, AND WHY THEY MUST BE ALLOWED TO DISAGREE
  *
  * Authentication answers "who is operating this console?" and it is a fact: a
- * magic link, an `auth.users` row, a `senders.auth_user_id`. This module answers
+ * password, an `auth.users` row, a `senders.auth_user_id`. This module answers
  * "which WhatsApp account is installed on THIS handset?" and that is not a fact
  * the server can check. It is a self-declaration.
  *

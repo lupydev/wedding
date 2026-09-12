@@ -21,14 +21,17 @@
 /** The console landing page. */
 export const CONSOLE_ROOT_PATH = "/console";
 
-/** Magic-link entry point. The only console page an anonymous visitor may see. */
+/** Sign-in form. The only console page an anonymous visitor may see. */
 export const CONSOLE_LOGIN_PATH = "/console/login";
 
 /**
- * Everything under here creates or destroys a session and must never be
- * redirected away from: the magic-link callback is the route that turns an
- * anonymous visitor into an authenticated one, so bouncing anonymous requests
- * off it would make signing in impossible.
+ * Everything under here destroys a session and must never be redirected away
+ * from. `/console/auth/sign-out` is the only exit from the state where somebody
+ * holds a valid Supabase session that is not an operator: a redirect would
+ * leave the console and the login page trading that request forever.
+ *
+ * A session is CREATED by the Server Action behind `/console/login`, which
+ * needs no exemption because the login page already has one.
  */
 export const CONSOLE_AUTH_PATH_PREFIX = "/console/auth";
 

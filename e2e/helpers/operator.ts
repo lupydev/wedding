@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client } from "pg";
+
+import { resolveLocalKeys } from "../../supabase/tests/helpers/local-keys";
 
 /**
  * Console-operator fixtures for the browser-level suite.
@@ -9,25 +12,39 @@ import { Client } from "pg";
  * there is no environment variable to set and no redeploy to wait for, which is
  * the whole point of design decision D7.
  *
- * The `auth.users` row is NOT seeded. It is created by Supabase Auth when the
- * magic link is first followed, and watching `senders.auth_user_id` go from
- * NULL to that user's id is how the binding is asserted rather than assumed.
+ * Sign-in is email and password, so the `auth.users` row DOES have to exist
+ * before the browser can sign in, and it is created here the same way
+ * `scripts/seed-operators.ts` creates it: through the admin API, with a
+ * password, confirmed. What is deliberately NOT seeded is
+ * `senders.auth_user_id`: it stays NULL, and watching it become the seeded
+ * user's id on the first sign-in is how the binding is asserted rather than
+ * assumed.
  */
 
 const LOCAL_DB_URL =
   process.env.SUPABASE_DB_URL ??
   "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-const MAILPIT_URL = process.env.MAILPIT_URL ?? "http://127.0.0.1:54324";
+const LOCAL_API_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
 
 export interface SeededOperator {
   readonly senderId: string;
   readonly displayName: string;
   readonly allowlistedEmail: string;
+  /** Random per fixture. Never a real operator password, never committed. */
+  readonly password: string;
   /** Fabricated. Never used to build a dispatch link; `wa.me` has no sender. */
   readonly contactPhone: string;
   /** The bound auth user id, read straight from the row. NULL until first login. */
   readonly boundAuthUserId: () => Promise<string | null>;
+  readonly cleanup: () => Promise<void>;
+}
+
+/** An `auth.users` row with NO `senders` row: someone who is not an operator. */
+export interface SeededAccount {
+  readonly email: string;
+  readonly password: string;
+  readonly authUserId: string;
   readonly cleanup: () => Promise<void>;
 }
 
@@ -47,12 +64,51 @@ async function connect(): Promise<Client> {
   return db;
 }
 
+function adminClient(): SupabaseClient {
+  const { secretKey } = resolveLocalKeys();
+
+  return createClient(LOCAL_API_URL, secretKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/**
+ * Creates one confirmed auth user with a password.
+ *
+ * `email_confirm: true` for the same reason the seeding script sets it: an
+ * unconfirmed address is refused at the first sign-in, and the login form is
+ * designed never to explain why.
+ */
+async function createAuthUser(
+  email: string,
+  password: string,
+): Promise<string> {
+  const { data, error } = await adminClient().auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+
+  if (error || !data.user) {
+    throw new Error(
+      `Could not create the auth user for the fixture: ${error?.message ?? "no user was returned"}`,
+    );
+  }
+
+  return data.user.id;
+}
+
+async function deleteAuthUser(authUserId: string): Promise<void> {
+  await adminClient().auth.admin.deleteUser(authUserId);
+}
+
 export async function seedOperator(
   options: { displayName?: string } = {},
 ): Promise<SeededOperator> {
   const suffix = randomBytes(4).toString("hex");
   const allowlistedEmail = `operator.${suffix}.${Date.now()}@example.test`;
   const displayName = options.displayName ?? `Operadora ${suffix}`;
+  const password = `fixture-password-${randomBytes(8).toString("hex")}`;
   // A block no GUEST fixture uses. The previous value was
   // `+5730055{two digits}00`, which drew `+57300555100` about once every thirty
   // runs — and that string is a PREFIX of `+573005551001`, a guest number seeded
@@ -64,6 +120,10 @@ export async function seedOperator(
   // operator's own contact really is on the page. Fabricated, like every number
   // in this suite: a real guest number must never enter a fixture.
   const contactPhone = `+57301990${suffix.slice(0, 4).replace(/\D/g, "1")}`;
+
+  // The auth user first: if the sender row existed and this failed, the fixture
+  // would be an operator who cannot sign in, which reads as a product defect.
+  const authUserId = await createAuthUser(allowlistedEmail, password);
   const db = await connect();
 
   let senderId: string;
@@ -83,6 +143,7 @@ export async function seedOperator(
     senderId,
     displayName,
     allowlistedEmail,
+    password,
     contactPhone,
 
     boundAuthUserId: async () => {
@@ -102,86 +163,34 @@ export async function seedOperator(
     cleanup: async () => {
       const cleaner = await connect();
       try {
-        const bound = await cleaner.query<{ auth_user_id: string | null }>(
-          "select auth_user_id from senders where id = $1",
-          [senderId],
-        );
-
         await cleaner.query("delete from senders where id = $1", [senderId]);
-
-        const authUserId = bound.rows[0]?.auth_user_id ?? null;
-        if (authUserId) {
-          await cleaner.query("delete from auth.users where id = $1", [
-            authUserId,
-          ]);
-        }
       } finally {
         await cleaner.end();
       }
+
+      await deleteAuthUser(authUserId);
     },
   };
 }
 
-interface MailpitSummary {
-  readonly ID: string;
-  readonly To: ReadonlyArray<{ readonly Address: string }>;
-}
-
-/** Every message currently held for one address, newest first. */
-export async function messagesFor(address: string): Promise<MailpitSummary[]> {
-  const response = await fetch(`${MAILPIT_URL}/api/v1/messages?limit=200`);
-
-  if (!response.ok) {
-    throw new Error(
-      `Mailpit is not reachable at ${MAILPIT_URL} (HTTP ${response.status}). ` +
-        "Run `supabase start` before the E2E suite.",
-    );
-  }
-
-  const body = (await response.json()) as { messages?: MailpitSummary[] };
-
-  return (body.messages ?? []).filter((message) =>
-    message.To.some(
-      (recipient) => recipient.Address.toLowerCase() === address.toLowerCase(),
-    ),
-  );
-}
-
 /**
- * The magic link Supabase mailed to one address.
+ * Creates an authenticatable identity that is NOT an operator.
  *
- * Polls, because delivery is asynchronous and a bare read races the send. Fails
- * with the address in the message so a flake is diagnosable.
+ * The fixture the indistinguishability assertion needs: someone whose password
+ * is genuinely correct and who still must be refused, in exactly the same words
+ * and with exactly as little session as a wrong password gets.
  */
-export async function waitForMagicLink(
-  address: string,
-  timeoutMs = 15_000,
-): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
+export async function seedAuthOnlyAccount(): Promise<SeededAccount> {
+  const email = `stranger.${randomBytes(4).toString("hex")}.${Date.now()}@example.test`;
+  const password = `fixture-password-${randomBytes(8).toString("hex")}`;
+  const authUserId = await createAuthUser(email, password);
 
-  while (Date.now() < deadline) {
-    const [newest] = await messagesFor(address);
-
-    if (newest) {
-      const detail = await fetch(`${MAILPIT_URL}/api/v1/message/${newest.ID}`);
-      const body = (await detail.json()) as {
-        Text?: string;
-        HTML?: string;
-      };
-      const source = `${body.HTML ?? ""}\n${body.Text ?? ""}`;
-      const match = source.match(
-        /https?:\/\/[^\s"'<>]*\/auth\/v1\/verify[^\s"'<>]*/,
-      );
-
-      if (match) {
-        return match[0].replace(/&amp;/g, "&");
-      }
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-
-  throw new Error(
-    `No magic link arrived for ${address} within ${timeoutMs}ms.`,
-  );
+  return {
+    email,
+    password,
+    authUserId,
+    cleanup: async () => {
+      await deleteAuthUser(authUserId);
+    },
+  };
 }

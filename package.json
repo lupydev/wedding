@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "import:guests": "tsx --conditions=react-server scripts/import-guests.ts"
+    "import:guests": "tsx --conditions=react-server scripts/import-guests.ts",
+    "seed:operators": "tsx --conditions=react-server scripts/seed-operators.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

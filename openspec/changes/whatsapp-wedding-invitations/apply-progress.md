@@ -3153,3 +3153,210 @@ WARNINGs.
 13/14 Work Unit 6b-ii tasks complete; `6b.8`–`6b.14` and `6b.16` are now closed.
 Only `6b.15` (Realtime) remains open in Phase 6b. Working tree left uncommitted
 and fully normalized. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 7 — Operator Password Sign-In and Seeding
+
+**Mode**: Strict TDD. **Store**: hybrid. **Branch**: `feat/whatsapp-wedding-invitations`, base `d8ea1dc`.
+
+Magic-link sign-in is replaced by email and password, and the two operators can
+now be created by a tool instead of by hand. Nothing else moved: the session
+rotation fix and its mutation-proven test, the HMAC-signed identity header, the
+`senders` allowlist (D7), the belt-and-braces session re-check, the device
+declaration and the `/console/api` redirect exemption are all exactly as they
+were. Phone auth was considered and rejected by the user — it needs an SMS
+provider or extra configuration flags, and email plus password is what Supabase
+gives natively with nothing added.
+
+## The refusal, which is the whole security content of this unit
+
+Three things fail here for three unrelated reasons, and they must be
+indistinguishable: a wrong password, a CORRECT password for an address that is
+not in `senders`, and an address with no account at all. Three mechanisms make
+that true, and each one is separately tested.
+
+1. **The password is verified first, always.** `signInOperator` does not touch
+   the allowlist until Supabase has answered. Checking `senders` first would
+   refuse a non-operator without any password verification, which is a
+   measurably faster answer — a timing oracle that no amount of identical
+   wording can hide. The unit test asserts `directory.lookups` is empty when the
+   credentials fail.
+2. **A session created by valid non-operator credentials is destroyed.** This is
+   the case a naive implementation gets wrong. Those credentials really are
+   valid, so Supabase really does issue a session; leaving it would hand a
+   stranger a signed-in browser and make their outcome trivially different from
+   a wrong password. The fake authenticator tracks whether a session is open,
+   because a fake that only answered `signIn` could not catch the missing
+   `signOut`.
+3. **The identity comes from the session, never from the form.** Unchanged from
+   the magic-link exchange, just relocated.
+
+Both the unit test and the E2E compare the three cases **against one another**
+rather than against a literal string, per the brief. A literal would still pass
+if all three sentences changed together and one of them started leaking. The
+E2E compares the full observable outcome — the notice text, the landing path and
+the session-cookie count — and a companion assertion proves the admitted case is
+observably different, so an implementation that refused everybody could not
+satisfy "the refusals are identical".
+
+`signInWithPassword` never creates a user, so unlike `signInWithOtp` with
+`shouldCreateUser: true`, a stranger cannot make an `auth.users` row appear by
+typing into this form.
+
+## The callback route is deleted, not orphaned
+
+`app/console/auth/callback/route.ts` existed because a Server Component cannot
+write cookies and the magic-link exchange had to. A Server Action can, so the
+session is now established in the same request that checks the allowlist and the
+route has no caller. It is deleted along with the E2E test of a tampered code
+that only it could fail, and `e2e/console-auth.spec.ts` asserts the path answers
+**404** — its absence is proved, not assumed. An unreachable auth route left
+behind is a route nobody maintains and everybody assumes is safe.
+
+`CONSOLE_AUTH_PATH_PREFIX` keeps its redirect exemption, because
+`/console/auth/sign-out` still lives under it and is still the only exit from
+"holds a valid session but is not an operator". The two tests that exercised the
+exemption through the callback path now exercise it through the sign-out path —
+same assertion, against a route that exists.
+
+## Seeding
+
+`scripts/seed-operators.ts` follows `scripts/import-guests.ts`: pure parsing and
+validation in the script, the write in `lib/server/operators.ts`, everything
+validated before a single row is touched.
+
+**The operators' real details never enter the repository.** The untracked
+`data/operators.source.json` carries display name, role, email and contact
+phone. It does NOT carry passwords: each row names an ENVIRONMENT VARIABLE
+(`passwordEnv`), and a row carrying a literal `password` key is refused with a
+message naming where it belongs. Not the file, because that is a file on disk
+one `git add -f` away from the repository and it is the one thing a maintainer
+edits by hand; not `process.argv`, because arguments are visible to every other
+process through `ps`. Both untracked source paths are now named explicitly in
+`.gitignore` alongside the existing `/data/` rule.
+
+No output line — including every error message — carries an address, a phone
+number, a run of seven or more digits, or a password. The length of a too-short
+password is named; the password is not.
+
+Idempotent by address: a second run leaves exactly one `auth.users` row and
+exactly one `senders` row and reports itself as an update. That is also the
+reset path, which is why there is deliberately no self-service reset in the
+product: a reset flow mails a capability over every guest's phone number to
+whoever controls that mailbox today.
+
+## Files changed
+
+| File | Action | What was done |
+|---|---|---|
+| `lib/server/auth.ts` | Modified | `OperatorPasswordAuthenticator`, `SIGN_IN_NOTICE`, `signInOperator`, `supabaseOperatorPasswordAuthenticator`; magic-link port, notice and mailer removed |
+| `lib/server/auth.spec.ts` | Modified | 15 new tests for the password path; the magic-link suite removed |
+| `lib/server/operators.ts` | Created | `seedOperator`: admin-API user upsert, `senders` upsert, `auth_user_id` binding |
+| `lib/server/operators.spec.ts` | Created | 7 tests against a REAL local Supabase, including signing in with the seeded password |
+| `scripts/seed-operators.ts` | Created | `parseOperatorSource`, `resolveOperatorSeeds`, `formatSeedOutcomes`, CLI with `--dry-run` |
+| `scripts/seed-operators.spec.ts` | Created | 28 tests; every refusal, and the three things output must never carry |
+| `app/console/login/actions.ts` | Modified | `signInAction`: one constant refusal, redirect on success |
+| `app/console/login/login-form.tsx` | Modified | Password field, `current-password`, "Iniciar sesión" |
+| `app/console/login/login-form.spec.tsx` | Created | 7 tests, including "no sign-up, no reset, no remember me" |
+| `app/console/login/magic-link-state.ts` | Renamed | → `sign-in-state.ts` (`SignInState`, `IDLE_SIGN_IN_STATE`) |
+| `app/console/login/page.tsx` | Modified | Spanish copy for password sign-in, neutral register |
+| `app/console/auth/callback/route.ts` | **Deleted** | Unreachable once sign-in is a Server Action |
+| `lib/domain/operator-session.ts` | Modified | Comments only: the auth prefix exemption is now about sign-out |
+| `lib/domain/operator-session.spec.ts` | Modified | Exemption asserted through `/console/auth/sign-out` |
+| `supabase/tests/operator-session-refresh.spec.ts` | Modified | Same retarget, one test |
+| `e2e/helpers/operator.ts` | Modified | Admin-API auth user with a password, `seedAuthOnlyAccount`; Mailpit helpers deleted |
+| `e2e/helpers/console.ts` | Modified | `signInAsOperator` fills the form |
+| `e2e/console-auth.spec.ts` | Modified | Rewritten around the password flow; 3 new tests, 1 deleted |
+| `package.json` | Modified | `seed:operators` script |
+| `.gitignore`, `.env.example`, `supabase/config.toml`, `playwright.config.ts` | Modified | Untracked source paths; comments describing password sign-in |
+| `lib/server/env.{ts,spec.ts}`, `lib/server/cookies.ts`, `lib/domain/device-declaration.ts`, three E2E headers | Modified | Comments only — the stated reasons no longer referred to a mailbox |
+
+## TDD Cycle Evidence
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| 7a.1–7a.3 | `lib/server/auth.spec.ts` | Unit | 117/117 across the five files touched | 15 failed, 12 pre-existing still green | 27 passed | 15 cases incl. the three-way comparison and its non-degenerate companion | Refusal collapsed into one port; no `signOut` at the call site |
+| 7a.4 | `app/console/login/login-form.spec.tsx` | Component (RTL) | N/A (new) | 5 failed, 2 trivially green | 7 passed | 7 cases | Regex narrowed after the E2E caught it (below) |
+| 7a.8 | `lib/server/operators.spec.ts` | Integration (real Supabase) | N/A (new) | Import failed | 7 passed | 7 cases incl. idempotency, password replacement and a real sign-in | Auth upsert extracted from the sender upsert |
+| 7a.9 | `scripts/seed-operators.spec.ts` | Unit | N/A (new) | Import failed | 28 passed | 28 cases | None needed |
+| 7a.11–7a.12 | `e2e/console-auth.spec.ts` | E2E (Playwright) | 124 E2E | 1 failed (my own over-broad regex) | 126 passed | 3 new cases | Assertion tightened, copy left alone |
+
+### Test summary
+
+- Unit/component tests added: **52** (933 → **985**)
+- E2E: **124 → 126**. One test was legitimately removed — "a tampered magic-link
+  code creates no session" asserted the behaviour of the callback route, which
+  no longer exists. Three were added: the three-way indistinguishability
+  comparison, "a refused sign-in leaves no session cookie behind", and "the
+  login page offers no sign-up and no password reset".
+- Pure functions created: `parseOperatorSource`, `resolveOperatorSeeds`,
+  `formatSeedOutcomes`
+- Approval tests over existing untested code: none — every behaviour here is new
+  or replaced.
+
+### The one test that failed for a real reason
+
+`the login page offers no sign-up and no password reset` failed on its first E2E
+run, and it was the TEST that was wrong: `/registr/i` matched the word
+"registrados" in the legitimate instruction "Indique el correo electrónico y la
+contraseña **registrados** para el panel." The regex was narrowed to
+`registrarse|regístrese` and a `link count === 0` assertion was added; the copy
+was left alone. Worth recording because a looser stem would have forced worse
+Spanish to satisfy a test.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `npx vitest run lib/server/auth.spec.ts lib/server/operators.spec.ts scripts/seed-operators.spec.ts app/console/login/login-form.spec.tsx` — 69 passed |
+| Runtime harness | `PORT=3100 npx playwright test e2e/console-auth.spec.ts` inside the full run — 126 passed against a real production build, a real Postgres and a real password session. Plus a live CLI smoke run of `npm run seed:operators`: `--dry-run` validated 2, the first run reported `2 created`, the second reported `0 created, 2 updated` with exactly one auth user and one sender row each, both `auth_user_id` bound; unsetting one password variable refused with exit 1 before any write. Fixtures removed afterwards; `senders`=0, `auth.users`=0 for that prefix. |
+| Rollback boundary | Deleting `lib/server/operators.*`, `scripts/seed-operators.*`, `app/console/login/login-form.spec.tsx`, restoring `app/console/auth/callback/route.ts` and reverting the 20 modified files returns to `d8ea1dc` exactly. No migration was added and no schema changed: `senders` is untouched and the password lives in `auth.users`, which Supabase owns. |
+| Changed lines | ~1905 authored additions + 374 deletions. Ceiling 3000, not approached. |
+
+## Verification — actual observed output
+
+- `npm test`: **65 files, 985 passed** (baseline 933)
+- `PORT=3100 npm run e2e`: **126 passed** (baseline 124; see the removal above)
+- `npm run typecheck`: clean, exit 0
+- `npm run lint`: clean, exit 0
+- `npm run format:check`: "All matched files use Prettier code style!", exit 0
+- `npm run build`: succeeded. `/console/auth/callback` is **absent** from the
+  route table; `/console/auth/sign-out` and `/console/login` are present as `ƒ`.
+
+Every standing invariant re-ran green inside those suites: the operator-session
+refresh test (the one that fails when the reference bug is reintroduced);
+exactly one guest unlock path, with no query-parameter bypass and no console
+session that becomes one; external anon-key RLS; no guest phone digits in
+guest-facing page source; raw-HTML Open Graph under a WhatsApp User-Agent; the
+`nullif` mutation test; `service_role` append-only; seat parity; and
+`rsvp_latest` reducing to one row.
+
+## A literal in the brief that did not match the system
+
+The brief stated "Local Supabase is UP". It was not — `supabase_db_wedding` had
+exited, and the first safety-net run failed inside `resolveLocalKeys`. `supabase
+start` was run before any work began. The invariant held: the DB-backed suites
+must run against a real database and must not skip when it is missing, which is
+exactly why the failure was loud.
+
+The baseline counts in the brief (933 unit, 124 E2E) were accurate.
+
+## Not done, deliberately
+
+No sign-up path, no password-reset flow, no "remember me" — as instructed, and
+asserted at both the component and browser level. `6b.15` (Supabase Realtime on
+`dispatch_events`) and the Phase 7 placeholder items remain open; neither was in
+this unit's scope.
+
+`[auth.email] enable_signup = true` remains in `supabase/config.toml`. No
+product flow depends on it any more, and turning it off would strictly reduce
+surface, but the running local stack would need a restart for the change to take
+effect and that was judged too disruptive to do unasked. It grants no console
+access either way — `senders` is the allowlist — and it was equally true under
+magic link. Flagged as a risk rather than changed silently.
+
+## Status
+
+13/13 Work Unit 7 tasks complete. Working tree left uncommitted and fully
+normalized. Ready for `sdd-verify`.

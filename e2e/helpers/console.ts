@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { Client } from "pg";
 
-import { waitForMagicLink, type SeededOperator } from "./operator";
+import type { SeededOperator } from "./operator";
 
 /**
  * Console fixtures for the browser-level suite.
@@ -243,11 +243,11 @@ export async function seedConsoleInvitation(options: {
 }
 
 /**
- * Signs one allowlisted operator in through the real magic link.
+ * Signs one allowlisted operator in through the real form.
  *
- * The real link, out of the real mailbox, rather than a forged cookie: the
- * binding of `senders.auth_user_id` happens during the exchange, and a fixture
- * that skipped it would be asserting against a session the product never issues.
+ * The real form with real credentials, rather than a forged cookie: the binding
+ * of `senders.auth_user_id` happens during that sign-in, and a fixture that
+ * skipped it would be asserting against a session the product never issues.
  */
 export async function signInAsOperator(
   page: Page,
@@ -255,10 +255,13 @@ export async function signInAsOperator(
 ): Promise<void> {
   await page.goto("/console/login");
   await page.getByLabel("Correo electrónico").fill(operator.allowlistedEmail);
-  await page.getByRole("button", { name: "Enviar enlace de acceso" }).click();
-  await expect(page.getByRole("status")).toBeVisible({ timeout: 10_000 });
+  await page.getByLabel("Contraseña").fill(operator.password);
+  await page.getByRole("button", { name: "Iniciar sesión" }).click();
 
-  await page.goto(await waitForMagicLink(operator.allowlistedEmail));
+  // Signing in lands on the device picker, which is the first thing a new
+  // session meets. Waiting for it is what makes this helper's callers safe to
+  // navigate immediately afterwards.
+  await expect(page).toHaveURL(/\/console\/device$/);
 }
 
 /**

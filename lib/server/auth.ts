@@ -52,27 +52,41 @@ export interface OperatorDirectory {
   bindAuthUserId(senderId: string, authUserId: string): Promise<void>;
 }
 
-/** Sends the magic link. Separated so the allowlist check can be tested dry. */
-export interface MagicLinkMailer {
-  send(email: string): Promise<void>;
+/**
+ * Verifies a password and carries the resulting session.
+ *
+ * A port rather than a direct Supabase call for the same reason the directory
+ * is one: the decisions worth testing are "refuse", "refuse identically" and
+ * "destroy the session a valid non-operator just obtained", and none of them
+ * should need a live auth server to assert.
+ *
+ * `signOut` belongs here rather than at the call site because it is part of
+ * one refusal, not a separate act of tidying. A correct password for an address
+ * that is not in `senders` DOES authenticate; what makes that outcome identical
+ * to a wrong password is that the session never survives the call.
+ */
+export interface OperatorPasswordAuthenticator {
+  signIn(email: string, password: string): Promise<OperatorIdentity | null>;
+  signOut(): Promise<void>;
 }
 
 /**
- * The one answer every sign-in request gets.
+ * The one answer every refused sign-in gets.
  *
- * Identical for an operator, a stranger, a typo and a mail failure. Anything
- * else — a different sentence, an extra field, a visible error, a measurably
- * different latency — turns this form into an oracle that answers "is this
- * person one of the two people who can see every guest's phone number?".
+ * Identical for a wrong password, a correct password belonging to somebody who
+ * is not an operator, and an address with no account at all. Anything else — a
+ * different sentence, an extra field, a visible error, a surviving cookie —
+ * turns this form into an oracle that answers "is this person one of the two
+ * people who can see every guest's phone number?".
  */
-export const MAGIC_LINK_NOTICE =
-  "Si esa dirección corresponde a una persona operadora del panel, se envió un enlace de acceso. Revise su correo.";
+export const SIGN_IN_NOTICE =
+  "No fue posible iniciar sesión con los datos indicados. Verifique el correo electrónico y la contraseña.";
 
 /**
  * The authenticated user's own identity, or `null`.
  *
- * The belt-and-braces re-check the console depends on: after a magic link is
- * exchanged, the address that decides authorization is read back out of the
+ * The belt-and-braces re-check the console depends on: once credentials have
+ * been verified, the address that decides authorization is read back out of the
  * SESSION here, never out of the form that started the flow. Those two are
  * normally the same address; when they are not, something is wrong and the
  * caller signs the session out.
@@ -128,37 +142,64 @@ export async function resolveOperator(
 }
 
 /**
- * Requests a magic link, for an operator only.
+ * Signs an operator in with an email address and a password.
  *
- * The allowlist is consulted BEFORE anything is sent, so an address that is not
- * an operator never receives mail and never causes an `auth.users` row to
- * appear. The return value is a constant either way.
+ * `null` for every refusal, and every refusal must be indistinguishable to the
+ * person at the form. Three things make that true, and all three are load
+ * bearing:
+ *
+ *  1. **The password is verified first, always.** Consulting `senders` first
+ *     would let a non-operator address be refused without any password check —
+ *     a measurably faster answer, and a timing oracle no amount of identical
+ *     wording can hide.
+ *  2. **The session is destroyed when the authenticated identity is not an
+ *     operator.** Those credentials really are valid, so a session really is
+ *     issued; leaving it would give a stranger a signed-in browser and make
+ *     their outcome trivially distinguishable from a wrong password.
+ *  3. **The identity comes from the session, never from the form.** The address
+ *     that decides authorization is the one the auth server confirmed. That is
+ *     the same belt-and-braces re-check the magic-link exchange used to do.
+ *
+ * There is deliberately no sign-up and no reset. `signInWithPassword` never
+ * creates a user, so a stranger cannot make an `auth.users` row appear by
+ * typing into this form; operator accounts are created once, out of band, by
+ * `scripts/seed-operators.ts`.
  */
-export async function requestOperatorMagicLink(
+export async function signInOperator(
   directory: OperatorDirectory,
-  mailer: MagicLinkMailer,
+  authenticator: OperatorPasswordAuthenticator,
   rawEmail: string | null | undefined,
-): Promise<string> {
+  rawPassword: string | null | undefined,
+): Promise<Operator | null> {
   const email = normalizeAllowlistEmail(rawEmail);
 
-  if (email === null) {
-    return MAGIC_LINK_NOTICE;
+  // A password is an opaque byte string: it is never trimmed, lowercased or
+  // otherwise rewritten. Only its presence is checked here.
+  const password = typeof rawPassword === "string" ? rawPassword : "";
+
+  if (email === null || password === "") {
+    // Neither of these can identify an operator — `allowlisted_email` is
+    // constrained to a well-formed lowercase address, and an empty password
+    // authenticates nobody — so refusing without a round trip reveals only that
+    // the form was incomplete, which the visitor already knows.
+    return null;
   }
 
-  const record = await directory.findByAllowlistedEmail(email);
+  const identity = await authenticator.signIn(email, password);
 
-  if (record === null) {
-    return MAGIC_LINK_NOTICE;
+  if (identity === null) {
+    return null;
   }
 
-  try {
-    await mailer.send(email);
-  } catch {
-    // Swallowed on purpose. A rate limit or an SMTP outage must not become the
-    // difference between "this address is an operator" and "it is not".
+  const operator = await resolveOperator(directory, identity);
+
+  if (operator === null) {
+    await authenticator.signOut();
+
+    return null;
   }
 
-  return MAGIC_LINK_NOTICE;
+  return operator;
 }
 
 interface SenderRow {
@@ -219,27 +260,36 @@ export function supabaseOperatorDirectory(
   };
 }
 
-/** Sends the magic link through Supabase Auth, for an address already allowed. */
-export function supabaseMagicLinkMailer(
+/**
+ * The real password check, through Supabase Auth.
+ *
+ * The client passed in must be the one built with the PUBLISHABLE key and
+ * bound to this request's cookies: signing in writes the session, and signing
+ * out has to clear the very cookies that sign-in wrote.
+ *
+ * Every failure collapses to `null`. The reason Supabase gives — wrong
+ * password, unknown user, unconfirmed address, rate limited — is exactly the
+ * information this form exists not to publish.
+ */
+export function supabaseOperatorPasswordAuthenticator(
   client: SupabaseClient,
-  emailRedirectTo: string,
-): MagicLinkMailer {
+): OperatorPasswordAuthenticator {
   return {
-    async send(email) {
-      const { error } = await client.auth.signInWithOtp({
+    async signIn(email, password) {
+      const { data, error } = await client.auth.signInWithPassword({
         email,
-        options: {
-          emailRedirectTo,
-          // The allowlist already decided this address may sign in, and the
-          // sender row is the only thing that authorizes anything. Creating the
-          // `auth.users` row on first link is what binds `auth_user_id`.
-          shouldCreateUser: true,
-        },
+        password,
       });
 
       if (error) {
-        throw new Error(error.message);
+        return null;
       }
+
+      return sessionIdentityOf(data.user);
+    },
+
+    async signOut() {
+      await client.auth.signOut();
     },
   };
 }

@@ -1,9 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import {
-  messagesFor,
+  seedAuthOnlyAccount,
   seedOperator,
-  waitForMagicLink,
   type SeededOperator,
 } from "./helpers/operator";
 
@@ -19,12 +18,13 @@ const SESSION_COOKIE_PATTERN = /^sb-.*-auth-token(\.\d+)?$/;
 /**
  * Console authentication, end to end.
  *
- * Everything asserted here lives inside an async Server Component, a Route
- * Handler or the proxy, which Vitest cannot reach. The cookie-rotation
- * half of this work unit is asserted separately and far more precisely in
+ * Everything asserted here lives inside an async Server Component, a Server
+ * Action or the proxy, which Vitest cannot reach. The cookie-rotation half of
+ * this work unit is asserted separately and far more precisely in
  * `supabase/tests/operator-session-refresh.spec.ts`; what this file proves is
- * that the whole chain — form, allowlist, mail, exchange, binding, protected
- * render — actually connects.
+ * that the whole chain — form, credentials, allowlist, binding, protected
+ * render — actually connects, and that every way of failing it looks the same
+ * from a browser.
  */
 
 let operator: SeededOperator;
@@ -36,6 +36,30 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await operator.cleanup();
 });
+
+/** Submits the sign-in form once and reports everything a visitor can observe. */
+async function attemptSignIn(
+  page: Page,
+  email: string,
+  password: string,
+): Promise<{ notice: string; url: string; sessionCookies: number }> {
+  await page.context().clearCookies();
+  await page.goto("/console/login");
+  await page.getByLabel("Correo electrónico").fill(email);
+  await page.getByLabel("Contraseña").fill(password);
+  await page.getByRole("button", { name: "Iniciar sesión" }).click();
+
+  const notice = await page.getByRole("status").innerText({ timeout: 10_000 });
+  const cookies = await page.context().cookies();
+
+  return {
+    notice,
+    url: new URL(page.url()).pathname,
+    sessionCookies: cookies.filter((cookie) =>
+      SESSION_COOKIE_PATTERN.test(cookie.name),
+    ).length,
+  };
+}
 
 test.describe("console access control", () => {
   test("an anonymous visitor cannot reach the console", async ({ page }) => {
@@ -68,55 +92,68 @@ test.describe("console access control", () => {
 
     await expect(page).toHaveURL(/\/console\/login$/);
   });
+
+  test("the magic-link callback route is gone, not merely unused", async ({
+    request,
+  }) => {
+    // Deleted with the flow it served. An unreachable auth route left behind in
+    // a codebase is a route nobody maintains and everybody assumes is safe.
+    const response = await request.get("/console/auth/callback?code=anything", {
+      maxRedirects: 0,
+      failOnStatusCode: false,
+    });
+
+    expect(response.status()).toBe(404);
+  });
 });
 
-test.describe("magic-link sign-in", () => {
-  test("an address that is not an operator is indistinguishable from one that is", async ({
+test.describe("password sign-in", () => {
+  test("the three ways of failing are indistinguishable from one another", async ({
     page,
   }) => {
     // Its own operator row, so this test never competes with the sign-in test
-    // for one mailbox or one `auth_user_id`.
+    // for one `auth_user_id`.
     const other = await seedOperator({ displayName: "Beto Operador" });
-    const stranger = `stranger.${Date.now()}@example.test`;
+    // Somebody with a perfectly valid Supabase account who is not an operator.
+    // Their credentials really do authenticate; the product must still refuse
+    // them, in the same words and with as little session as anyone else.
+    const stranger = await seedAuthOnlyAccount();
 
     try {
-      await page.goto("/console/login");
-      await page.getByLabel("Correo electrónico").fill(stranger);
-      await page
-        .getByRole("button", { name: "Enviar enlace de acceso" })
-        .click();
+      const wrongPassword = await attemptSignIn(
+        page,
+        other.allowlistedEmail,
+        "not-the-password",
+      );
+      const validCredentialsNotAnOperator = await attemptSignIn(
+        page,
+        stranger.email,
+        stranger.password,
+      );
+      const noAccountAtAll = await attemptSignIn(
+        page,
+        `nobody.${Date.now()}@example.test`,
+        "whatever-they-typed",
+      );
 
-      const strangerNotice = await page
-        .getByRole("status")
-        .innerText({ timeout: 10_000 });
-      expect(strangerNotice.length).toBeGreaterThan(0);
+      // Compared against one another, not against a literal: a literal would
+      // still pass if all three sentences changed together and one of them
+      // started leaking.
+      expect(validCredentialsNotAnOperator).toEqual(wrongPassword);
+      expect(noAccountAtAll).toEqual(wrongPassword);
 
-      // The same form, with a real operator address, says exactly the same
-      // thing. A different sentence here would answer "who can see every
-      // guest's phone number?" for anyone with a browser.
-      await page.goto("/console/login");
-      await page.getByLabel("Correo electrónico").fill(other.allowlistedEmail);
-      await page
-        .getByRole("button", { name: "Enviar enlace de acceso" })
-        .click();
+      // And what they are equal TO matters: still on the login page, no
+      // session, and a notice that says something.
+      expect(wrongPassword.url).toBe("/console/login");
+      expect(wrongPassword.sessionCookies).toBe(0);
+      expect(wrongPassword.notice.length).toBeGreaterThan(0);
 
-      const operatorNotice = await page
-        .getByRole("status")
-        .innerText({ timeout: 10_000 });
-      expect(operatorNotice).toBe(strangerNotice);
-
-      // Waiting for the operator's mail first is what makes the next assertion
-      // mean something: it proves delivery is working and that enough time has
-      // passed for a message to the stranger to have shown up too.
-      await waitForMagicLink(other.allowlistedEmail);
-      expect(await messagesFor(stranger)).toHaveLength(0);
-
-      // Identical answer, and no session either way.
-      const cookies = await page.context().cookies();
-      expect(
-        cookies.filter((c) => SESSION_COOKIE_PATTERN.test(c.name)),
-      ).toHaveLength(0);
+      // The stranger's valid credentials created a session on the auth server
+      // for a moment. It must not have survived the refusal.
+      await page.goto("/console");
+      await expect(page).toHaveURL(/\/console\/login$/);
     } finally {
+      await stranger.cleanup();
       await other.cleanup();
     }
   });
@@ -128,11 +165,8 @@ test.describe("magic-link sign-in", () => {
 
     await page.goto("/console/login");
     await page.getByLabel("Correo electrónico").fill(operator.allowlistedEmail);
-    await page.getByRole("button", { name: "Enviar enlace de acceso" }).click();
-    await expect(page.getByRole("status")).toBeVisible({ timeout: 10_000 });
-
-    const magicLink = await waitForMagicLink(operator.allowlistedEmail);
-    await page.goto(magicLink);
+    await page.getByLabel("Contraseña").fill(operator.password);
+    await page.getByRole("button", { name: "Iniciar sesión" }).click();
 
     // The session works, and the FIRST thing it meets is the per-device
     // question: which WhatsApp account is installed on this handset. Being
@@ -168,6 +202,9 @@ test.describe("magic-link sign-in", () => {
       operator.contactPhone.replace("+", ""),
     );
 
+    // Nor does the password they just typed survive anywhere in the page.
+    expect(await page.content()).not.toContain(operator.password);
+
     // The session survives an ordinary reload rather than depending on the
     // redirect that created it. So does the device declaration.
     await page.reload();
@@ -184,15 +221,39 @@ test.describe("magic-link sign-in", () => {
     await expect(page).toHaveURL(/\/console\/login$/);
   });
 
-  test("a tampered magic-link code creates no session", async ({ page }) => {
-    await page.goto(
-      "/console/auth/callback?code=not-a-real-authorization-code",
+  test("a refused sign-in leaves no session cookie behind", async ({
+    page,
+  }) => {
+    const attempt = await attemptSignIn(
+      page,
+      operator.allowlistedEmail,
+      "definitely-not-the-password",
     );
 
+    expect(attempt.sessionCookies).toBe(0);
+
+    await page.goto("/console");
     await expect(page).toHaveURL(/\/console\/login$/);
-    const cookies = await page.context().cookies();
-    expect(
-      cookies.filter((c) => SESSION_COOKIE_PATTERN.test(c.name)),
-    ).toHaveLength(0);
+  });
+
+  test("the login page offers no sign-up and no password reset", async ({
+    page,
+  }) => {
+    // Two operators, created once by `scripts/seed-operators.ts`. A reset flow
+    // would mail a capability over every guest's phone number to whoever
+    // controls that mailbox today.
+    await page.goto("/console/login");
+
+    const text = (await page.textContent("main")) ?? "";
+
+    // The stems are deliberately narrow. A looser `registr` would also match
+    // "registrados" in the instruction above the form, which describes the
+    // credentials rather than offering a way to create any.
+    expect(text).not.toMatch(
+      /crear cuenta|registrarse|reg[íi]strese|olvid|restablec|recuperar la contrase/i,
+    );
+    expect(await page.getByRole("button").count()).toBe(1);
+    // One way in, and no link out of it. The only exit is signing in.
+    expect(await page.getByRole("link").count()).toBe(0);
   });
 });

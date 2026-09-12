@@ -294,10 +294,11 @@ export function deviceSenderCookieOptions(): DeviceSenderCookieOptions {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    // `lax` rather than `strict`: the operator arrives at the console from a
-    // magic link in their mail client, which is a cross-site top-level
-    // navigation. `strict` would withhold the declaration on exactly that
-    // navigation and re-ask on every sign-in.
+    // `lax` rather than `strict`: operators reach the console from links they
+    // send each other, which is a cross-site top-level navigation. `strict`
+    // would withhold the declaration on exactly that navigation and re-ask the
+    // picker, for no gain — this cookie is a self-declaration, not a
+    // credential. The session cookie is the credential, and Supabase sets it.
     sameSite: "lax",
     path: "/console",
     maxAge: DEVICE_SENDER_COOKIE_MAX_AGE_SECONDS,

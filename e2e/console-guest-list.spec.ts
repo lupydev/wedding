@@ -18,7 +18,7 @@ import { seedOperator, type SeededOperator } from "./helpers/operator";
  * reshaping the list.
  *
  * Serial, with ONE browser context: every test needs a signed-in operator, and
- * signing in means a real magic link out of a real mailbox. Running that ten
+ * signing in means a real round trip through the real form. Running that ten
  * times would make the suite slow enough that somebody would delete it.
  */
 

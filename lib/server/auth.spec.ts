@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { OperatorIdentity } from "@/lib/domain/operator-session";
 
 import {
-  MAGIC_LINK_NOTICE,
-  requestOperatorMagicLink,
+  SIGN_IN_NOTICE,
   resolveOperator,
   sessionIdentityOf,
+  signInOperator,
   type OperatorDirectory,
+  type OperatorPasswordAuthenticator,
   type OperatorRecord,
 } from "./auth";
 
@@ -55,16 +56,51 @@ class FakeDirectory implements OperatorDirectory {
   }
 }
 
-class RecordingMailer {
-  readonly sent: string[] = [];
-  shouldFail = false;
+interface FakeAccount {
+  readonly email: string;
+  readonly password: string;
+  readonly authUserId: string;
+}
 
-  async send(email: string): Promise<void> {
-    if (this.shouldFail) {
-      throw new Error("smtp exploded");
+/**
+ * A recording password authenticator.
+ *
+ * It tracks whether a session is currently open, because that is the half of
+ * "indistinguishable" a returned value cannot express: a stranger who supplies
+ * the correct password for their own Supabase account DOES get authenticated,
+ * and the only thing that stops that from being observable is the sign-out that
+ * must follow. A fake that only answered `signIn` could not catch its absence.
+ */
+class FakePasswordAuthenticator implements OperatorPasswordAuthenticator {
+  readonly attempts: Array<{ email: string; password: string }> = [];
+  sessionOpen = false;
+  signOutCount = 0;
+
+  constructor(private readonly accounts: readonly FakeAccount[] = []) {}
+
+  async signIn(
+    email: string,
+    password: string,
+  ): Promise<OperatorIdentity | null> {
+    this.attempts.push({ email, password });
+
+    const account = this.accounts.find(
+      (candidate) =>
+        candidate.email === email && candidate.password === password,
+    );
+
+    if (!account) {
+      return null;
     }
 
-    this.sent.push(email);
+    this.sessionOpen = true;
+
+    return { authUserId: account.authUserId, email: account.email };
+  }
+
+  async signOut(): Promise<void> {
+    this.signOutCount += 1;
+    this.sessionOpen = false;
   }
 }
 
@@ -156,71 +192,296 @@ describe("resolveOperator", () => {
   });
 });
 
-describe("requestOperatorMagicLink", () => {
-  it("sends a link to an allowlisted address", async () => {
-    const directory = new FakeDirectory([anaRecord()]);
-    const mailer = new RecordingMailer();
+const ANA_PASSWORD = "correct-horse-battery-staple";
+const STRANGER_PASSWORD = "a-perfectly-valid-password";
 
-    const notice = await requestOperatorMagicLink(
+function anaAccount(): FakeAccount {
+  return {
+    email: "ana@example.test",
+    password: ANA_PASSWORD,
+    authUserId: ANA_AUTH_USER_ID,
+  };
+}
+
+function strangerAccount(): FakeAccount {
+  return {
+    email: "stranger@example.test",
+    password: STRANGER_PASSWORD,
+    authUserId: BETO_AUTH_USER_ID,
+  };
+}
+
+/**
+ * Everything a caller of `signInOperator` can observe about one attempt.
+ *
+ * Deliberately not a message: the refusals are compared against EACH OTHER
+ * rather than against a literal, because a literal would still pass if all
+ * three sentences changed together and one of them started leaking. What must
+ * be equal is the whole observable outcome — the answer, whether a session
+ * survives, and whether the allowlist was touched.
+ */
+interface ObservedAttempt {
+  readonly admitted: boolean;
+  readonly sessionOpen: boolean;
+  readonly bindings: number;
+}
+
+async function observeSignIn(
+  email: string,
+  password: string,
+): Promise<ObservedAttempt> {
+  const directory = new FakeDirectory([anaRecord()]);
+  const authenticator = new FakePasswordAuthenticator([
+    anaAccount(),
+    strangerAccount(),
+  ]);
+
+  const operator = await signInOperator(
+    directory,
+    authenticator,
+    email,
+    password,
+  );
+
+  return {
+    admitted: operator !== null,
+    sessionOpen: authenticator.sessionOpen,
+    bindings: directory.bindings.length,
+  };
+}
+
+describe("signInOperator", () => {
+  it("admits an allowlisted operator and binds their identity on the first sign-in", async () => {
+    const directory = new FakeDirectory([anaRecord()]);
+    const authenticator = new FakePasswordAuthenticator([anaAccount()]);
+
+    const operator = await signInOperator(
       directory,
-      mailer,
+      authenticator,
       "ana@example.test",
+      ANA_PASSWORD,
     );
 
-    expect(mailer.sent).toEqual(["ana@example.test"]);
-    expect(notice).toBe(MAGIC_LINK_NOTICE);
+    expect(operator).toEqual({
+      id: ANA_SENDER_ID,
+      displayName: "Ana",
+      role: "partner_a",
+      allowlistedEmail: "ana@example.test",
+      authUserId: ANA_AUTH_USER_ID,
+    });
+    expect(authenticator.sessionOpen).toBe(true);
+    expect(authenticator.signOutCount).toBe(0);
+    expect(directory.bindings).toEqual([
+      { senderId: ANA_SENDER_ID, authUserId: ANA_AUTH_USER_ID },
+    ]);
   });
 
-  it("gives an unknown address the byte-identical answer, and sends nothing", async () => {
-    // Whether an address is an operator is not public information. A different
-    // message, a different field, or a different error is an enumeration oracle.
+  it("refuses a wrong password for a real operator, and opens no session", async () => {
     const directory = new FakeDirectory([anaRecord()]);
-    const mailer = new RecordingMailer();
+    const authenticator = new FakePasswordAuthenticator([anaAccount()]);
 
-    const notice = await requestOperatorMagicLink(
+    const operator = await signInOperator(
       directory,
-      mailer,
+      authenticator,
+      "ana@example.test",
+      "not-the-password",
+    );
+
+    expect(operator).toBeNull();
+    expect(authenticator.sessionOpen).toBe(false);
+    expect(directory.bindings).toEqual([]);
+  });
+
+  it("refuses a correct password for an address that is not an operator, and destroys the session it just created", async () => {
+    // This is the case a naive implementation gets wrong. The credentials are
+    // genuinely valid, so Supabase issues a session; leaving it in place would
+    // hand a stranger a signed-in browser and — far worse — make their outcome
+    // observably different from a wrong password.
+    const directory = new FakeDirectory([anaRecord()]);
+    const authenticator = new FakePasswordAuthenticator([strangerAccount()]);
+
+    const operator = await signInOperator(
+      directory,
+      authenticator,
       "stranger@example.test",
+      STRANGER_PASSWORD,
     );
 
-    expect(mailer.sent).toEqual([]);
-    expect(notice).toBe(MAGIC_LINK_NOTICE);
+    expect(operator).toBeNull();
+    expect(authenticator.signOutCount).toBe(1);
+    expect(authenticator.sessionOpen).toBe(false);
   });
 
-  it("gives a malformed address the same answer too", async () => {
+  it("refuses an address with no account at all", async () => {
     const directory = new FakeDirectory([anaRecord()]);
-    const mailer = new RecordingMailer();
+    const authenticator = new FakePasswordAuthenticator([anaAccount()]);
 
-    const notice = await requestOperatorMagicLink(directory, mailer, "@@@");
-
-    expect(mailer.sent).toEqual([]);
-    expect(directory.lookups).toEqual([]);
-    expect(notice).toBe(MAGIC_LINK_NOTICE);
-  });
-
-  it("gives the same answer when delivery itself fails", async () => {
-    // A rate-limited or broken mailer must not become a way to tell an operator
-    // address apart from a stranger's.
-    const directory = new FakeDirectory([anaRecord()]);
-    const mailer = new RecordingMailer();
-    mailer.shouldFail = true;
-
-    const notice = await requestOperatorMagicLink(
+    const operator = await signInOperator(
       directory,
-      mailer,
-      "ana@example.test",
+      authenticator,
+      "nobody@example.test",
+      "whatever-they-typed",
     );
 
-    expect(notice).toBe(MAGIC_LINK_NOTICE);
+    expect(operator).toBeNull();
+    expect(authenticator.sessionOpen).toBe(false);
   });
 
-  it("normalizes the address before it reaches the mailer", async () => {
+  it("answers the three refusals identically, compared against one another", async () => {
+    // Whether an address is one of the two people who can see every guest's
+    // phone number is not public information. These three attempts fail for
+    // three completely different reasons and must be indistinguishable.
+    const wrongPassword = await observeSignIn(
+      "ana@example.test",
+      "not-the-password",
+    );
+    const strangerWithAnAccount = await observeSignIn(
+      "stranger@example.test",
+      STRANGER_PASSWORD,
+    );
+    const noAccountAtAll = await observeSignIn(
+      "nobody@example.test",
+      "whatever-they-typed",
+    );
+
+    expect(wrongPassword).toEqual(strangerWithAnAccount);
+    expect(strangerWithAnAccount).toEqual(noAccountAtAll);
+    expect(wrongPassword).toEqual({
+      admitted: false,
+      sessionOpen: false,
+      bindings: 0,
+    });
+  });
+
+  it("does distinguish the one case that is allowed to differ: a real operator", async () => {
+    // The companion to the assertion above. Without it, an implementation that
+    // refused EVERYONE would satisfy "the refusals are identical" perfectly.
+    const refused = await observeSignIn("ana@example.test", "not-the-password");
+    const admitted = await observeSignIn("ana@example.test", ANA_PASSWORD);
+
+    expect(admitted).not.toEqual(refused);
+    expect(admitted).toEqual({
+      admitted: true,
+      sessionOpen: true,
+      bindings: 1,
+    });
+  });
+
+  it("never consults the allowlist before the password has been verified", async () => {
+    // Checking `senders` first would make a non-operator address answer without
+    // a password verification at all — a measurably faster refusal, which is an
+    // enumeration oracle that no identical sentence can hide.
     const directory = new FakeDirectory([anaRecord()]);
-    const mailer = new RecordingMailer();
+    const authenticator = new FakePasswordAuthenticator([anaAccount()]);
 
-    await requestOperatorMagicLink(directory, mailer, " ANA@Example.Test ");
+    await signInOperator(
+      directory,
+      authenticator,
+      "stranger@example.test",
+      "not-the-password",
+    );
 
-    expect(mailer.sent).toEqual(["ana@example.test"]);
+    expect(authenticator.attempts).toEqual([
+      { email: "stranger@example.test", password: "not-the-password" },
+    ]);
+    expect(directory.lookups).toEqual([]);
+  });
+
+  it("normalizes the address before it reaches the authenticator", async () => {
+    const directory = new FakeDirectory([anaRecord()]);
+    const authenticator = new FakePasswordAuthenticator([anaAccount()]);
+
+    const operator = await signInOperator(
+      directory,
+      authenticator,
+      "  Ana@Example.Test ",
+      ANA_PASSWORD,
+    );
+
+    expect(authenticator.attempts).toEqual([
+      { email: "ana@example.test", password: ANA_PASSWORD },
+    ]);
+    expect(operator?.id).toBe(ANA_SENDER_ID);
+  });
+
+  it("does not trim or otherwise rewrite the password", async () => {
+    // A password is an opaque byte string. Trimming it would silently make two
+    // different passwords the same one, and would lock out anyone whose
+    // password legitimately ends in a space.
+    const directory = new FakeDirectory([anaRecord()]);
+    const authenticator = new FakePasswordAuthenticator([anaAccount()]);
+
+    await signInOperator(
+      directory,
+      authenticator,
+      "ana@example.test",
+      `  ${ANA_PASSWORD}  `,
+    );
+
+    expect(authenticator.attempts).toEqual([
+      { email: "ana@example.test", password: `  ${ANA_PASSWORD}  ` },
+    ]);
+  });
+
+  it.each([
+    {
+      email: "not-an-address",
+      password: ANA_PASSWORD,
+      why: "a malformed address",
+    },
+    { email: "ana@example.test", password: "", why: "an empty password" },
+    { email: null, password: ANA_PASSWORD, why: "a missing address" },
+    { email: "ana@example.test", password: null, why: "a missing password" },
+  ])(
+    "refuses $why without attempting a sign-in",
+    async ({ email, password }) => {
+      const directory = new FakeDirectory([anaRecord()]);
+      const authenticator = new FakePasswordAuthenticator([anaAccount()]);
+
+      const operator = await signInOperator(
+        directory,
+        authenticator,
+        email,
+        password,
+      );
+
+      expect(operator).toBeNull();
+      expect(authenticator.attempts).toEqual([]);
+      expect(directory.lookups).toEqual([]);
+    },
+  );
+
+  it("denies a second auth identity claiming an already-bound sender, and signs it out", async () => {
+    // The same rule `resolveOperator` enforces, reached through the real
+    // sign-in path: valid credentials for an auth user that is not the one
+    // bound to the sender row must not inherit that operator's guests.
+    const directory = new FakeDirectory([
+      anaRecord({ authUserId: ANA_AUTH_USER_ID }),
+    ]);
+    const authenticator = new FakePasswordAuthenticator([
+      { ...anaAccount(), authUserId: BETO_AUTH_USER_ID },
+    ]);
+
+    const operator = await signInOperator(
+      directory,
+      authenticator,
+      "ana@example.test",
+      ANA_PASSWORD,
+    );
+
+    expect(operator).toBeNull();
+    expect(authenticator.sessionOpen).toBe(false);
+    expect(directory.bindings).toEqual([]);
+  });
+});
+
+describe("SIGN_IN_NOTICE", () => {
+  it("names neither the address nor whether an account exists", () => {
+    // The one sentence every refusal gets. Words like "contraseña incorrecta"
+    // or "no existe" would answer the enumeration question in plain Spanish.
+    expect(SIGN_IN_NOTICE).not.toMatch(/incorrect|no existe|no encontr/i);
+    expect(SIGN_IN_NOTICE).not.toMatch(/@/);
+    expect(SIGN_IN_NOTICE.length).toBeGreaterThan(0);
   });
 });
 

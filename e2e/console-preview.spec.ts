@@ -30,7 +30,7 @@ import { E2E_SITE_ORIGIN } from "./helpers/site-origin";
  * this file asserts it from the side that now has a preview to be tempted by.
  *
  * Serial, with one browser context: every test needs a signed-in operator, and
- * signing in means a real magic link out of a real mailbox.
+ * signing in means a real round trip through the real form.
  */
 
 test.describe.configure({ mode: "serial" });

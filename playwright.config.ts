@@ -44,8 +44,8 @@ export default defineConfig({
       // address Playwright connects to, exactly as in production.
       NEXT_PUBLIC_SITE_ORIGIN: E2E_SITE_ORIGIN,
       // The console origin is separate from the public invitation origin: the
-      // magic link is emailed, so the address in it has to be one this test
-      // run's browser can actually open.
+      // server reads console-rendered pages over HTTP to resolve the advertised
+      // preview card, so it has to be an address this run can actually reach.
       CONSOLE_ORIGIN: baseURL,
     },
   },

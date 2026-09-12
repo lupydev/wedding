@@ -161,10 +161,9 @@ describe("consoleOrigin", () => {
   });
 
   it("uses the explicit console origin when one is configured", () => {
-    // The magic link is emailed, so the origin in it must be an address the
-    // operator's browser can actually reach. That is not always the public
-    // invitation origin: a preview deployment, a tunnel, or the E2E server on
-    // a free port all serve the console somewhere else.
+    // The console is not always served at the public invitation origin: a
+    // preview deployment, a tunnel, or the E2E server on a free port all serve
+    // it somewhere else, and the server itself has to be able to reach it.
     process.env.NEXT_PUBLIC_SITE_ORIGIN = "https://boda.example.com";
     process.env.CONSOLE_ORIGIN = "http://localhost:3100";
 
@@ -178,8 +177,8 @@ describe("consoleOrigin", () => {
   });
 
   it("rejects a console origin that is not absolute", () => {
-    // A relative value would produce a magic link pointing nowhere, and the
-    // operator would be locked out with no error to read.
+    // A relative value cannot be fetched server-side, so the card-path read
+    // would fail silently and the console would show no preview at all.
     process.env.CONSOLE_ORIGIN = "localhost:3100";
 
     expect(() => consoleOrigin()).toThrow(/absolute/);
