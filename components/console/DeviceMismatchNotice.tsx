@@ -28,13 +28,32 @@ export interface DeviceMismatchNoticeProps {
 
 export function DeviceMismatchNotice({ message }: DeviceMismatchNoticeProps) {
   return (
-    <section className="device-mismatch" role="alert">
-      <h2>{message.heading}</h2>
-      <p>{message.body}</p>
-      <ul>
+    // Red, because something is BROKEN: this handset's WhatsApp account and this
+    // session disagree, and nothing the operator does in the console can reconcile
+    // them. It is one of the three signal colours and this is one of its meanings.
+    //
+    // NO BUTTON ANYWHERE IN HERE. Both exits change a fact — the declaration or the
+    // session — and each is a plain link, so both survive with JavaScript disabled.
+    // There is deliberately nothing that dismisses this.
+    <section
+      className="device-mismatch rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-4"
+      role="alert"
+    >
+      <h2 className="text-base leading-snug text-destructive">
+        {message.heading}
+      </h2>
+      <p className="mt-2 max-w-[68ch] text-sm text-foreground">
+        {message.body}
+      </p>
+      <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
         {message.exits.map((exit) => (
           <li key={exit.href}>
-            <a href={exit.href}>{exit.label}</a>
+            <a
+              className="text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              href={exit.href}
+            >
+              {exit.label}
+            </a>
           </li>
         ))}
       </ul>

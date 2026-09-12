@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { StatusBadge } from "@/components/console/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { dispatchStateTone } from "@/lib/design/console-status";
 import { postEventBeacon } from "@/lib/browser/beacon";
 import { browserNavigation } from "@/lib/browser/navigation";
 import {
@@ -168,18 +171,26 @@ export function DispatchLauncher({
   }
 
   return (
-    <section className="dispatch-launcher">
-      <h2>Preparar el envío para {greetingName}</h2>
+    <section className="dispatch-launcher rounded-lg border border-border bg-card px-4 py-4">
+      <h2 className="text-base leading-snug">
+        Preparar el envío para {greetingName}
+      </h2>
 
-      <p className="dispatch-launcher__recipient">
+      <p className="dispatch-launcher__recipient mt-2 text-sm text-foreground">
         El mensaje se dirige a {recipientName}.
       </p>
 
-      <p className="dispatch-launcher__state">
-        {DISPATCH_STATE_LABELS[dispatchState]}
+      <p className="dispatch-launcher__state mt-2">
+        <StatusBadge
+          label={DISPATCH_STATE_LABELS[dispatchState]}
+          tone={dispatchStateTone(dispatchState)}
+        />
       </p>
 
-      <p className="dispatch-launcher__disclosure">
+      <p
+        className="dispatch-launcher__disclosure mt-3 text-sm text-hint"
+        style={{ maxWidth: "48ch" }}
+      >
         Al abrir el enlace queda registrado únicamente que se abrió WhatsApp. La
         aplicación no puede saber si el mensaje llegó a enviarse: eso solo lo
         sabe quien lo envía, y por eso hace falta confirmarlo aquí después.
@@ -190,27 +201,43 @@ export function DispatchLauncher({
         route to the same destination that writes no event at all, and it would
         be the one the operator reached for first.
       */}
-      <button
-        className="dispatch-launcher__open"
+      {/*
+        THE ONLY GOLD BUTTON ON THIS SCREEN. Gold means "this needs your attention",
+        and there is exactly one thing on this page that does. A reference console put
+        four green buttons on every row of its send screen and none of them read as
+        the important one — the two confirmations below are therefore quiet and
+        destructive respectively, never a second primary.
+      */}
+      <Button
+        className="dispatch-launcher__open mt-4 w-full md:w-auto"
         type="button"
         onClick={openWhatsApp}
+        size="lg"
       >
         Abrir WhatsApp con el mensaje
-      </button>
+      </Button>
 
       {awaitingAnswer && (
-        <div className="dispatch-launcher__confirm">
-          <p>¿Se envió el mensaje a {recipientName}?</p>
+        <div className="dispatch-launcher__confirm mt-4 rounded-md border border-border bg-muted px-3 py-3">
+          <p className="text-sm text-foreground">
+            ¿Se envió el mensaje a {recipientName}?
+          </p>
 
-          <form action={answered(markSentAction)}>
-            <input type="hidden" name="invitationId" value={invitationId} />
-            <button type="submit">Marcar como enviada</button>
-          </form>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <form action={answered(markSentAction)}>
+              <input type="hidden" name="invitationId" value={invitationId} />
+              <Button size="lg" type="submit" variant="outline">
+                Marcar como enviada
+              </Button>
+            </form>
 
-          <form action={answered(markFailedAction)}>
-            <input type="hidden" name="invitationId" value={invitationId} />
-            <button type="submit">No se pudo enviar</button>
-          </form>
+            <form action={answered(markFailedAction)}>
+              <input type="hidden" name="invitationId" value={invitationId} />
+              <Button size="lg" type="submit" variant="destructive">
+                No se pudo enviar
+              </Button>
+            </form>
+          </div>
         </div>
       )}
     </section>

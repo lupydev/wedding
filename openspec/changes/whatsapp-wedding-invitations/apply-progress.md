@@ -3360,3 +3360,157 @@ magic link. Flagged as a risk rather than changed silently.
 
 13/13 Work Unit 7 tasks complete. Working tree left uncommitted and fully
 normalized. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 8 — Console Design Foundation
+
+**Mode**: Strict TDD. Presentation only: no route, behaviour, server action or
+query changed.
+
+## Verification
+
+| Command | Observed result |
+|---|---|
+| `npm test` | 85 files, **1215 passed** (baseline 985) |
+| `PORT=3100 npm run e2e` | **136 passed** (baseline 126) |
+| `npm run typecheck` | clean, exit 0 |
+| `npm run lint` | clean, exit 0 |
+| `npm run format:check` | "All matched files use Prettier code style!" |
+| `npm run build` | compiled in 2.3s; 12 routes; no warnings |
+
+Every standing invariant held: raw-HTML Open Graph under a WhatsApp UA with no
+tags after `</head>`, no guest phone digits in guest-facing page source, one
+unlock path with no bypass and no console session that becomes one, the `nullif`
+mutation test, `service_role` append-only, seat parity, `rsvp_latest` reducing to
+one row, external anon-key RLS, and the operator-session refresh test.
+
+## Measured, not assumed — corrections to the briefed numbers
+
+`lib/design/contrast.ts` recomputed every value in the brief. Nine of eleven
+matched to within rounding. Three did not, and in each case the assertion was the
+better test:
+
+| Pair | Briefed | Measured | Action |
+|---|---|---|---|
+| `primary-foreground` `#1A1408` on gold `#D79E4F` | 7.81:1 | **7.75:1** | Value kept; brief's figure was 0.06 high. |
+| hint `#8892A0` on the RAISED surface `#262E38` | (not given; 4.96 on card) | **4.36:1 — FAILS** | Hint lifted to **`#8C95A3`**, worst-case 4.54:1. |
+| destructive `#D8735F` on the RAISED surface `#262E38` | (not given; 4.86 on card) | **4.27:1 — FAILS** | Destructive lifted to **`#DA7965`**, worst-case 4.51:1. |
+
+The brief's two headline claims were both confirmed exactly: white on that gold
+measures **2.36:1**, and the near-black foreground the reference's own button
+primitive already used is the readable one. `lib/design/console-theme.spec.ts`
+asserts white-on-gold is BELOW threshold, so the suite is proven to have teeth
+rather than merely passing.
+
+The unmeasured surface was the popover/raised one. A token is now declared
+readable on **every** surface or not at all, which is what caught both failures:
+"readable on three of the four" is a trap for the next screen, and the next
+screen is the one nobody re-measures.
+
+Two further briefing discrepancies, both observed rather than argued:
+
+- `npx shadcn@latest init -d` resolves to `--preset=base-nova`, i.e. **Base UI**,
+  not Radix. Radix required `init -p nova -b radix`. The brief said `-d` defaults
+  to `--base radix`; it does not, on shadcn 4.21.0.
+- The `@theme inline` font trap is real and reproducible: the first `init` wrote
+  `--font-sans: var(--font-sans);` and `--font-heading: var(--font-sans);`.
+  `tools/console-theme-css.spec.ts` now fails on any `--font-*: var(--font-*)`
+  self-reference, so a later `init` cannot silently restore it.
+- This Radix build of `AlertDialog` does **not** set `aria-modal="true"`. It traps
+  focus and marks the rest of the tree instead, so the test asserts the trap
+  (six Tab presses, focus never leaves) rather than the attribute.
+
+## Two defects found BY the tests, during this unit
+
+1. **Three tabs active at once on `/console`.** `isConsoleNavItemActive` ignored
+   the fragment, so the root tab and both jump-link tabs matched the same path.
+   Caught by `e2e/console-design.spec.ts` asserting exactly one
+   `aria-current="page"`. Fixed: a jump link is never the current page, and
+   `lib/design/console-nav.spec.ts` now walks every tab href and asserts exactly
+   one match per path.
+2. **`loading.tsx` turned a 404 into a 200.** A route-group `loading.tsx` places
+   a Suspense boundary above the compose and preview routes, whose `notFound()`
+   then arrives as streamed content after the shell has flushed. Two standing E2E
+   tests — "a not-owned invitation answers the same way as one that does not
+   exist" — went from 404 to 200. Reverted to an explicit local `<Suspense>`
+   inside the console root page, with both auth gates outside it so their
+   redirects still set the status. The skeleton lives in
+   `components/console/ConsoleSkeleton.tsx`.
+
+Also caught: a stray `sm:px-6` in the shell, by
+`tools/console-one-breakpoint.spec.ts`.
+
+## Deviations from the brief, and why
+
+- **Four tabs, not five.** The console has exactly four destinations that need no
+  invitation id. Login is pre-session, compose and preview are per-household. The
+  constraint that mattered — no overflow sheet — holds. Sign-out is deliberately
+  in the header rather than the bar: a bottom bar sits under the thumb, and an
+  accidental sign-out mid-dispatch costs a re-authentication on a phone in a
+  venue.
+- **Gold is NOT the active-tab colour.** The brief's own rule says the three
+  signal colours have exactly one meaning each and nothing else may use them.
+  "This is where you already are" is not "this needs your attention", so the
+  active tab's colour signal is the step from `muted-foreground` (6.18:1) to
+  `foreground` (12.91:1), plus weight, plus a geometric mark.
+  `ConsoleNav.spec.tsx` asserts the nav spends none of the three.
+- **The guest list compacts, it does not hide.** Guest names, stored numbers and
+  the inline phone editor stay ON the row: the standing E2E suite asserts each of
+  them is visible there, and the inline editor is the only thing standing between
+  a missing number and a household that never receives its invitation. What
+  changed is the shape — one headline line with the name and both status badges,
+  a metadata line, guests as single lines instead of six stacked paragraphs.
+- **`Stat`/`StatBar` ship as tested primitives; `ProgressSummary` reuses their
+  layout RULE rather than the components.** `Stat` is a `dt`/`dd` pair needing a
+  figure and a label separately. `ProgressSummary` renders one whole SENTENCE per
+  metric on purpose — a figure with no population beside it is the "42
+  confirmadas" defect — and `e2e/console-guest-list.spec.ts` walks
+  `section.progress-summary li` asserting every line names its population. So the
+  list keeps its shape and borrows `statBarTemplate()` and `tabular-nums`.
+- **`NoMatchesState` is built and tested but unused.** The console has no filter
+  surface, and adding one would be a behaviour change. It is ready for the screen
+  that needs it.
+- **The document default is PAPER and the console opts into graphite.** Tailwind
+  Preflight is global, so the guest-facing routes could not be left untouched by
+  it either way. Making paper the default meant those routes needed **zero
+  edits** to stay light, and a forgotten opt-out can never ship a wedding
+  invitation on a near-black page. Both console preview panes re-enter paper
+  explicitly via `.paper-surface`.
+
+## Behavioural findings, reported and NOT fixed here
+
+- `components/ui/input.tsx` ships `md:text-sm` from the registry, which is 14px
+  above 768px. Neutralised by a base-layer `font-size: 16px !important` floor on
+  every field rather than by editing a regenerable registry file.
+- `supabase/config.toml` still has `[auth.email] enable_signup = true`, carried
+  over from Work Unit 7's note. Unchanged.
+
+## Not done, deliberately
+
+No theme switcher, no second theme, no dark-mode toggle. No `framer-motion`. No
+hand-inlined SVG — icons come from `lucide-react`, which shadcn brings anyway.
+The guest-facing invitation routes were not restyled; they inherit the shared
+type and the paper base and nothing else.
+
+## Rollback boundary
+
+Delete `lib/design/**`, `components/ui/**`, `components.json`, `lib/utils.ts`,
+`postcss.config.mjs`, `e2e/console-design.spec.ts`, `tools/{app-fonts,console-one-breakpoint,console-theme-css}.spec.ts`
+and the six new `components/console/*` files; revert `app/globals.css`,
+`app/layout.tsx`, the seven restyled `components/console/*` files, the four
+`app/console/**` pages, `package.json` and `package-lock.json`. Nothing outside
+presentation is touched, so the console returns to unstyled and fully working.
+
+## Size
+
+Roughly **3.7k authored lines**, excluding ~1.1k of vendored shadcn registry
+files. Far above the session's 800-line budget. It is one cohesive foundation —
+tokens, primitives, shell, and the tests that hold them — and slicing it ships a
+half-themed console. Recommending `size:exception`; no comments, tests or docs
+were compressed to chase the number.
+
+## Status
+
+26/26 Work Unit 8 tasks complete. Working tree left uncommitted and fully
+normalized. Ready for `sdd-verify`.

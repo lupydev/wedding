@@ -1,3 +1,5 @@
+import { StatusBadge } from "@/components/console/StatusBadge";
+import { preflightGroupTone } from "@/lib/design/console-status";
 import type {
   DispatchPreflight as Preflight,
   PreflightHousehold,
@@ -21,6 +23,12 @@ import type {
  *    that edits them — but a readiness summary is a thing an operator
  *    screenshots and forwards to the other operator, and a guest's number has no
  *    business travelling in one.
+ *
+ * NO EXTRA WRAPPER ELEMENTS AROUND THE GROUPS, AND THAT IS A CONSTRAINT RATHER THAN
+ * a preference: the standing end-to-end suite locates each group as the `section`
+ * inside this one that CONTAINS a given heading. A styling wrapper that was also a
+ * `section` would match the same filter twice and make those locators ambiguous. The
+ * groups are therefore restyled in place.
  */
 
 export interface DispatchPreflightProps {
@@ -33,12 +41,12 @@ function HouseholdLine({
   readonly household: PreflightHousehold;
 }) {
   return (
-    <li className="dispatch-preflight__household">
-      <span className="dispatch-preflight__household-name">
+    <li className="dispatch-preflight__household text-sm">
+      <span className="dispatch-preflight__household-name text-foreground">
         {household.householdName}
       </span>
       {household.guestNames.length > 0 && (
-        <span className="dispatch-preflight__guests">
+        <span className="dispatch-preflight__guests text-muted-foreground">
           {": "}
           {household.guestNames.join(", ")}
         </span>
@@ -49,27 +57,62 @@ function HouseholdLine({
 
 export function DispatchPreflight({ preflight }: DispatchPreflightProps) {
   return (
-    <section className="dispatch-preflight">
-      <h2>Revisión previa al envío</h2>
+    <section className="dispatch-preflight rounded-lg border border-border bg-card px-4 py-4">
+      <h2 className="text-base leading-snug">Revisión previa al envío</h2>
 
-      <p className="dispatch-preflight__ready">{preflight.readyText}</p>
+      {/*
+        The one gold figure on this panel: how many households can go out now. It is
+        the number the operator opened the page for, so it is the one that is large.
+      */}
+      <p
+        className="dispatch-preflight__ready mt-2 font-display text-2xl leading-tight text-primary"
+        style={{ fontVariantNumeric: "tabular-nums" }}
+      >
+        {preflight.readyText}
+      </p>
 
-      <p className="dispatch-preflight__intro">
+      <p
+        className="dispatch-preflight__intro mt-1 text-sm text-hint"
+        style={{ maxWidth: "48ch" }}
+      >
         Esta revisión no envía nada. Señala, antes de empezar, qué invitaciones
         todavía no pueden salir y qué hace falta para que puedan.
       </p>
 
       {preflight.groups.map((group) => (
-        <section className="dispatch-preflight__group" key={group.kind}>
-          <h3>{group.heading}</h3>
+        <section
+          className="dispatch-preflight__group mt-4 rounded-md bg-muted px-3 py-3"
+          key={group.kind}
+        >
+          {/*
+            The badge sits BESIDE the heading and not inside it. Inside, it becomes
+            part of the heading's accessible name — "Sin número en la agenda 2 de 4
+            invitaciones de Ana" — and every `getByRole("heading", { name })` in the
+            suite stops matching. A visual grouping is not a semantic one.
+          */}
+          <h3 className="text-sm font-semibold">{group.heading}</h3>
 
-          <p className="dispatch-preflight__count">{group.text}</p>
-          <p className="dispatch-preflight__explanation">{group.explanation}</p>
+          <p className="dispatch-preflight__count mt-1">
+            <StatusBadge
+              label={group.text}
+              tone={preflightGroupTone(group.kind)}
+            />
+          </p>
+          <p className="dispatch-preflight__explanation mt-1 text-sm text-muted-foreground">
+            {group.explanation}
+          </p>
 
           {group.households.length === 0 ? (
-            <p className="dispatch-preflight__empty">Ninguna</p>
+            /*
+              An empty group renders as EMPTY, never as nothing. A check that omits
+              its clean sections cannot be read as "nothing is wrong here" — it
+              reads as "this check did not run", and those are not tellable apart.
+            */
+            <p className="dispatch-preflight__empty mt-2 text-sm text-hint">
+              Ninguna
+            </p>
           ) : (
-            <ul className="dispatch-preflight__households">
+            <ul className="dispatch-preflight__households mt-2 flex flex-col gap-1">
               {group.households.map((household) => (
                 <HouseholdLine
                   household={household}

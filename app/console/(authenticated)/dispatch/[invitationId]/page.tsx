@@ -72,13 +72,19 @@ export default async function DispatchPage({
   // explanation is not a boundary.
   if (dispatchIsBlockedBy(declaration.status)) {
     return (
-      <main className="console__main">
-        <p>
+      // A `div`, not a `main`: `ConsoleShell` already renders this page's one `main`.
+      <div className="console__main flex flex-col gap-4">
+        <p className="max-w-[68ch] rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-4 text-sm text-foreground">
           Los envíos están bloqueados en este dispositivo hasta que la cuenta de
           WhatsApp declarada coincida con la sesión.
         </p>
-        <a href={CONSOLE_ROOT_PATH}>Volver al panel</a>
-      </main>
+        <a
+          className="self-start text-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          href={CONSOLE_ROOT_PATH}
+        >
+          Volver al panel
+        </a>
+      </div>
     );
   }
 
@@ -99,23 +105,30 @@ export default async function DispatchPage({
 
   if (!recipient.ok) {
     return (
-      <main className="console__main">
-        <h2>No se puede preparar el envío para {invitation.greetingName}</h2>
+      <div className="console__main flex flex-col gap-4">
+        <h2 className="text-balance">
+          No se puede preparar el envío para {invitation.greetingName}
+        </h2>
 
-        <p>
+        <p className="max-w-[68ch] text-sm text-muted-foreground">
           {recipient.reason === "no_phone_on_file"
             ? "Todavía no hay ningún número guardado para esta invitación. Se puede agregar desde el panel, junto al nombre de cada persona."
             : "Los números guardados para esta invitación no parecen recibir WhatsApp: una línea fija lo es. Enviar de todas formas dejaría registrado un envío que nadie recibiría."}
         </p>
 
-        <ul>
+        <ul className="flex flex-col gap-1 rounded-lg border border-border bg-card px-4 py-3 text-sm">
           {invitation.guests.map((guest) => (
             <li key={guest.id}>{guest.fullName}</li>
           ))}
         </ul>
 
-        <a href={CONSOLE_ROOT_PATH}>Volver al panel</a>
-      </main>
+        <a
+          className="self-start text-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          href={CONSOLE_ROOT_PATH}
+        >
+          Volver al panel
+        </a>
+      </div>
     );
   }
 
@@ -126,7 +139,7 @@ export default async function DispatchPage({
   const cardImagePath = await resolveAdvertisedCardPath(invitation.slug);
 
   return (
-    <main className="console__main">
+    <div className="console__main flex flex-col gap-4">
       <DispatchLauncher
         invitationId={invitation.invitationId}
         greetingName={invitation.greetingName}
@@ -160,7 +173,12 @@ export default async function DispatchPage({
         cardLinkLabel={new URL(siteOrigin()).host}
       />
 
-      <a href={CONSOLE_ROOT_PATH}>Volver al panel</a>
-    </main>
+      <a
+        className="self-start text-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        href={CONSOLE_ROOT_PATH}
+      >
+        Volver al panel
+      </a>
+    </div>
   );
 }

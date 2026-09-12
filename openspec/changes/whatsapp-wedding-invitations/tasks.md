@@ -372,6 +372,41 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 7a.12 RED — `e2e/console-auth.spec.ts`: the three refusals compared against one another as full observable outcomes (notice, landing path, session-cookie count), the stranger's momentary session proved not to survive, the seeded operator signing in and binding, the typed password absent from page source, the callback route 404, and the login page offering no sign-up or reset.
 - [x] 7a.13 Verify: `npm test`, `PORT=3100 npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`.
 
+## Phase 8: Console Design Foundation (Work Unit 8)
+
+Presentation only: no route, behaviour, server action or query changed. Two palettes — graphite console, papery invitation — bound by shared type. Every rule is asserted as a measurement, not described.
+
+- [x] 8.1 RED — `lib/design/contrast.spec.ts`: WCAG 2.x arithmetic pinned against published values (black-on-white 21:1, sRGB coefficients, alpha compositing, refusal of unmeasurable `oklch()`).
+- [x] 8.2 GREEN — `lib/design/contrast.ts`: `parseCssColor`, `relativeLuminance`, `flatten`, `contrastRatio`, `WCAG_AA_NORMAL_TEXT`. Pure, dependency-free.
+- [x] 8.3 RED — `lib/design/console-theme.spec.ts`: every declared foreground/background pair walked and held to 4.5:1; white-on-gold asserted BELOW the threshold so the suite is proven to have teeth.
+- [x] 8.4 GREEN — `lib/design/console-theme.ts`: measured graphite tokens, `CONSOLE_SEMANTIC_COLOR_ROLES` (gold = attention, green = done, red = broken/missing, nothing else), hairlines excluded from the text threshold by name, `CONSOLE_RADIUS`, `CONSOLE_INPUT_MIN_FONT_SIZE_PX = 16`.
+- [x] 8.5 RED/GREEN — `lib/design/paper-theme.{spec.ts,ts}`: the guest-facing palette under the same measurement, plus an assertion that the console gold is unreadable on paper.
+- [x] 8.6 RED/GREEN — `tools/console-theme-css.spec.ts`: reads `app/globals.css` off disk and fails on token drift, on a surviving `oklch` grey from a `shadcn init`, on a `--font-*: var(--font-*)` self-reference, on `font-size: 15px`, on a missing `prefers-reduced-motion` block, and on any duration over 200ms.
+- [x] 8.7 GREEN — `app/globals.css` rewritten: paper on `:root`, graphite on `.console-surface`, paper island on `.paper-surface`, literal font families in `@theme inline`, a 16px floor on every field, and reduced-motion honoured.
+- [x] 8.8 RED/GREEN — `tools/app-fonts.spec.ts` + `app/layout.tsx`: Yeseva One (400), Hanken Grotesk (400/500/600/700), Caveat (`preload: false`), all `display: "swap"`, variable classes on `<html>` and never on `<body>`.
+- [x] 8.9 GREEN — shadcn/ui initialised on the Radix base (`init -p nova -b radix`) with Tailwind v4: `button`, `card`, `input`, `label`, `table`, `badge`, `alert`, `separator`, `skeleton`, `sheet`, `alert-dialog`, `dropdown-menu`. `shadcn` and `tw-animate-css` moved to `devDependencies`; `md:text-sm` removed from the Input floor by a base-layer rule.
+- [x] 8.10 RED/GREEN — `components/ui/panel.{spec.tsx,tsx}`: title is a REQUIRED prop, hint capped at 48ch, heading level selectable.
+- [x] 8.11 RED/GREEN — `components/ui/stat.{spec.tsx,tsx}`: two emphases only, `tabular-nums`, `dt`/`dd` pairing, opt-in emphasis.
+- [x] 8.12 RED/GREEN — `components/ui/stat-bar.{spec.tsx,tsx}`: `repeat(auto-fit, minmax(88px, 1fr))`, never `flex-wrap`.
+- [x] 8.13 RED/GREEN — `components/ui/empty-state.{spec.tsx,tsx}`: `EmptyState` for "nothing yet" and a DIFFERENT `NoMatchesState` that keeps the filter visible and offers to clear it.
+- [x] 8.14 RED/GREEN — `components/ui/error-region.{spec.tsx,tsx}`: an `aria-live="polite"` region mounted BEFORE its first message, with node identity preserved across the change.
+- [x] 8.15 RED/GREEN — `components/ui/why-disabled.{spec.ts,ts}`: a disabled control always carries a stated reason; a blank reason throws.
+- [x] 8.16 RED/GREEN — `components/ui/confirm-destructive.{spec.tsx,tsx}`: `AlertDialog` and never `Dialog`, `window.confirm` proven unused, focus proven trapped across six Tab presses.
+- [x] 8.17 RED/GREEN — `lib/design/console-nav.{spec.ts,ts}`: ONE breakpoint (768px / `md`), 56px tab bar base, four parameterless destinations, no overflow sheet, and three redundant active signals (colour, weight, geometric mark).
+- [x] 8.18 RED/GREEN — `tools/console-one-breakpoint.spec.ts`: reads every console source and fails on any responsive variant other than `md:`. It caught a stray `sm:px-6` in the shell.
+- [x] 8.19 RED/GREEN — `lib/design/console-status.{spec.ts,ts}`: total tone functions over the dispatch, answer and readiness unions, so no call site chooses a colour. Green is reachable by exactly one RSVP answer.
+- [x] 8.20 RED/GREEN — `components/console/{ConsoleShell,ConsoleNav,ConsoleNavCurrent,ConsoleHeader,StatusBadge,ConsoleSkeleton}`: sidebar above the breakpoint, bottom bar below, content padding read from `--console-tabbar-height`, skip link, sign-out kept out of the thumb-reach bar. `ConsoleNav` asserted to spend NONE of the three signal colours on the active tab.
+- [x] 8.21 GREEN — the guest list restyled as a compact row: one headline line carrying the name and both status badges, a metadata line, guests as single lines, `min-w-0` on every truncating flex child. Guest names, stored numbers and the inline editor stay ON the row, because the standing E2E suite asserts they are visible there.
+- [x] 8.22 GREEN — `ProgressSummary`, `DispatchPreflight`, `GuestPhoneField`, `DeviceMismatchNotice`, `DeviceDeclarationForm`, `DispatchLauncher`, `WhatsAppBubble` restyled in place, every class hook and DOM shape the E2E suite selects on preserved. The WhatsApp pane moved to `.paper-surface`; its approved-markup snapshot updated deliberately.
+- [x] 8.23 GREEN — `app/console/{login,device}` and the authenticated pages restyled; the nested `<main>` elements collapsed to `div`s under the shell's single `main`.
+- [x] 8.24 RED/GREEN — `components/console/ConsoleSkeleton.{spec.tsx,tsx}` plus an explicit local `<Suspense>` in the console root page. A `loading.tsx` was tried first and reverted: the route-group boundary turned the compose and preview routes' `notFound()` into a streamed 200, which an E2E run caught.
+- [x] 8.25 RED/GREEN — `e2e/console-design.spec.ts`: computed input font-size at least 16px on a phone AND a desktop width, the console measured graphite, the invitation measured light, "Hanken Grotesk" measured as the loaded body family, the shell's single breakpoint flip, content padding equal to the measured bar height, the active tab's geometric mark, and reduced motion honoured. It caught three tabs marked active at once on `/console`.
+- [x] 8.26 Verify: `npm test` (1215 passed), `PORT=3100 npm run e2e` (136 passed), `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — all clean. Every standing invariant held.
+
+### Work Unit 8 size
+
+Authored change is roughly 3.7k lines (excluding ~1.1k of vendored shadcn registry files), far above the session's 800-line budget. It is one cohesive foundation — tokens, primitives, shell and the tests that hold them — and cannot be sliced without shipping a half-themed console. Recommend `size:exception`.
+
 ## Phase 7: Placeholders and Finalization (non-blocking, no dependent tasks)
 
 - [ ] 7.1 Once the couple supplies `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`, `{{VENUE_NAME}}`, `{{VENUE_ADDRESS}}`, `{{APPROX_GUEST_COUNT}}`, `{{CEREMONY_DATE}}`, `{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}` and `{{ZOOM_PASSCODE}}` (the last four are an `UPDATE` on the `ceremony` row, not a code edit), replace every placeholder occurrence in invitation copy, message templates, and RSVP deadline defaults. Do not invent values; do not block any other work unit on this.

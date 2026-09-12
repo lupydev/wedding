@@ -75,13 +75,25 @@ export function WhatsAppBubble({
   const length = describeMessageLength(messageText);
 
   return (
-    <section className="wa-preview" aria-label="Vista previa del mensaje">
-      <p className="wa-preview__label">{MESSAGE_PREVIEW_APPROXIMATE_LABEL}</p>
+    // `paper-surface`, not the console's graphite. This pane's whole claim is that
+    // it shows what the RECIPIENT will see, and a preview rendered on a surface no
+    // recipient will ever see is a preview an operator approves copy on and is
+    // wrong about. The console is the back room; this is a window out of it.
+    <section
+      className="wa-preview paper-surface rounded-lg border border-border px-4 py-4"
+      aria-label="Vista previa del mensaje"
+    >
+      <p
+        className="wa-preview__label text-sm text-muted-foreground"
+        style={{ maxWidth: "48ch" }}
+      >
+        {MESSAGE_PREVIEW_APPROXIMATE_LABEL}
+      </p>
 
-      <div className="wa-preview__bubble">
-        <div className="wa-preview__card">
+      <div className="wa-preview__bubble mt-3 max-w-sm rounded-lg border border-border bg-card p-2 shadow-sm">
+        <div className="wa-preview__card overflow-hidden rounded-md bg-muted">
           {cardImagePath === null ? (
-            <p className="wa-preview__card-missing">
+            <p className="wa-preview__card-missing px-3 py-4 text-sm text-destructive">
               No se pudo cargar la tarjeta de vista previa. El mensaje se puede
               enviar igual: WhatsApp la genera por su cuenta al abrir el enlace.
             </p>
@@ -96,32 +108,48 @@ export function WhatsAppBubble({
             */
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              className="wa-preview__card-image"
+              className="wa-preview__card-image block w-full"
               src={cardImagePath}
               alt={`Tarjeta de vista previa de la invitación de ${cardTitle}`}
             />
           )}
 
-          <div className="wa-preview__card-text">
-            <p className="wa-preview__card-title">{cardTitle}</p>
-            <p className="wa-preview__card-description">{cardDescription}</p>
+          <div className="wa-preview__card-text px-3 py-2">
+            <p className="wa-preview__card-title font-display text-sm leading-snug text-foreground">
+              {cardTitle}
+            </p>
+            <p className="wa-preview__card-description mt-0.5 text-xs text-muted-foreground">
+              {cardDescription}
+            </p>
             {/* A label, not an anchor: nothing in this pane may be a second
                 route to the send that records no `link_opened` event. */}
-            <p className="wa-preview__card-host">{cardLinkLabel}</p>
+            <p className="wa-preview__card-host mt-0.5 text-xs text-hint">
+              {cardLinkLabel}
+            </p>
           </div>
         </div>
 
-        <p className="wa-preview__text">{messageText}</p>
+        <p className="wa-preview__text mt-2 px-1 text-sm whitespace-pre-line text-foreground">
+          {messageText}
+        </p>
       </div>
 
-      <p className="wa-preview__length">{length.sentence}</p>
+      <p className="wa-preview__length mt-3 text-xs text-muted-foreground">
+        {length.sentence}
+      </p>
 
-      <p className="wa-preview__url-label">Enlace que se abrirá:</p>
-      <p className="wa-preview__url">{waUrl}</p>
+      <p className="wa-preview__url-label mt-3 text-xs font-semibold text-foreground">
+        Enlace que se abrirá:
+      </p>
+      <p className="wa-preview__url mt-1 rounded-md bg-muted px-2 py-1 font-mono text-xs break-all text-muted-foreground">
+        {waUrl}
+      </p>
 
-      <div className="wa-preview__divergences">
-        <p>En qué se diferencia esta vista previa de WhatsApp de verdad:</p>
-        <ul>
+      <div className="wa-preview__divergences mt-3 text-xs text-muted-foreground">
+        <p className="font-semibold text-foreground">
+          En qué se diferencia esta vista previa de WhatsApp de verdad:
+        </p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-5">
           {MESSAGE_PREVIEW_DIVERGENCES.map((divergence) => (
             <li key={divergence}>{divergence}</li>
           ))}

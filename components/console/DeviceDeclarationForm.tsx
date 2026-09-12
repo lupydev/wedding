@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+
 /**
  * The per-device WhatsApp account picker — presentational, props only.
  *
@@ -34,13 +36,16 @@ export function DeviceDeclarationForm({
   action,
 }: DeviceDeclarationFormProps) {
   return (
-    <form className="device-declaration" action={action}>
-      <fieldset>
-        <legend>
+    <form className="device-declaration flex flex-col gap-4" action={action}>
+      <fieldset className="rounded-lg border border-border bg-card px-4 py-4">
+        <legend className="px-1 text-sm font-semibold text-foreground">
           ¿Qué cuenta de WhatsApp está instalada en este dispositivo?
         </legend>
 
-        <p className="device-declaration__why">
+        <p
+          className="device-declaration__why mt-1 text-sm text-hint"
+          style={{ maxWidth: "48ch" }}
+        >
           Los enlaces wa.me solo indican quién recibe el mensaje: no existe
           forma de elegir desde qué cuenta se envía. El mensaje sale de la
           cuenta instalada en este teléfono, así que esta respuesta se guarda
@@ -48,8 +53,12 @@ export function DeviceDeclarationForm({
         </p>
 
         {operators.map((operator) => (
-          <p key={operator.id}>
+          <p
+            className="mt-3 flex min-h-11 items-center gap-3 rounded-md bg-muted px-3"
+            key={operator.id}
+          >
             <input
+              className="size-4 accent-[var(--primary)]"
               type="radio"
               id={`device-sender-${operator.id}`}
               name="senderId"
@@ -57,14 +66,19 @@ export function DeviceDeclarationForm({
               defaultChecked={operator.id === declaredSenderId}
               required
             />
-            <label htmlFor={`device-sender-${operator.id}`}>
+            <label
+              className="flex-1 text-sm text-foreground"
+              htmlFor={`device-sender-${operator.id}`}
+            >
               {operator.displayName}
             </label>
           </p>
         ))}
       </fieldset>
 
-      <button type="submit">Guardar la declaración de este dispositivo</button>
+      <Button className="self-start" size="lg" type="submit">
+        Guardar la declaración de este dispositivo
+      </Button>
     </form>
   );
 }

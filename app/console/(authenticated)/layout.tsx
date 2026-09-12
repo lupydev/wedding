@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { ConsoleHeader } from "@/components/console/ConsoleHeader";
+import { ConsoleNavCurrent } from "@/components/console/ConsoleNavCurrent";
+import { ConsoleShell } from "@/components/console/ConsoleShell";
 import { DeviceMismatchNotice } from "@/components/console/DeviceMismatchNotice";
 import {
   CONSOLE_DEVICE_PATH,
@@ -59,21 +62,17 @@ export default async function AuthenticatedConsoleLayout({
       : null;
 
   return (
-    <div className="console">
-      <header className="console__header">
-        <h1>Panel de envíos</h1>
-        <p className="console__operator">
-          Sesión iniciada como <strong>{operator.displayName}</strong>
-        </p>
-        <a className="console__device" href={CONSOLE_DEVICE_PATH}>
-          Cambiar la cuenta de WhatsApp de este dispositivo
-        </a>
-        {/* A plain link, so signing out works with no JavaScript at all. */}
-        <a className="console__sign-out" href="/console/auth/sign-out">
-          Cerrar sesión
-        </a>
-      </header>
-
+    <ConsoleShell
+      className="console"
+      header={
+        <ConsoleHeader
+          devicePath={CONSOLE_DEVICE_PATH}
+          operatorDisplayName={operator.displayName}
+          signOutPath="/console/auth/sign-out"
+        />
+      }
+      nav={<ConsoleNavCurrent />}
+    >
       {declaration.status === "mismatch" && (
         <DeviceMismatchNotice
           message={describeDeviceMismatch({
@@ -84,6 +83,6 @@ export default async function AuthenticatedConsoleLayout({
       )}
 
       {children}
-    </div>
+    </ConsoleShell>
   );
 }

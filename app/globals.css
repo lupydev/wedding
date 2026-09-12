@@ -1,19 +1,343 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * The dark variant shadcn's primitives reference in their class strings.
+ *
+ * It is DEFINED and never APPLIED. This product has two palettes — graphite for
+ * the console, paper for the invitation — chosen per surface, not per user
+ * preference. There is no theme switcher, no `.dark` class on `<html>`, and no
+ * `prefers-color-scheme` override: a wedding invitation does not have a dark
+ * mode. The variant exists only so the generated `dark:` utilities compile.
+ */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * THE DOCUMENT DEFAULT IS PAPER, AND THE CONSOLE OPTS INTO GRAPHITE.
+ *
+ * That ordering is deliberate and it is the reason the guest-facing invitation
+ * routes needed no edit in this work unit. Had `:root` been graphite, every
+ * guest-facing surface would have had to opt back OUT, and the one that was
+ * forgotten would have shipped a wedding invitation on a near-black page.
+ *
+ * Values come from `lib/design/paper-theme.ts` and are measured there.
+ * `tools/console-theme-css.spec.ts` reads this file and fails if the two drift.
+ */
 :root {
-  color-scheme: light dark;
+  /*
+   * `light` only, not `light dark`. `color-scheme: light dark` hands the browser
+   * permission to repaint form controls, scrollbars and `<select>` popups dark
+   * on a system in dark mode — on the paper surface that produces a black
+   * dropdown on a cream page. The console asks for `dark` explicitly below,
+   * where it is true.
+   */
+  color-scheme: light;
+
+  --background: #faf7f1;
+  --foreground: #2a2620;
+  --card: #ffffff;
+  --card-foreground: #2a2620;
+  --popover: #ffffff;
+  --popover-foreground: #2a2620;
+  --muted: #f1ece2;
+  --muted-foreground: #6b6358;
+  --secondary: #f1ece2;
+  --secondary-foreground: #2a2620;
+  --accent: #f1ece2;
+  --accent-foreground: #2a2620;
+  --primary: #7f5b1a;
+  --primary-foreground: #ffffff;
+  --destructive: #a33a26;
+  --border: rgba(42, 38, 32, 0.14);
+  --input: rgba(42, 38, 32, 0.24);
+  --ring: #7f5b1a;
+
+  /* Paper equivalents of the console's two extra signal tokens. */
+  --paper-hint: #716a5f;
+  --paper-success: #2f6b45;
+
+  /* ONE radius for the whole product: 14px. */
+  --radius: 0.875rem;
+
+  /*
+   * Two easings and no more. `--ease-out` for anything entering or settling,
+   * `--ease-in-out` for anything that moves and comes back. A third curve is a
+   * decision nobody can justify at the call site.
+   */
+  --console-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --console-ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --console-motion-fast: 120ms;
+  --console-motion: 200ms;
+
+  /*
+   * The bottom tab bar's height, including the home-indicator inset.
+   *
+   * Declared once, as a variable, because the bar's height and the content's
+   * bottom padding MUST be the same number. Two literals drift, and the way they
+   * drift is the last row of the guest list sitting permanently under the bar.
+   */
+  --console-tabbar-height: calc(56px + env(safe-area-inset-bottom));
 }
 
-* {
-  box-sizing: border-box;
+/*
+ * THE CONSOLE SURFACE: graphite.
+ *
+ * A scope class rather than a media query or a `.dark` toggle. The console is
+ * graphite because of what it IS — a back room, on a phone, in daylight — not
+ * because of what the operating system prefers this morning.
+ *
+ * Values come from `lib/design/console-theme.ts`, where every single
+ * foreground/background pairing below is measured against WCAG AA for normal
+ * text. Do not edit a value here: edit the token table, and this file's test
+ * will tell you the two disagree.
+ *
+ * THE COLOUR RULE, ENFORCED BY REVIEW AND WRITTEN HERE BECAUSE THIS IS WHERE
+ * SOMEBODY WILL LOOK:
+ *
+ *   --primary   (gold #D79E4F)  "this needs your attention"
+ *   --console-success (#5FA97B) "done"
+ *   --destructive (#DA7965)     "broken or missing"
+ *
+ * NOTHING ELSE MAY USE THOSE THREE. Not a decorative accent, not a heading, not
+ * a hover state, not a second button on the same row. A reference console put
+ * four green buttons on every guest row across 388 guests and none of them read
+ * as the important one; a colour that means three things means nothing.
+ */
+.console-surface {
+  color-scheme: dark;
+
+  --background: #161a1f;
+  --foreground: #ede9e1;
+  --card: #1e242c;
+  --card-foreground: #ede9e1;
+  /* The RAISED surface: menus, sheets, popovers. Lighter than the card. */
+  --popover: #262e38;
+  --popover-foreground: #ede9e1;
+  /* The SUNK surface: inputs, alternate rows, wells. Darker than the card. */
+  --muted: #191e24;
+  --muted-foreground: #9aa4b0;
+  --secondary: #262e38;
+  --secondary-foreground: #ede9e1;
+  --accent: #262e38;
+  --accent-foreground: #ede9e1;
+
+  --primary: #d79e4f;
+  /*
+   * NEVER `#fff` HERE. White on this gold measures 2.36:1 against a 4.5:1
+   * minimum, and it is what a reference console shipped in its active nav item,
+   * its active filter chips and its copy-confirmation button — while its own
+   * shared button primitive already used this near-black value and was right.
+   */
+  --primary-foreground: #1a1408;
+
+  --destructive: #da7965;
+  --console-success: #5fa97b;
+  /* Hints: the one-line explanation under a panel title. */
+  --console-hint: #8c95a3;
+
+  /* The hairline, and twice the hairline for anything that is a control. */
+  --border: rgba(233, 228, 217, 0.1);
+  --input: rgba(233, 228, 217, 0.2);
+  --ring: #d79e4f;
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+/*
+ * A paper island inside the console.
+ *
+ * Both console preview panes — the invitation body preview and the WhatsApp
+ * bubble — show the guest a guest sees. Rendering them graphite would make the
+ * operator approve copy on a surface no guest will ever see, which defeats the
+ * entire purpose of a preview. So they re-enter the document default explicitly.
+ */
+.paper-surface {
+  color-scheme: light;
+
+  --background: #faf7f1;
+  --foreground: #2a2620;
+  --card: #ffffff;
+  --card-foreground: #2a2620;
+  --popover: #ffffff;
+  --popover-foreground: #2a2620;
+  --muted: #f1ece2;
+  --muted-foreground: #6b6358;
+  --secondary: #f1ece2;
+  --secondary-foreground: #2a2620;
+  --accent: #f1ece2;
+  --accent-foreground: #2a2620;
+  --primary: #7f5b1a;
+  --primary-foreground: #ffffff;
+  --destructive: #a33a26;
+  --border: rgba(42, 38, 32, 0.14);
+  --input: rgba(42, 38, 32, 0.24);
+  --ring: #7f5b1a;
+
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+/*
+ * THE FONT TRAP, AND WHY EVERY FAMILY BELOW IS A LITERAL NAME.
+ *
+ * `shadcn init` writes `--font-sans: var(--font-sans);` into this block. Tailwind
+ * v4 resolves custom properties inside `@theme inline` at PARSE time, so a
+ * variable that `next/font` injects at RUNTIME resolves to nothing and the
+ * declaration collapses into a self-reference. Every font then silently falls
+ * back to the browser default — no error, no warning, no failing build, just the
+ * wrong typeface everywhere.
+ *
+ * Literal family names cannot do that. `next/font` still emits the `@font-face`
+ * rules and its variable classes still go on `<html>`, so the variables exist for
+ * hand-written CSS; nothing in the theme depends on them resolving early.
+ *
+ * `tools/console-theme-css.spec.ts` fails on any `--font-*: var(--font-*)`
+ * self-reference, so a later `shadcn init` cannot quietly reintroduce it.
+ */
+@theme inline {
+  --font-sans:
+    "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --font-display: "Yeseva One", Georgia, "Times New Roman", serif;
+  --font-script: "Caveat", "Segoe Script", cursive;
+  --font-heading: "Yeseva One", Georgia, "Times New Roman", serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* The two console-only signal colours, and the hint. */
+  --color-success: var(--console-success);
+  --color-hint: var(--console-hint);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.5);
+  --radius-3xl: calc(var(--radius) * 1.75);
+  --radius-4xl: calc(var(--radius) * 2);
+
+  --ease-console-out: var(--console-ease-out);
+  --ease-console-in-out: var(--console-ease-in-out);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    /*
+     * Tailwind Preflight removes the browser's default smooth-scroll and
+     * document margins. Restoring the scroll behaviour here keeps in-page
+     * anchors usable; the reduced-motion block below turns it off again for
+     * anyone who asked.
+     */
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Display type on both surfaces. Tailwind Preflight resets every heading to
+   * inherited size and weight, so a document with no utility classes on its
+   * headings would be a wall of body text — which is exactly what the
+   * guest-facing invitation routes are, by design, in this work unit. These
+   * rules are what keeps them readable without editing them.
+   */
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-normal text-balance;
+    line-height: 1.15;
+  }
+
+  h1 {
+    font-size: clamp(1.75rem, 1.25rem + 2.5vw, 2.5rem);
+  }
+
+  h2 {
+    font-size: clamp(1.375rem, 1.1rem + 1.4vw, 1.75rem);
+  }
+
+  h3 {
+    font-size: 1.125rem;
+  }
+
+  p {
+    @apply text-pretty;
+    line-height: 1.6;
+  }
+
+  /*
+   * EVERY FIELD IS AT LEAST 16px, AND THERE IS NO VIEWPORT WHERE IT IS NOT.
+   *
+   * The threshold is genuinely 16: at 16px or larger mobile Safari focuses the
+   * field normally, at 15px or less it zooms the whole viewport. A reference
+   * console set 15px with a comment that said "below 16 and iOS zooms" — the
+   * rule and its own comment contradicted each other — and it zoomed on every
+   * field focus, on the phone it was built for. Operators dispatch from a phone
+   * here as well, because `wa.me` needs WhatsApp on the same handset.
+   *
+   * `!important` because shadcn's own Input primitive carries a `md:text-sm`
+   * utility, and a viewport-scoped utility beats a base-layer rule. The one
+   * value this whole rule exists to guarantee is a FLOOR, so it may not be
+   * undercut by a breakpoint.
+   */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /*
+   * A disabled control that does not say why is a dead end. The rule cannot be
+   * enforced by CSS, so `components/ui/why-disabled.ts` enforces it in code and
+   * this cursor is the visible half.
+   */
+  :disabled {
+    cursor: not-allowed;
+  }
+}
+
+/*
+ * HONOUR prefers-reduced-motion.
+ *
+ * Not "reduce the durations" — remove the movement. Someone who set this
+ * preference did so because motion makes them ill, and a 120ms slide is still a
+ * slide. Opacity is left alone: a cross-fade carries no vestibular motion and
+ * removing it would make several states change with no transition at all.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { PhoneLineType } from "@/lib/domain/phone-reachability";
 
 /**
@@ -77,47 +80,81 @@ export function GuestPhoneField({
   if (editing) {
     return (
       <form
-        className="guest-phone guest-phone--editing"
+        className="guest-phone guest-phone--editing flex flex-wrap items-end gap-2"
         action={(formData) => {
           setEditing(false);
           return action(formData);
         }}
       >
         <input type="hidden" name="guestId" value={guestId} />
-        <label htmlFor={`phone-${guestId}`}>Número de {guestName}</label>
-        <input
-          id={`phone-${guestId}`}
-          name="phone"
-          type="tel"
-          autoComplete="off"
-          defaultValue={phoneE164 ?? ""}
-          // Vacío borra el número. No es un accidente: una persona invitada sin
-          // número es un dato válido, y guardarlo como cadena vacía rompería el
-          // acceso por teléfono.
-          placeholder="Vacío borra el número"
-        />
-        <button type="submit">Guardar</button>
-        <button type="button" onClick={() => setEditing(false)}>
+        <div className="flex min-w-0 flex-col gap-1">
+          <Label
+            className="text-xs text-muted-foreground"
+            htmlFor={`phone-${guestId}`}
+          >
+            Número de {guestName}
+          </Label>
+          <Input
+            className="h-10 w-44"
+            id={`phone-${guestId}`}
+            name="phone"
+            type="tel"
+            autoComplete="off"
+            defaultValue={phoneE164 ?? ""}
+            // Vacío borra el número. No es un accidente: una persona invitada sin
+            // número es un dato válido, y guardarlo como cadena vacía rompería el
+            // acceso por teléfono.
+            placeholder="Vacío borra el número"
+          />
+        </div>
+        <Button size="lg" type="submit">
+          Guardar
+        </Button>
+        <Button
+          onClick={() => setEditing(false)}
+          size="lg"
+          type="button"
+          variant="ghost"
+        >
           Cancelar
-        </button>
+        </Button>
       </form>
     );
   }
 
   return (
-    <div className="guest-phone">
-      <span className="guest-phone__value">{phoneE164 ?? "Sin número"}</span>
+    <div className="guest-phone flex flex-wrap items-baseline gap-x-2 gap-y-1">
+      <span
+        className={
+          phoneE164 === null
+            ? // A missing number is the one thing on this row that is MISSING, which
+              // is what red means here. Nothing else in the list may use it.
+              "guest-phone__value text-sm text-destructive"
+            : "guest-phone__value text-sm text-muted-foreground"
+        }
+        style={{ fontVariantNumeric: "tabular-nums" }}
+      >
+        {phoneE164 ?? "Sin número"}
+      </span>
 
       {warning !== null && (
-        <span className="guest-phone__warning" role="status">
+        <span
+          className="guest-phone__warning text-xs text-destructive"
+          role="status"
+        >
           {warning}
         </span>
       )}
 
       {!readOnly && (
-        <button type="button" onClick={() => setEditing(true)}>
+        <Button
+          onClick={() => setEditing(true)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
           Editar el número de {guestName}
-        </button>
+        </Button>
       )}
     </div>
   );

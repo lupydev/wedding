@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { whyDisabled } from "@/components/ui/why-disabled";
+
 import { IDLE_SIGN_IN_STATE, type SignInState } from "./sign-in-state";
 
 /**
@@ -29,36 +34,58 @@ export function LoginForm({ action }: { readonly action: SignInFormAction }) {
   const [state, submit, pending] = useActionState(action, IDLE_SIGN_IN_STATE);
 
   return (
-    <form action={submit} className="console-login__form">
-      <label htmlFor="operator-email">Correo electrónico</label>
-      <input
-        id="operator-email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        required
-      />
+    <form action={submit} className="console-login__form flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="operator-email">Correo electrónico</Label>
+        <Input
+          className="h-11"
+          id="operator-email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+        />
+      </div>
 
-      <label htmlFor="operator-password">Contraseña</label>
-      <input
-        id="operator-password"
-        name="password"
-        type="password"
-        // `current-password`, never `new-password`: this form signs an existing
-        // operator in and cannot create anybody.
-        autoComplete="current-password"
-        required
-      />
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="operator-password">Contraseña</Label>
+        <Input
+          className="h-11"
+          id="operator-password"
+          name="password"
+          type="password"
+          // `current-password`, never `new-password`: this form signs an existing
+          // operator in and cannot create anybody.
+          autoComplete="current-password"
+          required
+        />
+      </div>
 
-      <button type="submit" disabled={pending}>
+      {/*
+        `whyDisabled` rather than a bare `disabled={pending}`: on venue Wi-Fi this
+        round trip is long enough for an operator to decide the button is broken and
+        start reloading the page. A disabled control that does not say why is a dead
+        end, so the reason travels with the attribute.
+      */}
+      <Button
+        className="w-full"
+        size="lg"
+        type="submit"
+        {...whyDisabled(
+          pending ? "Se está verificando el acceso. Un momento." : null,
+        )}
+      >
         Iniciar sesión
-      </button>
+      </Button>
 
       {state.notice === null ? null : (
         // `role="status"` rather than `alert`: the outcome is deliberately the
         // same message in every refusal, so it is information, not a warning —
         // and an `alert` would also be one more thing that could differ.
-        <p role="status" className="console-login__notice">
+        <p
+          role="status"
+          className="console-login__notice text-sm text-destructive"
+        >
           {state.notice}
         </p>
       )}

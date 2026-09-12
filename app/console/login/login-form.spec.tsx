@@ -109,6 +109,32 @@ describe("LoginForm", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  /**
+   * A disabled control that does not say why is a dead end.
+   *
+   * The submit button is withheld while the action is in flight, which on a phone
+   * on venue Wi-Fi is long enough for an operator to conclude the button is broken
+   * and start reloading. The reason travels with the attribute.
+   */
+  it("states why the submit button is unavailable while the sign-in is in flight", async () => {
+    const pending = new Promise<SignInState>(() => {});
+    render(<LoginForm action={() => pending} />);
+
+    await userEvent.type(
+      screen.getByLabelText("Correo electrónico"),
+      "ana@example.test",
+    );
+    await userEvent.type(screen.getByLabelText("Contraseña"), "secreta");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Iniciar sesión" }),
+    );
+
+    const button = screen.getByRole("button", { name: "Iniciar sesión" });
+
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/\S/));
+  });
+
   it("offers no sign-up, no password reset and no remembered session", () => {
     // Two operators, created once by `scripts/seed-operators.ts`. A reset is a
     // maintainer running that tool again — deliberately not a self-service flow

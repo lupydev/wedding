@@ -1,3 +1,6 @@
+import { Suspense } from "react";
+
+import { ConsoleSkeleton } from "@/components/console/ConsoleSkeleton";
 import { DispatchPreflight } from "@/components/console/DispatchPreflight";
 import { GuestList } from "@/components/console/GuestList";
 import { ProgressSummary } from "@/components/console/ProgressSummary";
@@ -50,16 +53,57 @@ export default async function ConsolePage() {
   // go and fix numbers.
   const dispatchBlocked = dispatchIsBlockedBy(declaration.status);
 
+  /*
+    THE SUSPENSE BOUNDARY IS HERE AND NOWHERE HIGHER.
+
+    Both gates above run OUTSIDE it, deliberately: each of them can redirect, and a
+    redirect thrown after the shell has flushed is a 200 with a client-side bounce
+    instead of the 307 this route answers. The same reasoning is why the skeleton is
+    a component rather than a `loading.tsx` — a boundary at the route-group level
+    would also wrap the compose and preview routes, whose `notFound()` must stay a
+    real 404.
+
+    What IS inside the boundary is the pair of list queries, which is the part worth
+    a skeleton: two partitioned reads over every invitation in the event.
+  */
+  return (
+    <Suspense fallback={<ConsoleSkeleton />}>
+      <ConsoleLists
+        dispatchBlocked={dispatchBlocked}
+        operatorDisplayName={operator.displayName}
+        viewerSenderId={operator.id}
+      />
+    </Suspense>
+  );
+}
+
+/**
+ * The two partitioned lists, fetched behind the boundary above.
+ *
+ * It re-reads nothing about the session: the identity arrives as props, already
+ * established by the page. A second `requireOperator()` inside a Suspense boundary
+ * would be an authorization check whose redirect could no longer change the response
+ * status, which is the one place that check must not live.
+ */
+async function ConsoleLists({
+  dispatchBlocked,
+  operatorDisplayName,
+  viewerSenderId,
+}: {
+  readonly dispatchBlocked: boolean;
+  readonly operatorDisplayName: string;
+  readonly viewerSenderId: string;
+}) {
   const client = createServerSupabaseClient();
   const defaultCountry = requiredDefaultPhoneCountry();
   const [mine, everything] = await Promise.all([
     listConsoleInvitations(client, {
-      viewerSenderId: operator.id,
+      viewerSenderId,
       ownedOnly: true,
       defaultCountry,
     }),
     listConsoleInvitations(client, {
-      viewerSenderId: operator.id,
+      viewerSenderId,
       ownedOnly: false,
       defaultCountry,
     }),
@@ -67,24 +111,34 @@ export default async function ConsolePage() {
   const theirs = everything.filter((row) => !row.ownedByViewer);
 
   return (
-    <main className="console__main">
-      <section className="console__section">
+    // A `div`, not a `main`: `ConsoleShell` above already renders the page's one
+    // `main` landmark. Two of them is invalid markup and makes "skip to content"
+    // ambiguous for a screen reader.
+    //
+    // The two sections keep their original order and their `console__section`
+    // hook. The tab bar's two in-page destinations are fragments of THIS page, so
+    // they are ids on what is already here rather than routes that did not exist.
+    <div className="console__main flex flex-col gap-8">
+      <section className="console__section flex flex-col gap-4">
         <h2>Tus invitaciones</h2>
 
         <ProgressSummary
-          heading={`Resumen de las invitaciones de ${operator.displayName}`}
+          heading={`Resumen de las invitaciones de ${operatorDisplayName}`}
           metrics={scopedMetrics(
             summarizeConsoleList(mine),
-            ownedPopulation(operator.displayName),
+            ownedPopulation(operatorDisplayName),
           )}
         />
 
-        <DispatchPreflight
-          preflight={buildDispatchPreflight(
-            mine,
-            ownedPopulation(operator.displayName),
-          )}
-        />
+        {/* `scroll-mt` so the fragment target is not hidden under the header. */}
+        <div className="scroll-mt-4" id="revision">
+          <DispatchPreflight
+            preflight={buildDispatchPreflight(
+              mine,
+              ownedPopulation(operatorDisplayName),
+            )}
+          />
+        </div>
 
         <GuestList
           rows={mine}
@@ -94,10 +148,13 @@ export default async function ConsolePage() {
         />
       </section>
 
-      <section className="console__section">
+      <section
+        className="console__section flex scroll-mt-4 flex-col gap-4"
+        id="evento"
+      >
         <h2>Todas las invitaciones del evento</h2>
 
-        <p>
+        <p className="max-w-[68ch] text-sm text-muted-foreground">
           Este resumen abarca las invitaciones de ambas cuentas. Las filas de
           abajo son las que gestiona la otra cuenta: se muestran para consulta y
           no ofrecen acción de envío, porque el mensaje saldría de otra cuenta
@@ -123,6 +180,6 @@ export default async function ConsolePage() {
           emptyMessage="La otra cuenta todavía no tiene invitaciones a su nombre."
         />
       </section>
-    </main>
+    </div>
   );
 }

@@ -106,22 +106,25 @@ export default async function InvitationPreviewPage({
   const invitation = toGuestFacingInvitation(record);
 
   return (
-    <main className="console__main console__preview">
-      <h2>Vista previa de la invitación de {invitation.greetingName}</h2>
+    <div className="console__main console__preview flex flex-col gap-4">
+      <h2 className="text-balance">
+        Vista previa de la invitación de {invitation.greetingName}
+      </h2>
 
-      <p className="console__preview-note">
+      <p className="console__preview-note max-w-[68ch] text-sm text-muted-foreground">
         Así se ve la invitación una vez que la persona invitada pasa la
         verificación por teléfono. El formulario de confirmación no se muestra
         aquí: responder por otra persona cambiaría su respuesta de verdad.
       </p>
 
-      <p className="console__preview-gate">
+      <p className="console__preview-gate max-w-[68ch] text-sm text-muted-foreground">
         Para ver la pantalla de verificación tal como la ve quien recibe el
         enlace, se puede abrir la invitación directamente:{" "}
         {/* The public URL, not a preview of it. There is nothing to bypass: the
             gate screen is what an unverified visitor sees, so opening the real
             link shows exactly it. */}
         <a
+          className="break-all text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           href={invitationPageUrl(siteOrigin(), invitation.slug)}
           rel="noreferrer"
           target="_blank"
@@ -130,11 +133,22 @@ export default async function InvitationPreviewPage({
         </a>
       </p>
 
-      <div className="console__preview-body">
+      {/*
+        `paper-surface`: the preview shows what a GUEST sees, and a guest sees paper.
+        Rendering it on the console's graphite would have the operator approve copy
+        on a surface no guest will ever look at, which is the one thing a preview
+        must not do. The console is the back room of this event; this is a window.
+      */}
+      <div className="console__preview-body paper-surface rounded-lg border border-border px-4 py-6">
         <InvitationBody invitation={invitation} />
       </div>
 
-      <a href={CONSOLE_ROOT_PATH}>Volver al panel</a>
-    </main>
+      <a
+        className="self-start text-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        href={CONSOLE_ROOT_PATH}
+      >
+        Volver al panel
+      </a>
+    </div>
   );
 }
