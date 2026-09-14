@@ -33,9 +33,10 @@ const wedding: InvitationBodyWedding = {
 };
 
 const household: InvitationBodyInvitation = {
-  displayName: "Familia Muñóz",
-  greetingName: "Ñoño Muñóz",
-  seatsAllowed: 3,
+  // The joined short names a household is greeted by, which is what
+  // `deriveGreetingName` produces — deliberately NOT one member's full name,
+  // because the list below renders full names and the two must not collide.
+  greetingName: "Ñoño, Aurelia y Tomás",
   rsvpDeadline: "2027-05-01",
   guests: [
     { id: "g1", fullName: "Ñoño Muñóz", isChild: false },
@@ -49,7 +50,7 @@ describe("InvitationBody", () => {
     render(<InvitationBody invitation={household} wedding={wedding} />);
 
     expect(
-      screen.getByRole("heading", { name: /Ñoño Muñóz/ }),
+      screen.getByRole("heading", { name: /Ñoño, Aurelia y Tomás/ }),
     ).toBeInTheDocument();
   });
 
@@ -79,26 +80,48 @@ describe("InvitationBody", () => {
     expect(names[2]).toContain("Tomás Muñóz");
   });
 
-  it("states how many seats the household was given", () => {
+  it("names the household once, and never restates it", () => {
+    // The greeting already names this household and the list below already
+    // names every member. A count sentence and a second heading each said the
+    // same fact a third and fourth time, which is how the section grew four
+    // lines that all answer "who is this for?".
     render(<InvitationBody invitation={household} wedding={wedding} />);
 
-    expect(screen.getByText(/3 lugares/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Esta invitación es para/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/es para \d+ personas?\./),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("La invitación es para vos."),
+    ).not.toBeInTheDocument();
+
+    // What survives: the greeting, and the members by name.
+    expect(screen.getByText(household.greetingName)).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
 
-  it("states a single seat in the singular", () => {
+  it("still names every member of a one-person household", () => {
+    // The count sentence is gone, so a one-member invitation is carried by the
+    // greeting and the single name — with no "1 persona" ration to get wrong.
+    //
+    // Deliberately guests[1] and not guests[0]: this fixture's first guest
+    // shares the household's greeting name, which is the real shape of a solo
+    // guest with no nickname. The list then repeats the greeting verbatim. That
+    // is a live copy question for the visual design and NOT something to paper
+    // over with a string comparison here — the list is the authoritative record
+    // of who is invited, so it renders either way.
     render(
       <InvitationBody
-        invitation={{
-          ...household,
-          seatsAllowed: 1,
-          guests: [household.guests[0]],
-        }}
+        invitation={{ ...household, guests: [household.guests[1]] }}
         wedding={wedding}
       />,
     );
 
-    expect(screen.getByText(/1 lugar\b/)).toBeInTheDocument();
-    expect(screen.queryByText(/1 lugares/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/personas?/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("Aurelia Muñóz")).toBeInTheDocument();
   });
 
   it("states the confirmation deadline the household was given", () => {

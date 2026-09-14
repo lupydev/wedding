@@ -45,8 +45,8 @@ beforeAll(async () => {
     senderId = sender.rows[0].id;
 
     const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
-       values ('storeaaaaaaaaaaa', $1, 'Familia Store', 'Familia Store', 3)
+      `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+       values ('storeaaaaaaaaaaa', $1, 'Familia Store', 'Familia Store')
        returning id`,
       [senderId],
     );
@@ -159,7 +159,7 @@ describe("createRsvpStore", () => {
         seatsConfirmed: 6,
         dietaryNotes: null,
       }),
-    ).rejects.toThrow(/exceeds seats_allowed/);
+    ).rejects.toThrow(/exceeds the 3 named members of this invitation/);
 
     await expect(rawResponseCount()).resolves.toBe(before);
   });

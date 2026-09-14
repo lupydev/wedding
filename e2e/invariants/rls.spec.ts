@@ -68,7 +68,6 @@ const INSERT_PAYLOADS: Record<OwnedTable, object> = {
     slug: "aaaaaaaaaaaaaaab",
     display_name: "Intruder",
     greeting_name: "Intruder",
-    seats_allowed: 2,
   },
   invitation_guests: { full_name: "Intruder" },
   dispatch_events: { kind: "link_opened" },
@@ -156,8 +155,8 @@ test.describe("RLS invariants held against the publishable key", () => {
       senderId = sender.rows[0].id;
 
       const invitation = await db.query<{ id: string }>(
-        `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
-         values ($1, $2, 'Familia Invariante', 'Familia Invariante', 2)
+        `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+         values ($1, $2, 'Familia Invariante', 'Familia Invariante')
          returning id`,
         [makeSlug(), senderId],
       );

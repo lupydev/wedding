@@ -101,20 +101,24 @@ export function rsvpFeedbackMessages(
  * How many more people this household may still select.
  *
  * The sentence exists because the form DISABLES the remaining checkboxes once
- * the allowance is spent (the hard cap has no "request more" affordance, by
- * confirmed decision). A control that stops responding without a word reads as
- * a broken page, so the moment it happens is stated in words.
+ * everybody on the invitation is selected (the hard cap has no "request more"
+ * affordance, by confirmed decision). A control that stops responding without a
+ * word reads as a broken page, so the moment it happens is stated in words.
+ *
+ * `memberCount` is the invitation's own membership since migration 0012, which
+ * is why the completed sentence names the PEOPLE rather than reserved seats:
+ * there is no allowance separate from the names to report.
  */
 export function seatsSelectionSentence(
   selected: number,
-  seatsAllowed: number,
+  memberCount: number,
 ): string {
-  const remaining = seatsAllowed - selected;
+  const remaining = memberCount - selected;
 
   if (remaining <= 0) {
-    return seatsAllowed === 1
-      ? "Ya seleccionaron el único lugar reservado."
-      : `Ya seleccionaron los ${seatsAllowed} lugares reservados.`;
+    return memberCount === 1
+      ? "Ya seleccionaron a la única persona."
+      : `Ya seleccionaron las ${memberCount}.`;
   }
 
   return remaining === 1

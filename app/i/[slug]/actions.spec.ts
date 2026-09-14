@@ -93,7 +93,6 @@ const RECORD = {
   ownerSenderId: "22222222-2222-4222-8222-222222222222",
   displayName: "Familia Aguirre",
   greetingName: "Familia Aguirre",
-  seatsAllowed: 3,
   rsvpDeadline: "2026-05-01",
   guests: [
     {
@@ -296,7 +295,6 @@ describe("submitRsvpAction routing", () => {
 
     expect(request.invitation).toEqual({
       id: INVITATION_ID,
-      seatsAllowed: 3,
       rsvpDeadline: "2026-05-01",
       guestIds: [GUEST_ID],
     });

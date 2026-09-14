@@ -99,7 +99,6 @@ export interface ConsoleInvitationSeed {
 export async function seedConsoleInvitation(options: {
   ownerSenderId: string;
   greetingName: string;
-  seatsAllowed?: number;
   guests: readonly ConsoleGuestSeed[];
 }): Promise<ConsoleInvitationSeed> {
   const db = await connect();
@@ -107,15 +106,10 @@ export async function seedConsoleInvitation(options: {
 
   try {
     const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
-       values ($1, $2, $3, $3, $4)
+      `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+       values ($1, $2, $3, $3)
        returning id`,
-      [
-        slug,
-        options.ownerSenderId,
-        options.greetingName,
-        options.seatsAllowed ?? options.guests.length,
-      ],
+      [slug, options.ownerSenderId, options.greetingName],
     );
     const invitationId = invitation.rows[0].id;
     const guestIds = new Map<string, string>();

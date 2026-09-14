@@ -29,9 +29,6 @@ import { isWellFormedUuid } from "@/lib/domain/uuid";
  *    no phone field to leak.
  */
 
-/** Maximum seats an invitation may allow, matching the DB CHECK constraint. */
-export const MAX_SEATS_ALLOWED = 12;
-
 export interface ImportGuest {
   readonly fullName: string;
   readonly phone?: string;
@@ -43,7 +40,6 @@ export interface ImportRow {
   readonly ownerEmail: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly seatsAllowed: number;
   readonly rsvpDeadline?: string | null;
   /**
    * Optional stable identity of this household in the source file.
@@ -78,7 +74,6 @@ export interface NewInvitation {
   readonly sourceKey?: string | null;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly seatsAllowed: number;
   readonly rsvpDeadline: string | null;
   readonly guests: readonly NewInvitationGuest[];
 }
@@ -94,7 +89,6 @@ export interface InvitationRecord {
   readonly ownerSenderId: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly seatsAllowed: number;
   readonly rsvpDeadline: string | null;
   readonly guests: readonly InvitationGuestRecord[];
 }
@@ -110,7 +104,6 @@ export interface GuestFacingInvitation {
   readonly slug: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly seatsAllowed: number;
   readonly rsvpDeadline: string | null;
   readonly guests: readonly GuestFacingGuest[];
 }
@@ -146,16 +139,6 @@ export function validateImportRow(
   if (!ownerSenderId) {
     throw new Error(
       `Import row "${displayName}" has an unrecognized owner: ${ownerEmail}. Every invitation must be owned by a known sender.`,
-    );
-  }
-
-  if (
-    !Number.isInteger(row.seatsAllowed) ||
-    row.seatsAllowed < 1 ||
-    row.seatsAllowed > MAX_SEATS_ALLOWED
-  ) {
-    throw new Error(
-      `Import row "${displayName}" has an invalid seats_allowed: ${row.seatsAllowed}. It must be an integer between 1 and ${MAX_SEATS_ALLOWED}.`,
     );
   }
 
@@ -213,7 +196,6 @@ export function validateImportRow(
       row.sourceKey?.trim() || deriveSourceKey(ownerEmail, displayName),
     displayName,
     greetingName,
-    seatsAllowed: row.seatsAllowed,
     rsvpDeadline: row.rsvpDeadline?.trim() || null,
     guests,
   };
@@ -281,7 +263,6 @@ export function toGuestFacingInvitation(
     slug: record.slug,
     displayName: record.displayName,
     greetingName: record.greetingName,
-    seatsAllowed: record.seatsAllowed,
     rsvpDeadline: record.rsvpDeadline,
     guests: record.guests.map((guest) => ({
       id: guest.id,
@@ -314,7 +295,6 @@ interface InvitationRow {
   owner_sender_id: string;
   display_name: string;
   greeting_name: string;
-  seats_allowed: number;
   rsvp_deadline: string | null;
   invitation_guests: {
     id: string;
@@ -326,9 +306,14 @@ interface InvitationRow {
   }[];
 }
 
+// The embed names its FOREIGN KEY, not just the table. Since 0012 two
+// constraints join these tables in opposite directions — a guest's
+// `invitation_id` and an invitation's `dispatch_recipient_guest_id` — and
+// PostgREST refuses an ambiguous embed with "more than one relationship was
+// found". Naming the constraint says which direction this read means.
 const INVITATION_SELECT =
-  "id, slug, owner_sender_id, display_name, greeting_name, seats_allowed, rsvp_deadline, " +
-  "invitation_guests(id, full_name, phone_e164, phone_last8, is_primary, is_child)";
+  "id, slug, owner_sender_id, display_name, greeting_name, rsvp_deadline, " +
+  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, phone_last8, is_primary, is_child)";
 
 function toRecord(row: InvitationRow): InvitationRecord {
   return {
@@ -337,7 +322,6 @@ function toRecord(row: InvitationRow): InvitationRecord {
     ownerSenderId: row.owner_sender_id,
     displayName: row.display_name,
     greetingName: row.greeting_name,
-    seatsAllowed: row.seats_allowed,
     rsvpDeadline: row.rsvp_deadline,
     guests: row.invitation_guests.map((guest) => ({
       id: guest.id,
@@ -371,7 +355,6 @@ export async function createInvitation(
       owner_sender_id: input.ownerSenderId,
       display_name: input.displayName,
       greeting_name: input.greetingName,
-      seats_allowed: input.seatsAllowed,
       rsvp_deadline: input.rsvpDeadline,
       source_key: input.sourceKey ?? null,
     })
@@ -466,7 +449,6 @@ export async function importInvitations(
       owner_sender_id: invitation.ownerSenderId,
       display_name: invitation.displayName,
       greeting_name: invitation.greetingName,
-      seats_allowed: invitation.seatsAllowed,
       rsvp_deadline: invitation.rsvpDeadline,
       guests: invitation.guests.map((guest) => ({
         full_name: guest.fullName,
@@ -626,7 +608,6 @@ interface ConsoleInvitationRow {
   owner_sender_id: string;
   display_name: string;
   greeting_name: string;
-  seats_allowed: number;
   rsvp_deadline: string | null;
   senders: { display_name: string } | null;
   invitation_guests: {
@@ -639,9 +620,9 @@ interface ConsoleInvitationRow {
 }
 
 const CONSOLE_INVITATION_SELECT =
-  "id, slug, owner_sender_id, display_name, greeting_name, seats_allowed, rsvp_deadline, " +
+  "id, slug, owner_sender_id, display_name, greeting_name, rsvp_deadline, " +
   "senders(display_name), " +
-  "invitation_guests(id, full_name, phone_e164, is_child, is_primary)";
+  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, is_child, is_primary)";
 
 export interface ConsoleListOptions {
   /** The SESSION's sender id. Never a value the browser supplied. */
@@ -707,7 +688,6 @@ export async function listConsoleInvitations(
     slug: row.slug,
     greetingName: row.greeting_name,
     displayName: row.display_name,
-    seatsAllowed: row.seats_allowed,
     rsvpDeadline: row.rsvp_deadline,
     ownerSenderId: row.owner_sender_id,
     // The FK is NOT NULL, so a missing name means the embed failed rather than
@@ -849,7 +829,10 @@ export async function findGuestInvitationOwner(
 ): Promise<string | null> {
   const { data, error } = await client
     .from("invitation_guests")
-    .select("invitations(owner_sender_id)")
+    // Same 0012 ambiguity as INVITATION_SELECT, read from the other side: name
+    // the guest's own `invitation_id` constraint so this cannot resolve through
+    // `dispatch_recipient_guest_id` instead.
+    .select("invitations!invitation_guests_invitation_id_fkey(owner_sender_id)")
     .eq("id", guestId)
     .maybeSingle<{ invitations: { owner_sender_id: string } | null }>();
 

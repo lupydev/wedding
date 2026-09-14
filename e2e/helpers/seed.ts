@@ -92,7 +92,6 @@ async function connect(): Promise<Client> {
 export async function seedInvitation(options: {
   greetingName: string;
   displayName?: string;
-  seatsAllowed?: number;
   /**
    * Fabricated owner contact. Varying it per fixture is what makes the gate's
    * recovery-link assertion meaningful: a single hard-coded value would pass
@@ -123,15 +122,14 @@ export async function seedInvitation(options: {
     const senderId = sender.rows[0].id;
 
     const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed, rsvp_deadline)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, rsvp_deadline)
+       values ($1, $2, $3, $4, $5)
        returning id`,
       [
         slug,
         senderId,
         displayName,
         options.greetingName,
-        options.seatsAllowed ?? options.guests.length,
         options.rsvpDeadline ?? null,
       ],
     );

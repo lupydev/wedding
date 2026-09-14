@@ -24,8 +24,10 @@ import { verifyUnlockCookie } from "./cookies";
  * WHY SEATS ARE DERIVED AND NEVER TYPED
  *
  * The database enforces two rules that must agree with the form: the hard cap
- * (`seats_confirmed <= seats_allowed`, 0003) and parity (`seats_confirmed =
- * cardinality(attendee_guest_ids)`, 0007). Every seat on this guest list
+ * (`seats_confirmed <= count(*) of this invitation's members`, 0012, which
+ * superseded 0003's and 0007's read of a stored allowance) and parity
+ * (`seats_confirmed = cardinality(attendee_guest_ids)`, 0007). Every seat on
+ * this guest list
  * corresponds to a named person — the couple has the names — so the honest
  * input is the set of checked boxes and nothing else. `seats_confirmed` is
  * computed from that set here. There is no field on the wire that reaches that
@@ -120,7 +122,6 @@ export interface RsvpStore {
 /** Exactly what deciding an RSVP needs to know about an invitation. */
 export interface RsvpTarget {
   readonly id: string;
-  readonly seatsAllowed: number;
   /** ISO calendar day, or `null` for an invitation that never closes. */
   readonly rsvpDeadline: string | null;
   /** Every guest named on this invitation. Nobody else may be seated. */
@@ -213,7 +214,7 @@ export async function submitRsvp(
   const attendeeGuestIds = payload.attending ? payload.attendeeGuestIds : [];
 
   // Shape before identity, matching the order `validateRsvpSelection` itself
-  // uses: five names against three seats is over the cap whoever those five
+  // uses: more names than this household holds is over the cap whoever those
   // people are, and answering "we do not recognize one of them" would report a
   // downstream symptom instead of the thing that is actually wrong.
   const validation = validateRsvpSelection(
@@ -223,7 +224,9 @@ export async function submitRsvp(
       seatsConfirmed: attendeeGuestIds.length,
       attendeeGuestIds,
     },
-    invitation.seatsAllowed,
+    // The cap IS the household's own size (0012). There is no second number
+    // that could disagree with the names, so there is nothing to pass but this.
+    invitation.guestIds.length,
   );
 
   if (!validation.ok) {

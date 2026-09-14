@@ -34,7 +34,6 @@ function household(
   return seedInvitation({
     greetingName: GREETING,
     displayName: "Familia Aguirre",
-    seatsAllowed: 3,
     guests: [
       { fullName: GUEST_ONE, phoneE164: PHONE_ONE },
       { fullName: GUEST_TWO, phoneE164: PHONE_TWO },

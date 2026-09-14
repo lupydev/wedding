@@ -17,7 +17,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     slug: "abcdefghijklmn23",
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
-    seatsAllowed: 3,
+    memberCount: 3,
     rsvpDeadline: null,
     ownerSenderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     ownerDisplayName: "Ana Operadora",

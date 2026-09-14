@@ -20,7 +20,6 @@
  *         "ownerEmail": "ana@example.test",   // must match senders.allowlisted_email
  *         "displayName": "Familia Restrepo",
  *         "greetingName": "Familia Restrepo",
- *         "seatsAllowed": 3,
  *         "rsvpDeadline": "2026-05-01",       // optional
  *         "sourceKey": "restrepo-bogota",     // optional, see below
  *         "guests": [
@@ -108,23 +107,15 @@ export interface UndispatchableGuest {
   readonly lineType: PhoneLineType;
 }
 
-/** One household whose seat allowance disagrees with the names entered. */
-export interface SeatMismatch {
-  readonly displayName: string;
-  readonly seatsAllowed: number;
-  readonly namedGuests: number;
-}
-
 export interface ImportAdvisory {
   readonly householdCount: number;
   readonly guestCount: number;
   readonly undispatchablePhones: readonly UndispatchableGuest[];
-  readonly seatMismatches: readonly SeatMismatch[];
 }
 
 /**
- * Inspects a validated guest list for the two faults that stay invisible until
- * the day they matter. Pure: it reads the rows and writes nothing.
+ * Inspects a validated guest list for the fault that stays invisible until the
+ * day it matters. Pure: it reads the rows and writes nothing.
  *
  * ADVISORY, never a rejection. The import is atomic, so refusing the file over
  * one aunt's landline would refuse the entire guest list, and a landline guest
@@ -133,30 +124,21 @@ export interface ImportAdvisory {
  * building a `wa.me` link from that number, recording a dispatch event and
  * reporting it as sent while the message reaches nothing.
  *
- * The seat check exists because every seat in this guest list corresponds to a
- * named person. A household whose `seats_allowed` disagrees with the number of
- * names is therefore a data-entry typo, and it surfaces later as a guest who
- * cannot confirm their own household. It is not a database constraint on
- * purpose: a partially entered household must still be savable.
+ * There used to be a second advisory here, reporting a household whose stored
+ * seat allowance disagreed with the number of names entered. Migration 0012
+ * removed the possibility rather than the warning: the member count IS the
+ * allowance, so the two can no longer disagree and there is nothing left to
+ * report.
  */
 export function buildImportAdvisory(
   invitations: readonly NewInvitation[],
   defaultCountry: string,
 ): ImportAdvisory {
   const undispatchablePhones: UndispatchableGuest[] = [];
-  const seatMismatches: SeatMismatch[] = [];
   let guestCount = 0;
 
   for (const invitation of invitations) {
     guestCount += invitation.guests.length;
-
-    if (invitation.seatsAllowed !== invitation.guests.length) {
-      seatMismatches.push({
-        displayName: invitation.displayName,
-        seatsAllowed: invitation.seatsAllowed,
-        namedGuests: invitation.guests.length,
-      });
-    }
 
     for (const guest of invitation.guests) {
       if (guest.phoneE164 === null) {
@@ -184,7 +166,6 @@ export function buildImportAdvisory(
     householdCount: invitations.length,
     guestCount,
     undispatchablePhones,
-    seatMismatches,
   };
 }
 
@@ -210,17 +191,6 @@ export function formatImportAdvisory(advisory: ImportAdvisory): string[] {
     for (const guest of advisory.undispatchablePhones) {
       lines.push(
         `  - ${guest.displayName} / ${guest.fullName}: ${guest.lineType}`,
-      );
-    }
-  }
-
-  if (advisory.seatMismatches.length > 0) {
-    lines.push(
-      `Seats: ${advisory.seatMismatches.length} of ${advisory.householdCount} households name a number of guests that differs from their seat allowance.`,
-    );
-    for (const mismatch of advisory.seatMismatches) {
-      lines.push(
-        `  - ${mismatch.displayName}: seats_allowed ${mismatch.seatsAllowed}, names entered ${mismatch.namedGuests}`,
       );
     }
   }

@@ -75,7 +75,7 @@ describe("rsvp_latest", () => {
   it("reports exactly one response per invitation, and it is the newest", async () => {
     await withRollback(async (db) => {
       const senderId = await seedSender(db);
-      const invitationId = await seedInvitation(db, senderId, 3);
+      const invitationId = await seedInvitation(db, senderId);
       const [guestOne] = await seedGuests(db, invitationId, 2);
 
       await respond(db, {
@@ -107,7 +107,7 @@ describe("rsvp_latest", () => {
   it("does not double-count the household that changed its mind", async () => {
     await withRollback(async (db) => {
       const senderId = await seedSender(db);
-      const invitationId = await seedInvitation(db, senderId, 3);
+      const invitationId = await seedInvitation(db, senderId);
       const [guestOne, guestTwo] = await seedGuests(db, invitationId, 2);
 
       // Two seats confirmed, then cancelled. The history is intentionally kept.
@@ -159,7 +159,7 @@ describe("rsvp_latest", () => {
   it("picks one row deterministically when two share a submitted_at", async () => {
     await withRollback(async (db) => {
       const senderId = await seedSender(db);
-      const invitationId = await seedInvitation(db, senderId, 3);
+      const invitationId = await seedInvitation(db, senderId);
       const [guestOne] = await seedGuests(db, invitationId, 2);
 
       // The exact same instant, as two writes inside one transaction produce.
@@ -192,8 +192,8 @@ describe("rsvp_latest", () => {
   it("reduces per invitation, never across them", async () => {
     await withRollback(async (db) => {
       const senderId = await seedSender(db);
-      const yesHousehold = await seedInvitation(db, senderId, 3);
-      const noHousehold = await seedInvitation(db, senderId, 3);
+      const yesHousehold = await seedInvitation(db, senderId);
+      const noHousehold = await seedInvitation(db, senderId);
       const [yesGuest] = await seedGuests(db, yesHousehold, 1);
       const [noGuest] = await seedGuests(db, noHousehold, 1);
 

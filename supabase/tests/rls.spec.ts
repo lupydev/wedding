@@ -140,7 +140,6 @@ describe("row level security", () => {
         slug: "abcdefghijklmnop",
         display_name: "Intruder",
         greeting_name: "Intruder",
-        seats_allowed: 2,
       },
       invitation_guests: { full_name: "Intruder" },
       dispatch_events: { kind: "link_opened" },

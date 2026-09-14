@@ -18,7 +18,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     slug: "abcdefghijklmn23",
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
-    seatsAllowed: 4,
+    memberCount: 4,
     rsvpDeadline: null,
     ownerSenderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     ownerDisplayName: "Ana Operadora",
@@ -65,7 +65,7 @@ describe("summarizeConsoleList", () => {
       attending: 0,
       declined: 0,
       pending: 0,
-      seatsAllowed: 0,
+      seats: 0,
       seatsConfirmed: 0,
     });
   });
@@ -84,14 +84,14 @@ describe("summarizeConsoleList", () => {
     expect(summary.pending).toBe(0);
   });
 
-  it("totals seats confirmed against seats allowed", () => {
+  it("totals seats confirmed against the members these households hold", () => {
     const summary = summarizeConsoleList([
-      row({ seatsAllowed: 4, answer: "attending", seatsConfirmed: 3 }),
-      row({ seatsAllowed: 2, answer: "declined", seatsConfirmed: 0 }),
-      row({ seatsAllowed: 6, answer: "pending", seatsConfirmed: 0 }),
+      row({ memberCount: 4, answer: "attending", seatsConfirmed: 3 }),
+      row({ memberCount: 2, answer: "declined", seatsConfirmed: 0 }),
+      row({ memberCount: 6, answer: "pending", seatsConfirmed: 0 }),
     ]);
 
-    expect(summary.seatsAllowed).toBe(12);
+    expect(summary.seats).toBe(12);
     expect(summary.seatsConfirmed).toBe(3);
     expect(summary.total).toBe(3);
     expect(summary.attending).toBe(1);
@@ -131,9 +131,9 @@ describe("scopedMetrics — the scope is in the label", () => {
    * because nothing on screen said which population it was counting.
    */
   const rows = [
-    row({ answer: "attending", seatsConfirmed: 2, seatsAllowed: 3 }),
-    row({ answer: "declined", seatsAllowed: 2 }),
-    row({ answer: "pending", seatsAllowed: 5 }),
+    row({ answer: "attending", seatsConfirmed: 2, memberCount: 3 }),
+    row({ answer: "declined", memberCount: 2 }),
+    row({ answer: "pending", memberCount: 5 }),
   ];
 
   it("states the numerator, the denominator and the population in every line", () => {
@@ -173,7 +173,7 @@ describe("scopedMetrics — the scope is in the label", () => {
     );
   });
 
-  it("measures seats against seats, never against households", () => {
+  it("measures seats against the people invited, never against households", () => {
     const metrics = scopedMetrics(
       summarizeConsoleList(rows),
       ownedPopulation("Ana Operadora"),
@@ -183,7 +183,7 @@ describe("scopedMetrics — the scope is in the label", () => {
     expect(seats?.count).toBe(2);
     expect(seats?.outOf).toBe(10);
     expect(seats?.text).toBe(
-      "Lugares confirmados: 2 de 10 lugares habilitados en invitaciones de Ana Operadora",
+      "Lugares confirmados: 2 de 10 personas invitadas en invitaciones de Ana Operadora",
     );
   });
 
@@ -232,7 +232,6 @@ describe("assembleConsoleRows", () => {
       slug: "abcdefghijklmn23",
       greetingName: "Familia Muñóz",
       displayName: "Familia Muñóz",
-      seatsAllowed: 4,
       rsvpDeadline: null,
       ownerSenderId: ANA,
       ownerDisplayName: "Ana Operadora",
@@ -266,6 +265,40 @@ describe("assembleConsoleRows", () => {
 
     expect(rows.map((row) => row.ownedByViewer)).toEqual([true, false]);
     expect(rows[1].ownerDisplayName).toBe("Beto Operador");
+  });
+
+  it("derives the member count from the household's own members", () => {
+    // D17: the row carries `memberCount`, not an allowance somebody typed. The
+    // two-member household proves the number tracks the guests rather than a
+    // fixture default that would happen to match a one-member one.
+    const rows = assembleConsoleRows({
+      viewerSenderId: ANA,
+      defaultCountry: "CO",
+      invitations: [
+        invitation(),
+        invitation({
+          invitationId: OTHER_HOUSEHOLD,
+          guests: [
+            {
+              id: "g1",
+              fullName: "Ana Muñóz",
+              isChild: false,
+              phoneE164: "+573001234567",
+            },
+            {
+              id: "g2",
+              fullName: "Luis Muñóz",
+              isChild: false,
+              phoneE164: null,
+            },
+          ],
+        }),
+      ],
+      latestAnswers: [],
+      events: [],
+    });
+
+    expect(rows.map((row) => row.memberCount)).toEqual([1, 2]);
   });
 
   it("carries the current answer from the reduced response, not from a history", () => {

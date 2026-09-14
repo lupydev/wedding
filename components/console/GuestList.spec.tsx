@@ -28,7 +28,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     slug: "abcdefghijklmn23",
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
-    seatsAllowed: 3,
+    memberCount: 3,
     rsvpDeadline: null,
     ownerSenderId: ANA,
     ownerDisplayName: "Ana Operadora",
@@ -86,7 +86,7 @@ describe("GuestList", () => {
     expect(household).not.toBeNull();
     expect(within(household).getByText("Ana Muñóz")).toBeInTheDocument();
     expect(within(household).getByText("Niña Muñóz")).toBeInTheDocument();
-    expect(within(household).getByText(/3 lugares/)).toBeInTheDocument();
+    expect(within(household).getByText("3 personas")).toBeInTheDocument();
   });
 
   it("shows the owning sender on every row", () => {
@@ -228,11 +228,11 @@ describe("GuestList", () => {
     expect(screen.getByText("Marcada como enviada")).toBeInTheDocument();
   });
 
-  it("shows the current answer, and the seats it confirmed", () => {
+  it("shows the current answer, and how many of the household it confirmed", () => {
     renderList([row({ answer: "attending", seatsConfirmed: 2 })]);
 
     expect(screen.getByText("Confirmada")).toBeInTheDocument();
-    expect(screen.getByText(/2 de 3 lugares confirmados/)).toBeInTheDocument();
+    expect(screen.getByText("2 de 3 personas confirmadas")).toBeInTheDocument();
   });
 
   it("shows a declined household as declined rather than as unanswered", () => {

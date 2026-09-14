@@ -60,7 +60,6 @@ function renderForm(
   options: {
     action?: ReturnType<typeof actionReturning>;
     guests?: readonly RsvpAnswerGuest[];
-    seatsAllowed?: number;
     current?: RsvpAnswerCurrent | null;
     ceremony?: CeremonyStreamDetails;
   } = {},
@@ -71,7 +70,6 @@ function renderForm(
     <RsvpAnswer
       action={action}
       guests={options.guests ?? GUESTS}
-      seatsAllowed={options.seatsAllowed ?? 3}
       current={options.current ?? null}
       ceremony={options.ceremony ?? CEREMONY}
     />,
@@ -167,10 +165,12 @@ describe("RsvpAnswer attendance choice", () => {
 });
 
 describe("RsvpAnswer seat cap", () => {
-  it("never lets a guest select more people than the household has seats", async () => {
-    // Five named people, three seats. The moment the third box is checked the
-    // remaining two stop being selectable — there is no fourth choice to make
-    // and no message inviting one.
+  it("never lets a guest select anybody this invitation does not name", async () => {
+    // The cap IS the membership since migration 0012, so the form cannot offer
+    // an over-cap selection: there is exactly one checkbox per member and no
+    // affordance for anybody else. A five-member household may therefore seat
+    // all five, and every box stays interactive so the guest can still change
+    // their mind after checking the last one.
     const user = userEvent.setup();
     const guests: RsvpAnswerGuest[] = [
       ...GUESTS,
@@ -178,10 +178,10 @@ describe("RsvpAnswer seat cap", () => {
       { id: "eeeeeeee-5555-4555-8555-555555555555", fullName: "Ana Aguirre" },
     ];
 
-    renderForm({ guests, seatsAllowed: 3 });
+    renderForm({ guests });
     await user.click(screen.getByRole("radio", { name: /Sí, allá estaremos/ }));
 
-    for (const guest of guests.slice(0, 3)) {
+    for (const guest of guests) {
       await user.click(screen.getByRole("checkbox", { name: guest.fullName }));
     }
 
@@ -192,24 +192,21 @@ describe("RsvpAnswer seat cap", () => {
       (box) => !(box as HTMLInputElement).disabled,
     );
 
-    expect(checked).toHaveLength(3);
-    // Only the three already-checked boxes remain interactive, so the guest can
-    // still change their mind — they simply cannot add a fourth person.
-    expect(selectable).toHaveLength(3);
-    expect(
-      screen.getByRole("checkbox", { name: "Luis Aguirre" }),
-    ).toBeDisabled();
+    expect(attendeeBoxes()).toHaveLength(5);
+    expect(checked).toHaveLength(5);
+    expect(selectable).toHaveLength(5);
+    expect(screen.getByText("Ya seleccionaron las 5.")).toBeInTheDocument();
   });
 
-  it("says the allowance is spent instead of silently freezing the controls", async () => {
+  it("says everyone is selected instead of silently freezing the controls", async () => {
     const user = userEvent.setup();
-    renderForm({ seatsAllowed: 1 });
+    renderForm({ guests: [GUESTS[0]] });
 
     await user.click(screen.getByRole("radio", { name: /Sí, allá estaremos/ }));
     await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
 
     expect(
-      screen.getByText("Ya seleccionaron el único lugar reservado."),
+      screen.getByText("Ya seleccionaron a la única persona."),
     ).toBeInTheDocument();
   });
 

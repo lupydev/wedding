@@ -27,7 +27,6 @@ const invitationCarryingPrivateDetails = {
   coupleNames: "Ana y Bruno",
   displayName: "Familia Muñóz",
   greetingName: "Ñoño Muñóz",
-  seatsAllowed: 3,
   rsvpDeadline: "2027-05-01",
   guests: [{ id: "g1", fullName: "Ñoño Muñóz", isChild: false }],
   // Values that only ever exist elsewhere in the product, pinned here so the

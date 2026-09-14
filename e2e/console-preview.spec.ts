@@ -89,7 +89,6 @@ test.beforeAll(async ({ browser }) => {
   household = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Previa Muñóz",
-    seatsAllowed: 3,
     guests: [
       {
         fullName: "Ana Previa Muñóz",
@@ -103,7 +102,6 @@ test.beforeAll(async ({ browser }) => {
   betosHousehold = await seedConsoleInvitation({
     ownerSenderId: beto.senderId,
     greetingName: "Familia Ajena Restrepo",
-    seatsAllowed: 2,
     guests: [
       {
         fullName: "Beto Ajeno Restrepo",

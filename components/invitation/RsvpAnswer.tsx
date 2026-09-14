@@ -78,13 +78,11 @@ type Answer = "yes" | "no" | "";
 
 export function RsvpAnswer({
   guests,
-  seatsAllowed,
   current,
   ceremony,
   action,
 }: {
   readonly guests: readonly RsvpAnswerGuest[];
-  readonly seatsAllowed: number;
   readonly current: RsvpAnswerCurrent | null;
   /** The ceremony stream, shown in place of the form to a declining household. */
   readonly ceremony: CeremonyStreamDetails;
@@ -146,7 +144,9 @@ export function RsvpAnswer({
   }, [feedback]);
 
   const isAttending = attending === "yes";
-  const allowanceSpent = selected.length >= seatsAllowed;
+  // The cap IS this household's membership since migration 0012, so there is
+  // nothing to compare the selection against but the list already rendered.
+  const allowanceSpent = selected.length >= guests.length;
   const answered = currentRsvpSentence(current);
   const messages = rsvpFeedbackMessages(feedback);
   const showStream = answerOnFile === "no" && !reconsidering;
@@ -238,7 +238,7 @@ export function RsvpAnswer({
       <fieldset className="rsvp__attendees" disabled={!isAttending}>
         <legend>¿Quiénes asisten?</legend>
         <p className="rsvp__seats">
-          {seatsSelectionSentence(selected.length, seatsAllowed)}
+          {seatsSelectionSentence(selected.length, guests.length)}
         </p>
         {guests.map((guest) => {
           const checked = selected.includes(guest.id);

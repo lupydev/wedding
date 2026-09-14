@@ -55,7 +55,6 @@ function importRow(overrides: Partial<ImportRow> = {}): ImportRow {
     ownerEmail: "ana@example.test",
     displayName: "Familia Restrepo",
     greetingName: "Familia Restrepo",
-    seatsAllowed: 3,
     guests: [
       { fullName: "Ana Restrepo", phone: "3001234567", isPrimary: true },
       { fullName: "Nicolás Muñóz", phone: "300 765 4321" },
@@ -130,12 +129,6 @@ describe("validateImportRow — guest data", () => {
     ).toThrow(/Familia Restrepo/);
   });
 
-  it("rejects a seats_allowed of zero, which the hard cap forbids", () => {
-    expect(() =>
-      validateImportRow(importRow({ seatsAllowed: 0 }), SENDERS, "CO"),
-    ).toThrow(/seats/i);
-  });
-
   it("rejects a row with no guests at all", () => {
     expect(() =>
       validateImportRow(importRow({ guests: [] }), SENDERS, "CO"),
@@ -165,7 +158,6 @@ describe("toGuestFacingInvitation — phones never leave the server", () => {
     ownerSenderId: SENDERS["ana@example.test"],
     displayName: "Familia Restrepo",
     greetingName: "Familia Restrepo",
-    seatsAllowed: 3,
     rsvpDeadline: "2026-05-01",
     guests: [
       {
@@ -194,7 +186,6 @@ describe("toGuestFacingInvitation — phones never leave the server", () => {
       slug: "abcdefghijklmnop",
       greetingName: "Familia Restrepo",
       displayName: "Familia Restrepo",
-      seatsAllowed: 3,
       rsvpDeadline: "2026-05-01",
       guests: [
         {
@@ -251,7 +242,6 @@ describe("invitations repository (local Supabase)", () => {
         ownerSenderId: senderId,
         displayName: "Familia Restrepo",
         greetingName: "Familia Restrepo",
-        seatsAllowed: 3,
         rsvpDeadline: null,
         guests: [
           {
@@ -318,7 +308,6 @@ describe("invitations repository (local Supabase)", () => {
         ownerSenderId: "99999999-9999-4999-8999-999999999999",
         displayName: "Sin Dueño",
         greetingName: "Sin Dueño",
-        seatsAllowed: 2,
         rsvpDeadline: null,
         guests: [
           {
@@ -472,7 +461,6 @@ describe("importInvitations — atomic and idempotent (local Supabase)", () => {
       sourceKey,
       displayName,
       greetingName: displayName,
-      seatsAllowed: 2,
       rsvpDeadline: null,
       guests: [
         {
@@ -619,9 +607,9 @@ describe("listConsoleInvitations (local Supabase)", () => {
       const [anaId, betoId] = senders.rows.map((sender) => sender.id);
 
       const invitations = await db.query<{ id: string }>(
-        `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
-         values ($1, $3, 'Familia Muñóz', 'Familia Muñóz', 2),
-                ($2, $4, 'Familia Peña', 'Familia Peña', 3)
+        `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+         values ($1, $3, 'Familia Muñóz', 'Familia Muñóz'),
+                ($2, $4, 'Familia Peña', 'Familia Peña')
          returning id`,
         [makeConsoleSlug(), makeConsoleSlug(), anaId, betoId],
       );

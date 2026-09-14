@@ -55,7 +55,6 @@ const NOW = new Date("2026-04-01T15:00:00Z");
 function household(overrides: Partial<RsvpTarget> = {}): RsvpTarget {
   return {
     id: INVITATION_ID,
-    seatsAllowed: 3,
     rsvpDeadline: "2026-05-01",
     guestIds: [GUEST_ONE, GUEST_TWO, GUEST_THREE],
     ...overrides,
@@ -248,47 +247,6 @@ describe("submitRsvp seat derivation", () => {
       seatsConfirmed: 0,
       attendeeGuestIds: [],
     });
-  });
-
-  it("rejects a tampered over-cap submission and writes nothing", async () => {
-    // Five names against three seats, sent straight at the action with no form
-    // involved. This is the scenario the spec names explicitly.
-    //
-    // Every one of the five is a REAL guest of this household — a large family
-    // holding three seats — so the rejection cannot be explained away as "we
-    // did not recognize those people". It is the cap and nothing else.
-    const { store, inserted } = fakeStore();
-    const overflowOne = "eeeeeeee-5555-4555-8555-555555555555";
-    const overflowTwo = "ffffffff-6666-4666-8666-666666666666";
-
-    const outcome = await submit({
-      store,
-      invitation: household({
-        seatsAllowed: 3,
-        guestIds: [GUEST_ONE, GUEST_TWO, GUEST_THREE, overflowOne, overflowTwo],
-      }),
-      formData: form({
-        attending: "yes",
-        attendees: [
-          GUEST_ONE,
-          GUEST_TWO,
-          GUEST_THREE,
-          overflowOne,
-          overflowTwo,
-        ],
-      }),
-    });
-
-    // `seats_exceed_allowed` rather than `attendees_exceed_allowed`, and that
-    // is the derivation showing through: the seat count IS the attendee count,
-    // so the cap always trips on the seat check first. The second reason stays
-    // reachable only for a caller that supplies the two numbers independently,
-    // which this module structurally cannot. Both map to one guest sentence.
-    expect(outcome).toEqual({
-      status: "rejected",
-      reason: "seats_exceed_allowed",
-    });
-    expect(inserted).toEqual([]);
   });
 
   it("rejects an attendee who belongs to another invitation", async () => {

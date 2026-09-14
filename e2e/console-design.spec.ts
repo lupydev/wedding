@@ -44,7 +44,6 @@ test.beforeAll(async ({ browser }) => {
   household = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Diseño Restrepo",
-    seatsAllowed: 2,
     guests: [
       { fullName: "Ana Diseño", phoneE164: "+573005559001", isPrimary: true },
     ],

@@ -139,7 +139,6 @@ export default async function InvitationPage({ params }: RouteParams) {
               // household.
               <RsvpAnswer
                 guests={invitation.guests}
-                seatsAllowed={invitation.seatsAllowed}
                 current={
                   current === null
                     ? null

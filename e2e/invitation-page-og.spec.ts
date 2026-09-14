@@ -33,7 +33,6 @@ test.beforeAll(async () => {
   invitation = await seedInvitation({
     greetingName: GREETING_NAME,
     displayName: "Familia Muñóz",
-    seatsAllowed: 2,
     guests: [
       { fullName: GREETING_NAME, phoneE164: "+573005550001" },
       { fullName: "Aurelia Muñóz", phoneE164: "+573005550002" },

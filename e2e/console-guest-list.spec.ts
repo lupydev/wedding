@@ -51,7 +51,6 @@ test.beforeAll(async ({ browser }) => {
   anaHousehold = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Muñóz Aristizábal",
-    seatsAllowed: 3,
     guests: [
       {
         fullName: "Ana Muñóz",
@@ -67,7 +66,6 @@ test.beforeAll(async ({ browser }) => {
   changedMind = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Cambió de Idea",
-    seatsAllowed: 2,
     guests: [{ fullName: "Clara Cambió", phoneE164: "+573005551002" }],
   });
   // Said yes, then said no. Two rows in an append-only table; ONE household.
@@ -81,7 +79,6 @@ test.beforeAll(async ({ browser }) => {
   opened = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Enlace Abierto",
-    seatsAllowed: 1,
     guests: [{ fullName: "Omar Enlace", phoneE164: "+573005551003" }],
   });
   await opened.recordEvent("link_opened", ana.senderId);
@@ -89,7 +86,6 @@ test.beforeAll(async ({ browser }) => {
   betoHousehold = await seedConsoleInvitation({
     ownerSenderId: beto.senderId,
     greetingName: "Familia Peña Betancur",
-    seatsAllowed: 4,
     guests: [{ fullName: "Pedro Peña", phoneE164: "+573005551004" }],
   });
 
@@ -260,7 +256,7 @@ test.describe("the partitioned guest list", () => {
     expect(sharedTotal).toBeGreaterThan(3);
   });
 
-  test("the named guests, the seats and the phone numbers are all on the row", async () => {
+  test("the named guests, the member count and the phone numbers are all on the row", async () => {
     await page.goto("/console");
     const row = page
       .locator("li.guest-list__row")
@@ -271,7 +267,10 @@ test.describe("the partitioned guest list", () => {
     // paper over.
     await expect(row.getByText("Ana Muñóz", { exact: true })).toBeVisible();
     await expect(row.getByText("Niña Muñóz", { exact: true })).toBeVisible();
-    await expect(row.getByText("3 lugares")).toBeVisible();
+    // Two names, so two people: the count is the household itself since
+    // migration 0012, never a separately-typed allowance that could differ from
+    // the two names asserted directly above.
+    await expect(row.getByText("2 personas")).toBeVisible();
     // The console IS the authorized reader of guest phone numbers: the two
     // operators are the couple, and they entered these numbers themselves.
     await expect(row.getByText("+573005551001")).toBeVisible();

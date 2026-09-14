@@ -79,8 +79,8 @@ async function withDispatchFixture(
       ],
     );
     const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
-       values ($1, $2, 'Familia Dispatch', 'Familia Dispatch', 2)
+      `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+       values ($1, $2, 'Familia Dispatch', 'Familia Dispatch')
        returning id`,
       [makeSlug(), senders.rows[0].id],
     );

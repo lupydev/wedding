@@ -92,7 +92,12 @@ export interface ConsoleListRow {
   readonly slug: string;
   readonly greetingName: string;
   readonly displayName: string;
-  readonly seatsAllowed: number;
+  /**
+   * How many people this invitation names. Derived from its own members, which
+   * is what the seat cap reads since migration 0012 — not an allowance somebody
+   * typed that could disagree with the names (design D17).
+   */
+  readonly memberCount: number;
   /** ISO calendar day, or `null` for an invitation that never closes. */
   readonly rsvpDeadline: string | null;
   readonly ownerSenderId: string;
@@ -114,7 +119,8 @@ export interface ConsoleSummary {
   readonly attending: number;
   readonly declined: number;
   readonly pending: number;
-  readonly seatsAllowed: number;
+  /** Every member of every invitation in this scope: the seats there are. */
+  readonly seats: number;
   readonly seatsConfirmed: number;
   readonly byDispatchState: Readonly<Record<DispatchState, number>>;
   /**
@@ -142,13 +148,13 @@ export function summarizeConsoleList(
   let attending = 0;
   let declined = 0;
   let pending = 0;
-  let seatsAllowed = 0;
+  let seats = 0;
   let seatsConfirmed = 0;
   let operatorAssertedSends = 0;
 
   for (const row of rows) {
     byDispatchState[row.dispatchState] += 1;
-    seatsAllowed += row.seatsAllowed;
+    seats += row.memberCount;
     seatsConfirmed += row.seatsConfirmed;
 
     if (countsAsOperatorAssertedSend(row.dispatchState)) {
@@ -169,7 +175,7 @@ export function summarizeConsoleList(
     attending,
     declined,
     pending,
-    seatsAllowed,
+    seats,
     seatsConfirmed,
     byDispatchState,
     operatorAssertedSends,
@@ -282,8 +288,8 @@ export function scopedMetrics(
       "seats",
       "Lugares confirmados",
       summary.seatsConfirmed,
-      summary.seatsAllowed,
-      `lugares habilitados en ${population}`,
+      summary.seats,
+      `personas invitadas en ${population}`,
     ),
   ];
 }
@@ -294,7 +300,6 @@ export interface ConsoleInvitationInput {
   readonly slug: string;
   readonly greetingName: string;
   readonly displayName: string;
-  readonly seatsAllowed: number;
   readonly rsvpDeadline: string | null;
   readonly ownerSenderId: string;
   readonly ownerDisplayName: string;
@@ -361,7 +366,7 @@ export function assembleConsoleRows(input: {
       slug: invitation.slug,
       greetingName: invitation.greetingName,
       displayName: invitation.displayName,
-      seatsAllowed: invitation.seatsAllowed,
+      memberCount: invitation.guests.length,
       rsvpDeadline: invitation.rsvpDeadline,
       ownerSenderId: invitation.ownerSenderId,
       ownerDisplayName: invitation.ownerDisplayName,

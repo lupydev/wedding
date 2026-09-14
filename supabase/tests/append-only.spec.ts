@@ -143,12 +143,17 @@ describe("append-only tables (as service_role)", () => {
  * Seat allowance is a HARD CAP (design D6, confirmed product decision). It is
  * an invariant, so it is enforced at the database, not only in the form the
  * attacker controls.
+ *
+ * Since migration 0012 the cap is the invitation's own member count. The rule
+ * did not loosen — the allowance simply stopped being a second number a human
+ * could set to disagree with the names.
  */
 describe("rsvp seat cap (as service_role)", () => {
-  it("rejects seats_confirmed above the invitation's seats_allowed", async () => {
+  it("rejects seats_confirmed above the invitation's member count", async () => {
     const message = await withRollback(async (db) => {
       const senderId = await seedSender(db);
-      const invitationId = await seedInvitation(db, senderId, 3);
+      const invitationId = await seedInvitation(db, senderId);
+      await seedGuests(db, invitationId, 3);
       await db.query("set local role service_role");
 
       return captureError(() =>
@@ -160,16 +165,18 @@ describe("rsvp seat cap (as service_role)", () => {
       );
     });
 
-    expect(message).toContain("seats_confirmed 4 exceeds seats_allowed 3");
+    expect(message).toContain(
+      "seats_confirmed 4 exceeds the 3 named members of this invitation",
+    );
   });
 
-  it("rejects more attendee_guest_ids than seats_allowed", async () => {
+  it("rejects more attendee_guest_ids than the invitation has members", async () => {
     const message = await withRollback(async (db) => {
       const senderId = await seedSender(db);
-      const invitationId = await seedInvitation(db, senderId, 2);
+      const invitationId = await seedInvitation(db, senderId);
       const guests = await db.query<{ id: string }>(
         `insert into invitation_guests (invitation_id, full_name)
-         values ($1, 'Guest One'), ($1, 'Guest Two'), ($1, 'Guest Three')
+         values ($1, 'Guest One'), ($1, 'Guest Two')
          returning id`,
         [invitationId],
       );
@@ -179,18 +186,26 @@ describe("rsvp seat cap (as service_role)", () => {
         db.query(
           `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
            values ($1, true, 2, $2)`,
-          [invitationId, guests.rows.map((row) => row.id)],
+          [
+            invitationId,
+            [
+              ...guests.rows.map((row) => row.id),
+              "00000000-0000-4000-8000-000000000000",
+            ],
+          ],
         ),
       );
     });
 
-    expect(message).toContain("exceeds seats_allowed 2");
+    expect(message).toContain(
+      "seats_confirmed 2 exceeds the 2 named members of this invitation",
+    );
   });
 
   it("accepts a selection exactly at the cap", async () => {
     const stored = await withRollback(async (db) => {
       const senderId = await seedSender(db);
-      const invitationId = await seedInvitation(db, senderId, 2);
+      const invitationId = await seedInvitation(db, senderId);
       const guests = await db.query<{ id: string }>(
         `insert into invitation_guests (invitation_id, full_name)
          values ($1, 'Guest One'), ($1, 'Guest Two')

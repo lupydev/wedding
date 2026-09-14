@@ -99,11 +99,20 @@ function parseCeremonySeed(
       });
     }
 
-    const defaults = sql.matchAll(
-      /add\s+column\s+(\w+)\s+\w+\s+not\s+null\s+default\s+'([^']*)'/gi,
+    // Scoped to `alter table ceremony` STATEMENTS, never to the whole file.
+    // An unscoped scan reads any migration's `add column ... not null default
+    // '...'` — 0012 adds `invitations.greeting_name_source` that way — as a
+    // ceremony seed, and then reports a column this table does not have.
+    const ceremonyAlters = sql.matchAll(
+      /alter\s+table\s+ceremony\b([\s\S]*?);/gi,
     );
-    for (const [, column, value] of defaults) {
-      seed[column] = value;
+    for (const [, statement] of ceremonyAlters) {
+      const defaults = statement.matchAll(
+        /add\s+column\s+(\w+)\s+\w+\s+not\s+null\s+default\s+'([^']*)'/gi,
+      );
+      for (const [, column, value] of defaults) {
+        seed[column] = value;
+      }
     }
   }
 
@@ -208,6 +217,19 @@ describe("the ceremony configuration row", () => {
 
     expect(invented).toEqual({ ceremony_date: "sábado 14 de noviembre" });
     expect(invented.ceremony_date).not.toMatch(PLACEHOLDER);
+  });
+
+  it("does not read another table's defaulted column as a ceremony seed", () => {
+    // 0012 adds `invitations.greeting_name_source text not null default
+    // 'imported'`. Before the parser was scoped to `alter table ceremony`, that
+    // line was reported as a ceremony column — and the assertion above then
+    // failed for a migration that never touched this table.
+    const elsewhere = parseCeremonySeed([
+      "alter table invitations add column greeting_name_source text not null default 'imported';",
+      "alter table ceremony add column venue_name text not null default '{{VENUE_NAME}}';",
+    ]);
+
+    expect(elsewhere).toEqual({ venue_name: "{{VENUE_NAME}}" });
   });
 
   it("still accepts an UPDATE, because that is how the couple will fill it in", async () => {

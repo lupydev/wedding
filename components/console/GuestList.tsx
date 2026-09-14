@@ -85,12 +85,19 @@ export interface GuestListProps {
   readonly emptyMessage: string;
 }
 
-function seatsSentence(row: ConsoleListRow): string {
+/**
+ * The household's size, and how much of it has confirmed.
+ *
+ * It counts the MEMBERS rather than a stored allowance: since migration 0012
+ * there is no allowance to read, and the number here has to be the same one the
+ * name list below it shows.
+ */
+function membersSentence(row: ConsoleListRow): string {
   if (row.answer === "attending") {
-    return `${row.seatsConfirmed} de ${row.seatsAllowed} lugares confirmados`;
+    return `${row.seatsConfirmed} de ${row.memberCount} personas confirmadas`;
   }
 
-  return `${row.seatsAllowed} lugares`;
+  return row.memberCount === 1 ? "1 persona" : `${row.memberCount} personas`;
 }
 
 function dispatchLabel(state: DispatchState): string {
@@ -157,7 +164,7 @@ export function GuestList({
           </div>
 
           <p className="guest-list__seats mt-1 text-xs text-hint">
-            {seatsSentence(row)}
+            {membersSentence(row)}
           </p>
 
           <ul className="guest-list__guests mt-2 flex flex-col gap-1 border-t border-border pt-2">

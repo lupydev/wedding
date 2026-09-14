@@ -122,18 +122,23 @@ function makeSlug(): string {
   return slug;
 }
 
-/** Inserts an invitation owned by `ownerSenderId` and returns its id. */
+/**
+ * Inserts an invitation owned by `ownerSenderId` and returns its id.
+ *
+ * There is no seat allowance to state. Since migration 0012 the cap IS the
+ * number of members on the invitation, so a fixture sets the cap by calling
+ * `seedGuests` — which is the same thing the product does.
+ */
 export async function seedInvitation(
   db: Client,
   ownerSenderId: string,
-  seatsAllowed = 4,
 ): Promise<string> {
   const slug = makeSlug();
   const result = await db.query<{ id: string }>(
-    `insert into invitations (slug, owner_sender_id, display_name, greeting_name, seats_allowed)
-     values ($1, $2, 'Familia Prueba', 'Familia Prueba', $3)
+    `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+     values ($1, $2, 'Familia Prueba', 'Familia Prueba')
      returning id`,
-    [slug, ownerSenderId, seatsAllowed],
+    [slug, ownerSenderId],
   );
 
   return result.rows[0].id;

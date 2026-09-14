@@ -26,9 +26,7 @@ export interface InvitationBodyGuest {
  * this component.
  */
 export interface InvitationBodyInvitation {
-  readonly displayName: string;
   readonly greetingName: string;
-  readonly seatsAllowed: number;
   readonly rsvpDeadline: string | null;
   readonly guests: readonly InvitationBodyGuest[];
 }
@@ -65,12 +63,6 @@ export interface InvitationBodyWedding {
   readonly ceremonyDate: string;
   readonly venueName: string;
   readonly venueAddress: string;
-}
-
-function seatsSentence(seatsAllowed: number): string {
-  return seatsAllowed === 1
-    ? "Tienen 1 lugar reservado."
-    : `Tienen ${seatsAllowed} lugares reservados.`;
 }
 
 export function InvitationBody({
@@ -111,9 +103,13 @@ export function InvitationBody({
         <dd>{wedding.venueAddress}</dd>
       </dl>
 
+      {/* WHO THIS IS FOR, SAID ONCE.
+       * The greeting above already names this household and the list below
+       * already names every member. A "Esta invitación es para …" heading and a
+       * "La invitación es para N personas." count each restated that same fact,
+       * so the section carried four lines all answering the same question. The
+       * list is the authoritative record; the greeting is the salutation. */}
       <section className="invitation__household">
-        <h2>Esta invitación es para {invitation.displayName}</h2>
-        <p>{seatsSentence(invitation.seatsAllowed)}</p>
         <ul>
           {invitation.guests.map((guest) => (
             <li key={guest.id}>

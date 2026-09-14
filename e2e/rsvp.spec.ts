@@ -45,7 +45,6 @@ function household(
   return seedInvitation({
     greetingName: "Familia Aguirre",
     displayName: "Familia Aguirre",
-    seatsAllowed: 3,
     guests: [
       { fullName: GUEST_ONE, phoneE164: PHONE_ONE },
       { fullName: GUEST_TWO, phoneE164: "+573005552222" },
@@ -289,12 +288,13 @@ test.describe("the seat cap", () => {
   let invitation: SeededInvitation;
 
   test.beforeAll(async () => {
-    // Five named people, three seats: a large family the couple could only fit
-    // three of. This is where a cap is a real constraint rather than a formality.
+    // Five named people, and therefore five seats: since migration 0012 the cap
+    // IS the household's membership, so an over-cap selection is not refused —
+    // it is unrepresentable, because the form offers exactly one box per member
+    // and nothing else.
     invitation = await seedInvitation({
       greetingName: "Familia Restrepo",
       displayName: "Familia Restrepo",
-      seatsAllowed: 3,
       guests: [
         { fullName: GUEST_ONE, phoneE164: PHONE_ONE },
         { fullName: GUEST_TWO },
@@ -309,19 +309,22 @@ test.describe("the seat cap", () => {
     await invitation?.cleanup();
   });
 
-  test("offers no way to select a fourth person", async ({ page }) => {
+  test("offers no way to select anybody this invitation does not name", async ({
+    page,
+  }) => {
     await unlock(page, invitation);
 
     await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
     await attendeeBox(page, GUEST_ONE).check();
     await attendeeBox(page, GUEST_TWO).check();
     await attendeeBox(page, GUEST_THREE).check();
+    await attendeeBox(page, "Luis Restrepo").check();
+    await attendeeBox(page, "Ana Restrepo").check();
 
-    await expect(
-      page.getByText("Ya seleccionaron los 3 lugares reservados."),
-    ).toBeVisible();
-    await expect(attendeeBox(page, "Luis Restrepo")).toBeDisabled();
-    await expect(attendeeBox(page, "Ana Restrepo")).toBeDisabled();
+    await expect(page.getByText("Ya seleccionaron las 5.")).toBeVisible();
+    // Exactly one box per member and no more, so there is no sixth choice to
+    // refuse in the first place.
+    await expect(page.locator('input[name="attendee"]')).toHaveCount(5);
     // And no affordance anywhere for asking for more.
     await expect(page.getByRole("spinbutton")).toHaveCount(0);
 
@@ -332,44 +335,6 @@ test.describe("the seat cap", () => {
     await expect(page.getByLabel(/Mensaje/i)).toHaveCount(0);
     await expect(page.locator('[name="message"]')).toHaveCount(0);
     await expect(page.getByLabel(/Restricciones alimentarias/)).toBeVisible();
-  });
-
-  test("refuses a tampered over-cap submission server-side", async ({
-    page,
-  }) => {
-    await unlock(page, invitation);
-    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
-
-    // Break the form the way an attacker would: strip the attribute that stops
-    // the fourth and fifth boxes, then check everybody. The client cap is a
-    // convenience; what is being tested is the guarantee behind it.
-    await page.evaluate(() => {
-      for (const box of document.querySelectorAll<HTMLInputElement>(
-        'input[name="attendee"]',
-      )) {
-        box.disabled = false;
-        box.checked = true;
-        box.dispatchEvent(new Event("click", { bubbles: true }));
-      }
-    });
-
-    await page.evaluate(() => {
-      // React controls these inputs, so the DOM state above is re-applied here
-      // immediately before submit — a plain form POST carries what the DOM says.
-      for (const box of document.querySelectorAll<HTMLInputElement>(
-        'input[name="attendee"]',
-      )) {
-        box.disabled = false;
-        box.checked = true;
-      }
-    });
-
-    await submit(page);
-
-    await expect(rsvpAlert(page)).toContainText(
-      "Seleccionaron más personas de las que tenemos reservadas para ustedes.",
-    );
-    await expect(invitation.responseHistory()).resolves.toHaveLength(0);
   });
 
   test("refuses a submission naming somebody from another household", async ({

@@ -56,7 +56,6 @@ test.beforeAll(async ({ browser }) => {
   ready = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Lista Muñóz",
-    seatsAllowed: 2,
     guests: [
       { fullName: "Ana Lista", phoneE164: "+573005552001", isPrimary: true },
       { fullName: "Niña Lista", phoneE164: null },
@@ -66,7 +65,6 @@ test.beforeAll(async ({ browser }) => {
   noPhone = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Sin Número Aristizábal",
-    seatsAllowed: 2,
     guests: [
       { fullName: "Carlos Sin Número", phoneE164: null, isPrimary: true },
       { fullName: "Rosa Sin Número", phoneE164: null },
@@ -78,7 +76,6 @@ test.beforeAll(async ({ browser }) => {
   landline = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Fija Restrepo",
-    seatsAllowed: 2,
     guests: [
       { fullName: "Casa Fija", phoneE164: "+576012345678", isPrimary: true },
     ],
@@ -87,7 +84,6 @@ test.beforeAll(async ({ browser }) => {
   alreadySent = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Ya Enviada Osorio",
-    seatsAllowed: 2,
     guests: [
       { fullName: "Jorge Osorio", phoneE164: "+573005552002", isPrimary: true },
     ],
@@ -97,7 +93,6 @@ test.beforeAll(async ({ browser }) => {
   betosHousehold = await seedConsoleInvitation({
     ownerSenderId: beto.senderId,
     greetingName: "Familia De Beto",
-    seatsAllowed: 2,
     guests: [
       { fullName: "Luz De Beto", phoneE164: "+573005552003", isPrimary: true },
     ],

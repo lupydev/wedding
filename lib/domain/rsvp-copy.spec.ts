@@ -99,18 +99,17 @@ describe("seatsSelectionSentence", () => {
     );
   });
 
-  it("says the allowance is complete rather than offering zero more", () => {
+  it("says everyone is selected rather than offering zero more", () => {
     // "Puedes seleccionar 0 personas más" reads as a bug, and it is also the
     // moment the remaining checkboxes are disabled — the sentence must explain
-    // that rather than leave it looking broken.
-    expect(seatsSelectionSentence(3, 3)).toBe(
-      "Ya seleccionaron los 3 lugares reservados.",
-    );
+    // that rather than leave it looking broken. It names the PEOPLE now, not a
+    // reserved-seat allowance that no longer exists.
+    expect(seatsSelectionSentence(3, 3)).toBe("Ya seleccionaron las 3.");
   });
 
-  it("uses the singular when the household holds a single seat", () => {
+  it("addresses the single member of a one-person invitation", () => {
     expect(seatsSelectionSentence(1, 1)).toBe(
-      "Ya seleccionaron el único lugar reservado.",
+      "Ya seleccionaron a la única persona.",
     );
   });
 });
