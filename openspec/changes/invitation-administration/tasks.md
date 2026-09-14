@@ -157,13 +157,13 @@ estimate for that half).
 
 ## Phase 2a: Spanish naming — `spanish-list`, `guest-name`, `greeting-name`
 
-- [ ] 2a.1 RED — `lib/domain/spanish-list.spec.ts`: the full sixteen-row conjunction table (Luzma, Ana, Elena, Inés, Ignacio, Isabel, Hilda, Íñigo, Ian, Yolanda, Hierro, Iván, Irene, ÍÑIGO/íñigo, NFD Íñigo, `"  Inés"`), plus arity 0 (throws), 1, 3, 4 with an explicit no-Oxford-comma assertion.
-- [ ] 2a.2 GREEN — `lib/domain/spanish-list.ts`: `spanishConjunction(nextItem)` and `joinSpanishList(items)` per `design.md` §4 — NFC-normalize + trim before the /i/ hiatus-vs-diphthong test; the module comment states the `o→u` disjunction and sentence-initial interrogative exception are deliberately NOT implemented.
-- [ ] 2a.3 RED — `lib/domain/guest-name.spec.ts`: `firstName`, `soloAddressName` (`nickname ?? fullName`), `listMemberName` (`nickname ?? firstName(fullName)`) — the SAME guest (`{fullName:"Luis Guzmán", nickname:null}`) MUST yield `"Luis Guzmán"` solo and `"Luis"` in a list, asserted together.
-- [ ] 2a.4 GREEN — `lib/domain/guest-name.ts`: `NameableGuest`, `firstName`, `soloAddressName`, `listMemberName` per `design.md` §4.
-- [ ] 2a.5 RED — `lib/domain/greeting-name.spec.ts`: `deriveGreetingName` — one member (solo fallback), three members (list fallback + conjunction), empty list THROWS; `resolveGreetingName` at `'custom'` returns the stored string untouched AND at `'derived'` recomputes from current members, asserted together.
-- [ ] 2a.6 GREEN — `lib/domain/greeting-name.ts`: `GreetingNameSource`, `deriveGreetingName` (throws on `[]`), `resolveGreetingName` per `design.md` §4.
-- [ ] 2a.7 Verify: `npm test -- lib/domain/spanish-list lib/domain/guest-name lib/domain/greeting-name`, `npm run typecheck`, `npm run lint` (confirm `domainImportZone` accepts all three with zero I/O/React imports).
+- [x] 2a.1 RED — `lib/domain/spanish-list.spec.ts`: the full sixteen-row conjunction table (Luzma, Ana, Elena, Inés, Ignacio, Isabel, Hilda, Íñigo, Ian, Yolanda, Hierro, Iván, Irene, ÍÑIGO/íñigo, NFD Íñigo, `"  Inés"`), plus arity 0 (throws), 1, 3, 4 with an explicit no-Oxford-comma assertion.
+- [x] 2a.2 GREEN — `lib/domain/spanish-list.ts`: `spanishConjunction(nextItem)` and `joinSpanishList(items)` per `design.md` §4 — NFC-normalize + trim before the /i/ hiatus-vs-diphthong test; the module comment states the `o→u` disjunction and sentence-initial interrogative exception are deliberately NOT implemented.
+- [x] 2a.3 RED — `lib/domain/guest-name.spec.ts`: `firstName`, `soloAddressName` (`nickname ?? fullName`), `listMemberName` (`nickname ?? firstName(fullName)`) — the SAME guest (`{fullName:"Luis Guzmán", nickname:null}`) MUST yield `"Luis Guzmán"` solo and `"Luis"` in a list, asserted together.
+- [x] 2a.4 GREEN — `lib/domain/guest-name.ts`: `NameableGuest`, `firstName`, `soloAddressName`, `listMemberName` per `design.md` §4.
+- [x] 2a.5 RED — `lib/domain/greeting-name.spec.ts`: `deriveGreetingName` — one member (solo fallback), three members (list fallback + conjunction), empty list THROWS; `resolveGreetingName` at `'custom'` returns the stored string untouched AND at `'derived'` recomputes from current members, asserted together.
+- [x] 2a.6 GREEN — `lib/domain/greeting-name.ts`: `GreetingNameSource`, `deriveGreetingName` (throws on `[]`), `resolveGreetingName` per `design.md` §4.
+- [x] 2a.7 Verify: `npm test -- lib/domain/spanish-list lib/domain/guest-name lib/domain/greeting-name`, `npm run typecheck`, `npm run lint` (confirm `domainImportZone` accepts all three with zero I/O/React imports).
 
 ## Phase 2b: `dispatch-recipient`, `invitation-draft`, `invitation-deletion`; preflight rename
 

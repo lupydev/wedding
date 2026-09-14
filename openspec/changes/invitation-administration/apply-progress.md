@@ -232,3 +232,174 @@ number.
 ## Status
 
 30/120 tasks complete (all of slice 1a). Ready for verify. Slice 1b is NOT started by design.
+
+---
+
+# Batch 2 — Slice **2a** only (tasks 2a.1–2a.7)
+
+**Mode**: Strict TDD (`openspec/config.yaml` → `strict_tdd: true`, `test_command: "npm test"`)
+**Branch**: `feat/whatsapp-wedding-invitations` (base `6e7e931`, tree clean at start)
+**Prior progress read**: yes — this file's slice-1a section above, kept verbatim and merged into.
+**Not started, deliberately**: slice 2b. Nothing in the tree imports these three modules yet;
+they are pure additions with no call sites, which is exactly what makes the rollback boundary
+"delete six files".
+
+## Completed Tasks
+
+| Task | Status | Evidence |
+|---|---|---|
+| 2a.1 RED sixteen-row conjunction table + arity 0/1/3/4 | Done | `lib/domain/spanish-list.spec.ts`; RED `Cannot find module './spanish-list'` |
+| 2a.2 GREEN `lib/domain/spanish-list.ts` | Done | 26/26; NFC + trim before the hiatus/diphthong test; the two non-implemented rules named in the module comment |
+| 2a.3 RED `guest-name.spec.ts` | Done | RED `Cannot find module './guest-name'`; the solo/list contrast asserted on ONE guest in ONE test |
+| 2a.4 GREEN `lib/domain/guest-name.ts` | Done | 8/8 |
+| 2a.5 RED `greeting-name.spec.ts` | Done | RED `Cannot find module './greeting-name'`; `'custom'` and `'derived'` asserted together in ONE test |
+| 2a.6 GREEN `lib/domain/greeting-name.ts` | Done | 7/7; `deriveGreetingName([])` throws |
+| 2a.7 Verify | Done | See Work Unit Evidence; `domainImportZone` confirmed by a negative probe, not by a clean run alone |
+
+## The conjunction rule, written down because it is routinely mis-stated
+
+`y` becomes `e` only to avoid two adjacent /i/ sounds. The discriminator is therefore
+**phonological — hiatus versus diphthong — never the spelling `hi-`**:
+
+| Opening | Sound | Conjunction | Examples in the table |
+|---|---|---|---|
+| `i`/`í`/`hi`/`hí` + consonant, or the name ends there | hiatus, nucleus /i/ | `e` | Inés, Ignacio, Isabel, Hilda, Íñigo, Iván, Irene |
+| `i`/`í`/`hi`/`hí` + vowel | diphthong, opens on the glide /j/ | `y` | Ian, **Hierro**, **Hielo** |
+| anything else, including `y-` | not /i/ at all (`y-` is /ʝ/) | `y` | Luzma, Ana, Elena, Yolanda |
+
+**`Hierro` and `Hielo` are the SAME case and both take `y`** — the identical case to the textbook
+`frío y hielo`. A rule keyed on the spelling `hi-` emits `e` for both and is wrong. The genuine
+contrast pair is `Hija` (hiatus → `e Hija`) against `Hielo` (diphthong → `y Hielo`), and
+`spanish-list.spec.ts` asserts all three of those in one test, because that row is the one that
+catches the plausible wrong rule. This matches `specs/guest-naming/spec.md` verbatim; it was
+checked against the spec rather than taken on assertion.
+
+The silent `h` is stripped before the test because it spells no sound. Input is NFC-normalized
+and trimmed FIRST, so an NFD `Íñigo` from a Contacts paste behaves identically to the
+precomposed form — the spec file builds the decomposed string from explicit `\u0301`/`\u0303`
+escapes, since the two forms are indistinguishable on screen and a reviewer must be able to see
+which one is which. Normalization is applied to the OUTPUT as well as to the sound test, so the
+two encodings produce byte-identical joins.
+
+### The sixteen rows and their outcomes
+
+| # | Name | Result | Why |
+|---|---|---|---|
+| 1 | Luzma | `y` | consonant onset |
+| 2 | Ana | `y` | /a/, not /i/ |
+| 3 | Elena | `y` | /e/, not /i/ |
+| 4 | Inés | `e` | i + n, hiatus |
+| 5 | Ignacio | `e` | i + g, hiatus |
+| 6 | Isabel | `e` | i + s, hiatus |
+| 7 | Hilda | `e` | silent h, then i + l |
+| 8 | Íñigo | `e` | accented Í + ñ |
+| 9 | Iván | `e` | i + v, hiatus |
+| 10 | Irene | `e` | i + r, hiatus |
+| 11 | Ian | `y` | i + a, diphthong |
+| 12 | Hierro | `y` | hi + e, diphthong — same as Hielo |
+| 13 | Yolanda | `y` | y- is /ʝ/ |
+| 14 | ÍÑIGO / íñigo | `e` / `e` | case-insensitive in both directions |
+| 15 | NFD Íñigo | `e` | normalized before the test |
+| 16 | `"  Inés"` | `e` | trimmed before the test, and in the output |
+
+## Two pairings asserted together, never split
+
+- **`guest-name.spec.ts`**: the SAME guest `{ fullName: "Luis Guzmán", nickname: null }` yields
+  `"Luis Guzmán"` solo and `"Luis"` as a list member, in ONE test. Split across two tests, an
+  edit to either fallback could change one and leave the other silently agreeing — the exact
+  drift the two separate functions exist to prevent.
+- **`greeting-name.spec.ts`**: `resolveGreetingName` at `'custom'` returns the stored string
+  untouched AND at `'derived'` recomputes from the current members, in ONE test over the SAME
+  stored string and the SAME members. Asserting only the `'custom'` half is satisfied by a
+  function that always returns `stored` and never consults the members, which is precisely why
+  `greeting_name_source` is a stored fact rather than a write-time guess.
+
+## Three decisions this slice made that the task list did not spell out
+
+| Decision | Why |
+|---|---|
+| An empty-string `nickname` is treated as no nickname, in BOTH fallbacks | A form that clears the field submits `""`, not `null`. `nickname ?? fullName` alone would address the invitation to nobody. Asserted in `guest-name.spec.ts` |
+| `resolveGreetingName` at `'imported'` returns the stored string, like `'custom'` | Not in `guest-naming`, but stated explicitly in `specs/guest-directory/spec.md:109`: "only `'derived'` re-derives automatically; `'imported'` behaves like `'custom'` in this respect until an operator acts on it". `design.md` D15 gives the same reason for the column default. Asserted rather than left to the `else` branch by accident |
+| `deriveGreetingName` branches on arity instead of always joining | A one-member list joined would give the LIST fallback (first name only). The spec requires the SOLO fallback for a single member: `"Ana López"`, not `"Ana"` |
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 2a.1/2a.2 | `lib/domain/spanish-list.spec.ts` | Unit (`environment: 'node'`, zero mocks) | N/A (new file); suite baseline re-measured at 1686/1686 | ✅ `Error: Cannot find module './spanish-list' imported from …/lib/domain/spanish-list.spec.ts`, `Test Files 1 failed (1)`, `Tests no tests` | ✅ `Test Files 1 passed (1)`, `Tests 26 passed (26)` | ✅ 26 cases: all sixteen table rows, the hierro/hielo/hija triple, the NFD-vs-NFC pair, arity 0/1/2/3/4, and a case proving the conjunction comes from the LAST item rather than an earlier one | ➖ written once; the table and the two normalization helpers were the first shape |
+| 2a.3/2a.4 | `lib/domain/guest-name.spec.ts` | Unit | N/A (new file) | ✅ `Error: Cannot find module './guest-name'`, `Tests no tests` | ✅ `Tests 8 passed (8)` | ✅ 8 cases; the solo/list contrast, the nickname win, the `""` nickname and the single-token name each assert BOTH functions on the same guest | ➖ `usableNickname` extracted while writing, kept green |
+| 2a.5/2a.6 | `lib/domain/greeting-name.spec.ts` | Unit | N/A (new file) | ✅ `Error: Cannot find module './greeting-name'`, `Tests no tests` | ✅ `Tests 7 passed (7)` | ✅ 7 cases: one member, three members, the y→e rule reaching through the derivation, the empty-list throw, the custom/derived contrast, a stale stored name at `'derived'`, and `'imported'` | ➖ |
+
+### Test Summary
+
+- **Total tests written**: 41 authored across three new spec files (26 + 8 + 7)
+- **Total tests passing**: **1736** (`Test Files 94 passed (94)`), up from a re-measured baseline of **1686** (`91 passed (91)`)
+- **The +50 is fully accounted for**: 41 authored, plus **9** auto-enumerated cases from the
+  filesystem-scanning specs that generate one case per repository file. Measured directly, not
+  inferred: `tools/no-seats-allowed.spec.ts` + `tools/no-source-placeholders.spec.ts` +
+  `tools/console-one-breakpoint.spec.ts` = 362 before these six files and 371 after
+- **Layers used**: Unit (41). No component, DB or E2E layer — these are pure functions with no
+  I/O boundary to exercise
+- **Pure functions created**: 5 exported (`spanishConjunction`, `joinSpanishList`, `firstName`,
+  `soloAddressName`, `listMemberName`, plus `deriveGreetingName` and `resolveGreetingName` — 7
+  in total), 3 module-private (`normalizeName`, `usableNickname`, and the two lookup sets)
+- **Mocks used**: zero
+
+## `domainImportZone` was checked, not assumed
+
+Task 2a.7 asks for confirmation that the zone ACCEPTS all three modules. A clean `npm run lint`
+proves that only if the zone actually applies to them, so both halves were checked:
+
+1. `npx eslint --print-config lib/domain/{spanish-list,guest-name,greeting-name}.ts` returns the
+   zone's `no-restricted-imports` group — all eleven patterns — for each of the three files. The
+   rule is in effect, not merely absent from the output.
+2. A negative probe through `eslint --stdin --stdin-filename lib/domain/spanish-list.ts` with
+   `import { useState } from "react"` and `import { readFile } from "node:fs/promises"` produced
+   **2 errors**, both `no-restricted-imports`, both carrying the zone's message: *"lib/domain
+   must stay pure: no React, Next.js, storage vendor, Node built-ins, or server adapters."*
+   Nothing was written to disk.
+
+The three modules import only each other and `String.prototype.normalize`, which is the
+constraint `design.md` D14 records: they are bundled into the client graph as well as the server
+one, so they may use only what both runtimes have.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `npx vitest run lib/domain/spanish-list.spec.ts lib/domain/guest-name.spec.ts lib/domain/greeting-name.spec.ts` → `Test Files 3 passed (3)`, `Tests 41 passed (41)` |
+| Full suite | `npm test` → **exit 0**, `Test Files 94 passed (94)`, `Tests 1736 passed (1736)` |
+| Runtime harness command/scenario and exact result | **N/A — no runtime boundary exists.** All three modules are pure functions under Vitest `environment: 'node'`: no I/O, no database, no React, no vendor SDK, zero mocking. Nothing in the tree imports them yet, so there is no integration path to exercise |
+| E2E | **Not run, and unaffected.** The slice touches only six new files, none of which has a call site. No route, component, server adapter, migration or fixture changed; `npm run build` compiled the same 13 routes as slice 1a |
+| Additional gates | `npm run typecheck` → exit 0; `npm run lint` → exit 0, zero findings; `npm run format:check` → exit 0, "All matched files use Prettier code style!"; `npm run build` → exit 0, 13 routes |
+| Cold-start flake | `tools/eslint-zones.spec.ts` passed on the first run; no re-run was needed |
+| Rollback boundary | Delete the six files. Nothing imports them, no schema moved, no fixture moved, and `git status` shows six untracked additions and no modifications outside `openspec/**` |
+
+## Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `lib/domain/spanish-list.spec.ts` | Created | The sixteen-row table as `it.each` with a stated phonological reason per row; the hierro/hielo/hija triple; the NFD/NFC pair built from explicit escapes; arity 0/1/2/3/4 with a standalone no-Oxford-comma assertion |
+| `lib/domain/spanish-list.ts` | Created | `spanishConjunction`, `joinSpanishList`; NFC + trim on both the sound test and the output; module comment records that `o → u` and the sentence-initial interrogative exception are deliberately NOT implemented, with the reason each one is unreachable here |
+| `lib/domain/guest-name.spec.ts` | Created | `firstName` including a four-token name; the solo/list contrast and the nickname win asserted on one guest per test |
+| `lib/domain/guest-name.ts` | Created | `NameableGuest`, `firstName`, `soloAddressName`, `listMemberName`; two separate functions, never one flagged function, with the reason in the module comment |
+| `lib/domain/greeting-name.spec.ts` | Created | Solo/list/empty derivation; the custom-vs-derived contrast in one test; the stale-stored case; `'imported'` |
+| `lib/domain/greeting-name.ts` | Created | `GreetingNameSource`, `deriveGreetingName` (throws on `[]`), `resolveGreetingName` |
+| `openspec/changes/invitation-administration/tasks.md` | Modified | 2a.1–2a.7 marked `[x]` |
+| `openspec/changes/invitation-administration/apply-progress.md` | Modified | This section appended; the slice-1a section above is untouched |
+
+## Workload / PR Boundary
+
+- Mode: **chained slice 2a of eight**, one commit per slice, no pull requests
+- Current work unit: 2a — the three pure Spanish-naming modules and their specs
+- Boundary: starts at `6e7e931` with a clean tree; ends with three pure modules that nothing
+  imports, the whole suite green, and slice 2b not started
+- **Authored changed lines: 516** (516 additions, 0 deletions, excluding `openspec/**`) against
+  the recorded `review_budget_lines: 800`. **Within budget; no `size:exception` needed.** The
+  design estimated 2a at ≈530
+- **Not committed and not pushed**, as instructed
+
+## Status
+
+37/120 tasks complete (all of slice 1a, all of slice 2a). Ready for verify. Slice 2b is NOT
+started by design.
