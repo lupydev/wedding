@@ -127,12 +127,19 @@ describe("signUnlockCookie / verifyUnlockCookie", () => {
     expect(verifyUnlockCookie(value, INVITATION, justAfter)).toBe(false);
   });
 
-  it("outlives a month, because the wedding is further away than that", () => {
+  it("lasts exactly the 180 days the phone-gate spec requires", () => {
     // A 7-day or 30-day cookie re-gates a guest who confirmed early and comes
     // back to check the address the week of the wedding. The gate exists to
     // stop a forwarded link, not to expire a guest who already proved they own
     // the number.
-    expect(UNLOCK_COOKIE_MAX_AGE_SECONDS).toBeGreaterThan(90 * 86_400);
+    //
+    // EXACT, not `> 90 days`, which is what this asserted before. That bound
+    // was written to the implementation and passed at any value above three
+    // months, so it could not have detected the very drift it sat next to —
+    // the spec said 30 days while the code said 180 and nothing went red.
+    // `specs/phone-gate/spec.md` now says 180 days and carries the supersession
+    // paragraph; this is the assertion that keeps the two in step.
+    expect(UNLOCK_COOKIE_MAX_AGE_SECONDS).toBe(180 * 24 * 60 * 60);
   });
 });
 

@@ -3835,3 +3835,154 @@ chase the number.
 25/25 Work Unit 9 tasks complete. Tasks 5b.15 and the code half of 7.1 closed; the
 VALUES remain the couple's to supply, now through `/console/wedding` rather than a
 migration. Working tree uncommitted and fully normalized. Ready for `sdd-verify`.
+
+---
+
+# Work Unit 10 — verify-closure (Strict TDD)
+
+Scope: the four CRITICAL findings from `verify-report.md` plus the record
+corrections. No feature work. Baseline going in: `npm test` 1458 tests with 1
+failing, E2E 152 passing.
+
+## CRITICAL-4 — open self-service signup, closed
+
+`supabase/config.toml` had `enable_signup = true` under `[auth]` and
+`[auth.email]`, and the verify report demonstrated that a stranger holding only
+the publishable key could `POST /auth/v1/signup` and receive an `authenticated`
+JWT.
+
+New file `e2e/invariants/auth-signup.spec.ts`, beside the RLS invariants,
+probing the running instance in three tests: the browser signup call
+(supabase-js), a raw POST to `/auth/v1/signup` cross-checked against
+`auth.users` itself, and a CONTROL that an out-of-band seeded operator can
+still sign in. Fresh probe address per run and the probe user deleted in a
+`finally`, so the file is re-runnable.
+
+**A PREMISE IN THE BRIEF WAS WRONG, AND THE CONTROL TEST IS WHAT CAUGHT IT.**
+The brief said to set `enable_signup = false` in BOTH blocks. Doing so broke the
+console outright: `[auth.email] enable_signup` is the email PROVIDER switch (the
+CLI maps it to `GOTRUE_EXTERNAL_EMAIL_ENABLED`), and with it false a correctly
+seeded operator's `signInWithPassword` answered `Email logins are disabled`. The
+two signup probes passed and the control failed — exactly the "refuses
+everything" failure mode the control exists to distinguish. Final state:
+`[auth] enable_signup = false` closes the endpoint, `[auth.email] enable_signup`
+stays `true`, and both lines carry the reasoning.
+
+**AND THAT CLAIM WAS STILL TOO WIDE — the review caught it.** Two CRITICAL
+findings (`R3-signup-closure-proved-only-against-a-local-stack`,
+`R4-signup-closure-proved-only-against-the-local-stack`) observed that
+`supabase/config.toml` configures the containers the Supabase CLI starts LOCALLY
+and that the new probe defaults to loopback, so the closure is achieved and proven
+for the local stack and for nothing else. A hosted project carries its own auth
+settings, which no file in this repository writes. Corrected in place: the
+docblock, the config comment and the spec now say where the proof stops, and
+closing signup on the hosted project is tracked as deferred task 7.4. The local
+outcome is achieved and proven; the deployed one is neither configured nor
+observed here, and saying otherwise was the same over-claim this unit was
+convened to fix.
+
+Restart was `supabase stop && supabase start` — never `db reset`.
+`auth.users` before: `lumigu.dev@gmail.com`, `sruiz7541@gmail.com`. After both
+restarts: identical, and `ceremony.couple_names` still `Luis & Michell`.
+
+`lib/server/auth.ts`'s docblock claimed "a stranger cannot make an `auth.users`
+row appear by typing into this form" — true of the form and false of the
+project. Rewritten to say the form was never the boundary and to name the
+project-level flag and the test that proves it.
+
+## CRITICAL-1 — the ceremony placeholder test, re-expressed
+
+The old test read the LIVE singleton and required every column to match
+`/^\{\{[A-Z_]+\}\}$/`, so `/console/wedding` working made it red. The
+requirement it protects is a property of the MIGRATION, so it is now asserted
+there: a pure `parseCeremonySeed(migrations)` reads the `0009` INSERT and the
+`0011` column defaults, the test requires all seven value columns to be
+accounted for (a parser that found nothing must not pass), and a second test
+hands the parser an invented value as a negative control.
+
+## CRITICAL-2 — the unlock cookie: spec amended, both tests tightened
+
+The code's 180 days is kept; `specs/phone-gate/spec.md` is amended to 180 with
+an explicit supersession paragraph in the style of `specs/rsvp/spec.md`, and
+`design.md` and task `4b.7` follow. Both covering tests were written to the
+implementation and passed at any value above 90 days, so neither could detect
+the drift beside it: `lib/server/cookies.spec.ts` now asserts the exact value
+and `e2e/phone-gate.spec.ts` asserts a band of `179.99 < daysLeft <= 180`. Both
+renamed to describe what they assert.
+
+## CRITICAL-3 — the authentication mechanism
+
+`specs/dispatch-console/spec.md`'s magic-link requirement is rewritten as
+email-and-password with a supersession paragraph; the allowlist half is
+unchanged because it is still the real authorization boundary (D7). The
+requirement now also states the indistinguishable-refusal properties the code
+actually implements and the closed signup endpoint. `design.md:52` names
+`app/console/login/actions.ts`; tasks `6a-i.7` and `6a.3` are ANNOTATED as
+superseded rather than rewritten, per the `5b.10` rename precedent.
+
+## Record corrections
+
+`2.5`, `4b.12` and `7.3` checked with their stale annotations replaced by what
+is true. `6b.15`/`6b-ii.14` (Realtime) descoped — I verified the claim myself:
+searching all seven capability specs for `realtime`, `live` and `real-time`
+returns nothing. `7.1` and `7.2` descoped as operational. All four moved into a
+new "Deferred — outside this change's specified scope" section with pointers
+left at their original positions; **no unchecked task remains in `tasks.md`**.
+WARNING-4 softened to "the allowlisted senders" in both specs with the reason
+stated. WARNING-5/6 fixed in `design.md`, including a new entry for
+`proxy.ts` / `lib/proxy/operator-session.ts`, which the design record omitted
+entirely. SUGGESTION-4 clarified: canonical means the build-scoped hash query
+Next.js itself appends, and the preview must neither add a buster nor strip it.
+
+Out of scope and untouched, as instructed: WARNING-1, -2, -3 and
+SUGGESTION-1, -2, -3, -5.
+
+## TDD Cycle Evidence
+
+| Item | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| CRITICAL-4 signup closed | `e2e/invariants/auth-signup.spec.ts` | E2E | N/A (new) | Proven — 2 failed / 1 passed against `enable_signup = true` | 3 passed after the config change | 3 cases: browser call, raw POST + DB read, sign-in control | Control caught the `[auth.email]` regression; config comments added |
+| CRITICAL-1 placeholder seed | `supabase/tests/ceremony.spec.ts` | Unit (fs) | 28/28 before | Proven by mutation — seeded `sábado 14 de noviembre de 2026`, test failed naming the column | GREEN restored; 29 passed | 2 cases: real migrations + invented-value negative control | Parser extracted as a pure function |
+| CRITICAL-2 cookie lifetime | `lib/server/cookies.spec.ts`, `e2e/phone-gate.spec.ts` | Unit + E2E | 31/31, E2E green | Proven by mutation — code set to 30d, unit failed `2592000 ≠ 15552000`, E2E failed `29.999… > 179.99` | Both GREEN at 180d | Exact value + bounded band | Both tests renamed to what they assert |
+| CRITICAL-3, records | spec/design/tasks | Docs | N/A | N/A — no behavioural change | Suites unaffected | ➖ | ➖ |
+
+Triangulation skipped for CRITICAL-3 and the record corrections: they change no
+behaviour, so there is nothing for a second case to force out.
+
+## Verification — actual observed output
+
+- `npm test`: **89 files, 1459 passed, exit 0** (baseline 1458 with 1 failing).
+- `PORT=3100 npm run e2e`: **155 passed**, 0 failed (baseline 152; +3 signup invariants).
+- `npm run typecheck`: clean, no output.
+- `npm run lint`: clean, no output.
+- `npm run format:check`: `All matched files use Prettier code style!`
+- `npm run build`: compiled; 13 routes; `Proxy (Middleware)` emitted.
+- `tools/eslint-zones.spec.ts` did NOT flake in this session.
+
+## Rollback boundary
+
+Delete `e2e/invariants/auth-signup.spec.ts`; revert `supabase/config.toml` (then
+`supabase stop && supabase start` — never `db reset`), `lib/server/auth.ts`,
+`lib/server/cookies.spec.ts`, `e2e/phone-gate.spec.ts` and
+`supabase/tests/ceremony.spec.ts`; revert the four OpenSpec documents. Reverting
+the config re-opens the signup endpoint, which is the one part of this unit that
+should not be rolled back without a replacement.
+
+## Size
+
+**457 authored lines** (279 added+deleted across 10 tracked files, plus a
+178-line new test file) against the 400-line budget — **57 over**. Recommending
+`size:exception`. It does not slice further: the security fix is not separable
+from the test that proves it, and `npm test` stays red until the ceremony test
+moves, so CRITICAL-1 and CRITICAL-4 both have to be in whichever slice claims a
+green suite. The record corrections (about 110 lines of prose across four
+OpenSpec documents) are the only separable part, and they are what makes the
+archived spec true. No comment, test or doc was compressed to chase the number.
+
+## Status
+
+All four CRITICAL findings closed; WARNING-4/5/6 and SUGGESTION-4 closed; six
+formerly-unchecked tasks resolved (three checked, three descoped plus `7.1`).
+`tasks.md` has no unchecked task. Working tree uncommitted and fully normalized.
+Ready for `sdd-verify`.
+

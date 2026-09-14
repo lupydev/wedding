@@ -48,15 +48,16 @@ The four highest-risk behaviors (phone normalization, `wa.me` link building, mes
 | `app/i/[slug]/opengraph-image.tsx` | Create | Names-only card, `next/og`, Node runtime |
 | `app/i/[slug]/gate-form.tsx` | Create | `'use client'` phone input |
 | `app/i/[slug]/actions.ts` | Create | `'use server'` — `unlockAction`, `submitRsvpAction` |
-| `app/console/layout.tsx` | Create | `requireOperator()` + device-declaration gate |
-| `app/console/login/page.tsx`, `app/console/auth/callback/route.ts` | Create | Magic-link entry and exchange |
-| `app/console/page.tsx` | Create | Guest list partitioned by `owner_sender_id` |
+| `app/console/(authenticated)/layout.tsx` | Create | `requireOperator()` + device-declaration gate. `(authenticated)` is a route GROUP, so the URL stays `/console/...` |
+| `app/console/login/page.tsx`, `app/console/login/actions.ts` | Create | Email-and-password entry. A Server Action writes the session cookie directly, which is the only thing the deleted `auth/callback` route existed to do. Supersedes the magic-link exchange (WU7a) |
+| `app/console/(authenticated)/page.tsx` | Create | Guest list partitioned by `owner_sender_id` |
 | `app/console/device/page.tsx` | Create | Per-device WhatsApp-account picker |
-| `app/console/dispatch/[invitationId]/page.tsx` | Create | Compose view + mock bubble |
-| `app/console/preview/[invitationId]/page.tsx` | Create | Admin-only body preview |
+| `app/console/(authenticated)/dispatch/[invitationId]/page.tsx` | Create | Compose view + mock bubble |
+| `app/console/(authenticated)/preview/[invitationId]/page.tsx` | Create | Admin-only body preview |
 | `app/console/api/dispatch-event/route.ts` | Create | `sendBeacon` POST target, idempotent, returns 204 |
+| `proxy.ts`, `lib/proxy/operator-session.ts` | Create | Runs on `/console/:path*` only. Refreshes the Supabase session cookie on every console request so a long dispatch sitting never expires mid-send, and unconditionally DELETES any inbound `x-operator-identity` header before forwarding, so a forwarded identity can only ever be one this process signed. Named `proxy.ts` rather than `middleware.ts` per the Next 16.3 rename (WU6a-i) |
 | `components/invitation/InvitationBody.tsx` | Create | **Sync** RSC, props only — shared by public + admin routes |
-| `components/invitation/RsvpForm.tsx` | Create | `'use client'` |
+| `components/invitation/RsvpAnswer.tsx` | Create | `'use client'`. Renamed from `RsvpForm.tsx` in WU5b: it renders the recorded ANSWER, which is the form or the stream card |
 | `components/console/WhatsAppBubble.tsx` | Create | Mock bubble, props only |
 | `lib/domain/phone.ts` | Create | `normalizeForStorage`, `deriveGateKey`, `matchesInvitation` |
 | `lib/domain/wa-link.ts` | Create | `buildWaMeLink` |
@@ -283,7 +284,9 @@ raw input ──► deriveGateKey(raw)            digits only; last 8; null if <
 
 Only failures count, so a guest who unlocks and returns is never punished. The second scope exists because the first is trivially defeated by rotating source IPs. `ip_hash = HMAC-SHA256(GATE_IP_PEPPER, ip)` truncated to 32 hex chars — an unpeppered hash of an IPv4 address is reversible by exhaustive enumeration in seconds. `gate_attempts` is a table rather than in-memory because Vercel serverless instances share no memory.
 
-**Unlock cookie**: name `inv_unlock`, value = `base64url(payload) + '.' + HMAC-SHA256(UNLOCK_COOKIE_SECRET, payload)` where payload is `{ invitationId, exp }`. `httpOnly` (JS must never read it), `secure`, `sameSite: 'Lax'`, `path: '/i/' + slug`, `maxAge: 30d`.
+**Unlock cookie**: name `inv_unlock`, value = `base64url(payload) + '.' + HMAC-SHA256(UNLOCK_COOKIE_SECRET, payload)` where payload is `{ invitationId, exp }`. `httpOnly` (JS must never read it), `secure`, `sameSite: 'Lax'`, `path: '/i/' + slug`, `maxAge: 180d`.
+
+- **180 days, superseding the original 30**: the gate stops a forwarded link, not a guest who already proved they hold a number on the invitation — and the capability protected is the slug, which that guest keeps either way. A short lifetime therefore buys nothing and only re-gates the household that answered early and returns the week of the wedding. The expiry is enforced server-side from the signed payload, never from the browser's copy. `specs/phone-gate/spec.md` carries the full supersession.
 
 - **`SameSite=Lax`, not `Strict`**: the guest arrives by a cross-site top-level navigation from WhatsApp. `Strict` drops the cookie on exactly that navigation and re-gates the guest every time they reopen the link from the chat — the failure this cookie exists to prevent. `Lax` sends it on top-level GETs. `None` is unnecessary; nothing embeds the page cross-site.
 - **Path-scoped to the slug**: slug rotation makes the old cookie unreachable with no revocation list. The server additionally verifies the payload's `invitationId` matches the invitation resolved from the slug.
@@ -346,14 +349,14 @@ Operator      Console (client)        Server            Supabase          WhatsA
 
 | | Q1: Who is operating? | Q2: Which WhatsApp account is on this handset? |
 |---|---|---|
-| Mechanism | Supabase Auth magic link | Per-device signed cookie `device_sender`, `httpOnly`, `path=/console`, 1 year |
+| Mechanism | Supabase Auth email and password (WU7a; was a magic link) | Per-device signed cookie `device_sender`, `httpOnly`, `path=/console`, 1 year |
 | Source of truth | `senders.allowlisted_email` → `senders.auth_user_id` (D7) | The operator's own declaration on this device |
 | Verifiable? | **Yes** — cryptographic | **No** — unverifiable by construction |
 | Used for | Authorization: console access, guest phone visibility, `actor_sender_id` | Nothing but a human-facing interstitial |
 
 **Why they must stay separate.** `wa.me` addresses the recipient only; there is no sender parameter. The message is sent from whichever WhatsApp is installed on the device that opens the link. Sender routing is **physical**, not addressable by the app. So the device answer is a self-declaration the server can never check — which means it must **never** be an authorization input. Conflating them fails in one of two ways: a self-declared value would grant access to guest phone numbers, or authentication would be pretending it proves which SIM is in the phone. Neither is true. Auth is a fact; the declaration is a hint.
 
-**Flow.** `app/console/layout.tsx` calls `requireOperator()`; unauthenticated or non-allowlisted → `/console/login`. Then it reads `device_sender`: absent → redirect to `/console/device` (**fail to the picker, never to a default** — clearing storage must not silently pick someone). If `device_sender ≠ session sender`, dispatch is blocked by a non-dismissible interstitial explaining the mismatch, offering "Change the device declaration" or "Sign in as the other operator". The read-only progress view stays available. This is the only guard that catches "the bride logged in on the groom's phone".
+**Flow.** `app/console/(authenticated)/layout.tsx` calls `requireOperator()`; unauthenticated or non-allowlisted → `/console/login`. Then it reads `device_sender`: absent → redirect to `/console/device` (**fail to the picker, never to a default** — clearing storage must not silently pick someone). If `device_sender ≠ session sender`, dispatch is blocked by a non-dismissible interstitial explaining the mismatch, offering "Change the device declaration" or "Sign in as the other operator". The read-only progress view stays available. This is the only guard that catches "the bride logged in on the groom's phone".
 
 **Wrong-owner dispatch** is unpreventable at the protocol level, so it is layered: (1) the list is partitioned by `owner_sender_id`; (2) non-owned rows render "owned by {name}" instead of a send button; (3) the interstitial; (4) if an event is recorded anyway, `actor_sender_id ≠ owner_sender_id` is **stored** and surfaced as a data-quality flag rather than only prevented.
 
@@ -387,7 +390,7 @@ The hexagonal split is what makes this testable, and the reason is mechanical: *
 | Layer | Tool / env | Scope | Bar |
 |---|---|---|---|
 | Unit | Vitest, `environment: 'node'` | all of `lib/domain/**` | **100%** on `phone.ts` and `wa-link.ts`. Table-driven: `+`/no `+`, spaces, dashes, parens, Mexican `1` prefix, Argentine `9` prefix, empty, garbage; link encoding of space, `&`, `?`, `%0A`, accents, emoji, and no `+` on the number; a missing template variable must **fail loudly**, never render `undefined` into a message a human is about to send. |
-| Component | Vitest + RTL + jsdom | `GateForm`, `RsvpForm`, `WhatsAppBubble`, `InvitationBody` (sync) | Behavior + one `InvitationBody` snapshot as the drift guard |
+| Component | Vitest + RTL + jsdom | `GateForm`, `RsvpAnswer`, `WhatsAppBubble`, `InvitationBody` (sync) | Behavior + one `InvitationBody` snapshot as the drift guard |
 | DB | Vitest (node) against local Supabase | migrations, generated column, triggers | `phone_last8` is NULL when the phone is NULL; UPDATE/DELETE on `dispatch_events` raises; over-cap RSVP insert raises; **anon key gets permission-denied on all six tables** |
 | Integration | Vitest (node) | `lib/server/**` with a repository fake | Gate lockout arithmetic, cookie sign/verify, warm-failure path leaves creation successful |
 | E2E | Playwright | everything async-RSC | `og:image`/`og:title` inside `<head>` of the **raw** HTML under `User-Agent: WhatsApp/2.23.20.0` before any JS runs (the single highest-value test — regression guard for streaming metadata); wrong phone leaks no invitation content and no stored digit sequence into page source; **no query parameter bypasses the gate**; RSVP over-cap rejected server-side; dispatch interstitial blocks on device mismatch |

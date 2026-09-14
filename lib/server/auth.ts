@@ -160,10 +160,29 @@ export async function resolveOperator(
  *     that decides authorization is the one the auth server confirmed. That is
  *     the same belt-and-braces re-check the magic-link exchange used to do.
  *
- * There is deliberately no sign-up and no reset. `signInWithPassword` never
- * creates a user, so a stranger cannot make an `auth.users` row appear by
- * typing into this form; operator accounts are created once, out of band, by
- * `scripts/seed-operators.ts`.
+ * There is deliberately no sign-up and no reset, and the claim that matters is
+ * bigger than this form. `signInWithPassword` never creates a user, so nothing
+ * typed HERE can make an `auth.users` row appear — but the form was never the
+ * boundary. `POST /auth/v1/signup` is reachable by anyone holding the
+ * publishable key, which is printed in the page source of every invitation, so
+ * the endpoint has to be shut on the INSTANCE, and no source file can do that
+ * for an instance it does not configure.
+ *
+ * What is proven, and exactly where the proof stops. `supabase/config.toml` sets
+ * `[auth] enable_signup = false`, and `e2e/invariants/auth-signup.spec.ts` probes
+ * a running instance to assert the refusal rather than trusting the flag. That
+ * config file governs the containers the Supabase CLI starts LOCALLY, and the
+ * probe reaches whatever `SUPABASE_URL` names, which is the local stack unless it
+ * is pointed elsewhere. A hosted project carries its own auth settings, which
+ * nothing in this repository writes — so a deployed project's signup posture is
+ * neither configured nor observed here. Closing it is a deploy-time step, tracked
+ * as task 7.4. Until that step is done, a deployed project can still mint an
+ * unvetted identity while every command in this repository stays green, which is
+ * the failure mode this paragraph exists to keep visible.
+ *
+ * Operator accounts are created once, out of band, by
+ * `scripts/seed-operators.ts` through the admin API, which that flag does not
+ * affect.
  */
 export async function signInOperator(
   directory: OperatorDirectory,

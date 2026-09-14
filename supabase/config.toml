@@ -183,7 +183,27 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-enable_signup = true
+#
+# FALSE, AND THIS IS A SECURITY BOUNDARY RATHER THAN A PREFERENCE.
+#
+# The publishable key is in the browser by design — it is printed in the page
+# source of every invitation — so `POST /auth/v1/signup` is reachable by anyone
+# who opens a link. Left open, a stranger mints themselves a real `auth.users`
+# row and a real `authenticated` JWT for an address nobody vetted. Nothing in
+# this product needs it: `lib/server/auth.ts` only ever calls
+# `signInWithPassword`, and operator accounts are created out of band by
+# `scripts/seed-operators.ts` through the admin API, which is unaffected by this
+# flag. `e2e/invariants/auth-signup.spec.ts` probes the running instance and
+# asserts the refusal, including a control that sign-in still works — so this
+# line cannot be flipped back without a red suite.
+#
+# SCOPE, AND IT IS NARROWER THAN IT LOOKS. This file configures the containers the
+# Supabase CLI starts LOCALLY. It does not reach a hosted project, whose auth
+# settings live in that project and are changed from its dashboard or management
+# API. Nothing in this repository sets them, and no test here goes red if a
+# deployed project leaves signup open. Closing it there is a deploy-time step,
+# tracked as task 7.4.
+enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
@@ -228,6 +248,16 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
+#
+# LEFT TRUE ON PURPOSE, AND THAT IS NOT A GAP.
+#
+# This flag is the email PROVIDER switch, not a signup switch: the CLI maps it to
+# GOTRUE_EXTERNAL_EMAIL_ENABLED, which gates email sign-IN as well. Setting it to
+# false was tried and it broke the console outright — `signInWithPassword`
+# answered "Email logins are disabled" for a correctly seeded operator, which
+# `e2e/invariants/auth-signup.spec.ts`'s control test caught immediately. The
+# global `[auth] enable_signup = false` above is what closes
+# `POST /auth/v1/signup`, and the same file proves it does.
 enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.

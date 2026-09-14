@@ -58,7 +58,7 @@ Chain strategy: pending
 - [x] 2.2 GREEN — `lib/domain/phone.ts`: implement `normalizePhone` via `libphonenumber-js`'s `parsePhoneNumberFromString`; never throws, returns a discriminated success/failure result.
 - [x] 2.3 RED — `phone.spec.ts`: `normalizeForStorage` (throws on invalid input), `deriveGateKey` (lenient, digits-only, `null` if <8 digits), `matchesInvitation` (any-guest match true; one-digit near-miss false).
 - [x] 2.4 GREEN — `phone.ts`: implement `normalizeForStorage`, `deriveGateKey`, `matchesInvitation`; run `npm run test:coverage` and confirm 100% coverage on this file.
-- [ ] 2.5 (PARTIAL — test table done; `.env.example` write BLOCKED by the environment's permission settings, see apply-progress) Add `DEFAULT_PHONE_COUNTRY` to `.env.example`; confirm 2.1/2.3's table spans MX/AR/US candidate default-country values (extend the table if a candidate is missing).
+- [x] 2.5 (COMPLETE — the earlier PARTIAL annotation was stale, not the work. `.env.example` exists and is git-tracked (first added in `6f1a440`); it documents `DEFAULT_PHONE_COUNTRY` together with the reason there is deliberately no fallback, and it covers all 8 variables `lib/server/env.ts` reads.) Add `DEFAULT_PHONE_COUNTRY` to `.env.example`; confirm 2.1/2.3's table spans MX/AR/US candidate default-country values (extend the table if a candidate is missing).
 - [x] 2.6 RED — `lib/domain/wa-link.spec.ts`: `buildWaMeLink` encoding table (space, `&`, `?`, newline as `%0A`, accented character, emoji, digits contain no `+`).
 - [x] 2.7 GREEN — `lib/domain/wa-link.ts`: implement `buildWaMeLink`; confirm 100% coverage on this file.
 - [x] 2.8 RED — `lib/domain/message-template.spec.ts`: renders `{{greeting_name}}`; a template referencing a missing variable throws/errors and never renders the literal string `undefined`.
@@ -166,12 +166,12 @@ out of scope and remain open.
 - [x] 4b.4 GREEN — wire `lib/domain/rate-limit.ts`'s `evaluateGate` into `gate.ts` against `gate_attempts`.
 - [x] 4b.5 GREEN — implement `ip_hash = HMAC-SHA256(GATE_IP_PEPPER, ip)` truncated to 32 hex chars via `node:crypto`, called only from `gate.ts`.
 - [x] 4b.6 RED — `lib/server/cookies.spec.ts`: unlock-cookie sign/verify round-trip; a tampered payload fails verification; the payload's `invitationId` is cross-checked against the invitation resolved from the current slug.
-- [x] 4b.7 GREEN — `lib/server/cookies.ts`: `import 'server-only'` first line; `inv_unlock` cookie — `httpOnly`, `secure`, `sameSite: 'lax'` (explicitly Lax, not Strict — the guest arrives via cross-site navigation from WhatsApp, and Strict would drop the cookie on that exact navigation), `path: '/i/' + slug`, `maxAge: 30 days`.
+- [x] 4b.7 GREEN — `lib/server/cookies.ts`: `import 'server-only'` first line; `inv_unlock` cookie — `httpOnly`, `secure`, `sameSite: 'lax'` (explicitly Lax, not Strict — the guest arrives via cross-site navigation from WhatsApp, and Strict would drop the cookie on that exact navigation), `path: '/i/' + slug`, `maxAge: 180 days` (SUPERSEDED from the 30 days this task originally specified — the gate stops a forwarded link, not a guest who already proved they hold a number, and the slug is the capability either way; `specs/phone-gate/spec.md` carries the full supersession and `lib/server/cookies.spec.ts` now asserts the exact value).
 - [x] 4b.8 GREEN — `app/i/[slug]/gate-form.tsx`: `'use client'` phone input calling `unlockAction`.
 - [x] 4b.9 GREEN — `app/i/[slug]/actions.ts`: `'use server'` `unlockAction(slug, rawPhone)`; generic failure message, no leaked digits.
 - [x] 4b.10 GREEN — wire `page.tsx`: render `gate-form.tsx` when no valid unlock cookie is present; delegate to body content when unlocked.
 - [x] 4b.11 RED — `e2e/phone-gate.spec.ts`: any guest's last-8 digits unlock; a near-miss is rejected; a failed-attempt response (HTML, inline JSON, network payloads) contains no guest name, no RSVP/dietary/message fields, and no digit sequence matching any stored guest phone.
-- [x] 4b.12 (PARTIAL — query-parameter half done; the console-operator half is DEFERRED: the console and its session do not exist until Work Unit 6a, so no operator can be authenticated yet. Covered today by an equivalent assertion that no session-shaped cookie — `admin_session`, `device_sender`, `sb-access-token`, `unlocked` — bypasses the gate, plus a forged `inv_unlock`. Re-assert with a real operator session in 6a.) RED — E2E addendum: `?preview=1`, `?admin=1`, and other query parameters never bypass the gate; an authenticated console operator visiting the public route directly still sees the gate.
+- [x] 4b.12 (COMPLETE — the DEFERRED half was closed and the annotation was what stayed stale. `e2e/console-guest-list.spec.ts:388-416` re-asserts it with a genuinely signed-in operator (`signInAsOperator(page, ana)`) across 4 query parameters, so the console never becomes a way past the guest gate. The original cookie-shaped assertions remain as the cheaper guard.) RED — E2E addendum: `?preview=1`, `?admin=1`, and other query parameters never bypass the gate; an authenticated console operator visiting the public route directly still sees the gate.
 - [x] 4b.13 RED — E2E addendum: 8 failed attempts within 15 minutes lock out the 9th; the lockout persists across separate requests.
 - [x] 4b.14 RED — E2E addendum: a successful unlock sets `inv_unlock` with `SameSite=Lax`; a repeat visit within 30 days skips the gate.
 - [x] 4b.15 GREEN — recovery UI: "¿No puedes entrar?" link via `buildWaMeLink(owner.contact_wa_phone_e164, renderMessageTemplate(HELP_TEMPLATE, { greetingName }))`, resolved server-side against the owning sender.
@@ -237,7 +237,7 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 6a-i.4 GREEN — `lib/server/auth.ts`: `import 'server-only'` first line; `resolveOperator` binds `auth_user_id` on first allowlisted login; `requireOperator()` re-checks the SESSION identity and signs out on mismatch; `readSessionIdentity()` keeps a non-header `getUser()` fallback.
 - [x] 6a-i.5 RED — `supabase/tests/operator-session-refresh.spec.ts`: a stale access token with a live refresh token, driven through the middleware handler, must put TWO session `Set-Cookie` headers on the response — including on a REDIRECT — and the rotated refresh token must reach the browser.
 - [x] 6a-i.6 GREEN — `proxy.ts` + `lib/proxy/operator-session.ts` (Next 16.3 deprecated the `middleware` file convention in favour of `proxy`): one response is built and every return path carries the cookies Supabase wrote; the matcher is scoped to `/console/:path*` so the guest gate never pays for an auth round-trip.
-- [x] 6a-i.7 GREEN — `app/console/login/**` and `app/console/auth/callback/route.ts`: magic-link entry and exchange, with the allowlist checked server-side before any mail is sent.
+- [x] 6a-i.7 (SUPERSEDED by 7a.2–7a.6, which is why the record is annotated rather than rewritten: this task WAS done as written, and then the mechanism changed. `app/console/auth/callback/route.ts` was deleted in 7a.6 and a Server Action in `app/console/login/actions.ts` writes the session cookie directly. The allowlist half survived untouched — it is still checked server-side, now after the password rather than before any mail.) GREEN — `app/console/login/**` and `app/console/auth/callback/route.ts`: magic-link entry and exchange, with the allowlist checked server-side before any mail is sent.
 - [x] 6a-i.8 GREEN — `app/console/layout.tsx` and a minimal authenticated `app/console/page.tsx` landing that proves the session works.
 - [x] 6a-i.9 RED — `e2e/console-auth.spec.ts`: an unauthenticated visitor cannot reach `/console`; an unallowlisted address gets the same response as an operator address and receives no mail; an allowlisted address completes the magic link, reaches the console, and binds `senders.auth_user_id`.
 - [x] 6a-i.10 GREEN — `playwright.config.ts` may no longer attach to a foreign dev server; the E2E suite always builds and starts its own.
@@ -247,7 +247,7 @@ in the gate that unit built; the third is an unasserted attribute.
 
 - [x] 6a.1 (Done by 6a-i.3.) RED — `lib/server/auth.spec.ts`: an unallowlisted email is denied and creates no session mapped to any sender; an allowlisted email resolves to exactly one `senders.auth_user_id` identity.
 - [x] 6a.2 (Done by 6a-i.4.) GREEN — `lib/server/auth.ts`: `import 'server-only'` first line; Supabase Auth magic-link helpers; `requireOperator()` resolves via `senders.allowlisted_email`/`auth_user_id`, binding `auth_user_id` on first allowlisted login.
-- [x] 6a.3 (Done by 6a-i.7.) GREEN — `app/console/login/page.tsx` and `app/console/auth/callback/route.ts`: magic-link entry/exchange.
+- [x] 6a.3 (Done by 6a-i.7, then SUPERSEDED by 7a.2–7a.6 along with it: the entry page remains, the callback route does not, and the mechanism is email and password. See 6a-i.7.) GREEN — `app/console/login/page.tsx` and `app/console/auth/callback/route.ts`: magic-link entry/exchange.
 - [x] 6a.4 (Done by 6a-i.8.) GREEN — `app/console/layout.tsx`: calls `requireOperator()`; redirects unauthenticated/non-allowlisted visitors to `/console/login`.
 - [x] 6a.5 (Done by 6a-ii.1/6a-ii.2.) RED — `lib/server/invitations.spec.ts` addendum: a sender's default query returns only `owner_sender_id`-matching invitations; the shared dashboard query returns aggregate counts across all invitations.
 - [x] 6a.6 (Done by 6a-ii.2.) GREEN — add partitioned + shared-dashboard query functions to `lib/server/invitations.ts`.
@@ -321,7 +321,7 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 6b.12 (Delivered earlier; verified by 6b-ii.) GREEN — wire `app/i/[slug]/page.tsx` to render `InvitationBody` after unlock, replacing Phase 4b's placeholder.
 - [x] 6b.13 (Done by 6b-ii.10.) GREEN — `app/console/preview/[invitationId]/page.tsx`: admin-only RSC behind `requireOperator()`, fetches by id, renders `InvitationBody`; no new authorization axis.
 - [x] 6b.14 (Done by 6b-ii.12.) RED — `e2e/console-preview.spec.ts`: the admin preview body and the unlocked public body render identical text for a seeded fixture; an unauthenticated visitor is denied with no content rendered; the mock-bubble preview image is byte-identical to a direct fetch of `/i/<slug>/opengraph-image`; every dispatch produces a `dispatch_events` row with `actor_sender_id`; a bypassed device-declaration mismatch still records the mismatched actor/owner pair.
-- [ ] 6b.15 NOT DONE — deferred out of Work Unit 6b-ii; see 6b-ii.14. GREEN — wire Supabase Realtime on `dispatch_events` so both consoles receive live updates after a `marked_sent`/`marked_failed` insert.
+> 6b.15 (Supabase Realtime on `dispatch_events`) is DESCOPED — see "Deferred — outside this change's specified scope" at the end of this file.
 - [x] 6b.16 (Done by 6b-ii.13.) Verify: run `e2e/console-preview.spec.ts`, the dispatch RTL suite, and full `npm test`/`npm run e2e` — confirm 6b.1, 6b.4, 6b.6, 6b.8, 6b.10, 6b.14 RED tests pass GREEN.
 
 ## Phase 6b-ii: The Two Console Preview Surfaces (Work Unit 6b-ii)
@@ -345,7 +345,7 @@ in the gate that unit built; the third is an unasserted attribute.
 - [x] 6b-ii.11 RED/GREEN — `consolePreviewPath` in `lib/domain/operator-session.ts`, and an owned-row preview link in `components/console/GuestList.tsx` that SURVIVES a device-declaration mismatch (reading sends nothing) while the send affordance does not.
 - [x] 6b-ii.12 RED — `e2e/console-preview.spec.ts` (6b.14), 22 tests: the admin body and the unlocked public body are byte-identical outside the RSVP slot; an unauthenticated visitor is denied with no content; the bubble's image is exactly the advertised `og:image` and its bytes equal a direct fetch of the card route; no query parameter bypasses the public gate even with an operator session; a mismatched actor/owner pair is still recorded.
 - [x] 6b-ii.13 Verify: `npm test` 933 passed, `PORT=3100 npm run e2e` 124 passed, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — all clean.
-- [ ] 6b-ii.14 NOT DONE — 6b.15 Supabase Realtime on `dispatch_events`. Deliberately excluded from this unit: it is a live-update concern rather than a preview surface, it needs a publication/RLS decision and probably a migration, and adding it would have pushed this unit past its changed-line ceiling. It is the only item of the original Work Unit 6b still outstanding.
+> 6b-ii.14 (Supabase Realtime on `dispatch_events`) is DESCOPED — see "Deferred — outside this change's specified scope" at the end of this file.
 
 ## Phase 7-auth: Operator Password Sign-In and Seeding (Work Unit 7)
 
@@ -441,6 +441,55 @@ Authored change is roughly **3.5k lines** across 24 modified and 14 new files, f
 
 ## Phase 7: Placeholders and Finalization (non-blocking, no dependent tasks)
 
-- [ ] 7.1 (Code half DONE by 9.1–9.25; the VALUES remain the couple's to supply, now through `/console/wedding` instead of a migration.) Once the couple supplies `{{COUPLE_NAMES}}`, `{{WEDDING_DATE}}`, `{{VENUE_NAME}}`, `{{VENUE_ADDRESS}}`, `{{APPROX_GUEST_COUNT}}`, `{{CEREMONY_DATE}}`, `{{CEREMONY_TIME}}`, `{{ZOOM_MEETING_ID}}` and `{{ZOOM_PASSCODE}}` (the last four are an `UPDATE` on the `ceremony` row, not a code edit), replace every placeholder occurrence in invitation copy, message templates, and RSVP deadline defaults. Do not invent values; do not block any other work unit on this.
-- [ ] 7.2 Set `NEXT_PUBLIC_SITE_ORIGIN` before the first deploy; confirm `metadataBase`/`og:image` resolve to the real deployed origin.
-- [ ] 7.3 Finalize the OG-card font choice (bundled Noto Sans vs. a custom ≤500 KB subset covering `ñ` and accented vowels); update `opengraph-image.tsx` if a custom font is chosen.
+> 7.1 and 7.2 are DESCOPED as OPERATIONAL — see "Deferred — outside this change's specified scope" at the end of this file. Their code halves are done; what remains is not code.
+- [x] 7.3 (DECIDED AND TESTED: ship NO custom font. `next/og` bundles a Latin font whose coverage is sufficient, so a ≤500 KB subset would add a build artefact and a download for glyphs already present. `tools/og-font-coverage.spec.ts` asserts `ñ`, `Ñ` and the accented vowels are real glyphs in that exact bundled file — read from its cmap, with a CJK codepoint as a negative control so a parser that always answered "present" would fail — and `e2e/invitation-page-og.spec.ts` confirms the accented and unaccented names render visibly different pixels. `opengraph-image.tsx` therefore needed no change.) Finalize the OG-card font choice (bundled Noto Sans vs. a custom ≤500 KB subset covering `ñ` and accented vowels); update `opengraph-image.tsx` if a custom font is chosen.
+
+## Deferred — outside this change's specified scope
+
+Nothing in this section is checked, because nothing in it was built or could be
+completed by writing code. It is here so the archived record states what was
+LEFT rather than leaving four boxes unchecked for a reader to guess at. Each item
+names why it is out and what would have to be decided first.
+
+**Supabase Realtime on `dispatch_events` (was 6b.15 and 6b-ii.14).** Never built,
+and no requirement in any of the seven capability specs asks for it — verified by
+searching all seven for `realtime`, `live` and `real-time`, which return nothing.
+It is a live-update nicety: both consoles would learn of the other's
+`marked_sent`/`marked_failed` insert without a refresh. It is genuinely out of
+scope rather than merely unfinished, and it is not free — publishing a table over
+Realtime is a publication and RLS decision on a table that is currently
+default-deny to every role but `service_role`, and it probably needs a migration.
+Reaching for it would widen the exact posture this change spent its effort
+closing. The product works without it: a refresh shows the other operator's
+progress, and the shared dashboard already covers both partitions.
+
+**Close self-service signup on the HOSTED Supabase project (7.4).** New, and it
+exists because a review found the gap: `supabase/config.toml` configures the
+containers the Supabase CLI starts LOCALLY, and `e2e/invariants/auth-signup.spec.ts`
+reaches whatever `SUPABASE_URL` names, which is the local stack unless it is
+pointed elsewhere. A hosted project carries its own auth settings and nothing in
+this repository writes them, so a deployed project can leave `POST /auth/v1/signup`
+open while every command in this repository stays green. It cannot be closed from
+here and it is not a code change: turn off self-service signup in the hosted
+project's auth settings, then run the invariant AGAINST that project —
+`SUPABASE_URL=<deployed> SUPABASE_DB_URL=<deployed> npx playwright test e2e/invariants/auth-signup.spec.ts`
+— so the refusal is proven where it matters and not only where it is convenient.
+Blocked behind the same provisioning as 7.2: there is no hosted project yet.
+
+**The couple's own wedding facts (was 7.1).** The CODE half is done — Work Unit 9
+shipped `/console/wedding`, an operator-editable form over all seven facts, and
+9.25 collapsed the last placeholder out of source. What remains is the VALUES,
+which are the couple's to supply through that form. No task can close this; the
+migration's seed stays a visible placeholder until somebody types the real thing,
+and `supabase/tests/ceremony.spec.ts` asserts that seed rather than the live row
+precisely so the couple filling it in is not a test failure.
+
+**Live confirmation of `metadataBase`/`og:image` on the deployed origin (was
+7.2).** The env-var half IS done: `NEXT_PUBLIC_SITE_ORIGIN` is set in Vercel
+Production. The live confirmation is BLOCKED and not by anything in this
+repository — production has no Supabase environment variables yet, so `/i/[slug]`
+cannot resolve an invitation there and there is no page whose `og:image` could be
+inspected. The behaviour itself is covered locally against a production build:
+`e2e/invitation-page-og.spec.ts > emits an absolute https og:image on the deployed
+origin` runs with the origin injected exactly as production injects it. This is
+recorded as unconfirmed-in-production rather than claimed done.

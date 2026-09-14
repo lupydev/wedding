@@ -61,12 +61,14 @@ The public gated route MUST have exactly one unlock path: the phone match descri
 
 ### Requirement: Unlock cookie persists the session
 
-On successful unlock, the system MUST set a signed, `httpOnly`, `SameSite=Lax` cookie scoped to that invitation, valid for 30 days, so the guest is not re-gated on return visits.
+On successful unlock, the system MUST set a signed, `httpOnly`, `SameSite=Lax` cookie scoped to that invitation, valid for 180 days, so the guest is not re-gated on return visits.
+
+This supersedes the original 30-day decision. The reasoning: the gate exists to stop a FORWARDED link, not to expire a guest who already proved they hold a number on the invitation, and the capability actually being protected is the slug — which that guest keeps either way, cookie or no cookie. So a shorter lifetime buys no security here; it only re-gates the household that answered early and comes back the week of the wedding to re-read the address, which is precisely the person the gate is not aimed at. The event is months out, which is why 30 days was too short in the first place: the invitation is dispatched long before the day it describes. A fresh cookie is minted on every successful unlock, so anyone who does re-enter their number restarts the clock. The expiry is enforced SERVER-side from the signed payload, not from the browser's copy, so a tampered or extended cookie is refused rather than honoured.
 
 #### Scenario: Repeat visit skips the gate
 
 - GIVEN a visitor successfully unlocked an invitation and received the unlock cookie
-- WHEN the same visitor requests `/i/<slug>` again within 30 days with that cookie present
+- WHEN the same visitor requests `/i/<slug>` again within 180 days with that cookie present
 - THEN the gate MUST NOT be shown and the invitation body MUST render directly
 
 ### Requirement: Recovery path to the owning sender

@@ -2,23 +2,39 @@
 
 ## Purpose
 
-Authenticated console for the two senders to review their guest partition, declare their device's WhatsApp account, build and open `wa.me` links, record dispatch events, and preview both invitation surfaces. The console PREPARES a `wa.me` link only; it never claims to send a message itself.
+Authenticated console for the allowlisted senders to review their guest partition, declare their device's WhatsApp account, build and open `wa.me` links, record dispatch events, and preview both invitation surfaces. The console PREPARES a `wa.me` link only; it never claims to send a message itself.
 
 ## Requirements
 
-### Requirement: Operator authentication via magic link
+### Requirement: Operator authentication by email and password
 
-Console access MUST require Supabase Auth magic-link sign-in, restricted to a server-checked two-email allowlist mapped to `senders.auth_user_id`.
+Console access MUST require Supabase Auth email-and-password sign-in, restricted to a server-checked allowlist of sender addresses mapped to `senders.auth_user_id`. The address that decides authorization MUST be the one the auth server confirmed in the session, never the one typed into the form. The console MUST offer no sign-up and no password reset, and the project MUST refuse self-service signup at `POST /auth/v1/signup` — operator accounts are created out of band through the admin API. Every refusal MUST be indistinguishable from every other refusal, which requires the password to be verified BEFORE the allowlist is consulted and requires any session issued to a valid non-operator identity to be destroyed before the refusal returns.
+
+This supersedes the original magic-link decision. The reasoning: a magic link makes every sign-in depend on mail delivery, and the two operators sign in repeatedly during a dispatch session — a link that lands in spam, or a link opened in a different browser than the one that requested it, locks an operator out of a console they are actively using with nothing they can do about it. It also needs an SMTP provider configured and reachable in production, and a `/console/auth/callback` route whose whole purpose is to exchange a code for a session, which a Server Action can do directly. A password is what Supabase gives natively with nothing added and no external dependency in the sign-in path. The allowlist half of this requirement is unchanged and still the real authorization boundary: `senders` IS the allowlist (design decision D7), so the mechanism moved and the authority did not. Phone/SMS auth was considered and rejected for needing a provider too.
+
+This requirement binds EVERY environment the console runs against, not only a
+developer's local stack. The repository can only carry the local half: the CLI
+configuration file it ships configures locally-started containers, and the
+covering invariant reaches whichever instance its environment variables name. A
+hosted project's auth settings are set in that project, so satisfying this
+requirement there is a deployment step and its absence produces no failing
+command in this repository.
+
+#### Scenario: Self-service signup is refused by the instance the console runs against
+
+- GIVEN an instance serving this console, holding only the publishable key that is printed in the page source of every invitation
+- WHEN `POST /auth/v1/signup` is called against that instance
+- THEN the instance MUST refuse it and MUST NOT create an `auth.users` row or issue an `authenticated` token, while operator sign-in against the same instance MUST continue to succeed
 
 #### Scenario: Unallowlisted email cannot access the console
 
-- GIVEN an email address not on the two-email allowlist
-- WHEN that email attempts magic-link sign-in
-- THEN the console MUST deny access and MUST NOT create a session mapped to any sender
+- GIVEN an email address that is not on the sender allowlist
+- WHEN that email attempts sign-in, including with credentials that are genuinely valid for an `auth.users` row
+- THEN the console MUST deny access, MUST NOT leave a session mapped to any sender, and MUST answer indistinguishably from a wrong password
 
 #### Scenario: Allowlisted sender reaches their dashboard
 
-- GIVEN an allowlisted email completes magic-link sign-in
+- GIVEN an allowlisted email signs in with the correct password
 - WHEN the session is established
 - THEN it MUST resolve to exactly one `senders.auth_user_id` identity
 
@@ -92,7 +108,7 @@ Every dispatch action MUST insert a row into `dispatch_events` recording `actor_
 
 ### Requirement: Message preview via the real OG endpoint
 
-The console MUST render a mock chat-bubble preview that fetches the invitation's real, canonical OG image endpoint (no cache-busting parameter), labelled as approximate.
+The console MUST render a mock chat-bubble preview that fetches the invitation's real, canonical OG image endpoint, labelled as approximate. "Canonical" means the exact URL a WhatsApp crawler would fetch, including the build-scoped hash query Next.js itself appends to the route: a CDN keys on the full URL, so the preview must not add a cache-busting parameter of its own, and must not strip the framework's own query either.
 
 #### Scenario: Preview image matches the dispatched card
 

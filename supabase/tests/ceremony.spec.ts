@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
@@ -53,6 +56,60 @@ const CEREMONY_COLUMNS = [
   "venue_address",
 ] as const;
 
+/** A seed value that is visibly unfinished: `{{LIKE_THIS}}`. */
+const PLACEHOLDER = /^\{\{[A-Z_]+\}\}$/;
+
+const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
+
+/** Every migration's SQL, in the order Postgres applies them. */
+function readMigrationSql(): string[] {
+  return readdirSync(MIGRATIONS_DIR)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(join(MIGRATIONS_DIR, name), "utf8"));
+}
+
+/**
+ * The value each `ceremony` column is SEEDED with, read from the migrations.
+ *
+ * Two shapes, because the table grew: `0009` seeds its four columns with an
+ * INSERT, and `0011` seeds its three with a column default it then drops. Later
+ * files win, so a migration that rewrote a seed would be the value reported.
+ *
+ * Pure on purpose — a string in, a record out, no database and no filesystem —
+ * so the negative control below can hand it an invented value directly.
+ */
+function parseCeremonySeed(
+  migrations: readonly string[],
+): Record<string, string> {
+  const seed: Record<string, string> = {};
+
+  for (const sql of migrations) {
+    const inserts = sql.matchAll(
+      /insert\s+into\s+ceremony\s*\(([^)]*)\)\s*values\s*\(([^)]*)\)/gi,
+    );
+    for (const [, rawColumns, rawValues] of inserts) {
+      const columns = rawColumns.split(",").map((part) => part.trim());
+      const values = rawValues
+        .split(",")
+        .map((part) => part.trim().replace(/^'(.*)'$/, "$1"));
+
+      columns.forEach((column, index) => {
+        seed[column] = values[index] ?? "";
+      });
+    }
+
+    const defaults = sql.matchAll(
+      /add\s+column\s+(\w+)\s+\w+\s+not\s+null\s+default\s+'([^']*)'/gi,
+    );
+    for (const [, column, value] of defaults) {
+      seed[column] = value;
+    }
+  }
+
+  return seed;
+}
+
 describe("the ceremony configuration row", () => {
   it("holds exactly one row after the migrations have run", async () => {
     const count = await withRollback(async (db) => {
@@ -106,23 +163,51 @@ describe("the ceremony configuration row", () => {
     expect(error).toMatch(/ceremony_is_singleton|violates check constraint/i);
   });
 
-  it("seeds clearly-unfinished placeholders rather than invented details", async () => {
-    const row = await withRollback(async (db) => {
-      const result = await db.query<Record<string, string>>(
-        `select ${CEREMONY_COLUMNS.join(", ")} from ceremony`,
-      );
+  /**
+   * THIS ASSERTION IS ABOUT THE MIGRATIONS, NOT ABOUT THE LIVE ROW.
+   *
+   * It used to read the live singleton and require every column to look like
+   * `{{THING}}`. That was correct for exactly as long as nobody could edit the
+   * row — and then Work Unit 9 shipped `/console/wedding`, whose entire purpose
+   * is to replace those placeholders. The couple typed their names in, and the
+   * test went red for the feature working. A test that cannot survive the
+   * feature it shipped beside is asserting on the wrong thing.
+   *
+   * The requirement it protects is real: the migration must SEED visibly
+   * unfinished placeholders rather than invent a plausible date or meeting id,
+   * because an invented value ships an invitation that reads as finished and
+   * sends guests to a call that does not exist. That is a property of the seed
+   * the migrations ship, so it is asserted against the migration SQL. A future
+   * migration writing `'sábado 14 de noviembre'` fails this; the couple filling
+   * in their own facts through the console does not.
+   */
+  it("ships a migration seed of clearly-unfinished placeholders, never invented details", () => {
+    const seed = parseCeremonySeed(readMigrationSql());
 
-      return result.rows[0];
-    });
+    // Every value column must be ACCOUNTED FOR, not merely consistent. Without
+    // this the assertion below is satisfied by a parser that found nothing —
+    // which is exactly how a column added by a later migration would slip in
+    // carrying an invented default and never be looked at.
+    expect(Object.keys(seed).sort()).toEqual([...CEREMONY_COLUMNS].sort());
 
-    // Every value is visibly a placeholder. A test that asserted specific
-    // invented text would be the invention it is meant to prevent.
     for (const column of CEREMONY_COLUMNS) {
-      expect({ column, value: row[column] }).toEqual({
+      expect({ column, value: seed[column] }).toEqual({
         column,
-        value: expect.stringMatching(/^\{\{[A-Z_]+\}\}$/),
+        value: expect.stringMatching(PLACEHOLDER),
       });
     }
+  });
+
+  it("reports an invented seed value instead of accepting it", () => {
+    // The negative control, and the reason the parser is a pure function: this
+    // is the mutation the test above exists to catch, asserted directly rather
+    // than by editing a migration and hoping somebody notices.
+    const invented = parseCeremonySeed([
+      "insert into ceremony (ceremony_date) values ('sábado 14 de noviembre');",
+    ]);
+
+    expect(invented).toEqual({ ceremony_date: "sábado 14 de noviembre" });
+    expect(invented.ceremony_date).not.toMatch(PLACEHOLDER);
   });
 
   it("still accepts an UPDATE, because that is how the couple will fill it in", async () => {

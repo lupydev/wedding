@@ -352,7 +352,7 @@ test.describe("the unlock cookie", () => {
     expect(cookie?.path).toBe(`/i/${invitation.slug}`);
   });
 
-  test("outlives a month, because the wedding is further away than that", async ({
+  test("expires 180 days out, the lifetime the phone-gate spec states", async ({
     page,
     context,
   }) => {
@@ -365,7 +365,15 @@ test.describe("the unlock cookie", () => {
     );
     const daysLeft = ((cookie?.expires ?? 0) * 1000 - Date.now()) / 86_400_000;
 
-    expect(daysLeft).toBeGreaterThan(90);
+    // A BAND, not `> 90`. The old bound was written to the implementation and
+    // was satisfied by anything past three months, so a cookie that quietly
+    // became a year would have passed just as happily as one that shrank to the
+    // 30 days the spec used to state. The slack below is only what the wire
+    // costs: the browser reports `expires` in whole seconds, and the render plus
+    // the round trip happen between the server minting it and this line reading
+    // the clock. Neither can add time, so 180 is a hard ceiling.
+    expect(daysLeft).toBeGreaterThan(179.99);
+    expect(daysLeft).toBeLessThanOrEqual(180);
   });
 
   test("lets a return visit skip the gate entirely", async ({ page }) => {
