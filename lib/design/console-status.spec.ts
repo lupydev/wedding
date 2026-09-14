@@ -8,6 +8,7 @@ import {
 } from "./console-status";
 import { DISPATCH_STATE_LABELS } from "@/lib/domain/dispatch-state";
 import { RSVP_ANSWER_LABELS } from "@/lib/domain/console-list";
+import { PREFLIGHT_BLOCKER_ORDER } from "@/lib/domain/dispatch-preflight";
 
 /**
  * Which of the three signal colours each console status is allowed to wear.
@@ -90,15 +91,32 @@ describe("rsvpAnswerTone", () => {
 });
 
 describe("preflightGroupTone", () => {
-  it("calls a household with no number on file broken, because a datum is missing", () => {
-    expect(preflightGroupTone("no_phone_on_file")).toBe("broken");
+  it("calls an invitation nobody has chosen a recipient for broken", () => {
+    // A decision is missing, which is work for the operator — the same kind of
+    // work a missing number is, and it reads the same way on the row.
+    expect(preflightGroupTone("no_recipient_chosen")).toBe("broken");
   });
 
-  it("calls a number that cannot receive WhatsApp broken", () => {
-    expect(preflightGroupTone("no_reachable_phone")).toBe("broken");
+  it("calls a chosen recipient with no number on file broken", () => {
+    expect(preflightGroupTone("recipient_has_no_phone")).toBe("broken");
+  });
+
+  it("calls a chosen number that cannot receive WhatsApp broken", () => {
+    expect(preflightGroupTone("recipient_phone_unreachable")).toBe("broken");
+  });
+
+  it("calls a stale recipient choice broken", () => {
+    expect(preflightGroupTone("recipient_not_in_household")).toBe("broken");
   });
 
   it("calls an already-dispatched household done", () => {
     expect(preflightGroupTone("already_dispatched")).toBe("done");
+  });
+
+  it("gives every blocker kind a tone, so a new one cannot render untoned", () => {
+    for (const kind of PREFLIGHT_BLOCKER_ORDER) {
+      expect(preflightGroupTone(kind)).not.toBe("");
+    }
+    expect(PREFLIGHT_BLOCKER_ORDER).toHaveLength(5);
   });
 });

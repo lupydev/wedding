@@ -15,7 +15,7 @@ import { seedOperator, type SeededOperator } from "./helpers/operator";
  *
  * Everything decided here lives inside async Server Components, a route handler
  * and a `sendBeacon` — none of which Vitest can render or deliver. The pure
- * parts are unit-tested (`selectDispatchRecipient`, `buildInvitationMessage`,
+ * parts are unit-tested (`resolveDispatchRecipient`, `buildInvitationMessage`,
  * `buildDispatchPreflight`, the launcher's beacon-before-navigation ordering);
  * what this file proves is that the chain connects.
  *

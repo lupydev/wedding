@@ -7,7 +7,6 @@ import {
   buildInvitationDispatchLink,
   buildInvitationMessage,
   consoleDispatchPath,
-  selectDispatchRecipient,
   type DispatchCandidateGuest,
 } from "./dispatch-message";
 
@@ -31,6 +30,7 @@ function guest(
   overrides: Partial<DispatchCandidateGuest> = {},
 ): DispatchCandidateGuest {
   return {
+    id: "g1",
     fullName: "Ana Muñóz",
     phoneE164: "+573001234567",
     dispatchable: true,
@@ -196,62 +196,36 @@ describe("buildInvitationDispatchLink", () => {
   });
 });
 
-describe("selectDispatchRecipient", () => {
-  it("addresses the first household member whose number can receive WhatsApp", () => {
-    const outcome = selectDispatchRecipient([
-      guest({ fullName: "Ana Muñóz", phoneE164: "+573001234567" }),
-      guest({ fullName: "Beto Muñóz", phoneE164: "+573009999999" }),
-    ]);
+describe("the removed auto-pick", () => {
+  /**
+   * `selectDispatchRecipient` picked the first household member carrying a
+   * dispatchable number, with no operator action and no record of a choice.
+   * It is REMOVED, not deprecated, and its two reasons moved to
+   * `dispatch-recipient.ts` under names that say whose phone is the problem.
+   *
+   * Asserted as absence from the module's exports, because a re-export left
+   * behind would compile, pass every other test in this file, and quietly
+   * restore the inference the dispatch-recipient capability exists to delete.
+   */
+  it("no longer exports the auto-pick or its outcome types", async () => {
+    const moduleExports = await import("./dispatch-message");
 
-    expect(outcome).toEqual({
-      ok: true,
-      guest: expect.objectContaining({ fullName: "Ana Muñóz" }),
-      phoneE164: "+573001234567",
-    });
+    expect(Object.keys(moduleExports)).not.toContain("selectDispatchRecipient");
+    expect(Object.keys(moduleExports)).not.toContain(
+      "DispatchRecipientProblem",
+    );
+    expect(Object.keys(moduleExports)).not.toContain(
+      "DispatchRecipientOutcome",
+    );
+    // The module is still the one that builds the draft, so an empty export
+    // list would pass the three assertions above for the wrong reason.
+    expect(Object.keys(moduleExports)).toContain("buildInvitationMessage");
   });
 
-  it("skips a landline and addresses the mobile behind it", () => {
-    // The household's primary contact is a landline. It is a valid E.164 number
-    // and no WhatsApp will ever answer it, so dispatching to it records a send
-    // nobody receives.
-    const outcome = selectDispatchRecipient([
-      guest({
-        fullName: "Casa Muñóz",
-        phoneE164: "+576012345678",
-        dispatchable: false,
-      }),
-      guest({ fullName: "Ana Muñóz", phoneE164: "+573001234567" }),
-    ]);
+  it("carries the guest id the stored choice names", () => {
+    const candidate: DispatchCandidateGuest = guest({ id: "g1" });
 
-    expect(outcome).toMatchObject({ ok: true, phoneE164: "+573001234567" });
-  });
-
-  it("reports a household with no number on file as exactly that", () => {
-    const outcome = selectDispatchRecipient([
-      guest({ fullName: "Niña Muñóz", phoneE164: null, dispatchable: false }),
-    ]);
-
-    expect(outcome).toEqual({ ok: false, reason: "no_phone_on_file" });
-  });
-
-  it("distinguishes a household whose only numbers cannot receive WhatsApp", () => {
-    const outcome = selectDispatchRecipient([
-      guest({
-        fullName: "Casa Muñóz",
-        phoneE164: "+576012345678",
-        dispatchable: false,
-      }),
-      guest({ fullName: "Niña Muñóz", phoneE164: null, dispatchable: false }),
-    ]);
-
-    expect(outcome).toEqual({ ok: false, reason: "no_reachable_phone" });
-  });
-
-  it("reports an empty household rather than throwing on it", () => {
-    expect(selectDispatchRecipient([])).toEqual({
-      ok: false,
-      reason: "no_phone_on_file",
-    });
+    expect(candidate.id).toBe("g1");
   });
 });
 

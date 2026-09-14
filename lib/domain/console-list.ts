@@ -110,6 +110,15 @@ export interface ConsoleListRow {
   readonly seatsConfirmed: number;
   /** ISO 8601 of the current answer, or `null` when unanswered. */
   readonly answeredAt: string | null;
+  /**
+   * The member an operator chose to address this invitation to, or `null`.
+   *
+   * `null` is the starting state and stays until somebody chooses: nothing
+   * infers a recipient from `is_primary`, from ordering, or from being the only
+   * reachable number. A send with no chosen recipient is a message leaving for
+   * a person nobody looked at, so the preflight reports it as a blocker.
+   */
+  readonly dispatchRecipientGuestId: string | null;
   readonly guests: readonly ConsoleListGuest[];
 }
 
@@ -303,6 +312,8 @@ export interface ConsoleInvitationInput {
   readonly rsvpDeadline: string | null;
   readonly ownerSenderId: string;
   readonly ownerDisplayName: string;
+  /** The stored `dispatch_recipient_guest_id`, or `null` while unchosen. */
+  readonly dispatchRecipientGuestId: string | null;
   readonly guests: readonly {
     readonly id: string;
     readonly fullName: string;
@@ -371,6 +382,7 @@ export function assembleConsoleRows(input: {
       ownerSenderId: invitation.ownerSenderId,
       ownerDisplayName: invitation.ownerDisplayName,
       ownedByViewer: invitation.ownerSenderId === input.viewerSenderId,
+      dispatchRecipientGuestId: invitation.dispatchRecipientGuestId,
       dispatchState: deriveDispatchState(
         events.get(invitation.invitationId) ?? [],
       ),

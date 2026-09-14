@@ -609,6 +609,7 @@ interface ConsoleInvitationRow {
   display_name: string;
   greeting_name: string;
   rsvp_deadline: string | null;
+  dispatch_recipient_guest_id: string | null;
   senders: { display_name: string } | null;
   invitation_guests: {
     id: string;
@@ -621,7 +622,7 @@ interface ConsoleInvitationRow {
 
 const CONSOLE_INVITATION_SELECT =
   "id, slug, owner_sender_id, display_name, greeting_name, rsvp_deadline, " +
-  "senders(display_name), " +
+  "dispatch_recipient_guest_id, senders(display_name), " +
   "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, is_child, is_primary)";
 
 export interface ConsoleListOptions {
@@ -693,6 +694,10 @@ export async function listConsoleInvitations(
     // The FK is NOT NULL, so a missing name means the embed failed rather than
     // that an invitation has no owner. Saying so beats rendering "undefined".
     ownerDisplayName: row.senders?.display_name ?? "Propietario desconocido",
+    // Read, never defaulted. `null` is the real starting state and stays until
+    // an operator chooses, which is what makes the preflight's
+    // `no_recipient_chosen` group mean something on day one.
+    dispatchRecipientGuestId: row.dispatch_recipient_guest_id,
     guests: [...row.invitation_guests]
       .sort((left, right) => {
         if (left.is_primary !== right.is_primary) {

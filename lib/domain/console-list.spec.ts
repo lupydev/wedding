@@ -27,6 +27,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     answer: "pending",
     seatsConfirmed: 0,
     answeredAt: null,
+    dispatchRecipientGuestId: null,
     guests: [],
     ...overrides,
   };
@@ -235,6 +236,7 @@ describe("assembleConsoleRows", () => {
       rsvpDeadline: null,
       ownerSenderId: ANA,
       ownerDisplayName: "Ana Operadora",
+      dispatchRecipientGuestId: null,
       guests: [
         {
           id: "g1",
@@ -265,6 +267,30 @@ describe("assembleConsoleRows", () => {
 
     expect(rows.map((row) => row.ownedByViewer)).toEqual([true, false]);
     expect(rows[1].ownerDisplayName).toBe("Beto Operador");
+  });
+
+  it("carries the chosen dispatch recipient through, and leaves an unchosen one unset", () => {
+    // Asserted as a PAIR: a mapping that hard-coded `null` would satisfy the
+    // unchosen half alone, and nothing downstream could ever be addressed.
+    const [chosen] = assembleConsoleRows({
+      invitations: [invitation({ dispatchRecipientGuestId: "g1" })],
+      latestAnswers: [],
+      events: [],
+      viewerSenderId: ANA,
+      defaultCountry: "CO",
+    });
+    const [unchosen] = assembleConsoleRows({
+      invitations: [invitation({ dispatchRecipientGuestId: null })],
+      latestAnswers: [],
+      events: [],
+      viewerSenderId: ANA,
+      defaultCountry: "CO",
+    });
+
+    expect(chosen?.dispatchRecipientGuestId).toBe("g1");
+    // Nothing infers one from `is_primary`, from ordering, or from being the
+    // only reachable number — the guest IS reachable and is still not chosen.
+    expect(unchosen?.dispatchRecipientGuestId).toBeNull();
   });
 
   it("derives the member count from the household's own members", () => {

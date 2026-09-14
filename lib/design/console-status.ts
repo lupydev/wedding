@@ -79,8 +79,10 @@ export function rsvpAnswerTone(answer: RsvpAnswer): ConsoleTone {
 /** The tone for one readiness-check group. */
 export function preflightGroupTone(kind: PreflightBlockerKind): ConsoleTone {
   switch (kind) {
-    case "no_phone_on_file":
-    case "no_reachable_phone":
+    case "no_recipient_chosen":
+    case "recipient_has_no_phone":
+    case "recipient_phone_unreachable":
+    case "recipient_not_in_household":
       return "broken";
     case "already_dispatched":
       return "done";

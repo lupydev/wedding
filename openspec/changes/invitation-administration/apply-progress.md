@@ -403,3 +403,269 @@ one, so they may use only what both runtimes have.
 
 37/120 tasks complete (all of slice 1a, all of slice 2a). Ready for verify. Slice 2b is NOT
 started by design.
+
+---
+
+# Batch 3 — Slice **2b** only (tasks 2b.1–2b.15)
+
+**Mode**: Strict TDD (`openspec/config.yaml` → `strict_tdd: true`, `test_command: "npm test"`)
+**Branch**: `feat/whatsapp-wedding-invitations` (base `cdc2c3c`, tree clean at start)
+**Prior progress read**: yes — this file's slice-1a and slice-2a sections above, kept
+byte-untouched and merged into.
+**Not started, deliberately**: slice 3a.
+**Over budget, stated up front**: **1,687 authored changed lines** against `review_budget_lines:
+800`. See *Why this slice could not land in 800 lines* below. No compression was attempted.
+
+## Completed Tasks
+
+| Task | Status | Evidence |
+|---|---|---|
+| 2b.1 RED — `dispatch-recipient.spec.ts`, five outcomes | ✅ | `Error: Cannot find module './dispatch-recipient'`, `Tests no tests` |
+| 2b.2 GREEN — `dispatch-recipient.ts` per §4 | ✅ | `Test Files 1 passed (1)`, `Tests 8 passed (8)` |
+| 2b.3 RED — the three exports asserted ABSENT | ✅ | `AssertionError: expected [ 'INVITATION_MESSAGE_TEMPLATE', …(6) ] to not include 'selectDispatchRecipient'` |
+| 2b.4 GREEN — auto-pick deleted, `DispatchCandidateGuest.id` added | ✅ | `Tests 18 passed (18)` |
+| 2b.5 RED — preflight re-derived against five renamed kinds | ✅ | `Tests 14 failed \| 3 passed (17)`, `TypeError: selectDispatchRecipient is not a function` |
+| 2b.6 GREEN — order, pass-through `classify()`, rewritten `GROUP_COPY` | ✅ | `Tests 17 passed (17)` |
+| 2b.7 RED — `validateInvitationDraft`, refusals paired with permissions | ✅ | `Error: Cannot find module './invitation-draft'`, `Tests no tests` |
+| 2b.8 GREEN — draft types + validator per §4 | ✅ | `Tests 24 passed (24)` (with 2b.10, 2b.12) |
+| 2b.9 RED — `canMoveMember`, refusal/permission asserted together (D25) | ✅ | same RED run as 2b.7 |
+| 2b.10 GREEN — `MoveRefusal`, `MoveOutcome`, `canMoveMember` | ✅ | `Tests 24 passed (24)` |
+| 2b.11 RED — `classifyMembershipChangeImpact` | ✅ | same RED run as 2b.7 |
+| 2b.12 GREEN — `ContradictedAnswer`, `MembershipChangeImpact` (D19) | ✅ | `Tests 24 passed (24)` |
+| 2b.13 RED — `invitation-deletion.spec.ts`, permitting/refusing pair | ✅ | `Error: Cannot find module './invitation-deletion'`, `Tests no tests` |
+| 2b.14 GREEN — `canDeleteInvitation` per §4 | ✅ | `Tests 5 passed (5)` |
+| 2b.15 Verify + zero `selectDispatchRecipient` references | ✅ | see *Work Unit Evidence*; `rg` finds only historical prose and the absence assertion |
+
+## The order question the brief asked me to resolve, resolved
+
+The phase brief's prose and `design.md` §7's `PREFLIGHT_BLOCKER_ORDER` array agree on all five
+canonical spellings and on `no_recipient_chosen` sorting first. They do NOT disagree on order:
+the brief's own five-line block places `recipient_not_in_household` FOURTH, exactly as §7's
+array does. `tasks.md`'s preamble had already flagged an *earlier* draft of the prose that
+listed it second. **The §7 array is what was implemented**, per the phase brief's instruction
+that design.md wins any such disagreement:
+
+```
+no_recipient_chosen → recipient_has_no_phone → recipient_phone_unreachable
+→ recipient_not_in_household → already_dispatched
+```
+
+`recipient_no_phone` and `recipient_unreachable` do not appear anywhere in the tree.
+
+## Advisory `R3-ordering-scenario-omits-fifth-kind` is closed
+
+Task 2b.5's fifth kind is unrepresentable in the database: the composite foreign key
+`(invitation_id, dispatch_recipient_guest_id)` makes a cross-household recipient impossible to
+persist (D23). A scenario drawn from real data therefore proves only FOUR kinds sort.
+
+Two tests close it, both synthesized straight through `resolveDispatchRecipient`'s plain-array
+signature, which cannot see that constraint:
+
+- `reports a stale choice naming somebody who is no longer a member` — one row, one kind
+- `sorts all five kinds into the documented order when every one of them is populated` — five
+  rows, one per kind, asserted as a single ordered `[kind, count]` sequence with **every group
+  non-empty**
+
+That second test is the advisory's actual subject: it is the only assertion in the tree where
+the fourth group's ORDINAL POSITION can fail, because it is the only one where all five groups
+are simultaneously populated.
+
+## The rename changed MEANING, and the stale Spanish string is gone
+
+`no_phone_on_file` meant *nobody in the household has a number*. `recipient_has_no_phone` means
+*the chosen person has none*. A household where the partner holds the only mobile is now
+BLOCKED where it previously read as ready — that is the whole reason for the `recipient_`
+prefix.
+
+The old copy `"Nadie de estas invitaciones tiene un número guardado"` is false under the new
+meaning and **does not survive**. Its absence is asserted, not reviewed:
+
+```
+it("no longer claims nobody in the household has a number", …)
+  expect(copy).not.toContain("Nadie de estas invitaciones tiene un número guardado")
+  expect(…recipient_has_no_phone.explanation).toContain("persona elegida")
+```
+
+Both renamed entries were rewritten and two new Spanish entries added, in the register of the
+surrounding copy. `GROUP_COPY` is the one deliberately Spanish artifact in this slice; it is
+operator-facing console text. Every identifier, comment and test name is English.
+
+## Every refusal is asserted beside its permitting case
+
+Tasks 2b.7, 2b.9 and 2b.13 name the discipline; it is applied throughout, in the same `it`:
+
+| Refusal | Permitting case in the same test |
+|---|---|
+| `no_members` | the one-member draft saves |
+| `member_without_name` | a named member saves |
+| `duplicate_member_id` | two distinct ids save; two `null` ids are two people, not one |
+| `recipient_not_a_member` | a recipient who IS a member saves |
+| `custom_name_empty` | a typed custom name saves; a derived name is exempt |
+| `would_empty_source` | a three-member source moves; **a two-member source also moves** (the boundary) |
+| `same_invitation` | a different destination moves |
+| `member_not_in_source` | a member the source has moves |
+| `already_dispatched` (deletion) | `canDeleteInvitation([])` → `ok` |
+
+`clearsSourceRecipient` is asserted `true` for the chosen guest and `false` for their
+non-chosen sibling in one test. Advisories are never refusals: a duplicate nickname, a
+recipient with no phone, and a recipient with a landline each assert `refusals: []` alongside
+the advisory.
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 2b.1/2b.2 | `lib/domain/dispatch-recipient.spec.ts` | Unit (`environment: 'node'`, zero mocks) | N/A (new file); suite baseline measured at 1736/1736 | ✅ `Error: Cannot find module './dispatch-recipient' imported from …/lib/domain/dispatch-recipient.spec.ts`, `Test Files 1 failed (1)`, `Tests no tests` | ✅ `Test Files 1 passed (1)`, `Tests 8 passed (8)` | ✅ 8 cases: all five outcomes, the chosen-not-first case that proves no ordering rule survived, `""` treated as no number, and an empty household under both a chosen and an unchosen id | ➖ written once; a linear four-guard function was the first shape |
+| 2b.3/2b.4 | `lib/domain/dispatch-message.spec.ts` | Unit | ✅ 17/17 before the edit | ✅ `AssertionError: expected [ 'INVITATION_MESSAGE_TEMPLATE', …(6) ] to not include 'selectDispatchRecipient'` | ✅ `Tests 18 passed (18)` | ✅ absence of all three exports PLUS presence of `buildInvitationMessage`, so an empty export list cannot pass it; `DispatchCandidateGuest.id` asserted separately | ➖ deletion only |
+| 2b.5/2b.6 | `lib/domain/dispatch-preflight.spec.ts` | Unit | ✅ 16/16 before the edit | ✅ `Tests 14 failed \| 3 passed (17)`; `TypeError: selectDispatchRecipient is not a function` at `dispatch-preflight.ts:165` | ✅ `Tests 17 passed (17)` | ✅ 17 cases: one per kind, the order asserted twice (literal array + `PREFLIGHT_BLOCKER_ORDER`), the all-five-populated ordering test, the stale-copy absence test, and the existing no-digits guard re-run | ✅ `classify()` collapsed to a pass-through; `blockedNames()` extracted; green after each step |
+| 2b.7/2b.8 | `lib/domain/invitation-draft.spec.ts` | Unit | N/A (new file) | ✅ `Error: Cannot find module './invitation-draft'`, `Tests no tests` | ✅ `Tests 24 passed (24)` | ✅ 12 cases for the validator: five refusals each paired with a permission, three advisories each paired with a non-advisory case, the two-unsaved-rows case, the derived-name exemption, and one asserting ALL refusals are reported rather than the first | ➖ `usableNickname`/`hasDuplicateId` extracted while writing, kept green |
+| 2b.9/2b.10 | same file | Unit | N/A (new file) | ✅ same RED run | ✅ `Tests 24 passed (24)` | ✅ 6 cases: three refusals with permissions, the two-member boundary, the `clearsSourceRecipient` true/false pair, and D25's ordering (emptiness refuses before the recipient is consulted) | ➖ three guards, first shape |
+| 2b.11/2b.12 | same file | Unit | N/A (new file) | ✅ same RED run | ✅ `Tests 24 passed (24)` | ✅ 6 cases: contradicted, not-contradicted, no-removal, no answer, a declined answer, and a shrink below `seatsConfirmed` with no dangling id | ➖ |
+| 2b.13/2b.14 | `lib/domain/invitation-deletion.spec.ts` | Unit | N/A (new file) | ✅ `Error: Cannot find module './invitation-deletion'`, `Tests no tests` | ✅ `Tests 5 passed (5)` | ✅ 5 cases: the permitting/refusing pair, `link_opened` alone, `marked_failed` alone, distinct-kind de-duplication in order seen, and an unknown future kind | ➖ |
+| consequential — tone | `lib/design/console-status.spec.ts` | Unit | ✅ 12/12 relevant before the edit | ✅ `Tests 4 failed \| 12 passed (16)` | ✅ `Tests 16 passed (16)` | ✅ one case per kind plus a loop over `PREFLIGHT_BLOCKER_ORDER` asserting length 5, so a sixth kind cannot render untoned | ➖ |
+| consequential — row | `lib/domain/console-list.spec.ts` | Unit | ✅ 21/21 before the edit | ✅ RED proved by `git stash`-ing the implementation: `Tests 1 failed \| 21 passed (22)` | ✅ `Tests 22 passed (22)` | ✅ chosen/unchosen asserted as a PAIR, so a mapping hard-coding `null` cannot pass | ➖ |
+| consequential — render | `components/console/DispatchPreflight.spec.tsx` | Component (Testing Library) | ✅ 6/6 before the edit | ✅ `Tests 6 failed`, `expected 'Revisión previa…' to contain 'Casa Muñóz'` | ✅ `Tests 8 passed (8)` | ✅ RE-DERIVED, not patched: the old "names the people whose number is missing" test split into one naming everybody there is to choose from and one naming **only** the chosen person while asserting the reachable partner is `null` in that section | ➖ |
+
+### Test Summary
+
+- **Total tests written**: 65 authored `it(` blocks across new and rewritten specs (8 new +
+  24 new + 5 new + 18 rewritten preflight/dispatch-message + 10 rewritten tone/row/render), for
+  a net authored delta of **+42** after the five deliberate deletions below
+- **Total tests passing**: **1787** (`Test Files 97 passed (97)`), up from a baseline of
+  **1736** (`94 passed (94)`) measured on the clean tree before any edit
+- **The +51 is accounted for exactly, measured rather than inferred.** Net-new in the three new
+  files: 8 + 24 + 5 = **37**. Net change in modified spec files, counted as `it(` blocks against
+  `git show HEAD:<file>`: `dispatch-message.spec.ts` 21→18 (**−3**: five auto-pick tests
+  deleted, two added), `dispatch-preflight.spec.ts` 14→17 (**+3**), `console-status.spec.ts`
+  13→16 (**+3**), `console-list.spec.ts` 21→22 (**+1**), `DispatchPreflight.spec.tsx` 7→8
+  (**+1**) = **+5**. Authored total **42**. The remaining **+9** is auto-enumerated: the three
+  filesystem-scanning specs generate one case per repository file, and measured directly by
+  stashing the whole slice, `npm test -- tools/no-seats-allowed tools/no-source-placeholders
+  tools/console-one-breakpoint` reports `371 passed` on the clean tree and `380 passed` after —
+  exactly +9 for the six new files. 42 + 9 = **51**
+- **Layers used**: Unit (59), Component (2 rewritten). No DB or E2E layer authored
+- **Approval tests**: none — nothing here was a behaviour-preserving refactor. The preflight
+  rename is a deliberate BEHAVIOUR change (see above), so its existing tests were re-derived
+  against the new meaning rather than preserved
+- **Pure functions created**: 6 exported (`resolveDispatchRecipient`, `validateInvitationDraft`,
+  `canMoveMember`, `classifyMembershipChangeImpact`, `canDeleteInvitation`, plus the rewritten
+  `blockedNames` helper), 3 module-private (`usableNickname`, `hasDuplicateNickname`,
+  `hasDuplicateId`)
+- **Mocks used**: zero in `lib/domain/**`; the two component tests mock nothing either
+
+## Five tests were DELETED rather than patched
+
+`lib/domain/dispatch-message.spec.ts`'s entire `describe("selectDispatchRecipient")` block — 5
+tests, 68 lines — was removed, not adapted. Every one of them asserted the auto-pick: "addresses
+the first household member whose number can receive WhatsApp", "skips a landline and addresses
+the mobile behind it". Those are assertions that the inference this capability REMOVES works
+correctly. Keeping them under new names would have been keeping the behaviour under new names.
+They are replaced by one test asserting the exports are gone.
+
+## The task list did not name four files the slice cannot land without
+
+This is reported rather than worked around, in the same spirit as `tasks.md`'s own 40th-file
+correction. Tasks 2b.1–2b.15 name only `lib/domain/**`, but 2b.6 requires `classify()` to call
+`resolveDispatchRecipient`, and that function needs **the chosen guest id**, which
+`ConsoleListRow` did not carry. 2b.15 additionally requires *zero remaining references to
+`selectDispatchRecipient` anywhere in source*, and one live call site sat outside `lib/domain/`.
+Neither is satisfiable within the stated file list. The forced set:
+
+| File | Why the slice cannot land without it | Size |
+|---|---|---|
+| `lib/domain/console-list.ts` | `ConsoleListRow` + `ConsoleInvitationInput` gain `dispatchRecipientGuestId`; `assembleConsoleRows` carries it. Without it `classify()` has no id to resolve | +12 |
+| `lib/server/invitations.ts` | `CONSOLE_INVITATION_SELECT` reads `dispatch_recipient_guest_id` (added by `0012` in slice 1a) and maps it. Without it every real row resolves to `no_recipient_chosen` forever | +7/−1 |
+| `app/console/(authenticated)/dispatch/[invitationId]/page.tsx` | The **only** live `selectDispatchRecipient` call site. 2b.15's zero-reference check fails without it, and so does `npm run typecheck` | +40/−11 |
+| `lib/design/console-status.ts` + `.spec.ts` | `preflightGroupTone`'s `switch` is exhaustive over `PreflightBlockerKind`; five kinds means it no longer compiles. `tsc` proved this, it was not assumed | +32/−6 |
+
+Plus three one-to-fifty-six-line fixture/copy updates that are pure consequence of the row field
+and the renamed headings: `components/console/DispatchPreflight.spec.tsx` (re-derived),
+`components/console/GuestList.spec.tsx` (+1), `components/console/ProgressSummary.spec.tsx`
+(+1), and one stale doc comment in `e2e/console-dispatch.spec.ts` naming the deleted function.
+
+`lib/server/invitations.ts`'s `chooseRecipient` WRITE is **not** here — that is task 3a.12 and
+was not touched. This slice reads the column; it does not write it.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `npm test -- lib/domain/dispatch-recipient lib/domain/dispatch-message lib/domain/dispatch-preflight lib/domain/invitation-draft lib/domain/invitation-deletion` (task 2b.15's own command) → all passing |
+| Full suite | `npm test` → **exit 0**, `Test Files 97 passed (97)`, `Tests 1787 passed (1787)` — baseline 1736 beaten by +51, zero failures, zero skips |
+| Runtime harness command/scenario and exact result | **N/A for the three new modules** — pure functions under `environment: 'node'`, no I/O, no React, no vendor SDK, zero mocking. The consequential wiring's runtime boundary (`lib/server/invitations.ts`'s new `select` column) is covered by `npm run build` compiling and by the existing `lib/server/invitations.spec.ts` fake/real split, which stayed green |
+| E2E | **Not run.** Files outside `lib/domain/**` WERE touched, so this is stated explicitly rather than assumed: the one E2E edit is a doc-comment word (`selectDispatchRecipient` → `resolveDispatchRecipient`) and changes no assertion. `e2e/console-dispatch.spec.ts`'s readiness-count assertions are task **4b.15**, which is where the design puts them ("Every E2E readiness-count assertion moves… do not adjust numbers until green"). Running E2E now would fail on counts this slice is not authorized to re-derive |
+| `npm run typecheck` | exit 0, no output. It found 5 of the 7 consequential files before they were fixed |
+| `npm run lint` | exit 0, zero findings. The `lib/domain/**` import zone accepted all three new modules unchanged; the rule was not weakened |
+| `npm run format:check` | exit 0, "All matched files use Prettier code style!" (after `prettier --write` on 5 files) |
+| `npm run build` | exit 0, same 13 routes as slice 2a |
+| Cold-start flake | `tools/eslint-zones.spec.ts` passed on the first run of every full-suite invocation; no re-run was needed |
+| Rollback boundary | Delete the six new `lib/domain/` files; restore `dispatch-message.ts` and `dispatch-preflight.ts` to their prior exports; revert the `dispatchRecipientGuestId` field in `console-list.ts`/`invitations.ts` and the dispatch page's resolver call. No migration, no schema, no data. `git status` shows 6 untracked additions and 14 modifications, all listed above |
+
+## Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `lib/domain/dispatch-recipient.spec.ts` | Created | 8 cases covering all five outcomes; the chosen-not-first case; `""` as no number; empty household under chosen and unchosen ids |
+| `lib/domain/dispatch-recipient.ts` | Created | `IdentifiedDispatchGuest`, `DispatchRecipientProblem`, `DispatchRecipientOutcome`, `resolveDispatchRecipient` per §4 — plain arrays, no fallback at any step |
+| `lib/domain/invitation-draft.spec.ts` | Created | 24 cases: validator, `canMoveMember`, `classifyMembershipChangeImpact`, every refusal paired with a permission |
+| `lib/domain/invitation-draft.ts` | Created | All eleven §4 exports; `canMoveMember` refuses emptiness before consulting the recipient (D25); `classifyMembershipChangeImpact` reports and never refuses (D19) |
+| `lib/domain/invitation-deletion.spec.ts` | Created | 5 cases; permitting/refusing pair, `link_opened` and `marked_failed` each alone, an unknown kind |
+| `lib/domain/invitation-deletion.ts` | Created | `DeletionRefusal`, `DeletionOutcome`, `canDeleteInvitation` — refuses on row EXISTENCE, never on a kind allowlist |
+| `lib/domain/dispatch-message.ts` | Modified | `selectDispatchRecipient`, `DispatchRecipientProblem`, `DispatchRecipientOutcome` deleted (−57); `DispatchCandidateGuest.id` added |
+| `lib/domain/dispatch-message.spec.ts` | Modified | 5 auto-pick tests deleted; absence-of-exports test added; `guest()` fixture carries `id` |
+| `lib/domain/dispatch-preflight.ts` | Modified | Five-kind `PREFLIGHT_BLOCKER_ORDER` per §7; `PreflightBlockerKind = DispatchRecipientProblem \| "already_dispatched"`; `classify()` a pass-through; `blockedNames()` extracted; `GROUP_COPY` fully rewritten |
+| `lib/domain/dispatch-preflight.spec.ts` | Modified | Re-derived against the five kinds; two tests added for the fifth kind and one for the stale copy |
+| `lib/domain/console-list.ts` | Modified | `dispatchRecipientGuestId` on `ConsoleListRow` + `ConsoleInvitationInput`, carried by `assembleConsoleRows` |
+| `lib/domain/console-list.spec.ts` | Modified | Fixture field; chosen/unchosen pass-through asserted as a pair |
+| `lib/server/invitations.ts` | Modified | `dispatch_recipient_guest_id` selected and mapped. Read only — no write |
+| `app/console/(authenticated)/dispatch/[invitationId]/page.tsx` | Modified | `resolveDispatchRecipient` with the stored choice; the two-branch ternary replaced by a four-entry `RECIPIENT_PROBLEM_COPY` record |
+| `lib/design/console-status.ts` + `.spec.ts` | Modified | `preflightGroupTone` exhaustive over five kinds; spec re-derived with a `PREFLIGHT_BLOCKER_ORDER` loop |
+| `components/console/DispatchPreflight.spec.tsx` | Modified | Re-derived headings and fixtures; the chosen-person naming rule asserted against a reachable partner |
+| `components/console/GuestList.spec.tsx`, `ProgressSummary.spec.tsx` | Modified | Row fixture field (+1 each) |
+| `e2e/console-dispatch.spec.ts` | Modified | One stale doc-comment word |
+| `openspec/changes/invitation-administration/tasks.md` | Modified | 2b.1–2b.15 marked `[x]` |
+| `openspec/changes/invitation-administration/apply-progress.md` | Modified | This section appended; the slice-1a and slice-2a sections above are byte-untouched |
+
+## Workload / PR Boundary
+
+- Mode: **chained slice 2b of eight**, one commit per slice, no pull requests
+- Current work unit: 2b — `dispatch-recipient`, `invitation-draft`, `invitation-deletion`,
+  the preflight rename, and the `selectDispatchRecipient` removal
+- Boundary: starts at `cdc2c3c` with a clean tree; ends with the auto-pick gone from the whole
+  tree, five blocker kinds classified and ordered, the whole suite green, and slice 3a not
+  started
+- **Authored changed lines: 1,687** — 1,018 in six new files, plus 445 insertions and 224
+  deletions across 14 modified files (all excluding `openspec/**`). Against
+  `review_budget_lines: 800` this is **2.1× over. `size:exception` is required for this slice**
+- **Not committed and not pushed**, as instructed
+
+### Why this slice could not land in 800 lines
+
+Stated as a fact about the work, not as an excuse, and **no compression was attempted** — the
+apply contract forbids deleting comments, tests or docs to reach a number.
+
+1. **The six new files alone are 1,018 lines**, before a single edit to anything existing.
+   `design.md` §6 estimated slice 2b at ≈730 lines TOTAL. That estimate was low: §4 specifies
+   **eighteen exported symbols** across three modules, and this repository's established
+   density — the module-level rationale comment that every one of `dispatch-message.ts`,
+   `dispatch-preflight.ts`, `guest-name.ts` and `greeting-name.ts` carries — costs roughly 40%
+   of each file. `invitation-draft.ts` implements **three** independent §4 surfaces (validator,
+   move check, impact classifier) and is 288 lines; its spec is 376.
+2. **The refusal-pairing discipline doubles the test count by design.** Nine refusals each
+   ship with a permitting case *in the same test*, which is what makes them meaningful. That
+   is a deliberate cost the spec imposes, not incidental verbosity.
+3. **The preflight rename is 355 lines of churn on its own** (140 + 215), because it went from
+   three kinds to five AND changed the meaning of two, so its spec had to be re-derived rather
+   than renamed.
+4. **~100 lines are the consequential wiring the task list omitted** (see above), which cannot
+   be deferred without leaving `npm run typecheck` red.
+
+A split is possible but was not taken, because no sub-slice is independently green. Splitting
+at `invitation-draft.ts` (664 lines, the obvious seam) would leave the auto-pick removal and
+the preflight rename in one ≈1,020-line half — still over budget — and the draft/deletion
+modules in a half with no call sites. The single natural boundary *is* the whole slice.
+
+## Status
+
+52/120 tasks complete (all of slice 1a, all of slice 2a, all of slice 2b). Ready for verify.
+Slice 3a is NOT started by design.

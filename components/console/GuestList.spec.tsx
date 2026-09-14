@@ -37,6 +37,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     answer: "pending",
     seatsConfirmed: 0,
     answeredAt: null,
+    dispatchRecipientGuestId: null,
     guests: [
       {
         id: "g1",

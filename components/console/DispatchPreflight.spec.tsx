@@ -51,6 +51,9 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     answer: "pending",
     seatsConfirmed: 0,
     answeredAt: null,
+    // Chosen on purpose: an unchosen recipient is itself a blocker now, so a
+    // fixture without one would put every row in the wrong group.
+    dispatchRecipientGuestId: "g1",
     guests: [guest()],
     ...overrides,
   };
@@ -73,37 +76,58 @@ describe("DispatchPreflight", () => {
     ).toBeInTheDocument();
   });
 
-  it("names the household and the people whose number is missing", () => {
+  it("names everybody there is to choose from when nobody has been chosen", () => {
+    render(
+      <DispatchPreflight
+        preflight={preflight([
+          row({
+            greetingName: "Familia Sin Elegir",
+            dispatchRecipientGuestId: null,
+            guests: [
+              guest({ fullName: "Ana Muñóz" }),
+              guest({ id: "g2", fullName: "Niña Muñóz" }),
+            ],
+          }),
+        ])}
+      />,
+    );
+    const section = groupSection("Sin destinatario elegido");
+
+    expect(within(section).getByText(/Familia Sin Elegir/)).toBeInTheDocument();
+    expect(within(section).getByText(/Ana Muñóz/)).toBeInTheDocument();
+    expect(within(section).getByText(/Niña Muñóz/)).toBeInTheDocument();
+  });
+
+  it("names only the chosen person when it is their number that is missing", () => {
     render(
       <DispatchPreflight
         preflight={preflight([
           row({
             greetingName: "Familia Sin Número",
+            dispatchRecipientGuestId: "g1",
             guests: [
               guest({
                 fullName: "Ana Muñóz",
                 phoneE164: null,
                 dispatchable: false,
               }),
-              guest({
-                id: "g2",
-                fullName: "Niña Muñóz",
-                phoneE164: null,
-                dispatchable: false,
-              }),
+              // The partner HAS a reachable number. Under the old
+              // household-wide meaning this row was ready; the message goes to
+              // whoever was chosen, so it is blocked and Beto is not the fix.
+              guest({ id: "g2", fullName: "Beto Muñóz" }),
             ],
           }),
         ])}
       />,
     );
-    const section = groupSection("Sin número en la agenda");
+    const section = groupSection("Con destinatario sin número");
 
     expect(within(section).getByText(/Familia Sin Número/)).toBeInTheDocument();
     expect(within(section).getByText(/Ana Muñóz/)).toBeInTheDocument();
-    expect(within(section).getByText(/Niña Muñóz/)).toBeInTheDocument();
+    expect(within(section).queryByText(/Beto Muñóz/)).toBeNull();
   });
 
-  it("names the household whose number cannot receive WhatsApp, and why that matters", () => {
+  it("names the household whose chosen number cannot receive WhatsApp, and why that matters", () => {
     render(
       <DispatchPreflight
         preflight={preflight([
@@ -121,7 +145,7 @@ describe("DispatchPreflight", () => {
         ])}
       />,
     );
-    const section = groupSection("Con número que no recibe WhatsApp");
+    const section = groupSection("Con destinatario que no recibe WhatsApp");
 
     expect(within(section).getByText(/Familia Fija/)).toBeInTheDocument();
     expect(within(section).getByText(/línea fija/)).toBeInTheDocument();
@@ -148,17 +172,19 @@ describe("DispatchPreflight", () => {
     // A check that silently omits its clean sections cannot be read as "nothing
     // is wrong here" — it reads as "this check did not run".
     render(<DispatchPreflight preflight={preflight([row()])} />);
-    const section = groupSection("Sin número en la agenda");
+    const section = groupSection("Con destinatario sin número");
 
     expect(within(section).getByText("Ninguna")).toBeInTheDocument();
   });
 
-  it("shows all three checks on every render, whatever the data says", () => {
+  it("shows all five checks on every render, whatever the data says", () => {
     render(<DispatchPreflight preflight={preflight([])} />);
 
     for (const heading of [
-      "Sin número en la agenda",
-      "Con número que no recibe WhatsApp",
+      "Sin destinatario elegido",
+      "Con destinatario sin número",
+      "Con destinatario que no recibe WhatsApp",
+      "Con destinatario que ya no pertenece",
       "Ya enviadas",
     ]) {
       expect(

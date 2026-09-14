@@ -16,12 +16,20 @@ import {
  * tells you which of eighty are going to fail, while there is still time to fix
  * them, and it costs nothing to run.
  *
- * The three questions it answers are three different pieces of work for a
- * person, so they are three groups and never one count:
+ * FIVE QUESTIONS NOW, NOT THREE, AND TWO OF THEM CHANGED MEANING
  *
- *  - nobody in this household has a number on file  → type one in
- *  - the numbers on file cannot receive WhatsApp    → find a different number
- *  - this household was already sent an invitation  → do not send it again
+ * Each group is a different piece of work for a person:
+ *
+ *  - nobody has chosen who this invitation is addressed to → choose somebody
+ *  - the CHOSEN person has no number on file               → type theirs in
+ *  - the CHOSEN person's number cannot receive WhatsApp    → find them a mobile
+ *  - the CHOSEN person is no longer a member               → choose again
+ *  - this household was already sent an invitation         → do not send again
+ *
+ * The two phone groups used to be about the HOUSEHOLD: "nobody here has a
+ * number", "none of these numbers can carry WhatsApp". They are now about the
+ * chosen person, so a household where the partner holds the only mobile is
+ * blocked where it previously was ready. That is the change, not a rename.
  *
  * NAMES, NEVER DIGITS. The console is the authorized reader of guest phone
  * numbers, but a readiness summary is a thing an operator screenshots and
@@ -58,6 +66,10 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     answer: "pending",
     seatsConfirmed: 0,
     answeredAt: null,
+    // Chosen on purpose in the default fixture: an unchosen recipient is now a
+    // blocker, so a fixture without one would make every "ready" case in this
+    // file green for the wrong reason.
+    dispatchRecipientGuestId: "g1",
     guests: [guest()],
     ...overrides,
   };
@@ -106,7 +118,7 @@ function renderedCopy(result: DispatchPreflight): string {
 }
 
 describe("buildDispatchPreflight", () => {
-  it("reports a household with a reachable number as ready, and names it", () => {
+  it("reports a household with a chosen, reachable recipient as ready, and names it", () => {
     const result = preflight([row()]);
 
     expect(result.ready.map((household) => household.householdName)).toEqual([
@@ -128,10 +140,36 @@ describe("buildDispatchPreflight", () => {
     expect(result.readyText).toBe(`Listas para enviar: 1 de 2 ${POPULATION}`);
   });
 
-  it("names the people a household has no number for, so the operator can go fix them", () => {
+  it("lists an invitation nobody has chosen a recipient for, and names who there is to choose from", () => {
     const result = preflight([
       row({
-        greetingName: "Familia Sin Número",
+        greetingName: "Familia Sin Elegir",
+        dispatchRecipientGuestId: null,
+        guests: [
+          guest({ id: "g1", fullName: "Ana Muñóz" }),
+          guest({ id: "g2", fullName: "Beto Muñóz" }),
+        ],
+      }),
+    ]);
+
+    expect(group(result, "no_recipient_chosen").households).toEqual([
+      {
+        invitationId: "11111111-1111-4111-8111-111111111111",
+        householdName: "Familia Sin Elegir",
+        guestNames: ["Ana Muñóz", "Beto Muñóz"],
+      },
+    ]);
+    expect(result.ready).toHaveLength(0);
+  });
+
+  it("blocks a chosen recipient with no number even when a partner holds a reachable one", () => {
+    // THE MEANING THAT CHANGED. Under the old `no_phone_on_file` this household
+    // was ready, because the auto-pick would have found Beto. The message is
+    // addressed to Ana now, because somebody chose her, and Ana has no number.
+    const result = preflight([
+      row({
+        greetingName: "Familia Mixta",
+        dispatchRecipientGuestId: "g1",
         guests: [
           guest({
             id: "g1",
@@ -140,30 +178,23 @@ describe("buildDispatchPreflight", () => {
             lineType: "not_normalizable",
             dispatchable: false,
           }),
-          guest({
-            id: "g2",
-            fullName: "Niña Muñóz",
-            isChild: true,
-            phoneE164: null,
-            lineType: "not_normalizable",
-            dispatchable: false,
-          }),
+          guest({ id: "g2", fullName: "Beto Muñóz" }),
         ],
       }),
     ]);
-    const missing = group(result, "no_phone_on_file");
 
-    expect(missing.households).toEqual([
-      {
-        invitationId: "11111111-1111-4111-8111-111111111111",
-        householdName: "Familia Sin Número",
-        guestNames: ["Ana Muñóz", "Niña Muñóz"],
-      },
+    expect(group(result, "recipient_has_no_phone").households).toEqual([
+      expect.objectContaining({
+        householdName: "Familia Mixta",
+        // Only the chosen person. Naming the household would send the operator
+        // looking at Beto, whose number is fine and is not what is wrong.
+        guestNames: ["Ana Muñóz"],
+      }),
     ]);
     expect(result.ready).toHaveLength(0);
   });
 
-  it("separates a number that exists but cannot receive WhatsApp from one that is missing", () => {
+  it("separates a chosen number that exists but cannot receive WhatsApp from one that is missing", () => {
     // A Colombian landline is valid and unreachable. Dispatching to it records a
     // send nobody receives, which is the exact failure this group prevents.
     const result = preflight([
@@ -180,36 +211,36 @@ describe("buildDispatchPreflight", () => {
       }),
     ]);
 
-    expect(group(result, "no_reachable_phone").households).toEqual([
+    expect(group(result, "recipient_phone_unreachable").households).toEqual([
       expect.objectContaining({
         householdName: "Familia Fija",
         guestNames: ["Casa Muñóz"],
       }),
     ]);
-    expect(group(result, "no_phone_on_file").households).toHaveLength(0);
+    expect(group(result, "recipient_has_no_phone").households).toHaveLength(0);
   });
 
-  it("names only the unreachable members, not the whole household", () => {
+  it("reports a stale choice naming somebody who is no longer a member", () => {
+    // Unwritable through the composite foreign key (design D23), and resolved
+    // anyway: `resolveDispatchRecipient` takes plain arrays and cannot see that
+    // constraint. Synthesized here through exactly that signature so all FIVE
+    // kinds are proved to sort, not the four the database can produce.
     const result = preflight([
       row({
-        greetingName: "Familia Mixta",
-        guests: [
-          guest({
-            id: "g1",
-            fullName: "Casa Muñóz",
-            phoneE164: "+576012345678",
-            lineType: "fixed_line",
-            dispatchable: false,
-          }),
-          guest({ id: "g2", fullName: "Ana Muñóz" }),
-        ],
+        greetingName: "Familia Mudada",
+        dispatchRecipientGuestId: "moved-away",
+        guests: [guest({ id: "g1", fullName: "Ana Muñóz" })],
       }),
     ]);
 
-    // One member IS reachable, so the household is ready and appears in no
-    // blocker group at all.
-    expect(result.ready).toHaveLength(1);
-    expect(group(result, "no_reachable_phone").households).toHaveLength(0);
+    expect(group(result, "recipient_not_in_household").households).toEqual([
+      expect.objectContaining({
+        householdName: "Familia Mudada",
+        // Nobody to name: the chosen person is not in this household to point at.
+        guestNames: [],
+      }),
+    ]);
+    expect(result.ready).toHaveLength(0);
   });
 
   it("lists an invitation the operator already asserted as sent, so a second pass does not re-send", () => {
@@ -244,21 +275,25 @@ describe("buildDispatchPreflight", () => {
     expect(result.ready).toHaveLength(1);
   });
 
-  it("reports an already-dispatched household once, even when its numbers are also unusable", () => {
+  it("reports an already-dispatched household once, even when nobody chose a recipient", () => {
     const result = preflight([
-      row({
-        dispatchState: "marked_sent",
-        guests: [guest({ phoneE164: null, dispatchable: false })],
-      }),
+      row({ dispatchState: "marked_sent", dispatchRecipientGuestId: null }),
     ]);
 
     expect(group(result, "already_dispatched").households).toHaveLength(1);
-    expect(group(result, "no_phone_on_file").households).toHaveLength(0);
+    expect(group(result, "no_recipient_chosen").households).toHaveLength(0);
   });
 
-  it("always reports all three groups, so an empty one is visible rather than absent", () => {
+  it("always reports all five groups, in order, so an empty one is visible rather than absent", () => {
     const result = preflight([row()]);
 
+    expect(result.groups.map((entry) => entry.kind)).toEqual([
+      "no_recipient_chosen",
+      "recipient_has_no_phone",
+      "recipient_phone_unreachable",
+      "recipient_not_in_household",
+      "already_dispatched",
+    ]);
     expect(result.groups.map((entry) => entry.kind)).toEqual([
       ...PREFLIGHT_BLOCKER_ORDER,
     ]);
@@ -268,14 +303,88 @@ describe("buildDispatchPreflight", () => {
     }
   });
 
-  it("states each group's count against the same named population", () => {
+  /**
+   * All five kinds present at once, each populated, asserted as one ordered
+   * sequence of counts. The per-kind tests above prove each classification; this
+   * proves the ORDER survives a scope where every group is non-empty — including
+   * the fourth kind the database can never produce, which is precisely the one a
+   * fixture drawn from real data would leave empty and unproved.
+   */
+  it("sorts all five kinds into the documented order when every one of them is populated", () => {
     const result = preflight([
-      row({ guests: [guest({ phoneE164: null, dispatchable: false })] }),
+      row({
+        invitationId: "11111111-1111-4111-8111-111111111111",
+        dispatchRecipientGuestId: null,
+      }),
+      row({
+        invitationId: "22222222-2222-4222-8222-222222222222",
+        dispatchRecipientGuestId: "g1",
+        guests: [
+          guest({
+            phoneE164: null,
+            lineType: "not_normalizable",
+            dispatchable: false,
+          }),
+        ],
+      }),
+      row({
+        invitationId: "33333333-3333-4333-8333-333333333333",
+        dispatchRecipientGuestId: "g1",
+        guests: [
+          guest({
+            phoneE164: "+576012345678",
+            lineType: "fixed_line",
+            dispatchable: false,
+          }),
+        ],
+      }),
+      row({
+        invitationId: "44444444-4444-4444-8444-444444444444",
+        dispatchRecipientGuestId: "moved-away",
+      }),
+      row({
+        invitationId: "55555555-5555-4555-8555-555555555555",
+        dispatchState: "marked_sent",
+      }),
     ]);
 
-    expect(group(result, "no_phone_on_file").text).toBe(
-      `Sin número en la agenda: 1 de 1 ${POPULATION}`,
+    expect(
+      result.groups.map((entry) => [entry.kind, entry.households.length]),
+    ).toEqual([
+      ["no_recipient_chosen", 1],
+      ["recipient_has_no_phone", 1],
+      ["recipient_phone_unreachable", 1],
+      ["recipient_not_in_household", 1],
+      ["already_dispatched", 1],
+    ]);
+    expect(result.ready).toHaveLength(0);
+  });
+
+  it("states each group's count against the same named population", () => {
+    const result = preflight([row({ dispatchRecipientGuestId: null })]);
+
+    expect(group(result, "no_recipient_chosen").text).toBe(
+      `Sin destinatario elegido: 1 de 1 ${POPULATION}`,
     );
+  });
+
+  /**
+   * The copy for the two RENAMED kinds had to change with them, not just their
+   * keys. The old text said "Nadie de estas invitaciones tiene un número
+   * guardado", which is false the moment the group means "the chosen person has
+   * none" — the partner may well have one. A stale string that still reads
+   * plausibly is exactly the failure this rename exists to prevent, so its
+   * absence is asserted rather than reviewed.
+   */
+  it("no longer claims nobody in the household has a number", () => {
+    const copy = renderedCopy(preflight([row()]));
+
+    expect(copy).not.toContain(
+      "Nadie de estas invitaciones tiene un número guardado",
+    );
+    expect(
+      group(preflight([row()]), "recipient_has_no_phone").explanation,
+    ).toContain("persona elegida");
   });
 
   it("reports an empty scope as empty rather than as ready", () => {

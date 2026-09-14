@@ -7,8 +7,11 @@ import {
   DISPATCH_EVENT_BEACON_PATH,
   buildInvitationDispatchLink,
   buildInvitationMessage,
-  selectDispatchRecipient,
 } from "@/lib/domain/dispatch-message";
+import {
+  resolveDispatchRecipient,
+  type DispatchRecipientProblem,
+} from "@/lib/domain/dispatch-recipient";
 import { buildInvitationMetadataText } from "@/lib/domain/og-card";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
 import { getCeremony } from "@/lib/server/ceremony";
@@ -33,8 +36,9 @@ import {
  * The compose view: build the link, open WhatsApp, then say what happened.
  *
  * A thin async container, like every async RSC in this codebase. Vitest cannot
- * render one, so nothing is DECIDED here: the recipient is chosen by
- * `selectDispatchRecipient`, the draft is rendered by `buildInvitationMessage`,
+ * render one, so nothing is DECIDED here: the recipient was chosen by an
+ * OPERATOR and is merely resolved by `resolveDispatchRecipient`, the draft is
+ * rendered by `buildInvitationMessage`,
  * the link is built by `buildWaMeLink`, and the ordering of the beacon against
  * the navigation lives in `DispatchLauncher` — all four under unit test. What
  * this file does is fetch, assemble and hand over props.
@@ -59,6 +63,27 @@ import {
  * A failure yields `null`, and the pane says the card could not be loaded rather
  * than falling back to a URL nothing will ever request.
  */
+
+/**
+ * What to do about each unresolvable recipient, in the operator's words.
+ *
+ * A record keyed by the reason rather than a ternary: the resolver has four
+ * reasons, and a ternary silently gives three of them the same sentence. Two of
+ * them are about the CHOSEN person specifically, which is the distinction that
+ * makes the sentence actionable at all.
+ */
+const RECIPIENT_PROBLEM_COPY: Readonly<
+  Record<DispatchRecipientProblem, string>
+> = {
+  no_recipient_chosen:
+    "Todavía nadie eligió a qué integrante de esta invitación va dirigido el mensaje. Se elige en el formulario de la invitación, marcando a una de las personas de la lista.",
+  recipient_has_no_phone:
+    "La persona elegida para esta invitación no tiene un número guardado, aunque alguien más de la invitación sí pueda tenerlo. Se puede agregar su número desde el panel, o elegir a otro integrante.",
+  recipient_phone_unreachable:
+    "El número de la persona elegida es válido, pero por su tipo de línea no parece recibir WhatsApp: una línea fija lo es. Enviar de todas formas dejaría registrado un envío que nadie recibiría.",
+  recipient_not_in_household:
+    "La persona elegida ya no figura entre los integrantes de esta invitación. Hay que elegir de nuevo a quién va dirigido el mensaje.",
+};
 
 export default async function DispatchPage({
   params,
@@ -103,7 +128,10 @@ export default async function DispatchPage({
     notFound();
   }
 
-  const recipient = selectDispatchRecipient(invitation.guests);
+  const recipient = resolveDispatchRecipient(
+    invitation.guests,
+    invitation.dispatchRecipientGuestId,
+  );
 
   if (!recipient.ok) {
     return (
@@ -113,9 +141,7 @@ export default async function DispatchPage({
         </h2>
 
         <p className="max-w-[68ch] text-sm text-muted-foreground">
-          {recipient.reason === "no_phone_on_file"
-            ? "Todavía no hay ningún número guardado para esta invitación. Se puede agregar desde el panel, junto al nombre de cada persona."
-            : "Los números guardados para esta invitación no parecen recibir WhatsApp: una línea fija lo es. Enviar de todas formas dejaría registrado un envío que nadie recibiría."}
+          {RECIPIENT_PROBLEM_COPY[recipient.reason]}
         </p>
 
         <ul className="flex flex-col gap-1 rounded-lg border border-border bg-card px-4 py-3 text-sm">

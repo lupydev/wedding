@@ -126,59 +126,18 @@ export function buildInvitationDispatchLink(
 
 /** The minimum this module needs to know about a household member. */
 export interface DispatchCandidateGuest {
+  /**
+   * The guest row's id — what a stored dispatch recipient choice names.
+   *
+   * Present on the candidate itself rather than carried alongside it: a
+   * candidate that cannot be identified cannot be chosen, and every consumer of
+   * this shape now resolves an explicit choice rather than picking one.
+   */
+  readonly id: string;
   readonly fullName: string;
   readonly phoneE164: string | null;
   /** From `classifyPhoneDispatchability`, computed upstream on the server. */
   readonly dispatchable: boolean;
-}
-
-/** Why a household cannot be addressed at all. */
-export type DispatchRecipientProblem =
-  "no_phone_on_file" | "no_reachable_phone";
-
-export type DispatchRecipientOutcome =
-  | {
-      readonly ok: true;
-      readonly guest: DispatchCandidateGuest;
-      readonly phoneE164: string;
-    }
-  | { readonly ok: false; readonly reason: DispatchRecipientProblem };
-
-/**
- * Picks the household member the invitation is addressed to.
- *
- * THE FIRST REACHABLE NUMBER, NOT THE FIRST NUMBER. The repository returns a
- * household's guests with its primary contact first, so the primary wins
- * whenever it can carry the message — but a household whose primary line is a
- * landline and whose partner holds a mobile is addressable, and a rule that
- * insisted on the primary would report it as impossible.
- *
- * The two failure reasons are kept apart because they call for different work
- * from a person: one household needs a number typed in, the other needs a
- * different number found. Collapsing them into "no se puede enviar" would hide
- * which.
- */
-export function selectDispatchRecipient(
-  guests: readonly DispatchCandidateGuest[],
-): DispatchRecipientOutcome {
-  let sawPhone = false;
-
-  for (const candidate of guests) {
-    if (candidate.phoneE164 === null || candidate.phoneE164 === "") {
-      continue;
-    }
-
-    sawPhone = true;
-
-    if (candidate.dispatchable) {
-      return { ok: true, guest: candidate, phoneE164: candidate.phoneE164 };
-    }
-  }
-
-  return {
-    ok: false,
-    reason: sawPhone ? "no_reachable_phone" : "no_phone_on_file",
-  };
 }
 
 /**
