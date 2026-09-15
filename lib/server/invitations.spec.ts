@@ -26,6 +26,7 @@ import {
   listOperatorProfiles,
   listSenderDirectory,
   updateGuestPhone,
+  updateInvitation,
   toGatePhoneRefs,
   toGuestFacingInvitation,
   validateImportRow,
@@ -1898,6 +1899,46 @@ describe("deleteInvitation — refused by ANY dispatch history (local Supabase)"
 });
 
 describe("rotateInvitationSlug — a new address for the same invitation (local Supabase)", () => {
+  it("keeps a household's members in a stable order after one of them is edited", async () => {
+    // POSTGRES HAS NO DEFAULT ROW ORDER, and an UPDATE moves the row to the end
+    // of the heap. Without an explicit ORDER BY, editing one member silently
+    // reorders the whole household everywhere it is read — the list the guest
+    // reads on their own invitation (which slice 1a made the authoritative
+    // record of who is invited), the console list, and worst of all
+    // `deriveGreetingName`, whose y/e conjunction is decided by the LAST name.
+    // A household could be greeted "Ana, Beto e Inés" one day and
+    // "Beto, Inés y Ana" the next, with nobody having renamed anyone.
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+      const invitation = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Orden",
+        greetingName: "Familia Orden",
+        greetingNameSource: "derived",
+        rsvpDeadline: null,
+        guests: [
+          member("Ana Orden", { isPrimary: true }),
+          member("Beto Orden"),
+          member("Inés Orden"),
+        ],
+      });
+
+      const before = (await findInvitationBySlug(client, invitation.slug))!;
+      const namesBefore = before.guests.map((guest) => guest.fullName);
+
+      // Touch the FIRST member. Postgres relocates that row in the heap.
+      await withDb(async (db) => {
+        await db.query(
+          "update invitation_guests set full_name = full_name where invitation_id = $1 and full_name = $2",
+          [invitation.id, "Ana Orden"],
+        );
+      });
+
+      const after = (await findInvitationBySlug(client, invitation.slug))!;
+      expect(after.guests.map((guest) => guest.fullName)).toEqual(namesBefore);
+    });
+  });
+
   it("returns the new slug even when warming rejects, because the slug already changed", async () => {
     // THE CONTRACT THIS FUNCTION'S OWN DOCBLOCK PROMISES.
     //
@@ -2071,6 +2112,160 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
       expect(
         await captureError(() => deleteInvitation(client, invitation.id)),
       ).toContain("marked_sent");
+    });
+  });
+});
+
+/**
+ * The invitation's OWN fields, which the member functions never touch.
+ *
+ * `greeting_name` and `greeting_name_source` are written here by the same
+ * `greetingNameColumns` pair every other write path uses (design §8), so a
+ * `derived` invitation re-derives from its current members and a `custom` one
+ * stores exactly what the operator typed. The submitted string is ignored for
+ * a derived name on purpose: the form shows the derived value live, and
+ * trusting the round-tripped copy of it is how a stale field overwrites a name
+ * the members no longer agree with.
+ */
+describe("updateInvitation — the invitation's own fields (local Supabase)", () => {
+  async function seed(senderId: string) {
+    return createInvitation(createServerSupabaseClient(), {
+      ownerSenderId: senderId,
+      displayName: "Familia Guzmán",
+      greetingName: "Familia Guzmán",
+      greetingNameSource: "custom",
+      rsvpDeadline: null,
+      guests: [
+        member("Luis Guzmán", { nickname: "Lucho", isPrimary: true }),
+        member("Ana Guzmán", { nickname: null }),
+      ],
+    });
+  }
+
+  async function readNaming(invitationId: string) {
+    return withDb(
+      async (db) =>
+        (
+          await db.query<{
+            display_name: string;
+            greeting_name: string;
+            greeting_name_source: string;
+            rsvp_deadline: string | null;
+          }>(
+            "select display_name, greeting_name, greeting_name_source, " +
+              "to_char(rsvp_deadline, 'YYYY-MM-DD') as rsvp_deadline " +
+              "from invitations where id = $1",
+            [invitationId],
+          )
+        ).rows[0],
+    );
+  }
+
+  it("stores a custom name exactly as typed, with its source and deadline", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await seed(senderId);
+
+      await updateInvitation(createServerSupabaseClient(), invitation.id, {
+        displayName: "Familia Guzmán Peña",
+        greetingName: "Los Guzmán de siempre",
+        greetingNameSource: "custom",
+        rsvpDeadline: "2026-05-01",
+      });
+
+      const stored = await readNaming(invitation.id);
+      expect(stored.display_name).toBe("Familia Guzmán Peña");
+      expect(stored.greeting_name).toBe("Los Guzmán de siempre");
+      expect(stored.greeting_name_source).toBe("custom");
+      expect(stored.rsvp_deadline).toBe("2026-05-01");
+    });
+  });
+
+  it("re-derives the name from the CURRENT members when the source is derived", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await seed(senderId);
+
+      await updateInvitation(createServerSupabaseClient(), invitation.id, {
+        displayName: "Familia Guzmán",
+        // Deliberately a lie. A derived name comes from the members, never
+        // from the copy the form round-tripped.
+        greetingName: "lo que sea",
+        greetingNameSource: "derived",
+        rsvpDeadline: null,
+      });
+
+      const stored = await readNaming(invitation.id);
+      expect(stored.greeting_name).toBe("Lucho y Ana");
+      expect(stored.greeting_name_source).toBe("derived");
+    });
+  });
+
+  it("refuses an empty custom name and leaves the stored one alone", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await seed(senderId);
+
+      const failure = await captureError(() =>
+        updateInvitation(createServerSupabaseClient(), invitation.id, {
+          displayName: "Familia Guzmán",
+          greetingName: "   ",
+          greetingNameSource: "custom",
+          rsvpDeadline: null,
+        }),
+      );
+
+      expect(failure).toMatch(/custom_name_empty/);
+
+      const stored = await readNaming(invitation.id);
+      expect(stored.greeting_name).toBe("Familia Guzmán");
+    });
+  });
+});
+
+/**
+ * The imported nickname has to survive the whole way to the row.
+ *
+ * Migration 0012 gave `import_invitations` a `nickname` to read, and
+ * `validateImportRow` now carries one through — but the payload that reaches
+ * the function is assembled here, and a field missing from THAT map is dropped
+ * in silence with every other layer looking correct.
+ */
+describe("importInvitations — the nickname reaches the row (local Supabase)", () => {
+  it("stores the supplied nickname and null for a guest without one", async () => {
+    await withSenderFixture(async (senderId) => {
+      const sourceKey = `nickname-${Date.now()}.${Math.random()}`;
+
+      const imported = await importInvitations(createServerSupabaseClient(), [
+        {
+          ownerSenderId: senderId,
+          sourceKey,
+          displayName: "Familia Guzmán",
+          greetingName: "Familia Guzmán",
+          rsvpDeadline: null,
+          guests: [
+            member("Luis Guzmán", { nickname: "Lucho", isPrimary: true }),
+            member("Ana Guzmán"),
+          ],
+        },
+      ]);
+
+      expect(imported[0].created).toBe(true);
+
+      const stored = await withDb(
+        async (db) =>
+          (
+            await db.query<{ full_name: string; nickname: string | null }>(
+              `select g.full_name, g.nickname from invitation_guests g
+                 join invitations i on i.id = g.invitation_id
+                where i.source_key = $1
+                order by g.full_name`,
+              [sourceKey],
+            )
+          ).rows,
+      );
+
+      expect(stored).toEqual([
+        { full_name: "Ana Guzmán", nickname: null },
+        { full_name: "Luis Guzmán", nickname: "Lucho" },
+      ]);
     });
   });
 });

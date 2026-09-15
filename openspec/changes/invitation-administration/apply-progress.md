@@ -892,3 +892,212 @@ and with create. The natural boundary is the whole write side.
 
 69/120 tasks complete (all of slice 1a, 2a, 2b and 3a). Slice 1b and slice 3b are NOT started.
 Ready for verify.
+
+---
+
+# Slice 3b — Server Actions; importer Zod parse + `nickname`
+
+**Change**: invitation-administration
+**Mode**: Strict TDD
+**Work unit**: 3b — the console's write surface and the importer's front door
+**Starts at**: `3b83efe` (slice 3a), clean tree
+
+## Completed Tasks
+
+| Task | Status | Evidence |
+|---|---|---|
+| 3b.1 RED — sender B writes on ANA's invitation X; dispatch stays owner-scoped and device-gated | ✅ | `Tests 30 failed \| 25 passed (55)`; every failure `TypeError: createInvitationAction is not a function` and its eight siblings. The three dispatch assertions PASSED in the same run — they exercise code that already exists, which is what makes them the control |
+| 3b.2 GREEN — `createInvitationAction`/`updateInvitationAction`, no ownership check | ✅ | `Tests 55 passed (55)`. Mutation-proved: reinstating an ownership lookup on ONE action turned the block red — `Tests 2 failed \| 53 passed (55)` |
+| 3b.3 RED — the four member actions require a session, never ownership; `removeMemberAction` surfaces `classifyMembershipChangeImpact` | ✅ | same RED run; `addMemberAction`/`editMemberAction`/`removeMemberAction`/`moveMemberAction` all `is not a function` |
+| 3b.4 GREEN — the four member actions wired | ✅ | `Tests 55 passed (55)`; the impact record is returned, not a boolean, and the membership is read BEFORE the removal (`expect(order).toEqual(["read", "remove"])`) |
+| 3b.5 RED — `chooseRecipientAction` refuses a non-member id, accepts a member id | ✅ | same RED run; `chooseRecipientAction is not a function` |
+| 3b.6 GREEN — `chooseRecipientAction` | ✅ | `Tests 55 passed (55)`; the refusal names the fact (`no pertenece a esta invitación`) rather than surfacing a constraint violation |
+| 3b.7 RED — `deleteInvitationAction` refuses with the `eventKinds`-naming message and offers rotation | ✅ | same RED run; `deleteInvitationAction is not a function` |
+| 3b.8 GREEN — `deleteInvitationAction` | ✅ | `Tests 55 passed (55)`; the repository refusal is propagated **verbatim** — asserted with `/link_opened, marked_failed[\s\S]*Rotate its slug instead/` |
+| 3b.9 RED — `rotateSlugAction` returns the new slug and records no dispatch event | ✅ | same RED run; `rotateSlugAction is not a function` |
+| 3b.10 GREEN — `rotateSlugAction` | ✅ | `Tests 55 passed (55)` |
+| 3b.11 RED — **D22**, the first Zod issue names file, index and field | ✅ | `Tests 6 failed \| 16 passed (22)`; `AssertionError: expected [Function] to throw an error` — a behavioural gap, not a missing symbol. Today's parse accepts the malformed row and it fails much later as a bare `TypeError` |
+| 3b.12 GREEN — `z.array(importRowSchema).safeParse`, first issue only | ✅ | `Tests 22 passed (22)`; exact message `data/guests.source.json → invitations[7].guests[1].full_name: expected string, received number` |
+| 3b.13 RED — `nickname` in, a seats column REJECTED (closes `R3-old-format-import-rejection-unproved`) | ✅ | same RED run; `expected undefined to be 'Lucho'` (validation dropped the nickname) and `expected [Function] to throw an error` (the old format was silently accepted) |
+| 3b.14 GREEN — optional `nickname`; any seats column rejected by name | ✅ | `Tests 22 passed (22)`, and a further RED→GREEN below for the payload that silently dropped the nickname on its way to the row |
+| 3b.15 Verify | ✅ | see *Work Unit Evidence* |
+
+## The authorization change, and why the tests can fail
+
+Confirmed decision 4 removes owner scoping from console **writes** and leaves **dispatch**
+alone. Removing an authorization check is the kind of change that looks fine and is not, so
+three things were done rather than one:
+
+1. **The session is BETO throughout and every invitation acted on is owned by ANA.** The
+   assertions are on the write actually issued with the submitted values, not on the absence
+   of an exception.
+2. **`findConsoleInvitation` answers `null` for BETO in that block** — the truth, because it
+   applies `owner_sender_id = viewer` as a `WHERE`. Any action that consulted ownership would
+   therefore refuse, and every assertion in the block would fail. The tests cannot pass by
+   accident while a check is still in place.
+3. **A mutation test.** An ownership lookup was temporarily reinstated on `addMemberAction`:
+
+   ```
+   FAIL  … > lets the non-owning operator add a member to ANA's invitation
+   FAIL  … > never consults the owner-scoped lookup on any administration write
+   Tests  2 failed | 53 passed (55)
+   ```
+
+   Reverted, `Tests 55 passed (55)`. The guard is live, not decorative.
+
+**"No ownership check" is not "no auth check".** Every one of the nine actions still begins
+with `requireOperator()`, proved by an `it.each` over a nine-entry table whose length is
+asserted separately so a dropped entry cannot silently stop being checked. Dispatch keeps both
+its ownership lookup and its per-device WhatsApp declaration gate, and three tests in
+`dispatch is still owner-scoped and still device-gated` refuse BETO on all three counts.
+
+## D22 — what the old parse actually did
+
+```ts
+// before — an unchecked cast over a value checked only for being a non-empty array
+return invitations as ImportRow[];
+```
+
+A malformed row survived the parse and failed downstream as a bare `TypeError: Cannot read
+properties of undefined (reading 'length')`, naming no row, no field and no file — against a
+requirement whose whole point is stopping at the row that introduced the problem. It is now a
+`safeParse` over `z.array(importRowSchema)` reporting only the **first** issue, because
+`ZodError.issues` for a malformed array is dominated by cascade noise from the first bad row.
+A second test asserts the message does **not** mention the second broken row.
+
+Field names are rendered in the importer's existing vocabulary — `full_name`, not `fullName` —
+because `validateImportRow` has always spoken in column names (`Import row is missing a value
+for full_name.`) and two vocabularies for one field is one more than an operator can hold.
+This is a deliberate choice and it is the one place in this slice where the message names a
+key that is spelled differently in the JSON.
+
+## The one-way door needed one exemption, and it is argued in the guard
+
+`tools/no-seats-allowed.spec.ts` forbids the literals `seatsAllowed`/`seats_allowed` anywhere
+under `app`, `components`, `lib`, `scripts`, `e2e` and `supabase/tests`, with an exemption list
+that was **empty on purpose**. Proving that an OLD-format source file is rejected requires
+naming the key that format used, and `git show 5ea6b4f~1:lib/server/invitations.ts` confirms
+that key was exactly `seatsAllowed` on `ImportRow`. The list therefore grows one entry,
+`scripts/import-guests.spec.ts`, and the guard's own `expect(EXEMPT_PATHS).toEqual([])`
+assertion was rewritten to name it and carry the argument — which is precisely the speed bump
+that assertion exists to be. No glob was widened, and `seats_allowed` is no longer named at
+all: the test covers `seatsAllowed`, `seats` and `seatCount`.
+
+## Two repository functions this slice had to add
+
+Neither is a reimplementation of slice 3a's work; both are gaps 3a's task list did not name.
+
+- **`updateInvitation`** (`lib/server/invitations.ts`). Task 3b.2 requires
+  `updateInvitationAction`, and nothing in the repository could write an invitation's own
+  fields — 3a shipped creation and membership only, while `design.md` §8 lists
+  `insert/update invitations`. It writes the greeting pair through the same
+  `greetingNameColumns` every other path uses, so a `derived` invitation re-derives from its
+  CURRENT members and the round-tripped string is ignored. RED
+  `Tests 3 failed | 65 passed (68)`, GREEN `Tests 68 passed (68)`.
+- **The `nickname` key in `importInvitations`'s payload.** Migration 0012 gave
+  `import_invitations` a `nickname` to read and `validateImportRow` now carries one through,
+  but the payload assembled for the RPC never sent it, so an imported nickname was dropped in
+  silence with every other layer looking correct. RED was the database itself:
+  `expected [ …(2) ] to deeply equal [ …(2) ] — "nickname": "Lucho" / + "nickname": null`.
+  GREEN `Tests 69 passed (69)`.
+
+## A pre-existing failure in slice 3a, reported and NOT fixed
+
+`lib/server/invitations.spec.ts > moveMemberToInvitation — a permitted move > moves the member,
+clears the SOURCE's recipient and leaves the destination's alone` fails nondeterministically:
+
+```
+AssertionError: expected 'Inés y Ana' to be 'Ana e Inés'
+```
+
+Reproduced on the **stashed, unmodified** slice-3a files **5 times out of 6**. `readMembership`
+issues no `ORDER BY`, so the member order — and therefore the derived greeting name — depends
+on heap order. With this slice's rows present it passed 3/3 and the full suite passed 3/3, which
+is luck rather than a fix. It belongs to slice 3a's `readMembership` and is left for the
+verifier to route; touching it here would edit code this work unit did not change.
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 3b.1–3b.10 | `app/console/(authenticated)/actions.spec.ts` | Integration (mocked repository, real action code) | ✅ 24/24 measured before the first edit | ✅ `Tests 30 failed \| 25 passed (55)`, plus a post-GREEN mutation run `Tests 2 failed \| 53 passed (55)` | ✅ `Tests 55 passed (55)` | ✅ 31 cases: nine writes by a non-owning operator, the owner-scoped lookup asserted absent, the unpartitioned read asserted present, the declaration asserted unread, nine session refusals by table, three dispatch refusals, the impact record with and without a contradicted answer, read-before-remove ordering, recipient accepted and refused, delete permitted and refused verbatim, rotation returning its slug and refusing a missing id | ✅ five parse helpers (`requiredInvitationId`, `text`, `requiredText`, `optionalText`, `flag`, `storedPhone`, `readMemberRows`, `readInvitation`) extracted so the nine actions share one shape; green after |
+| 3b.2 (repository half) | `lib/server/invitations.spec.ts` | Integration (real local Supabase) | ✅ 65/65 | ✅ `Tests 3 failed \| 65 passed (68)`; `updateInvitation is not a function` | ✅ `Tests 68 passed (68)` | ✅ 3 cases: a custom name stored verbatim with its deadline, a `derived` source re-deriving `"Lucho y Ana"` while the submitted string is deliberately a lie, and `custom_name_empty` refused with the stored name intact | ➖ |
+| 3b.11/3b.12 | `scripts/import-guests.spec.ts` | Unit (pure parse) | ✅ 16/16 | ✅ `Tests 6 failed \| 16 passed (22)`; `expected [Function] to throw an error` | ✅ `Tests 22 passed (22)` | ✅ 4 cases: the exact D22 message at `invitations[7].guests[1]`, first-issue-only (asserting `invitations[1]` is NOT named), a missing required field on the row, and a well-formed file still returning its rows | ✅ `issuePath` and `firstIssueMessage` extracted as pure functions |
+| 3b.13/3b.14 | same file + `lib/server/invitations.spec.ts` | Unit + Integration (real local Supabase) | ✅ 16/16 and 68/68 | ✅ `expected undefined to be 'Lucho'`; then `"nickname": "Lucho"` vs `null` straight from Postgres | ✅ `Tests 22 passed (22)` and `Tests 69 passed (69)` | ✅ 5 cases: nickname through the parse, through validation (and `null`, never `undefined`, for a guest without one), through the RPC into the row, `seats` rejected on a guest, and `seatsAllowed`/`seats`/`seatCount` rejected on a row | ➖ |
+
+### Test Summary
+
+- **Total tests written**: **43** authored `it(` blocks — 31 in `actions.spec.ts` (one an
+  `it.each` over nine actions, counted as 9), 4 in `lib/server/invitations.spec.ts`, 8 in
+  `scripts/import-guests.spec.ts`
+- **Total tests passing**: **1857** (`Test Files 97 passed (97)`), up from the slice-3a
+  baseline of **1812**. Run three consecutive times, 1857 every time
+- **Layers used**: Integration 35 (mocked-repository action tests and real-Supabase repository
+  tests), Unit 8
+- **Pure functions created**: 8 — `issuePath`, `firstIssueMessage`, `importedNickname`,
+  `requiredInvitationId`, `text`/`requiredText`/`optionalText`, `flag`
+
+## Work Unit Evidence
+
+| Evidence | Result |
+|---|---|
+| `npm test` | `Test Files 97 passed (97)`, `Tests 1857 passed (1857)`, exit 0. Three consecutive runs, identical |
+| `npm run typecheck` | Clean after two `RegExp` `s`-flag uses were rewritten as `[\s\S]` (`error TS1501`, the project targets below es2018) |
+| `npm run lint` | Clean, no output |
+| `npm run format:check` | `All matched files use Prettier code style!` (two files were written by Prettier first) |
+| `npm run build` | Succeeded; twelve routes compiled, no new route yet — the console UI is slice 4a |
+| `npm run e2e` | Run because this slice touches `lib/server/**` and `tools/**`. `114 passed`, **2 failed**, 38 did not run. Both failures reproduce on the STASHED tree: `console-dispatch › names the households that cannot be sent yet` (the knowingly stale readiness counts, task 4b.15) and `console-preview › points the preview image at the URL the crawler will fetch`. Run with `PORT=3123` because the user's own `next dev` holds 3000 and the config refuses to reuse a server it did not build; nothing was killed |
+| Cold-start flake | `tools/eslint-zones.spec.ts` passed on every full-suite run. No re-run needed |
+| Database survival check | Before: `auth.users` = `lumigu.dev@gmail.com`, `sruiz7541@gmail.com`; `ceremony.couple_names` = `Luis & Michell`. After: identical. `supabase db reset` was NOT run. No `withSenderFixture` row leaked; one `E2E Sender …@example.test` row and one invitation remain from the Playwright harness's own teardown, not from these tests |
+| Rollback boundary | Delete the nine exported actions and their eight helpers from `app/console/(authenticated)/actions.ts`, `updateInvitation` and the `nickname` payload key from `lib/server/invitations.ts`, the Zod schemas and `importedNickname` from the importer, the appended `describe` blocks from the three specs, and the single `EXEMPT_PATHS` entry. `updateGuestPhoneAction` and both dispatch actions are untouched. No migration, no schema, no data |
+
+## Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `app/console/(authenticated)/actions.ts` | Modified | +390/−0. Nine new Server Actions — create, update, add/edit/remove/move member, choose recipient, delete, rotate — none owner-scoped, all session-required; eight parse helpers |
+| `app/console/(authenticated)/actions.spec.ts` | Modified | +582/−0. 31 new cases across six `describe` blocks; the decision-4 block runs as BETO against ANA's invitation with the owner-scoped lookup answering `null` |
+| `lib/server/invitations.ts` | Modified | +83/−0. New `updateInvitation` and `InvitationEdit`; `ImportGuest` gains optional `nickname`; `importedNickname` helper; the RPC payload now sends `nickname` |
+| `lib/server/invitations.spec.ts` | Modified | +155/−0. `updateInvitation`'s three cases and the imported-nickname case |
+| `scripts/import-guests.ts` | Modified | +75/−1. `importGuestSchema`/`importRowSchema` (both `strictObject`), `issuePath`, `firstIssueMessage`; the unchecked cast at the old `:101` is gone |
+| `scripts/import-guests.spec.ts` | Modified | +173/−1. Nine new cases over the Zod parse and the one-way door |
+| `tools/no-seats-allowed.spec.ts` | Modified | +31/−9. One exemption, argued in place |
+| `openspec/changes/invitation-administration/tasks.md` | Modified | 3b.1–3b.15 marked `[x]` |
+| `openspec/changes/invitation-administration/apply-progress.md` | Modified | This section appended; slices 1a, 2a, 2b and 3a are byte-untouched |
+
+## Workload / PR Boundary
+
+- Mode: **chained slice 3b of eight**, one commit per slice, no pull requests
+- Current work unit: 3b — Server Actions and the importer
+- Boundary: starts at `3b83efe` with a clean tree; ends with the console's whole write surface
+  callable and the importer refusing a malformed or old-format file by name. Slice 4a — the
+  console routes and the form — is NOT started
+- **Authored changed lines: 1,498** — 1,480 insertions and 18 deletions excluding
+  `openspec/**`. Against `review_budget_lines: 800` this is **1.9× over. `size:exception` is
+  required for this slice**
+- **Not committed and not pushed**, as instructed
+
+### Why this slice could not land in 800 lines
+
+`design.md` §6 estimated 3b at ≈510 lines. Facts, not excuses:
+
+1. **Nine Server Actions, not two.** The task list names create, update, four member actions,
+   choose-recipient, delete and rotate. At this repository's density — every existing action
+   carries a rationale comment explaining what it checks and what it deliberately does not —
+   390 source lines for nine surfaces plus eight helpers is the house rate.
+2. **The authorization removal had to be proved, not asserted.** Nine writes by a non-owning
+   operator, an absence assertion on the owner-scoped lookup, a nine-entry session table, and
+   three dispatch refusals are 582 spec lines on their own. A shorter version would have been
+   the version that cannot fail.
+3. **Two repository gaps had to be closed** (`updateInvitation`, the dropped `nickname` payload
+   key), each with its own real-database test.
+4. **The importer's one-way door has four spellings and two failure shapes**, and each needs a
+   source file built to exhibit exactly one fault.
+
+No comment, test or doc was removed to reach a number, and no compression was attempted beyond
+the helper extraction that made the actions readable in the first place.
+
+## Status
+
+84/120 tasks complete (slices 1a, 2a, 2b, 3a and 3b). Slice 1b, 4a and 4b are NOT started.
+Ready for verify.

@@ -205,21 +205,21 @@ estimate for that half).
 
 ## Phase 3b: Server Actions; importer Zod parse + `nickname`
 
-- [ ] 3b.1 RED — `app/console/(authenticated)/actions.spec.ts` addendum: sender B, authenticated but not owning invitation X, may create a new invitation and edit, move members on, and delete invitation X exactly as owning sender A could; dispatch itself (`markDispatchSentAction`/`markDispatchFailedAction`) remains gated by ownership + device declaration, unchanged.
-- [ ] 3b.2 GREEN — `app/console/(authenticated)/actions.ts`: `createInvitationAction`/`updateInvitationAction` — thin: parse, call `validateInvitationDraft`/`lib/server/invitations.ts`, revalidate the console list path; apply NO ownership check.
-- [ ] 3b.3 RED — same file: `addMemberAction`/`editMemberAction`/`removeMemberAction`/`moveMemberAction` each require an operator session (no ownership check) and call the corresponding repository function; `removeMemberAction`'s return surfaces `classifyMembershipChangeImpact`'s advisories.
-- [ ] 3b.4 GREEN — `app/console/(authenticated)/actions.ts`: wire the four member actions.
-- [ ] 3b.5 RED — same file: `chooseRecipientAction` refuses a guest id not present in the invitation's current members and accepts a valid member id.
-- [ ] 3b.6 GREEN — `app/console/(authenticated)/actions.ts`: `chooseRecipientAction`.
-- [ ] 3b.7 RED — same file: `deleteInvitationAction` refuses with the same `eventKinds`-naming message `canDeleteInvitation` returns, succeeds for a zero-history invitation, and its refusal offers slug rotation as the alternative.
-- [ ] 3b.8 GREEN — `app/console/(authenticated)/actions.ts`: `deleteInvitationAction`.
-- [ ] 3b.9 RED — same file: `rotateSlugAction` returns the new slug and does not alter `dispatch_events`.
-- [ ] 3b.10 GREEN — `app/console/(authenticated)/actions.ts`: `rotateSlugAction`.
-- [ ] 3b.11 RED — `scripts/import-guests.spec.ts`: a malformed source row is reported via a Zod `safeParse` naming only the FIRST issue, as `data/guests.source.json → invitations[7].guests[1].full_name: expected string, received number` (D22).
-- [ ] 3b.12 GREEN — `scripts/import-guests.ts`: replace `return invitations as ImportRow[]` with a Zod `safeParse` over `z.array(importRowSchema)`, reporting only the first issue (D22).
-- [ ] 3b.13 RED — same file: a new-format row carrying `nickname` and no seats column imports successfully; an old-format row carrying a seats column and no `nickname` column is REJECTED by validation, not silently accepted with the seats column ignored — closes advisory finding `R3-old-format-import-rejection-unproved`.
-- [ ] 3b.14 GREEN — `scripts/import-guests.ts`, `validateImportRow`, `NewInvitation`/`ImportRow` types: accept optional `nickname` per guest row; reject any row carrying a seats/seat-count column.
-- [ ] 3b.15 Verify: `npm test -- app/console scripts/import-guests`, `npm run typecheck`, `npm run lint`, `npm run build`; confirm the "seats-versus-names advisory no longer exists" scenario already holds from 1a.12's deletion.
+- [x] 3b.1 RED — `app/console/(authenticated)/actions.spec.ts` addendum: sender B, authenticated but not owning invitation X, may create a new invitation and edit, move members on, and delete invitation X exactly as owning sender A could; dispatch itself (`markDispatchSentAction`/`markDispatchFailedAction`) remains gated by ownership + device declaration, unchanged.
+- [x] 3b.2 GREEN — `app/console/(authenticated)/actions.ts`: `createInvitationAction`/`updateInvitationAction` — thin: parse, call `validateInvitationDraft`/`lib/server/invitations.ts`, revalidate the console list path; apply NO ownership check.
+- [x] 3b.3 RED — same file: `addMemberAction`/`editMemberAction`/`removeMemberAction`/`moveMemberAction` each require an operator session (no ownership check) and call the corresponding repository function; `removeMemberAction`'s return surfaces `classifyMembershipChangeImpact`'s advisories.
+- [x] 3b.4 GREEN — `app/console/(authenticated)/actions.ts`: wire the four member actions.
+- [x] 3b.5 RED — same file: `chooseRecipientAction` refuses a guest id not present in the invitation's current members and accepts a valid member id.
+- [x] 3b.6 GREEN — `app/console/(authenticated)/actions.ts`: `chooseRecipientAction`.
+- [x] 3b.7 RED — same file: `deleteInvitationAction` refuses with the same `eventKinds`-naming message `canDeleteInvitation` returns, succeeds for a zero-history invitation, and its refusal offers slug rotation as the alternative.
+- [x] 3b.8 GREEN — `app/console/(authenticated)/actions.ts`: `deleteInvitationAction`.
+- [x] 3b.9 RED — same file: `rotateSlugAction` returns the new slug and does not alter `dispatch_events`.
+- [x] 3b.10 GREEN — `app/console/(authenticated)/actions.ts`: `rotateSlugAction`.
+- [x] 3b.11 RED — `scripts/import-guests.spec.ts`: a malformed source row is reported via a Zod `safeParse` naming only the FIRST issue, as `data/guests.source.json → invitations[7].guests[1].full_name: expected string, received number` (D22).
+- [x] 3b.12 GREEN — `scripts/import-guests.ts`: replace `return invitations as ImportRow[]` with a Zod `safeParse` over `z.array(importRowSchema)`, reporting only the first issue (D22).
+- [x] 3b.13 RED — same file: a new-format row carrying `nickname` and no seats column imports successfully; an old-format row carrying a seats column and no `nickname` column is REJECTED by validation, not silently accepted with the seats column ignored — closes advisory finding `R3-old-format-import-rejection-unproved`.
+- [x] 3b.14 GREEN — `scripts/import-guests.ts`, `validateImportRow`, `NewInvitation`/`ImportRow` types: accept optional `nickname` per guest row; reject any row carrying a seats/seat-count column.
+- [x] 3b.15 Verify: `npm test -- app/console scripts/import-guests`, `npm run typecheck`, `npm run lint`, `npm run build`; confirm the "seats-versus-names advisory no longer exists" scenario already holds from 1a.12's deletion.
 
 ## Phase 4a: Console routes, form component, live derived name
 

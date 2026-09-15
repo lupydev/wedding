@@ -48,17 +48,20 @@ const SCANNED_GLOBS = [
 ];
 
 /**
- * The complete exemption list, and it is EMPTY on purpose.
+ * The complete exemption list. Every path on it must carry an assertion a
+ * reader can open and verify, and it is added in the same commit as that
+ * assertion — an exemption whose justification points at a test that does not
+ * exist yet is self-justifying, covers nothing, and still passes its own
+ * existence check.
  *
- * Slice 1b will need one entry: the migration `0013` spec cannot assert that
- * `information_schema.columns` no longer lists `invitations.seats_allowed`
- * without naming it. That entry belongs in the same commit as the assertion
- * that needs it, never before — an exemption whose justification points at a
- * test that does not exist yet is self-justifying, covers nothing, and still
- * passes its own existence check. Every path listed here must carry an
- * assertion a reader can open and verify.
+ *  - `scripts/import-guests.spec.ts` asserts that a source file in the OLD
+ *    format is REJECTED. `seatsAllowed` was the exact key the pre-change
+ *    `ImportRow` required, so the test cannot name the format it rejects
+ *    without naming that key. It is the same shape of exemption the migration
+ *    `0013` spec will need in slice 1b: an assertion that the concept is gone,
+ *    which has to say the word once in order to say it is gone.
  */
-const EXEMPT_PATHS = [] as const;
+const EXEMPT_PATHS = ["scripts/import-guests.spec.ts"] as const;
 
 const SCANNED = SCANNED_GLOBS.flatMap((pattern) =>
   globSync(pattern, { cwd: REPO_ROOT }),
@@ -104,13 +107,18 @@ describe("no source file reads a seat allowance", () => {
     }
   });
 
-  it("exempts nothing, and every future exemption must exist on disk", () => {
-    // The exemption is a whitelist, not a pattern, and today it is empty:
-    // slice 1a bans the literal everywhere and needs no escape hatch. Slice 1b
-    // adds one entry alongside the assertion that requires it. If this array
-    // grows a wildcard or an entry whose justification points at a test that
-    // does not exist, this assertion is the one that has to be argued with.
-    expect(EXEMPT_PATHS).toEqual([]);
+  it("exempts exactly the one file that proves the old format is rejected", () => {
+    // The exemption is a whitelist, not a pattern, and this assertion is the
+    // one that has to be argued with before it grows. The argument for its
+    // single entry, made in full beside the list itself: the importer spec
+    // asserts that a source file in the PRE-CHANGE format is rejected, and
+    // `seatsAllowed` was the exact key that format required. A test that
+    // rejects a format cannot avoid naming it, and naming it indirectly would
+    // make the assertion both weaker and unreadable.
+    //
+    // What this does NOT license is a wildcard, a directory, or an entry whose
+    // justification points at a test that does not exist.
+    expect(EXEMPT_PATHS).toEqual(["scripts/import-guests.spec.ts"]);
 
     // A path listed but absent would exempt nothing while reading as coverage.
     for (const exempt of EXEMPT_PATHS as readonly string[]) {

@@ -46,11 +46,38 @@ vi.mock("@/lib/server/dispatch", () => ({
 const findConsoleInvitation = vi.fn();
 const findGuestInvitationOwner = vi.fn();
 const updateGuestPhone = vi.fn();
+const listConsoleInvitations = vi.fn();
+const createInvitation = vi.fn();
+const updateInvitation = vi.fn();
+const addMember = vi.fn();
+const editMember = vi.fn();
+const removeMember = vi.fn();
+const moveMemberToInvitation = vi.fn();
+const chooseRecipient = vi.fn();
+const deleteInvitation = vi.fn();
+const rotateInvitationSlug = vi.fn();
 vi.mock("@/lib/server/invitations", () => ({
   findConsoleInvitation: (...args: unknown[]) => findConsoleInvitation(...args),
   findGuestInvitationOwner: (...args: unknown[]) =>
     findGuestInvitationOwner(...args),
   updateGuestPhone: (...args: unknown[]) => updateGuestPhone(...args),
+  listConsoleInvitations: (...args: unknown[]) =>
+    listConsoleInvitations(...args),
+  createInvitation: (...args: unknown[]) => createInvitation(...args),
+  updateInvitation: (...args: unknown[]) => updateInvitation(...args),
+  addMember: (...args: unknown[]) => addMember(...args),
+  editMember: (...args: unknown[]) => editMember(...args),
+  removeMember: (...args: unknown[]) => removeMember(...args),
+  moveMemberToInvitation: (...args: unknown[]) =>
+    moveMemberToInvitation(...args),
+  chooseRecipient: (...args: unknown[]) => chooseRecipient(...args),
+  deleteInvitation: (...args: unknown[]) => deleteInvitation(...args),
+  rotateInvitationSlug: (...args: unknown[]) => rotateInvitationSlug(...args),
+}));
+
+const getCurrentRsvp = vi.fn();
+vi.mock("@/lib/server/rsvp", () => ({
+  getCurrentRsvp: (...args: unknown[]) => getCurrentRsvp(...args),
 }));
 
 vi.mock("@/lib/server/supabase", () => ({
@@ -65,15 +92,31 @@ vi.mock("next/cache", () => ({
 process.env.DEFAULT_PHONE_COUNTRY = "CO";
 
 const {
+  addMemberAction,
+  chooseRecipientAction,
+  createInvitationAction,
+  deleteInvitationAction,
+  editMemberAction,
   markDispatchFailedAction,
   markDispatchSentAction,
+  moveMemberAction,
+  removeMemberAction,
+  rotateSlugAction,
   updateGuestPhoneAction,
+  updateInvitationAction,
 } = await import("./actions");
 
 const ANA = { id: "aaaaaaaa-1111-4111-8111-111111111111", displayName: "Ana" };
+const BETO = {
+  id: "eeeeeeee-5555-4555-8555-555555555555",
+  displayName: "Beto",
+};
 const BETO_GUEST_ID = "dddddddd-4444-4444-8444-444444444444";
 const INVITATION_ID = "bbbbbbbb-2222-4222-8222-222222222222";
+const OTHER_INVITATION_ID = "ffffffff-6666-4666-8666-666666666666";
 const GUEST_ID = "cccccccc-3333-4333-8333-333333333333";
+const SECOND_GUEST_ID = "99999999-7777-4777-8777-777777777777";
+const STRANGER_GUEST_ID = "88888888-8888-4888-8888-888888888888";
 
 function form(entries: Record<string, string>): FormData {
   const data = new FormData();
@@ -100,6 +143,29 @@ beforeEach(() => {
   markSent.mockResolvedValue(undefined);
   markFailed.mockResolvedValue(undefined);
   updateGuestPhone.mockResolvedValue(undefined);
+  // Invitation X, owned by ANA, with two members. Every administration test
+  // below acts on it while the SESSION is BETO.
+  listConsoleInvitations.mockResolvedValue([
+    {
+      invitationId: INVITATION_ID,
+      ownerSenderId: ANA.id,
+      dispatchRecipientGuestId: null,
+      guests: [{ id: GUEST_ID }, { id: SECOND_GUEST_ID }],
+    },
+  ]);
+  getCurrentRsvp.mockResolvedValue(null);
+  createInvitation.mockResolvedValue({
+    id: INVITATION_ID,
+    slug: "aaaaaaaaaaaaaaaa",
+  });
+  updateInvitation.mockResolvedValue(undefined);
+  addMember.mockResolvedValue({ id: GUEST_ID });
+  editMember.mockResolvedValue(undefined);
+  removeMember.mockResolvedValue(undefined);
+  moveMemberToInvitation.mockResolvedValue(undefined);
+  chooseRecipient.mockResolvedValue(undefined);
+  deleteInvitation.mockResolvedValue(undefined);
+  rotateInvitationSlug.mockResolvedValue("zzzzzzzzzzzzzzzz");
 });
 
 describe("markDispatchSentAction — the four checks", () => {
@@ -331,5 +397,521 @@ describe("updateGuestPhoneAction — ownership without the declaration gate", ()
     await updateGuestPhoneAction(form({ guestId: GUEST_ID, phone: "" }));
 
     expect(updateGuestPhone.mock.calls[0][2]).toBe("");
+  });
+});
+
+/**
+ * Confirmed decision 4: ownership no longer gates a console WRITE.
+ *
+ * Administration carries no send risk. The couple are two people sharing one
+ * guest list, and an operator who cannot fix a typo in the other's household
+ * either waits for them or asks them to do it — which is how a guest list ends
+ * up maintained outside the tool. What ownership still decides is DISPATCH,
+ * because a message leaves from whichever WhatsApp account is installed on the
+ * handset and `wa.me` has no sender parameter to correct that.
+ *
+ * Removing an authorization check is exactly the kind of change that looks
+ * fine and is not, so the proof here is not "no error was thrown". The SESSION
+ * is BETO throughout and every invitation acted on is owned by ANA, the write
+ * is asserted to have actually been issued with the submitted values, and the
+ * owner-scoped lookup is asserted NEVER to have been consulted. "No ownership
+ * check" is still not "no auth check": the session requirement is proved
+ * separately, for every one of these actions.
+ */
+describe("console writes are not owner-scoped (confirmed decision 4)", () => {
+  beforeEach(() => {
+    requireOperator.mockResolvedValue(BETO);
+    // The owner-scoped lookup answers NULL for BETO on ANA's invitation,
+    // because that is the truth: it applies `owner_sender_id = viewer` as a
+    // WHERE. Any action below that consulted it would therefore refuse, and
+    // every assertion in this block would fail. That is the point — the tests
+    // cannot pass by accident while an ownership check is still in place.
+    findConsoleInvitation.mockResolvedValue(null);
+  });
+
+  it("lets the non-owning operator create an invitation", async () => {
+    await createInvitationAction(
+      form({
+        displayName: "Familia Restrepo",
+        greetingName: "Familia Restrepo",
+        greetingNameSource: "derived",
+        memberFullName: "Ana Restrepo",
+        memberNickname: "",
+        memberPhone: "3001234567",
+      }),
+    );
+
+    expect(createInvitation).toHaveBeenCalledTimes(1);
+    expect(createInvitation.mock.calls[0][1]).toMatchObject({
+      ownerSenderId: BETO.id,
+      displayName: "Familia Restrepo",
+      greetingNameSource: "derived",
+      guests: [
+        {
+          fullName: "Ana Restrepo",
+          nickname: null,
+          phoneE164: "+573001234567",
+          isChild: false,
+        },
+      ],
+    });
+  });
+
+  it("lets the non-owning operator edit an invitation ANA owns", async () => {
+    await updateInvitationAction(
+      form({
+        invitationId: INVITATION_ID,
+        displayName: "Familia Restrepo Gómez",
+        greetingName: "Los Restrepo",
+        greetingNameSource: "custom",
+      }),
+    );
+
+    expect(updateInvitation).toHaveBeenCalledTimes(1);
+    expect(updateInvitation.mock.calls[0].slice(1)).toEqual([
+      INVITATION_ID,
+      {
+        displayName: "Familia Restrepo Gómez",
+        greetingName: "Los Restrepo",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+      },
+    ]);
+  });
+
+  it("lets the non-owning operator add a member to ANA's invitation", async () => {
+    await addMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        fullName: "Luis Restrepo",
+        nickname: "Lucho",
+        phone: "3009876543",
+        isChild: "on",
+      }),
+    );
+
+    expect(addMember.mock.calls[0].slice(1)).toEqual([
+      INVITATION_ID,
+      {
+        fullName: "Luis Restrepo",
+        nickname: "Lucho",
+        phoneE164: "+573009876543",
+        isChild: true,
+      },
+    ]);
+  });
+
+  it("lets the non-owning operator edit a member of ANA's invitation", async () => {
+    await editMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        guestId: GUEST_ID,
+        fullName: "Ana María Restrepo",
+        nickname: "",
+        phone: "",
+      }),
+    );
+
+    expect(editMember.mock.calls[0].slice(1)).toEqual([
+      INVITATION_ID,
+      GUEST_ID,
+      {
+        fullName: "Ana María Restrepo",
+        nickname: null,
+        phoneE164: null,
+        isChild: false,
+      },
+    ]);
+  });
+
+  it("lets the non-owning operator remove a member of ANA's invitation", async () => {
+    await removeMemberAction(
+      form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(removeMember.mock.calls[0].slice(1)).toEqual([
+      INVITATION_ID,
+      GUEST_ID,
+    ]);
+  });
+
+  it("lets the non-owning operator move a member out of ANA's invitation", async () => {
+    await moveMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        destinationInvitationId: OTHER_INVITATION_ID,
+        guestId: GUEST_ID,
+      }),
+    );
+
+    expect(moveMemberToInvitation.mock.calls[0][1]).toEqual({
+      sourceInvitationId: INVITATION_ID,
+      destinationInvitationId: OTHER_INVITATION_ID,
+      memberId: GUEST_ID,
+      sourceMemberIds: [GUEST_ID, SECOND_GUEST_ID],
+      sourceRecipientGuestId: null,
+    });
+  });
+
+  it("lets the non-owning operator choose the recipient of ANA's invitation", async () => {
+    await chooseRecipientAction(
+      form({ invitationId: INVITATION_ID, guestId: SECOND_GUEST_ID }),
+    );
+
+    expect(chooseRecipient.mock.calls[0].slice(1)).toEqual([
+      INVITATION_ID,
+      SECOND_GUEST_ID,
+    ]);
+  });
+
+  it("lets the non-owning operator delete ANA's invitation", async () => {
+    await deleteInvitationAction(form({ invitationId: INVITATION_ID }));
+
+    expect(deleteInvitation.mock.calls[0][1]).toBe(INVITATION_ID);
+  });
+
+  it("lets the non-owning operator rotate ANA's slug", async () => {
+    const slug = await rotateSlugAction(form({ invitationId: INVITATION_ID }));
+
+    expect(rotateInvitationSlug.mock.calls[0][1]).toBe(INVITATION_ID);
+    expect(slug).toBe("zzzzzzzzzzzzzzzz");
+  });
+
+  it("never consults the owner-scoped lookup on any administration write", async () => {
+    // `findConsoleInvitation` applies `owner_sender_id = viewer` as a WHERE. A
+    // console write that called it would be owner-scoped whatever this file's
+    // other assertions said, so its absence is asserted directly.
+    await addMemberAction(
+      form({ invitationId: INVITATION_ID, fullName: "Luis", phone: "" }),
+    );
+    await removeMemberAction(
+      form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+    await deleteInvitationAction(form({ invitationId: INVITATION_ID }));
+
+    expect(findConsoleInvitation).not.toHaveBeenCalled();
+  });
+
+  it("reads the invitation WITHOUT the owner partition when it needs its members", async () => {
+    await moveMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        destinationInvitationId: OTHER_INVITATION_ID,
+        guestId: GUEST_ID,
+      }),
+    );
+
+    expect(listConsoleInvitations.mock.calls[0][1]).toMatchObject({
+      invitationId: INVITATION_ID,
+      ownedOnly: false,
+    });
+  });
+
+  it("does not read the device declaration for an administration write", async () => {
+    // The declaration gates a SEND. Nothing here sends anything, and gating
+    // data entry on it is the mistake the phone editor already documents.
+    await editMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        guestId: GUEST_ID,
+        fullName: "Ana",
+      }),
+    );
+
+    expect(readDeviceDeclaration).not.toHaveBeenCalled();
+  });
+});
+
+describe("every administration write still requires an operator session", () => {
+  const writes: readonly [string, () => Promise<unknown>][] = [
+    [
+      "createInvitationAction",
+      () =>
+        createInvitationAction(
+          form({
+            displayName: "X",
+            greetingName: "X",
+            memberFullName: "Ana",
+            memberPhone: "",
+          }),
+        ),
+    ],
+    [
+      "updateInvitationAction",
+      () =>
+        updateInvitationAction(
+          form({
+            invitationId: INVITATION_ID,
+            displayName: "X",
+            greetingName: "X",
+          }),
+        ),
+    ],
+    [
+      "addMemberAction",
+      () =>
+        addMemberAction(
+          form({ invitationId: INVITATION_ID, fullName: "Ana", phone: "" }),
+        ),
+    ],
+    [
+      "editMemberAction",
+      () =>
+        editMemberAction(
+          form({
+            invitationId: INVITATION_ID,
+            guestId: GUEST_ID,
+            fullName: "Ana",
+          }),
+        ),
+    ],
+    [
+      "removeMemberAction",
+      () =>
+        removeMemberAction(
+          form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+        ),
+    ],
+    [
+      "moveMemberAction",
+      () =>
+        moveMemberAction(
+          form({
+            invitationId: INVITATION_ID,
+            destinationInvitationId: OTHER_INVITATION_ID,
+            guestId: GUEST_ID,
+          }),
+        ),
+    ],
+    [
+      "chooseRecipientAction",
+      () =>
+        chooseRecipientAction(
+          form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+        ),
+    ],
+    [
+      "deleteInvitationAction",
+      () => deleteInvitationAction(form({ invitationId: INVITATION_ID })),
+    ],
+    [
+      "rotateSlugAction",
+      () => rotateSlugAction(form({ invitationId: INVITATION_ID })),
+    ],
+  ];
+
+  it("covers every action this slice adds", () => {
+    // Guards the loop below against becoming a ghost: an action dropped from
+    // this table would otherwise silently stop being checked.
+    expect(writes.map(([name]) => name)).toHaveLength(9);
+  });
+
+  it.each(writes)(
+    "refuses %s with no session, and writes nothing",
+    async (_name, invoke) => {
+      requireOperator.mockRejectedValue(
+        new Error("No hay sesión de operador."),
+      );
+
+      await expect(invoke()).rejects.toThrow(/sesión de operador/i);
+
+      for (const write of [
+        createInvitation,
+        updateInvitation,
+        addMember,
+        editMember,
+        removeMember,
+        moveMemberToInvitation,
+        chooseRecipient,
+        deleteInvitation,
+        rotateInvitationSlug,
+      ]) {
+        expect(write).not.toHaveBeenCalled();
+      }
+    },
+  );
+});
+
+describe("dispatch is still owner-scoped and still device-gated", () => {
+  // The half of confirmed decision 4 that did NOT change. If administration's
+  // relaxation ever leaks into these two actions, this is what turns red.
+  beforeEach(() => {
+    requireOperator.mockResolvedValue(BETO);
+  });
+
+  it("refuses BETO's send on an invitation ANA owns", async () => {
+    findConsoleInvitation.mockResolvedValue(null);
+
+    await expect(
+      markDispatchSentAction(form({ invitationId: INVITATION_ID })),
+    ).rejects.toThrow(/la gestiona la otra cuenta/i);
+
+    expect(markSent).not.toHaveBeenCalled();
+  });
+
+  it("refuses BETO's failure record on an invitation ANA owns", async () => {
+    findConsoleInvitation.mockResolvedValue(null);
+
+    await expect(
+      markDispatchFailedAction(form({ invitationId: INVITATION_ID })),
+    ).rejects.toThrow(/la gestiona la otra cuenta/i);
+
+    expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it("still applies the per-device WhatsApp gate to BETO", async () => {
+    readDeviceDeclaration.mockResolvedValue({
+      status: "mismatch",
+      declaredSenderId: ANA.id,
+    });
+
+    await expect(
+      markDispatchSentAction(form({ invitationId: INVITATION_ID })),
+    ).rejects.toThrow(/no coincide con la sesión/i);
+
+    expect(findConsoleInvitation).not.toHaveBeenCalled();
+    expect(markSent).not.toHaveBeenCalled();
+  });
+});
+
+describe("removeMemberAction — the advisory it hands back", () => {
+  it("reports the contradicted answer instead of refusing the removal", async () => {
+    // "Fer already said yes, but now he cannot come — take him off" is the
+    // couple's real workflow. The removal happens; what it broke is REPORTED.
+    getCurrentRsvp.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      attending: true,
+      seatsConfirmed: 2,
+      attendeeGuestIds: [GUEST_ID, SECOND_GUEST_ID],
+    });
+
+    const impact = await removeMemberAction(
+      form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(removeMember).toHaveBeenCalledTimes(1);
+    expect(impact).toEqual({
+      removedGuestIds: [GUEST_ID],
+      contradictedAnswers: [
+        {
+          rsvpResponseId: "11111111-1111-4111-8111-111111111111",
+          seatsConfirmed: 2,
+          danglingGuestIds: [GUEST_ID],
+        },
+      ],
+      seatsConfirmedExceedsMembers: true,
+    });
+  });
+
+  it("reports nothing to act on when the answer never named the removed member", async () => {
+    getCurrentRsvp.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      attending: true,
+      seatsConfirmed: 1,
+      attendeeGuestIds: [SECOND_GUEST_ID],
+    });
+
+    const impact = await removeMemberAction(
+      form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(impact.contradictedAnswers).toEqual([]);
+    expect(impact.seatsConfirmedExceedsMembers).toBe(false);
+    expect(impact.removedGuestIds).toEqual([GUEST_ID]);
+  });
+
+  it("reads the members BEFORE the removal, so the impact can name who left", async () => {
+    const order: string[] = [];
+    listConsoleInvitations.mockImplementation(async () => {
+      order.push("read");
+      return [
+        {
+          invitationId: INVITATION_ID,
+          ownerSenderId: ANA.id,
+          dispatchRecipientGuestId: null,
+          guests: [{ id: GUEST_ID }, { id: SECOND_GUEST_ID }],
+        },
+      ];
+    });
+    removeMember.mockImplementation(async () => {
+      order.push("remove");
+    });
+
+    await removeMemberAction(
+      form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(order).toEqual(["read", "remove"]);
+  });
+});
+
+describe("chooseRecipientAction — the member must belong to the invitation", () => {
+  it("accepts a guest the invitation currently names", async () => {
+    await chooseRecipientAction(
+      form({ invitationId: INVITATION_ID, guestId: SECOND_GUEST_ID }),
+    );
+
+    expect(chooseRecipient.mock.calls[0].slice(1)).toEqual([
+      INVITATION_ID,
+      SECOND_GUEST_ID,
+    ]);
+  });
+
+  it("refuses a guest id the invitation does not name, and writes nothing", async () => {
+    await expect(
+      chooseRecipientAction(
+        form({ invitationId: INVITATION_ID, guestId: STRANGER_GUEST_ID }),
+      ),
+    ).rejects.toThrow(/no pertenece a esta invitación/i);
+
+    expect(chooseRecipient).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteInvitationAction — the refusal it must not swallow", () => {
+  it("deletes an invitation with no dispatch history", async () => {
+    await deleteInvitationAction(form({ invitationId: INVITATION_ID }));
+
+    expect(deleteInvitation).toHaveBeenCalledTimes(1);
+    expect(rotateInvitationSlug).not.toHaveBeenCalled();
+    expect(revalidatePath.mock.calls.map((call) => call[0])).toContain(
+      "/console",
+    );
+  });
+
+  it("surfaces the repository's refusal verbatim, kinds and rotation and all", async () => {
+    // The action must not catch and reword this. `canDeleteInvitation` names
+    // the event kinds it found and offers slug rotation, and an operator shown
+    // "no se pudo eliminar" instead has been told nothing they can act on.
+    deleteInvitation.mockRejectedValue(
+      new Error(
+        `Could not delete invitation ${INVITATION_ID}: it has dispatch history ` +
+          "(link_opened, marked_failed), so a real guest may be holding its link. " +
+          "Rotate its slug instead, which makes the old link stop working without erasing what happened.",
+      ),
+    );
+
+    await expect(
+      deleteInvitationAction(form({ invitationId: INVITATION_ID })),
+    ).rejects.toThrow(
+      /link_opened, marked_failed[\s\S]*Rotate its slug instead/,
+    );
+  });
+});
+
+describe("rotateSlugAction", () => {
+  it("returns the new slug and records no dispatch event", async () => {
+    const slug = await rotateSlugAction(form({ invitationId: INVITATION_ID }));
+
+    expect(slug).toBe("zzzzzzzzzzzzzzzz");
+    expect(markSent).not.toHaveBeenCalled();
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(deleteInvitation).not.toHaveBeenCalled();
+  });
+
+  it("refuses a missing invitation id and rotates nothing", async () => {
+    await expect(rotateSlugAction(form({}))).rejects.toThrow(/no se indicó/i);
+
+    expect(rotateInvitationSlug).not.toHaveBeenCalled();
   });
 });

@@ -44,6 +44,8 @@ import { warmOgCard } from "@/lib/server/og-warm";
 
 export interface ImportGuest {
   readonly fullName: string;
+  /** How this person is actually called. Absent for most guests. */
+  readonly nickname?: string | null;
   readonly phone?: string;
   readonly isPrimary?: boolean;
   readonly isChild?: boolean;
@@ -140,6 +142,18 @@ function requireText(value: string | undefined, field: string): string {
 }
 
 /**
+ * The nickname an import row supplies, or `null` for one that supplies none.
+ *
+ * Never `undefined`: the column is nullable and a guest with no nickname falls
+ * through to the guest-naming capability's full-name and first-name fallbacks,
+ * which is a different thing from a field that was never considered. An
+ * emptied value is the absence of a nickname, not a nickname that is blank.
+ */
+function importedNickname(guest: ImportGuest): string | null {
+  return guest.nickname?.trim() || null;
+}
+
+/**
  * Validates one import row and resolves its owner to a single sender id.
  *
  * Sender ownership is mandatory at creation: `invitations.owner_sender_id` is
@@ -186,6 +200,7 @@ export function validateImportRow(
       // `phone_last8` is NULL too, so nothing at the gate can ever match them.
       return {
         fullName,
+        nickname: importedNickname(guest),
         phoneE164: null,
         isPrimary: guest.isPrimary === true,
         isChild: guest.isChild === true,
@@ -205,6 +220,7 @@ export function validateImportRow(
 
     return {
       fullName,
+      nickname: importedNickname(guest),
       phoneE164,
       isPrimary: guest.isPrimary === true,
       isChild: guest.isChild === true,
@@ -511,6 +527,69 @@ export async function createInvitation(
   return created;
 }
 
+/** The invitation's OWN fields an operator may rewrite from the edit form. */
+export interface InvitationEdit {
+  readonly displayName: string;
+  readonly greetingName: string;
+  readonly greetingNameSource: GreetingNameSource;
+  readonly rsvpDeadline: string | null;
+}
+
+/**
+ * Rewrites one invitation's own fields — never its membership.
+ *
+ * The greeting pair is written by `greetingNameColumns`, exactly as creation
+ * and every membership change write it (design §8), so a `derived` invitation
+ * re-derives from the members it actually has right now and the submitted
+ * string is ignored. Trusting the round-tripped copy instead is how a field the
+ * browser has been holding since page load overwrites a name the current
+ * members no longer agree with.
+ *
+ * The draft is validated before the statement, by the same pure function the
+ * form and the Server Action call, so a refusal costs nothing and leaves the
+ * stored name exactly as it was.
+ */
+export async function updateInvitation(
+  client: SupabaseClient,
+  invitationId: string,
+  edit: InvitationEdit,
+): Promise<void> {
+  const membership = await readMembership(client, invitationId);
+  const { refusals } = validateInvitationDraft({
+    displayName: edit.displayName,
+    greetingName: edit.greetingName,
+    greetingNameSource: edit.greetingNameSource,
+    members: membership.members,
+    dispatchRecipientGuestId: membership.dispatchRecipientGuestId,
+    rsvpDeadline: edit.rsvpDeadline,
+  });
+
+  if (refusals.length > 0) {
+    throw new Error(
+      `Could not update invitation ${invitationId}: ${refusalMessage(refusals)}. Nothing was written.`,
+    );
+  }
+
+  const { error } = await client
+    .from("invitations")
+    .update({
+      display_name: edit.displayName,
+      rsvp_deadline: edit.rsvpDeadline,
+      ...greetingNameColumns({
+        source: edit.greetingNameSource,
+        stored: edit.greetingName,
+        members: membership.members,
+      }),
+    })
+    .eq("id", invitationId);
+
+  if (error) {
+    throw new Error(
+      `Could not update invitation ${invitationId}: ${error.message}`,
+    );
+  }
+}
+
 /**
  * ── Member management ───────────────────────────────────────────────────────
  *
@@ -574,6 +653,9 @@ interface MembershipRow {
   }[];
 }
 
+/** The embedded resource name every guest read orders by. */
+const GUESTS = "invitation_guests";
+
 const MEMBERSHIP_SELECT =
   "display_name, greeting_name, greeting_name_source, rsvp_deadline, " +
   "dispatch_recipient_guest_id, " +
@@ -587,6 +669,16 @@ async function readMembership(
   const { data, error } = await client
     .from("invitations")
     .select(MEMBERSHIP_SELECT)
+    // A HOUSEHOLD HAS AN ORDER, and Postgres does not keep one for you: an UPDATE
+    // relocates the row in the heap, so an unordered read silently reshuffles the
+    // household every time anyone edits a member. That reaches the list the guest
+    // reads as the authoritative record of who is invited, the console list, and
+    // `deriveGreetingName`, whose y/e conjunction is decided by the LAST name.
+    // `is_primary` carries the intended order and nothing else (decision 12);
+    // `created_at` then `id` make the rest total rather than merely usually stable.
+    .order("is_primary", { referencedTable: GUESTS, ascending: false })
+    .order("created_at", { referencedTable: GUESTS, ascending: true })
+    .order("id", { referencedTable: GUESTS, ascending: true })
     .eq("id", invitationId)
     .maybeSingle<MembershipRow>();
 
@@ -1160,6 +1252,10 @@ export async function importInvitations(
       rsvp_deadline: invitation.rsvpDeadline,
       guests: invitation.guests.map((guest) => ({
         full_name: guest.fullName,
+        // `import_invitations` reads this key (migration 0012). Omitted from
+        // the payload, an imported nickname is dropped in silence with every
+        // other layer still looking correct.
+        nickname: guest.nickname ?? null,
         phone_e164: guest.phoneE164,
         is_primary: guest.isPrimary,
         is_child: guest.isChild,
@@ -1190,6 +1286,9 @@ export async function findInvitationBySlug(
   const { data, error } = await client
     .from("invitations")
     .select(INVITATION_SELECT)
+    .order("is_primary", { referencedTable: GUESTS, ascending: false })
+    .order("created_at", { referencedTable: GUESTS, ascending: true })
+    .order("id", { referencedTable: GUESTS, ascending: true })
     .eq("slug", slug)
     .maybeSingle<InvitationRow>();
 
@@ -1376,6 +1475,9 @@ export async function listConsoleInvitations(
   let query = client
     .from("invitations")
     .select(CONSOLE_INVITATION_SELECT)
+    .order("is_primary", { referencedTable: GUESTS, ascending: false })
+    .order("created_at", { referencedTable: GUESTS, ascending: true })
+    .order("id", { referencedTable: GUESTS, ascending: true })
     .order("display_name");
 
   if (options.ownedOnly) {

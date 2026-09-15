@@ -51,6 +51,7 @@
 import { readFileSync } from "node:fs";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 
 import {
   classifyPhoneDispatchability,
@@ -70,6 +71,68 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
 
 /** Repo-relative path of the untracked guest source. Git-ignored by design. */
 export const GUEST_SOURCE_PATH = "data/guests.source.json";
+
+/**
+ * One guest row of the source file.
+ *
+ * STRICT, and that is the one-way door. A source file in the old format carries
+ * a seats column and no `nickname`; there is no longer a stored seat allowance
+ * for it to populate, because the member count IS the cap since migration 0012.
+ * Accepting the file and ignoring the column is how a stale source imports
+ * wrong data while reporting success, so an unknown key is a rejection that
+ * names the key.
+ */
+const importGuestSchema = z.strictObject({
+  fullName: z.string(),
+  nickname: z.string().nullish(),
+  phone: z.string().optional(),
+  isPrimary: z.boolean().optional(),
+  isChild: z.boolean().optional(),
+});
+
+const importRowSchema = z.strictObject({
+  ownerEmail: z.string(),
+  displayName: z.string(),
+  greetingName: z.string(),
+  rsvpDeadline: z.string().nullish(),
+  sourceKey: z.string().optional(),
+  guests: z.array(importGuestSchema),
+});
+
+/**
+ * Renders one issue's path in the source file's own terms.
+ *
+ * `invitations` is prepended because the schema is applied to the array, not to
+ * the wrapper, and a path starting at `[7]` names a position in a file the
+ * operator has to open by hand. Field names are rendered the way every other
+ * message from this importer renders them — `full_name`, not `fullName` —
+ * because `validateImportRow` has always spoken in column names and two
+ * vocabularies for one field is one more than an operator can be asked to hold.
+ */
+function issuePath(path: readonly PropertyKey[]): string {
+  return path.reduce<string>((rendered, segment) => {
+    if (typeof segment === "number") {
+      return `${rendered}[${segment}]`;
+    }
+
+    return `${rendered}.${String(segment).replace(/[A-Z]/g, (upper) => `_${upper.toLowerCase()}`)}`;
+  }, "invitations");
+}
+
+/**
+ * The first issue, in the file's terms — never all of them.
+ *
+ * `ZodError.issues` for a malformed array is dominated by cascade noise from
+ * the first bad row, and the requirement's whole point is stopping at the row
+ * that introduced the problem. Zod's own message already reads
+ * "Invalid input: expected string, received number"; only the redundant prefix
+ * is removed, so the two halves of the sentence can never drift apart.
+ */
+function firstIssueMessage(error: z.ZodError): string {
+  const issue = error.issues[0];
+
+  return `${GUEST_SOURCE_PATH} → ${issuePath(issue.path)}: ${issue.message.replace(/^Invalid input:\s*/, "")}`;
+}
 
 /** Parses the raw source file contents into import rows. Pure and testable. */
 export function parseGuestSource(contents: string): ImportRow[] {
@@ -97,7 +160,17 @@ export function parseGuestSource(contents: string): ImportRow[] {
     );
   }
 
-  return invitations as ImportRow[];
+  // D22. This used to be `return invitations as ImportRow[]`, an unchecked cast
+  // over a value that had been checked only for being a non-empty array. Every
+  // malformed row past that point failed somewhere downstream as a bare
+  // TypeError naming no row, no field and no file.
+  const parsedRows = z.array(importRowSchema).safeParse(invitations);
+
+  if (!parsedRows.success) {
+    throw new Error(firstIssueMessage(parsedRows.error));
+  }
+
+  return parsedRows.data;
 }
 
 /** One guest whose stored number cannot receive a WhatsApp message. */
