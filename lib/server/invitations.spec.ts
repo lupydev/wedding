@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,10 +10,17 @@ import { resolveLocalKeys } from "../../supabase/tests/helpers/local-keys";
 import { summarizeConsoleList } from "@/lib/domain/console-list";
 
 import {
+  addMember,
+  chooseRecipient,
   createInvitation,
+  deleteInvitation,
+  editMember,
+  removeMember,
   findInvitationBySlug,
   findGuestInvitationOwner,
   importInvitations,
+  moveMemberToInvitation,
+  rotateInvitationSlug,
   findConsoleInvitation,
   listConsoleInvitations,
   listOperatorProfiles,
@@ -24,6 +32,7 @@ import {
   validateImportRows,
   type ImportRow,
   type NewInvitation,
+  type NewInvitationGuest,
   type SenderDirectory,
 } from "./invitations";
 import { createServerSupabaseClient } from "./supabase";
@@ -1007,6 +1016,1061 @@ describe("listConsoleInvitations (local Supabase)", () => {
           })
         )?.invitationId,
       ).toBe(fixture.anaInvitationId);
+    });
+  });
+});
+
+/**
+ * ── The write side (design.md §8) ───────────────────────────────────────────
+ *
+ * Everything below drives the repository's write path. Two layers, chosen per
+ * test rather than per file:
+ *
+ *  - The REAL local Supabase, wherever the database is the thing being proved —
+ *    the composite FK refusing a foreign recipient, the move trigger clearing
+ *    the source's choice, a hard delete really removing rows.
+ *  - A FAKE client, for the two states a real database cannot be made to reach
+ *    on demand: a guest insert failing while its compensating delete ALSO fails
+ *    (D21), and the proof that a refused move issues no statement at all (D25).
+ */
+
+/**
+ * One member of a create call, with everything a given test is not about
+ * defaulted. The fixtures then state only what the test actually turns on.
+ */
+function member(
+  fullName: string,
+  overrides: Partial<NewInvitationGuest> = {},
+): NewInvitationGuest {
+  return {
+    fullName,
+    nickname: null,
+    phoneE164: null,
+    isPrimary: false,
+    isChild: false,
+    ...overrides,
+  };
+}
+
+/** One call the repository made through the Supabase client. */
+interface RecordedCall {
+  readonly table: string;
+  readonly operation: "from" | "select" | "insert" | "update" | "delete";
+  readonly payload?: unknown;
+}
+
+type FakeResult = { data: unknown; error: { message: string } | null };
+
+/**
+ * A Supabase client that records every call and answers from a script.
+ *
+ * Keyed by `"<table>.<operation>"`. An unscripted call answers with an empty
+ * success, so a test only has to state the outcomes it is actually about.
+ */
+function makeFakeClient(script: Readonly<Record<string, FakeResult>> = {}): {
+  readonly calls: RecordedCall[];
+  readonly client: SupabaseClient;
+} {
+  const calls: RecordedCall[] = [];
+
+  function from(table: string) {
+    calls.push({ table, operation: "from" });
+    let key = table;
+
+    const answer = (): Promise<FakeResult> =>
+      Promise.resolve(script[key] ?? { data: null, error: null });
+
+    const chain = {
+      select(columns?: string) {
+        calls.push({ table, operation: "select", payload: columns });
+        // A trailing `.select()` on an insert or update is a RETURNING clause,
+        // not a read: it must not steal the mutation's scripted outcome.
+        if (key === table) {
+          key = `${table}.select`;
+        }
+        return chain;
+      },
+      insert(payload: unknown) {
+        calls.push({ table, operation: "insert", payload });
+        key = `${table}.insert`;
+        return chain;
+      },
+      update(payload: unknown) {
+        calls.push({ table, operation: "update", payload });
+        key = `${table}.update`;
+        return chain;
+      },
+      delete() {
+        calls.push({ table, operation: "delete" });
+        key = `${table}.delete`;
+        return chain;
+      },
+      eq() {
+        return chain;
+      },
+      in() {
+        return chain;
+      },
+      single: answer,
+      maybeSingle: answer,
+      then<TResult>(
+        onfulfilled?: (value: FakeResult) => TResult,
+        onrejected?: (reason: unknown) => TResult,
+      ) {
+        return answer().then(onfulfilled, onrejected);
+      },
+    };
+
+    return chain;
+  }
+
+  return { calls, client: { from } as unknown as SupabaseClient };
+}
+
+/** A sender row that really exists, so `owner_sender_id`'s FK is satisfied. */
+async function withSenderFixture(
+  body: (senderId: string) => Promise<void>,
+): Promise<void> {
+  const { secretKey } = resolveLocalKeys();
+  process.env.SUPABASE_URL = "http://127.0.0.1:54321";
+  process.env.SUPABASE_SECRET_KEY = secretKey;
+
+  const suffix = `${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+  const senderId = await withDb(async (db) => {
+    const result = await db.query<{ id: string }>(
+      `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+       values ('Ana Operadora', 'partner_a', $1, '+573001110000')
+       returning id`,
+      [`ana.${suffix}@example.test`],
+    );
+    return result.rows[0].id;
+  });
+
+  try {
+    await body(senderId);
+  } finally {
+    await withDb(async (db) => {
+      await db.query("set session_replication_role = replica");
+      await db.query(
+        `delete from dispatch_events where invitation_id in
+           (select id from invitations where owner_sender_id = $1)`,
+        [senderId],
+      );
+      await db.query(
+        `delete from invitation_guests where invitation_id in
+           (select id from invitations where owner_sender_id = $1)`,
+        [senderId],
+      );
+      await db.query("delete from invitations where owner_sender_id = $1", [
+        senderId,
+      ]);
+      await db.query("delete from senders where id = $1", [senderId]);
+      await db.query("reset session_replication_role");
+    });
+  }
+}
+
+describe("createInvitation — validated before any write (local Supabase)", () => {
+  it("creates a solo guest and a group through the identical write path", async () => {
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+
+      const solo = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Luis Guzmán",
+        greetingName: "",
+        greetingNameSource: "derived",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+        ],
+      });
+
+      const group = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Guzmán",
+        greetingName: "",
+        greetingNameSource: "derived",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            nickname: "Lucho",
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+          member("Inés Guzmán"),
+        ],
+      });
+
+      // Solo keeps the FULL name; a list member contributes a first name or a
+      // nickname. Same function, same call, two members' worth of difference.
+      const stored = await withDb(
+        async (db) =>
+          (
+            await db.query<{
+              id: string;
+              greeting_name: string;
+              greeting_name_source: string;
+            }>(
+              "select id, greeting_name, greeting_name_source from invitations where id = any($1)",
+              [[solo.id, group.id]],
+            )
+          ).rows,
+      );
+
+      expect(stored.find((row) => row.id === solo.id)?.greeting_name).toBe(
+        "Luis Guzmán",
+      );
+      expect(stored.find((row) => row.id === group.id)?.greeting_name).toBe(
+        "Lucho e Inés",
+      );
+      // Written together with the name, by the same function (design.md §8).
+      expect(stored.map((row) => row.greeting_name_source)).toEqual([
+        "derived",
+        "derived",
+      ]);
+      expect(solo.guests).toHaveLength(1);
+      expect(group.guests).toHaveLength(2);
+    });
+  });
+
+  it("stores a custom greeting name untouched, recording its source as custom", async () => {
+    await withSenderFixture(async (senderId) => {
+      const created = await createInvitation(createServerSupabaseClient(), {
+        ownerSenderId: senderId,
+        displayName: "Familia Guzmán",
+        greetingName: "Los del salón",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+        ],
+      });
+
+      const stored = await withDb(
+        async (db) =>
+          (
+            await db.query<{
+              greeting_name: string;
+              greeting_name_source: string;
+            }>(
+              "select greeting_name, greeting_name_source from invitations where id = $1",
+              [created.id],
+            )
+          ).rows[0],
+      );
+
+      expect(stored.greeting_name).toBe("Los del salón");
+      expect(stored.greeting_name_source).toBe("custom");
+    });
+  });
+
+  it("refuses a draft with zero members and creates nothing", async () => {
+    await withSenderFixture(async (senderId) => {
+      await expect(
+        createInvitation(createServerSupabaseClient(), {
+          ownerSenderId: senderId,
+          displayName: "Sin Nadie",
+          greetingName: "Sin Nadie",
+          greetingNameSource: "custom",
+          rsvpDeadline: null,
+          guests: [],
+        }),
+      ).rejects.toThrow(/no_members/);
+
+      const written = await withDb(
+        async (db) =>
+          (
+            await db.query(
+              "select 1 from invitations where owner_sender_id = $1",
+              [senderId],
+            )
+          ).rowCount,
+      );
+
+      expect(written).toBe(0);
+    });
+  });
+
+  it("refuses a member without a name and creates nothing", async () => {
+    await withSenderFixture(async (senderId) => {
+      await expect(
+        createInvitation(createServerSupabaseClient(), {
+          ownerSenderId: senderId,
+          displayName: "Familia Anónima",
+          greetingName: "Familia Anónima",
+          greetingNameSource: "custom",
+          rsvpDeadline: null,
+          guests: [member("   ", { isPrimary: true })],
+        }),
+      ).rejects.toThrow(/member_without_name/);
+
+      const written = await withDb(
+        async (db) =>
+          (
+            await db.query(
+              "select 1 from invitations where owner_sender_id = $1",
+              [senderId],
+            )
+          ).rowCount,
+      );
+
+      expect(written).toBe(0);
+    });
+  });
+});
+
+describe("createInvitation — D21, a compensation that itself fails", () => {
+  /**
+   * The bug this closes: the compensating delete's own result was discarded,
+   * so a failed compensation left a guestless invitation nobody could ever
+   * unlock, looking perfectly valid in the console, while the operator was
+   * told only that the guest insert had failed — the wrong thing, and no
+   * handle on the row.
+   */
+  it("names BOTH failures and the orphaned invitation's id and slug", async () => {
+    const { calls, client } = makeFakeClient({
+      "invitations.insert": {
+        data: { id: "0f5d2c3e-6a1b-4d7f-9c2e-3a4b5c6d7e8f" },
+        error: null,
+      },
+      "invitation_guests.insert": {
+        data: null,
+        error: { message: "duplicate key value violates unique constraint" },
+      },
+      "invitations.delete": {
+        data: null,
+        error: { message: "deadlock detected" },
+      },
+    });
+
+    const failure = await captureError(() =>
+      createInvitation(client, {
+        ownerSenderId: "11111111-1111-4111-8111-111111111111",
+        displayName: "Familia Guzmán",
+        greetingName: "Familia Guzmán",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+        ],
+      }),
+    );
+
+    const mintedSlug = calls.find(
+      (call) => call.table === "invitations" && call.operation === "insert",
+    )?.payload as { slug: string };
+
+    expect(failure).toContain("duplicate key value violates unique constraint");
+    expect(failure).toContain("deadlock detected");
+    expect(failure).toContain("0f5d2c3e-6a1b-4d7f-9c2e-3a4b5c6d7e8f");
+    expect(failure).toContain(mintedSlug.slug);
+  });
+
+  it("reports only the guest insert when the compensation succeeds", async () => {
+    const { client } = makeFakeClient({
+      "invitations.insert": {
+        data: { id: "0f5d2c3e-6a1b-4d7f-9c2e-3a4b5c6d7e8f" },
+        error: null,
+      },
+      "invitation_guests.insert": {
+        data: null,
+        error: { message: "phone_e164 violates check constraint" },
+      },
+      "invitations.delete": { data: null, error: null },
+    });
+
+    const failure = await captureError(() =>
+      createInvitation(client, {
+        ownerSenderId: "11111111-1111-4111-8111-111111111111",
+        displayName: "Familia Guzmán",
+        greetingName: "Familia Guzmán",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+        ],
+      }),
+    );
+
+    expect(failure).toContain("phone_e164 violates check constraint");
+    // The invitation really was removed, so there is no orphan to report and
+    // no second failure to name.
+    expect(failure).not.toContain("could not be removed");
+  });
+});
+
+describe("member management — add, edit, remove (local Supabase)", () => {
+  /** A derived-name invitation with the members named, returned as created. */
+  async function makeInvitation(
+    senderId: string,
+    names: readonly { fullName: string; nickname: string | null }[],
+  ) {
+    return createInvitation(createServerSupabaseClient(), {
+      ownerSenderId: senderId,
+      displayName: "Familia Guzmán",
+      greetingName: "",
+      greetingNameSource: "derived",
+      rsvpDeadline: null,
+      guests: names.map((name, index) => ({
+        fullName: name.fullName,
+        nickname: name.nickname,
+        phoneE164: index === 0 ? "+573001234567" : null,
+        isPrimary: index === 0,
+        isChild: false,
+      })),
+    });
+  }
+
+  async function storedGreeting(invitationId: string) {
+    return withDb(
+      async (db) =>
+        (
+          await db.query<{
+            greeting_name: string;
+            greeting_name_source: string;
+          }>(
+            "select greeting_name, greeting_name_source from invitations where id = $1",
+            [invitationId],
+          )
+        ).rows[0],
+    );
+  }
+
+  it("adds a member and re-derives the group name", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await makeInvitation(senderId, [
+        { fullName: "Luis Guzmán", nickname: "Lucho" },
+        { fullName: "Inés Guzmán", nickname: null },
+      ]);
+
+      const added = await addMember(
+        createServerSupabaseClient(),
+        invitation.id,
+        {
+          fullName: "Fernando Guzmán",
+          nickname: "Fer",
+          phoneE164: null,
+          isChild: false,
+        },
+      );
+
+      const reread = await findInvitationBySlug(
+        createServerSupabaseClient(),
+        invitation.slug,
+      );
+
+      expect(added.fullName).toBe("Fernando Guzmán");
+      expect(reread?.guests).toHaveLength(3);
+      expect((await storedGreeting(invitation.id)).greeting_name).toBe(
+        "Lucho, Inés y Fer",
+      );
+    });
+  });
+
+  it("edits a member's nickname and re-derives the group name", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await makeInvitation(senderId, [
+        { fullName: "Luis Guzmán", nickname: null },
+        { fullName: "Inés Guzmán", nickname: null },
+      ]);
+      const luis = invitation.guests.find(
+        (guest) => guest.fullName === "Luis Guzmán",
+      );
+
+      await editMember(createServerSupabaseClient(), invitation.id, luis!.id, {
+        nickname: "Lucho",
+      });
+
+      const stored = await storedGreeting(invitation.id);
+
+      expect(stored.greeting_name).toBe("Lucho e Inés");
+      expect(stored.greeting_name_source).toBe("derived");
+    });
+  });
+
+  it("never overwrites a custom group name when a member changes", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await createInvitation(createServerSupabaseClient(), {
+        ownerSenderId: senderId,
+        displayName: "Familia Guzmán",
+        greetingName: "Los del salón",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+        ],
+      });
+
+      await addMember(createServerSupabaseClient(), invitation.id, {
+        fullName: "Inés Guzmán",
+        nickname: null,
+        phoneE164: null,
+        isChild: false,
+      });
+
+      const stored = await storedGreeting(invitation.id);
+
+      expect(stored.greeting_name).toBe("Los del salón");
+      expect(stored.greeting_name_source).toBe("custom");
+    });
+  });
+
+  it("refuses to remove the LAST member, pointing at deleting the invitation", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await makeInvitation(senderId, [
+        { fullName: "Luis Guzmán", nickname: null },
+      ]);
+
+      const failure = await captureError(() =>
+        removeMember(
+          createServerSupabaseClient(),
+          invitation.id,
+          invitation.guests[0].id,
+        ),
+      );
+
+      expect(failure).toMatch(/delete the invitation/i);
+
+      const survivors = await findInvitationBySlug(
+        createServerSupabaseClient(),
+        invitation.slug,
+      );
+
+      expect(survivors?.guests.map((guest) => guest.fullName)).toEqual([
+        "Luis Guzmán",
+      ]);
+    });
+  });
+
+  it("removes a member from a two-member invitation and re-derives", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await makeInvitation(senderId, [
+        { fullName: "Luis Guzmán", nickname: null },
+        { fullName: "Inés Guzmán", nickname: null },
+      ]);
+      const ines = invitation.guests.find(
+        (guest) => guest.fullName === "Inés Guzmán",
+      );
+
+      await removeMember(createServerSupabaseClient(), invitation.id, ines!.id);
+
+      const survivors = await findInvitationBySlug(
+        createServerSupabaseClient(),
+        invitation.slug,
+      );
+
+      expect(survivors?.guests.map((guest) => guest.fullName)).toEqual([
+        "Luis Guzmán",
+      ]);
+      // One member left, so the SOLO fallback applies: the full name, not "Luis".
+      expect((await storedGreeting(invitation.id)).greeting_name).toBe(
+        "Luis Guzmán",
+      );
+    });
+  });
+
+  it("refuses to blank out a member's name", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await makeInvitation(senderId, [
+        { fullName: "Luis Guzmán", nickname: null },
+        { fullName: "Inés Guzmán", nickname: null },
+      ]);
+
+      const failure = await captureError(() =>
+        editMember(
+          createServerSupabaseClient(),
+          invitation.id,
+          invitation.guests[0].id,
+          { fullName: "   " },
+        ),
+      );
+
+      expect(failure).toContain("member_without_name");
+
+      const survivors = await findInvitationBySlug(
+        createServerSupabaseClient(),
+        invitation.slug,
+      );
+
+      expect(survivors?.guests.map((guest) => guest.fullName).sort()).toEqual([
+        "Inés Guzmán",
+        "Luis Guzmán",
+      ]);
+    });
+  });
+});
+
+describe("moveMemberToInvitation — D25, a refused move is never a statement", () => {
+  it("refuses a move that would empty the source and issues NO call at all", async () => {
+    const { calls, client } = makeFakeClient();
+
+    const failure = await captureError(() =>
+      moveMemberToInvitation(client, {
+        sourceInvitationId: "11111111-1111-4111-8111-111111111111",
+        destinationInvitationId: "22222222-2222-4222-8222-222222222222",
+        memberId: "33333333-3333-4333-8333-333333333333",
+        sourceMemberIds: ["33333333-3333-4333-8333-333333333333"],
+        sourceRecipientGuestId: "33333333-3333-4333-8333-333333333333",
+      }),
+    );
+
+    // The refusal is what the operator is told, and the database was never
+    // asked anything: the emptiness rule and the clearing trigger can never
+    // contend, because there is no statement for the trigger to fire on.
+    expect(failure).toMatch(/delete the invitation/i);
+    expect(calls).toEqual([]);
+  });
+
+  it("names the refusal rather than crashing on a zero-member derivation", async () => {
+    const { client } = makeFakeClient();
+
+    const failure = await captureError(() =>
+      moveMemberToInvitation(client, {
+        sourceInvitationId: "11111111-1111-4111-8111-111111111111",
+        destinationInvitationId: "22222222-2222-4222-8222-222222222222",
+        memberId: "33333333-3333-4333-8333-333333333333",
+        sourceMemberIds: ["33333333-3333-4333-8333-333333333333"],
+        sourceRecipientGuestId: null,
+      }),
+    );
+
+    // `deriveGreetingName([])` throws by design. It must be UNREACHABLE here:
+    // the member-count refusal always runs first, so the operator reads the
+    // refusal and its named reason rather than a derivation crash.
+    expect(failure).toContain("would_empty_source");
+    expect(failure).not.toMatch(/cannot derive a greeting name/i);
+  });
+
+  it("refuses a move to the SAME invitation without touching the database", async () => {
+    const { calls, client } = makeFakeClient();
+
+    const failure = await captureError(() =>
+      moveMemberToInvitation(client, {
+        sourceInvitationId: "11111111-1111-4111-8111-111111111111",
+        destinationInvitationId: "11111111-1111-4111-8111-111111111111",
+        memberId: "33333333-3333-4333-8333-333333333333",
+        sourceMemberIds: [
+          "33333333-3333-4333-8333-333333333333",
+          "44444444-4444-4444-8444-444444444444",
+        ],
+        sourceRecipientGuestId: null,
+      }),
+    );
+
+    expect(failure).toContain("same_invitation");
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("moveMemberToInvitation — a permitted move (local Supabase)", () => {
+  it("moves the member, clears the SOURCE's recipient and leaves the destination's alone", async () => {
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+
+      const source = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Guzmán",
+        greetingName: "",
+        greetingNameSource: "derived",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            nickname: "Lucho",
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+          member("Inés Guzmán", { phoneE164: "+573001234568" }),
+        ],
+      });
+      const destination = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Peña",
+        greetingName: "",
+        greetingNameSource: "derived",
+        rsvpDeadline: null,
+        guests: [
+          member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
+        ],
+      });
+
+      const moved = source.guests.find(
+        (guest) => guest.fullName === "Inés Guzmán",
+      )!;
+      const destinationOwn = destination.guests[0];
+
+      // Both invitations have a chosen recipient before the move.
+      await chooseRecipient(client, source.id, moved.id);
+      await chooseRecipient(client, destination.id, destinationOwn.id);
+
+      await moveMemberToInvitation(client, {
+        sourceInvitationId: source.id,
+        destinationInvitationId: destination.id,
+        memberId: moved.id,
+        sourceMemberIds: source.guests.map((guest) => guest.id),
+        sourceRecipientGuestId: moved.id,
+      });
+
+      const rows = await withDb(
+        async (db) =>
+          (
+            await db.query<{
+              id: string;
+              greeting_name: string;
+              dispatch_recipient_guest_id: string | null;
+              members: number;
+            }>(
+              `select i.id, i.greeting_name, i.dispatch_recipient_guest_id,
+                    (select count(*)::int from invitation_guests g where g.invitation_id = i.id) as members
+               from invitations i where i.id = any($1)`,
+              [[source.id, destination.id]],
+            )
+          ).rows,
+      );
+      const after = (id: string) => rows.find((row) => row.id === id)!;
+
+      expect(after(source.id).members).toBe(1);
+      expect(after(destination.id).members).toBe(2);
+      // The trigger cleared the source's choice; the destination's is untouched,
+      // never carried across (D25).
+      expect(after(source.id).dispatch_recipient_guest_id).toBeNull();
+      expect(after(destination.id).dispatch_recipient_guest_id).toBe(
+        destinationOwn.id,
+      );
+      // Both derived names now describe the membership each one actually has.
+      // One member left, so the SOLO fallback applies — and Luis has a
+      // nickname, which is what a solo address uses before his full name.
+      expect(after(source.id).greeting_name).toBe("Lucho");
+      expect(after(destination.id).greeting_name).toBe("Ana e Inés");
+    });
+  });
+});
+
+describe("chooseRecipient — the composite FK does the refusing (local Supabase)", () => {
+  it("accepts a member of the SAME invitation and refuses one from another", async () => {
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+
+      const ours = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Guzmán",
+        greetingName: "Familia Guzmán",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+        ],
+      });
+      const theirs = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Peña",
+        greetingName: "Familia Peña",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
+        ],
+      });
+
+      // The permitting counterpart, so the refusal below can fail if the
+      // constraint is ever dropped.
+      await chooseRecipient(client, ours.id, ours.guests[0].id);
+
+      const failure = await captureError(() =>
+        chooseRecipient(client, ours.id, theirs.guests[0].id),
+      );
+
+      expect(failure).toMatch(/foreign key constraint/i);
+
+      const stored = await withDb(
+        async (db) =>
+          (
+            await db.query<{ dispatch_recipient_guest_id: string | null }>(
+              "select dispatch_recipient_guest_id from invitations where id = $1",
+              [ours.id],
+            )
+          ).rows[0].dispatch_recipient_guest_id,
+      );
+
+      // Unchanged: the refused write left the earlier, valid choice in place.
+      expect(stored).toBe(ours.guests[0].id);
+    });
+  });
+});
+
+describe("deleteInvitation — refused by ANY dispatch history (local Supabase)", () => {
+  async function makeDeletable(senderId: string) {
+    return createInvitation(createServerSupabaseClient(), {
+      ownerSenderId: senderId,
+      displayName: "Familia Guzmán",
+      greetingName: "Familia Guzmán",
+      greetingNameSource: "custom",
+      rsvpDeadline: null,
+      guests: [
+        member("Luis Guzmán", { phoneE164: "+573001234567", isPrimary: true }),
+      ],
+    });
+  }
+
+  async function recordEvent(
+    invitationId: string,
+    senderId: string,
+    kind: string,
+  ): Promise<void> {
+    await withDb(async (db) => {
+      await db.query(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind, client_event_id)
+         values ($1, $2, $3, gen_random_uuid())`,
+        [invitationId, senderId, kind],
+      );
+    });
+  }
+
+  it("deletes an invitation with zero dispatch events, members included", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await makeDeletable(senderId);
+
+      await deleteInvitation(createServerSupabaseClient(), invitation.id);
+
+      const remaining = await withDb(async (db) => ({
+        invitations: (
+          await db.query("select 1 from invitations where id = $1", [
+            invitation.id,
+          ])
+        ).rowCount,
+        guests: (
+          await db.query(
+            "select 1 from invitation_guests where invitation_id = $1",
+            [invitation.id],
+          )
+        ).rowCount,
+      }));
+
+      expect(remaining).toEqual({ invitations: 0, guests: 0 });
+    });
+  });
+
+  it.each(["marked_sent", "link_opened", "marked_failed"])(
+    "refuses deletion for a %s event alone, naming it, and offers rotation",
+    async (kind) => {
+      await withSenderFixture(async (senderId) => {
+        const invitation = await makeDeletable(senderId);
+        await recordEvent(invitation.id, senderId, kind);
+
+        const failure = await captureError(() =>
+          deleteInvitation(createServerSupabaseClient(), invitation.id),
+        );
+
+        expect(failure).toContain(kind);
+        expect(failure).toMatch(/rotat/i);
+
+        const survived = await withDb(
+          async (db) =>
+            (
+              await db.query("select 1 from invitations where id = $1", [
+                invitation.id,
+              ])
+            ).rowCount,
+        );
+
+        expect(survived).toBe(1);
+      });
+    },
+  );
+});
+
+describe("rotateInvitationSlug — a new address for the same invitation (local Supabase)", () => {
+  it("returns the new slug even when warming rejects, because the slug already changed", async () => {
+    // THE CONTRACT THIS FUNCTION'S OWN DOCBLOCK PROMISES.
+    //
+    // Warming is a network call. If it is allowed to fail the rotation, the row
+    // has ALREADY been updated by then: the operator sees a thrown error while
+    // the old link is dead and the new slug — this function's only return value
+    // — is gone with the exception. The natural response is to retry, which
+    // mints and persists a THIRD slug. Rotation is the recovery path for
+    // "dispatched by mistake"; a recovery path that loses its own result is
+    // worse than the mistake it recovers from.
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+      const invitation = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Rojas",
+        greetingName: "Familia Rojas",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [member("Ana Rojas", { phoneE164: "+573001234567" })],
+      });
+
+      const newSlug = await rotateInvitationSlug(client, invitation.id, {
+        warm: async () => {
+          throw new Error("og warm endpoint unreachable");
+        },
+      });
+
+      expect(newSlug).toMatch(/^[a-z2-7]{16}$/);
+      expect(newSlug).not.toBe(invitation.slug);
+
+      // And the row really did rotate, so the caller can trust what it was given.
+      await withDb(async (db) => {
+        const stored = await db.query<{ slug: string }>(
+          "select slug from invitations where id = $1",
+          [invitation.id],
+        );
+        expect(stored.rows[0].slug).toBe(newSlug);
+      });
+    });
+  });
+
+  it("returns the new slug when warming answers false rather than throwing", async () => {
+    // A warm that reports failure without raising is the same situation wearing
+    // different clothes, and the boolean was discarded either way.
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+      const invitation = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Rojas",
+        greetingName: "Familia Rojas",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [member("Ana Rojas", { phoneE164: "+573001234567" })],
+      });
+
+      const newSlug = await rotateInvitationSlug(client, invitation.id, {
+        warm: async () => false,
+      });
+
+      expect(newSlug).toMatch(/^[a-z2-7]{16}$/);
+      expect(newSlug).not.toBe(invitation.slug);
+    });
+  });
+
+  it("mints a new slug, records the rotation, re-warms the new URL and keeps everything else", async () => {
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+      const invitation = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Guzmán",
+        greetingName: "Familia Guzmán",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+        ],
+      });
+
+      await withDb(async (db) => {
+        await db.query(
+          `insert into dispatch_events (invitation_id, actor_sender_id, kind, client_event_id)
+           values ($1, $2, 'marked_sent', gen_random_uuid())`,
+          [invitation.id, senderId],
+        );
+        await db.query(
+          "update invitations set og_warmed_at = now() where id = $1",
+          [invitation.id],
+        );
+      });
+
+      const warmed: string[] = [];
+      const newSlug = await rotateInvitationSlug(client, invitation.id, {
+        warm: async (slug) => {
+          warmed.push(slug);
+          return true;
+        },
+      });
+
+      expect(newSlug).not.toBe(invitation.slug);
+      expect(newSlug).toMatch(/^[a-z2-7]{16}$/);
+      // The new URL is a new CDN key, so the card is cold until it is warmed —
+      // and it is the NEW slug that gets warmed, never the retired one.
+      expect(warmed).toEqual([newSlug]);
+
+      const stored = await withDb(
+        async (db) =>
+          (
+            await db.query<{
+              slug: string;
+              slug_rotated_at: string | null;
+              og_warmed_at: string | null;
+              greeting_name: string;
+              events: number;
+              members: number;
+            }>(
+              `select i.slug, i.slug_rotated_at, i.og_warmed_at, i.greeting_name,
+                    (select count(*)::int from dispatch_events e where e.invitation_id = i.id) as events,
+                    (select count(*)::int from invitation_guests g where g.invitation_id = i.id) as members
+               from invitations i where i.id = $1`,
+              [invitation.id],
+            )
+          ).rows[0],
+      );
+
+      expect(stored.slug).toBe(newSlug);
+      expect(stored.slug_rotated_at).not.toBeNull();
+      expect(stored.og_warmed_at).toBeNull();
+      // Rotation is a new address, not a new invitation: the history it was
+      // offered as an alternative to deleting is exactly what it preserves.
+      expect(stored.events).toBe(1);
+      expect(stored.members).toBe(1);
+      expect(stored.greeting_name).toBe("Familia Guzmán");
+
+      // The old slug no longer names anything.
+      expect(await findInvitationBySlug(client, invitation.slug)).toBeNull();
+      expect((await findInvitationBySlug(client, newSlug))?.id).toBe(
+        invitation.id,
+      );
+    });
+  });
+
+  it("still refuses to delete a rotated invitation that was dispatched", async () => {
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+      const invitation = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Peña",
+        greetingName: "Familia Peña",
+        greetingNameSource: "custom",
+        rsvpDeadline: null,
+        guests: [
+          member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
+        ],
+      });
+
+      await withDb(async (db) => {
+        await db.query(
+          `insert into dispatch_events (invitation_id, actor_sender_id, kind, client_event_id)
+           values ($1, $2, 'marked_sent', gen_random_uuid())`,
+          [invitation.id, senderId],
+        );
+      });
+
+      await rotateInvitationSlug(client, invitation.id, {
+        warm: async () => true,
+      });
+
+      expect(
+        await captureError(() => deleteInvitation(client, invitation.id)),
+      ).toContain("marked_sent");
     });
   });
 });

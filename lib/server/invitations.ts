@@ -11,9 +11,22 @@ import {
   type ConsoleLatestAnswer,
   type ConsoleListRow,
 } from "@/lib/domain/console-list";
+import {
+  resolveGreetingName,
+  type GreetingNameSource,
+} from "@/lib/domain/greeting-name";
+import {
+  canMoveMember,
+  validateInvitationDraft,
+  type DraftRefusal,
+  type InvitationDraftMember,
+  type MoveRefusal,
+} from "@/lib/domain/invitation-draft";
+import { canDeleteInvitation } from "@/lib/domain/invitation-deletion";
 import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
 import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
 import { isWellFormedUuid } from "@/lib/domain/uuid";
+import { warmOgCard } from "@/lib/server/og-warm";
 
 /**
  * Invitation repository and import validation.
@@ -59,6 +72,8 @@ export type SenderDirectory = Readonly<Record<string, string>>;
 
 export interface NewInvitationGuest {
   readonly fullName: string;
+  /** How this member is addressed. Absent for most guests. */
+  readonly nickname?: string | null;
   readonly phoneE164: string | null;
   readonly isPrimary: boolean;
   readonly isChild: boolean;
@@ -74,6 +89,12 @@ export interface NewInvitation {
   readonly sourceKey?: string | null;
   readonly displayName: string;
   readonly greetingName: string;
+  /**
+   * Why `greetingName` says what it says. Defaults to `imported`, the column's
+   * own default: a script wrote the name and nobody has looked at it yet, so
+   * nothing may overwrite it. A console draft states `derived` or `custom`.
+   */
+  readonly greetingNameSource?: GreetingNameSource;
   readonly rsvpDeadline: string | null;
   readonly guests: readonly NewInvitationGuest[];
 }
@@ -335,7 +356,60 @@ function toRecord(row: InvitationRow): InvitationRecord {
 }
 
 /**
+ * The `greeting_name` / `greeting_name_source` column pair — the ONE place the
+ * two are produced (design.md §8).
+ *
+ * They are returned together, from one function, because that is the whole
+ * mitigation: two write sites is how a stored name and the source that explains
+ * it drift apart, and `greeting_name_source` exists precisely so "should this be
+ * re-derived?" is a stored fact rather than a guess made from the text.
+ *
+ * At `derived` the stored string is ignored and the name is recomputed from the
+ * members handed in. `deriveGreetingName` throws on an empty list by design, and
+ * every caller here refuses a memberless invitation BEFORE reaching this
+ * function, so that throw is unreachable through the write path.
+ */
+function greetingNameColumns(input: {
+  readonly source: GreetingNameSource;
+  readonly stored: string;
+  readonly members: readonly InvitationDraftMember[];
+}): { greeting_name: string; greeting_name_source: GreetingNameSource } {
+  return {
+    greeting_name: resolveGreetingName({
+      source: input.source,
+      stored: input.stored,
+      members: input.members,
+    }),
+    greeting_name_source: input.source,
+  };
+}
+
+/** One new guest as the pure draft validator sees them: no id yet, by definition. */
+function toDraftMember(guest: NewInvitationGuest): InvitationDraftMember {
+  return {
+    id: null,
+    fullName: guest.fullName,
+    nickname: guest.nickname ?? null,
+    phoneE164: guest.phoneE164,
+    isChild: guest.isChild,
+    // Reachability is an advisory about a CHOSEN recipient, and a member who
+    // has no id yet cannot have been chosen. Nothing here can consume it.
+    dispatchable: guest.phoneE164 !== null,
+  };
+}
+
+/**
  * Creates an invitation and its guests.
+ *
+ * ONE WRITE PATH FOR A SOLO GUEST AND FOR A GROUP
+ *
+ * A solo guest is a one-member invitation, not a different kind of thing, so
+ * there is no second function and no mode flag for them. The member count only
+ * ever changes what `deriveGreetingName` produces.
+ *
+ * The draft is validated by the same pure `validateInvitationDraft` the form and
+ * the Server Action use, BEFORE the first statement is issued: a refusal must
+ * cost nothing and leave nothing behind.
  *
  * If the guest insert fails the invitation row is removed again, because an
  * invitation with no guests can never be unlocked by anyone and would sit in
@@ -346,6 +420,25 @@ export async function createInvitation(
   client: SupabaseClient,
   input: NewInvitation,
 ): Promise<InvitationRecord> {
+  const members = input.guests.map(toDraftMember);
+  const source = input.greetingNameSource ?? "imported";
+  const { refusals } = validateInvitationDraft({
+    displayName: input.displayName,
+    greetingName: input.greetingName,
+    greetingNameSource: source,
+    members,
+    // A member that has never been written cannot have been chosen to receive
+    // the message, so creation never carries a recipient.
+    dispatchRecipientGuestId: null,
+    rsvpDeadline: input.rsvpDeadline,
+  });
+
+  if (refusals.length > 0) {
+    throw new Error(
+      `Could not create invitation "${input.displayName}": ${refusalMessage(refusals)}. Nothing was written.`,
+    );
+  }
+
   const slug = mintSlug();
 
   const { data: invitation, error: invitationError } = await client
@@ -354,7 +447,11 @@ export async function createInvitation(
       slug,
       owner_sender_id: input.ownerSenderId,
       display_name: input.displayName,
-      greeting_name: input.greetingName,
+      ...greetingNameColumns({
+        source,
+        stored: input.greetingName,
+        members,
+      }),
       rsvp_deadline: input.rsvpDeadline,
       source_key: input.sourceKey ?? null,
     })
@@ -371,6 +468,7 @@ export async function createInvitation(
     input.guests.map((guest) => ({
       invitation_id: invitation.id,
       full_name: guest.fullName,
+      nickname: guest.nickname ?? null,
       phone_e164: guest.phoneE164,
       is_primary: guest.isPrimary,
       is_child: guest.isChild,
@@ -378,7 +476,25 @@ export async function createInvitation(
   );
 
   if (guestsError) {
-    await client.from("invitations").delete().eq("id", invitation.id);
+    // D21. The compensation's OWN result is captured, not discarded. A failed
+    // compensation leaves a guestless invitation that can never be unlocked and
+    // that looks valid in the console, so the operator is told it exists and is
+    // given the two values needed to find it — otherwise they are told the
+    // wrong thing and handed no row to act on.
+    const { error: compensationError } = await client
+      .from("invitations")
+      .delete()
+      .eq("id", invitation.id);
+
+    if (compensationError) {
+      throw new Error(
+        `Could not create guests for invitation "${input.displayName}": ${guestsError.message}. ` +
+          `The empty invitation could not be removed either: ${compensationError.message}. ` +
+          `It is still present with id ${invitation.id} and slug ${slug}, has no members, ` +
+          "and must be deleted by hand.",
+      );
+    }
+
     throw new Error(
       `Could not create guests for invitation "${input.displayName}": ${guestsError.message}`,
     );
@@ -393,6 +509,598 @@ export async function createInvitation(
   }
 
   return created;
+}
+
+/**
+ * ── Member management ───────────────────────────────────────────────────────
+ *
+ * Add, edit and remove share one shape, and the order of its steps is the rule
+ * rather than an implementation detail:
+ *
+ *   1. read the invitation's CURRENT membership and naming,
+ *   2. compute what the membership would be AFTERWARDS, in memory,
+ *   3. validate that after-state with the pure `validateInvitationDraft`,
+ *   4. only then issue the write, and only then re-derive the group name.
+ *
+ * Step 3 before step 4 is what makes `deriveGreetingName`'s empty-list throw
+ * unreachable through this file: removing the last member is refused by the
+ * `no_members` check, so the derivation is never reached with an empty list.
+ * A re-derivation placed before the refusal would crash with "cannot derive a
+ * greeting name from zero members" instead of telling the operator to delete
+ * the invitation — the same action, reported as a bug.
+ */
+
+/** What each refusal means, in the terms the operator can act on. */
+const REFUSAL_EXPLANATION: Readonly<Record<DraftRefusal, string>> = {
+  no_members:
+    "an invitation must keep at least one member, so delete the invitation itself instead",
+  member_without_name: "every member needs a name",
+  duplicate_member_id: "the same member is listed twice",
+  recipient_not_a_member:
+    "the chosen recipient does not belong to this invitation",
+  custom_name_empty: "a custom group name cannot be blank",
+};
+
+function refusalMessage(refusals: readonly DraftRefusal[]): string {
+  return refusals
+    .map((refusal) => `${refusal} — ${REFUSAL_EXPLANATION[refusal]}`)
+    .join("; ");
+}
+
+/** An invitation's naming and membership, as the pure validator wants them. */
+interface InvitationMembership {
+  readonly greetingName: string;
+  readonly greetingNameSource: GreetingNameSource;
+  readonly dispatchRecipientGuestId: string | null;
+  readonly displayName: string;
+  readonly rsvpDeadline: string | null;
+  readonly members: readonly (InvitationDraftMember & {
+    readonly id: string;
+  })[];
+}
+
+interface MembershipRow {
+  display_name: string;
+  greeting_name: string;
+  greeting_name_source: GreetingNameSource;
+  rsvp_deadline: string | null;
+  dispatch_recipient_guest_id: string | null;
+  invitation_guests: {
+    id: string;
+    full_name: string;
+    nickname: string | null;
+    phone_e164: string | null;
+    is_child: boolean;
+  }[];
+}
+
+const MEMBERSHIP_SELECT =
+  "display_name, greeting_name, greeting_name_source, rsvp_deadline, " +
+  "dispatch_recipient_guest_id, " +
+  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, is_child)";
+
+/** Reads one invitation's current naming and membership, or throws. */
+async function readMembership(
+  client: SupabaseClient,
+  invitationId: string,
+): Promise<InvitationMembership> {
+  const { data, error } = await client
+    .from("invitations")
+    .select(MEMBERSHIP_SELECT)
+    .eq("id", invitationId)
+    .maybeSingle<MembershipRow>();
+
+  if (error) {
+    throw new Error(
+      `Could not read invitation ${invitationId}: ${error.message}`,
+    );
+  }
+
+  if (!data) {
+    throw new Error(`No invitation with id ${invitationId} exists.`);
+  }
+
+  return {
+    displayName: data.display_name,
+    greetingName: data.greeting_name,
+    greetingNameSource: data.greeting_name_source,
+    rsvpDeadline: data.rsvp_deadline,
+    dispatchRecipientGuestId: data.dispatch_recipient_guest_id,
+    members: data.invitation_guests.map((guest) => ({
+      id: guest.id,
+      fullName: guest.full_name,
+      nickname: guest.nickname,
+      phoneE164: guest.phone_e164,
+      isChild: guest.is_child,
+      dispatchable: guest.phone_e164 !== null,
+    })),
+  };
+}
+
+/**
+ * Refuses the change, BEFORE any statement, when the resulting membership is
+ * one the model does not permit.
+ */
+function refuseInvalidMembership(
+  membership: InvitationMembership,
+  afterMembers: readonly InvitationDraftMember[],
+  action: string,
+): void {
+  const { refusals } = validateInvitationDraft({
+    displayName: membership.displayName,
+    greetingName: membership.greetingName,
+    greetingNameSource: membership.greetingNameSource,
+    members: afterMembers,
+    // A recipient who is being removed is cleared by the FK, not refused here:
+    // the stored choice is checked against the members that remain.
+    dispatchRecipientGuestId: afterMembers.some(
+      (member) => member.id === membership.dispatchRecipientGuestId,
+    )
+      ? membership.dispatchRecipientGuestId
+      : null,
+    rsvpDeadline: membership.rsvpDeadline,
+  });
+
+  if (refusals.length > 0) {
+    throw new Error(`Could not ${action}: ${refusalMessage(refusals)}.`);
+  }
+}
+
+/**
+ * Re-derives and stores the group name for the membership that now exists.
+ *
+ * A `custom` or `imported` name is a string a person owns; it is returned
+ * untouched by `resolveGreetingName` and written back unchanged, together with
+ * its source, from the single column-pair function.
+ */
+async function rewriteGreetingName(
+  client: SupabaseClient,
+  invitationId: string,
+  source: GreetingNameSource,
+  stored: string,
+  members: readonly InvitationDraftMember[],
+): Promise<void> {
+  const { error } = await client
+    .from("invitations")
+    .update(greetingNameColumns({ source, stored, members }))
+    .eq("id", invitationId);
+
+  if (error) {
+    throw new Error(
+      `Members changed but the group name could not be updated on invitation ${invitationId}: ${error.message}`,
+    );
+  }
+}
+
+/** A member being added to an invitation that already exists. */
+export interface NewMember {
+  readonly fullName: string;
+  readonly nickname?: string | null;
+  readonly phoneE164: string | null;
+  readonly isChild: boolean;
+}
+
+/** The fields of an existing member an operator may rewrite. */
+export interface MemberEdit {
+  readonly fullName?: string;
+  readonly nickname?: string | null;
+  readonly phoneE164?: string | null;
+  readonly isChild?: boolean;
+}
+
+/** Adds one member to an existing invitation, re-deriving the group name. */
+export async function addMember(
+  client: SupabaseClient,
+  invitationId: string,
+  member: NewMember,
+): Promise<InvitationGuestRecord> {
+  const membership = await readMembership(client, invitationId);
+  const candidate: InvitationDraftMember = {
+    id: null,
+    fullName: member.fullName,
+    nickname: member.nickname ?? null,
+    phoneE164: member.phoneE164,
+    isChild: member.isChild,
+    dispatchable: member.phoneE164 !== null,
+  };
+
+  refuseInvalidMembership(
+    membership,
+    [...membership.members, candidate],
+    `add a member to invitation ${invitationId}`,
+  );
+
+  const { data, error } = await client
+    .from("invitation_guests")
+    .insert({
+      invitation_id: invitationId,
+      full_name: member.fullName,
+      nickname: member.nickname ?? null,
+      phone_e164: member.phoneE164,
+      is_primary: false,
+      is_child: member.isChild,
+    })
+    .select(
+      "id, full_name, nickname, phone_e164, phone_last8, is_primary, is_child",
+    )
+    .single<{
+      id: string;
+      full_name: string;
+      nickname: string | null;
+      phone_e164: string | null;
+      phone_last8: string | null;
+      is_primary: boolean;
+      is_child: boolean;
+    }>();
+
+  if (error || !data) {
+    throw new Error(
+      `Could not add a member to invitation ${invitationId}: ${error?.message ?? "no row returned"}`,
+    );
+  }
+
+  await rewriteGreetingName(
+    client,
+    invitationId,
+    membership.greetingNameSource,
+    membership.greetingName,
+    [...membership.members, { ...candidate, id: data.id }],
+  );
+
+  return {
+    id: data.id,
+    fullName: data.full_name,
+    nickname: data.nickname,
+    phoneE164: data.phone_e164,
+    phoneLast8: data.phone_last8,
+    isPrimary: data.is_primary,
+    isChild: data.is_child,
+  };
+}
+
+/** Rewrites one member's own fields, re-deriving the group name. */
+export async function editMember(
+  client: SupabaseClient,
+  invitationId: string,
+  guestId: string,
+  edit: MemberEdit,
+): Promise<void> {
+  const membership = await readMembership(client, invitationId);
+  const current = membership.members.find((member) => member.id === guestId);
+
+  if (!current) {
+    throw new Error(
+      `Member ${guestId} does not belong to invitation ${invitationId}.`,
+    );
+  }
+
+  const edited = {
+    ...current,
+    ...(edit.fullName === undefined ? {} : { fullName: edit.fullName }),
+    ...(edit.nickname === undefined ? {} : { nickname: edit.nickname }),
+    ...(edit.phoneE164 === undefined
+      ? {}
+      : { phoneE164: edit.phoneE164, dispatchable: edit.phoneE164 !== null }),
+    ...(edit.isChild === undefined ? {} : { isChild: edit.isChild }),
+  };
+  const afterMembers = membership.members.map((member) =>
+    member.id === guestId ? edited : member,
+  );
+
+  refuseInvalidMembership(
+    membership,
+    afterMembers,
+    `edit member ${guestId} of invitation ${invitationId}`,
+  );
+
+  const { error } = await client
+    .from("invitation_guests")
+    .update({
+      ...(edit.fullName === undefined ? {} : { full_name: edit.fullName }),
+      ...(edit.nickname === undefined ? {} : { nickname: edit.nickname }),
+      ...(edit.phoneE164 === undefined ? {} : { phone_e164: edit.phoneE164 }),
+      ...(edit.isChild === undefined ? {} : { is_child: edit.isChild }),
+    })
+    .eq("id", guestId);
+
+  if (error) {
+    throw new Error(`Could not edit member ${guestId}: ${error.message}`);
+  }
+
+  await rewriteGreetingName(
+    client,
+    invitationId,
+    membership.greetingNameSource,
+    membership.greetingName,
+    afterMembers,
+  );
+}
+
+/**
+ * Removes one member, re-deriving the group name.
+ *
+ * Removing the LAST member is refused and the refusal points at deleting the
+ * invitation, because an invitation with no members can never be unlocked by
+ * anyone while still looking valid in the console.
+ */
+export async function removeMember(
+  client: SupabaseClient,
+  invitationId: string,
+  guestId: string,
+): Promise<void> {
+  const membership = await readMembership(client, invitationId);
+  const afterMembers = membership.members.filter(
+    (member) => member.id !== guestId,
+  );
+
+  if (afterMembers.length === membership.members.length) {
+    throw new Error(
+      `Member ${guestId} does not belong to invitation ${invitationId}.`,
+    );
+  }
+
+  // The member-count refusal runs HERE, before any derivation and before any
+  // statement (design R3): with zero members left there is nothing to derive a
+  // name from, and the operator's actual next action is deleting the invitation.
+  refuseInvalidMembership(
+    membership,
+    afterMembers,
+    `remove member ${guestId} from invitation ${invitationId}`,
+  );
+
+  const { error } = await client
+    .from("invitation_guests")
+    .delete()
+    .eq("id", guestId);
+
+  if (error) {
+    throw new Error(`Could not remove member ${guestId}: ${error.message}`);
+  }
+
+  await rewriteGreetingName(
+    client,
+    invitationId,
+    membership.greetingNameSource,
+    membership.greetingName,
+    afterMembers,
+  );
+}
+
+/** Why a move was refused, in the terms the operator can act on. */
+const MOVE_REFUSAL_EXPLANATION: Readonly<Record<MoveRefusal, string>> = {
+  would_empty_source:
+    "it would leave the invitation with no members, so delete the invitation itself instead",
+  member_not_in_source:
+    "that member does not belong to the invitation moved from",
+  same_invitation: "the member already belongs to that invitation",
+};
+
+/** One member's move between two existing invitations. */
+export interface MemberMove {
+  readonly sourceInvitationId: string;
+  readonly destinationInvitationId: string;
+  readonly memberId: string;
+  /**
+   * The source's CURRENT member ids and chosen recipient, as the console
+   * already holds them.
+   *
+   * Passed in rather than read here, and that is D25's guarantee made
+   * structural: `canMoveMember` decides on these values BEFORE the first
+   * statement, so a refused move never becomes SQL and can never contend with
+   * `clear_recipient_on_guest_move`. A repository that read them first would
+   * have touched the database to answer a question it refuses on.
+   */
+  readonly sourceMemberIds: readonly string[];
+  readonly sourceRecipientGuestId: string | null;
+}
+
+/**
+ * Moves one member to another invitation.
+ *
+ * The source's recipient choice, if it was the moved member, is cleared by the
+ * `clear_recipient_on_guest_move` trigger — not here. The trigger binds against
+ * every writer, including a future script or a forgetful function; an
+ * application-level clear would bind only against this one (D11).
+ *
+ * The destination's own recipient is never touched. Carrying the choice across
+ * would be an auto-pick nobody made.
+ */
+export async function moveMemberToInvitation(
+  client: SupabaseClient,
+  move: MemberMove,
+): Promise<void> {
+  const outcome = canMoveMember({
+    sourceMemberIds: move.sourceMemberIds,
+    memberId: move.memberId,
+    sourceRecipientGuestId: move.sourceRecipientGuestId,
+    destinationInvitationId: move.destinationInvitationId,
+    sourceInvitationId: move.sourceInvitationId,
+  });
+
+  if (!outcome.ok) {
+    throw new Error(
+      `Could not move member ${move.memberId}: ${outcome.reason} — ${MOVE_REFUSAL_EXPLANATION[outcome.reason]}.`,
+    );
+  }
+
+  const { error } = await client
+    .from("invitation_guests")
+    .update({ invitation_id: move.destinationInvitationId })
+    .eq("id", move.memberId);
+
+  if (error) {
+    throw new Error(
+      `Could not move member ${move.memberId} to invitation ${move.destinationInvitationId}: ${error.message}`,
+    );
+  }
+
+  // Both households changed shape, so both derived names are now stale. Read
+  // after the move: this is the membership each one actually has.
+  for (const invitationId of [
+    move.sourceInvitationId,
+    move.destinationInvitationId,
+  ]) {
+    const membership = await readMembership(client, invitationId);
+    await rewriteGreetingName(
+      client,
+      invitationId,
+      membership.greetingNameSource,
+      membership.greetingName,
+      membership.members,
+    );
+  }
+}
+
+/**
+ * Records which member of an invitation receives its WhatsApp message.
+ *
+ * A guest belonging to a DIFFERENT invitation is refused by the composite
+ * foreign key `(id, dispatch_recipient_guest_id) → invitation_guests
+ * (invitation_id, id)`, which makes a cross-household recipient unrepresentable
+ * rather than merely unwritten. There is deliberately no application-level
+ * pre-check duplicating it: a second copy of the rule would hide whether the
+ * constraint still works, and it is the constraint that binds every writer.
+ */
+export async function chooseRecipient(
+  client: SupabaseClient,
+  invitationId: string,
+  guestId: string,
+): Promise<void> {
+  const { error } = await client
+    .from("invitations")
+    .update({ dispatch_recipient_guest_id: guestId })
+    .eq("id", invitationId);
+
+  if (error) {
+    throw new Error(
+      `Could not choose member ${guestId} as the recipient for invitation ${invitationId}: ${error.message}`,
+    );
+  }
+}
+
+/**
+ * Permanently deletes an invitation, members and all — or refuses.
+ *
+ * ANY `dispatch_events` row refuses, including `link_opened` and
+ * `marked_failed`: the link has demonstrably left this system's control, or the
+ * operator only BELIEVES it did not arrive, and both mean a real guest may be
+ * holding that URL. The refusal names the kinds it found, because "already
+ * dispatched" on an invitation nobody remembers sending reads as a bug until it
+ * says which events it means, and it points at slug rotation — the actual
+ * remedy for "sent by mistake".
+ *
+ * Where it is permitted it is a real hard delete. There is no soft-delete
+ * state, so no second definition of "exists" that one read could forget to
+ * honour (migration `0005`).
+ */
+export async function deleteInvitation(
+  client: SupabaseClient,
+  invitationId: string,
+): Promise<void> {
+  const { data, error } = await client
+    .from("dispatch_events")
+    .select("kind")
+    .eq("invitation_id", invitationId);
+
+  if (error) {
+    throw new Error(
+      `Could not read the dispatch log for invitation ${invitationId}: ${error.message}`,
+    );
+  }
+
+  const outcome = canDeleteInvitation(
+    ((data ?? []) as { kind: string }[]).map((event) => ({ kind: event.kind })),
+  );
+
+  if (!outcome.ok) {
+    throw new Error(
+      `Could not delete invitation ${invitationId}: it has dispatch history ` +
+        `(${outcome.eventKinds.join(", ")}), so a real guest may be holding its link. ` +
+        "Rotate its slug instead, which makes the old link stop working without erasing what happened.",
+    );
+  }
+
+  // `invitation_guests.invitation_id` cascades, so the members go with it.
+  const { error: deleteError } = await client
+    .from("invitations")
+    .delete()
+    .eq("id", invitationId);
+
+  if (deleteError) {
+    throw new Error(
+      `Could not delete invitation ${invitationId}: ${deleteError.message}`,
+    );
+  }
+}
+
+/** How a rotation re-warms the card for its new URL. */
+export interface RotateSlugOptions {
+  /** Injected so a test can watch WHICH slug is warmed without a network. */
+  readonly warm?: (slug: string) => Promise<boolean>;
+}
+
+/**
+ * Gives one invitation a NEW slug — the exit for "dispatched by mistake".
+ *
+ * The slug is minted by `mintSlug()`, the same function creation uses, so
+ * randomness stays in the adapter and the database keeps no randomness policy
+ * (design D2/D16). Rotation is a new ADDRESS for the same invitation: its
+ * members, its greeting name, its RSVP history and its dispatch history are all
+ * untouched, which is precisely why a rotated invitation is still undeletable
+ * if it was ever dispatched.
+ *
+ * `og_warmed_at` is cleared and the new URL re-warmed, because a CDN keys on the
+ * full URL: the new path is a cold cache entry no matter how warm the old one
+ * was. Warming never fails the rotation — the slug has already changed by then,
+ * and a cold card is a slow preview, not a broken link.
+ *
+ * What rotation does NOT do is invalidate a crawler's already-cached preview
+ * card for the OLD url. That card lives on Meta's infrastructure, and nothing
+ * here can reach it.
+ */
+export async function rotateInvitationSlug(
+  client: SupabaseClient,
+  invitationId: string,
+  options: RotateSlugOptions = {},
+): Promise<string> {
+  const slug = mintSlug();
+
+  const { error } = await client
+    .from("invitations")
+    .update({
+      slug,
+      slug_rotated_at: new Date().toISOString(),
+      // The new URL has never been fetched by anybody. Saying otherwise would
+      // make the console's "warmed" badge claim a cache entry that is empty.
+      og_warmed_at: null,
+    })
+    .eq("id", invitationId);
+
+  if (error) {
+    throw new Error(
+      `Could not rotate the slug of invitation ${invitationId}: ${error.message}`,
+    );
+  }
+
+  // THE SLUG HAS ALREADY CHANGED, so nothing after this point may throw.
+  //
+  // Warming is a network call and the docblock above promises it never fails the
+  // rotation. Without this guard it did: a rejecting warm threw AFTER the row was
+  // updated, so the operator saw a failed rotation while the old link was already
+  // dead and the new slug — this function's only return value — was lost with the
+  // exception. Retrying then minted a THIRD slug. Rotation is the recovery path
+  // for "dispatched by mistake"; it must not need recovering from itself.
+  //
+  // A cold card is a slow first preview. That is the whole cost of swallowing this.
+  const warm = options.warm ?? ((next: string) => warmOgCard(client, next));
+  try {
+    await warm(slug);
+  } catch {
+    // Deliberately swallowed. `og_warmed_at` is already null, so the next warm
+    // attempt — scheduled or manual — still knows this card is cold.
+  }
+
+  return slug;
 }
 
 /** One household's outcome from an import run. */

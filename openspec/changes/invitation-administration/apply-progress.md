@@ -669,3 +669,226 @@ modules in a half with no call sites. The single natural boundary *is* the whole
 
 52/120 tasks complete (all of slice 1a, all of slice 2a, all of slice 2b). Ready for verify.
 Slice 3a is NOT started by design.
+
+---
+
+# Batch 4 — Slice **3a** only (tasks 3a.1–3a.17)
+
+**Mode**: Strict TDD (`openspec/config.yaml` → `strict_tdd: true`, `test_command: "npm test"`)
+**Branch**: `feat/whatsapp-wedding-invitations` (base `4314333`, tree clean at start)
+**Prior progress read**: yes — this file's slice-1a, slice-2a and slice-2b sections above, kept
+byte-untouched and merged into.
+**Not started, deliberately**: slice 3b (Server Actions and the importer's Zod layer), and
+slice 1b, which remains unstarted from batch 1.
+**Over budget, stated up front**: **1,697 authored changed lines** against `review_budget_lines:
+800`. See *Why this slice could not land in 800 lines* below. One deduplication refactor was
+taken because it improved the tests; no comment, test or doc was removed to reach a number.
+
+## This slice closes the interim gap slice 2b opened
+
+Slice 2b made the console READ `dispatch_recipient_guest_id` and made
+`no_recipient_chosen` the first preflight blocker kind. Nothing wrote that column. Between
+2b landing and this slice, **every invitation reported `no_recipient_chosen` and dispatch was
+blocked for all of them** — correct behaviour for a column that is legitimately null, but a
+state no operator could leave.
+
+`chooseRecipient` (3a.11/3a.12) is what ends that, and it is the load-bearing task of this
+slice rather than a routine one. It is also the narrowest function here, deliberately: the
+composite FK `(id, dispatch_recipient_guest_id) → invitation_guests (invitation_id, id)` does
+the refusing, and **no application-level pre-check was added**. A second copy of that rule
+would hide whether the constraint still works. The test proves the database refuses a
+cross-household guest (`violates foreign key constraint`) and that the previously stored,
+valid choice is still in place afterwards.
+
+## Completed Tasks
+
+| Task | Status | Evidence |
+|---|---|---|
+| 3a.1 RED — `createInvitation` validates before writing; one path for solo and group | ✅ | `Tests 4 failed \| 40 passed (44)`; `AssertionError: expected '' to be 'Luis Guzmán'`, `expected 'imported' to be 'custom'`, `promise resolved "{ …(7) }" instead of rejecting` ×2 |
+| 3a.2 GREEN — validation + `greeting_name`/`greeting_name_source` from ONE function | ✅ | `Tests 44 passed (44)`; `greetingNameColumns()` is the single producer of the pair (§8) |
+| 3a.3 RED — **D21**, guest insert AND compensation both fail | ✅ | `AssertionError: expected 'Could not create guests for invitatio…' to contain 'deadlock detected'` — the compensation's own error was discarded, exactly the bug at the old `:398` |
+| 3a.4 GREEN — both failures plus the orphan's `id` and `slug` named | ✅ | `Tests 46 passed (46)`; permitting counterpart asserts the message does NOT claim an orphan when the compensation succeeded |
+| 3a.5 RED — `addMember`/`editMember`/`removeMember`, last-member refusal paired | ✅ | `Tests 6 failed \| 46 passed (52)`; `TypeError: addMember is not a function`, `editMember is not a function`, `removeMember is not a function` |
+| 3a.6 GREEN — all three validate the AFTER-state before any write | ✅ | `Tests 52 passed (52)` |
+| 3a.7 RED — a refused move issues NO call at all (D25) | ✅ | `AssertionError: expected '(0 , …moveMemberToInvitation…' to match /delete the invitation/i` |
+| 3a.8 GREEN — `canMoveMember` decides before SQL; the trigger clears the source | ✅ | `Tests 56 passed (56)`; `expect(calls).toEqual([])` passes — zero calls, not zero writes |
+| 3a.9 RED — the refusal precedes any greeting-name derivation | ✅ | `Tests 4 failed \| 52 passed (56)` after the assertion was strengthened to require the named reason, not merely the absence of a crash |
+| 3a.10 GREEN — refusal ordered before derivation in every member path | ✅ | `deriveGreetingName([])` is unreachable: `expect(failure).toContain("would_empty_source")` and `.not.toMatch(/cannot derive a greeting name/i)` both hold |
+| 3a.11 RED — `chooseRecipient`, same-invitation accepted, foreign refused by the FK | ✅ | RED captured as `TypeError: chooseRecipient is not a function` in the 3a.7 run, where the move test used it as a fixture. The FK-refusal assertion itself passed on its first run — see the honesty note below |
+| 3a.12 GREEN — `chooseRecipient` writes `dispatch_recipient_guest_id` | ✅ | `Tests 57 passed (57)`; stored recipient unchanged after the refused write |
+| 3a.13 RED — `deleteInvitation` permitted at zero events, refused by any history | ✅ | `Tests 4 failed \| 57 passed (61)`; `TypeError: deleteInvitation is not a function`, `to contain 'link_opened'`, `to contain 'marked_failed'` |
+| 3a.14 GREEN — `canDeleteInvitation` consulted before the hard delete | ✅ | `Tests 61 passed (61)`; refusal names the kinds AND offers rotation |
+| 3a.15 RED — `rotateInvitationSlug` mints, records, nulls the warm, re-warms | ✅ | `Tests 2 failed \| 61 passed (63)`; `TypeError: rotateInvitationSlug is not a function` |
+| 3a.16 GREEN — rotation per D16, `mintSlug()` reused | ✅ | `Tests 63 passed (63)` |
+| 3a.17 Verify | ✅ | see *Work Unit Evidence* |
+
+## An honesty note on 3a.11's RED
+
+Task 3a.11's cross-household assertion **passed on its first execution**, and that is recorded
+rather than dressed up. Its RED is real but was captured one step earlier: the move test (3a.7)
+used `chooseRecipient` as a fixture and failed with `TypeError: chooseRecipient is not a
+function`, which is what drove `chooseRecipient` into existence. The dedicated FK test then
+pinned behaviour the DATABASE already provides, because slice 1a delivered the composite
+constraint. It is a triangulation case over an existing guarantee, not a fresh RED→GREEN cycle,
+and it is exactly the test that would fail if a future change dropped the constraint or if
+somebody added the application-level pre-check this slice deliberately refused to add.
+
+## D21 — what the old code actually did, and what closes it
+
+```ts
+// before — the delete's own result is discarded
+await client.from("invitations").delete().eq("id", invitation.id);
+throw new Error(`Could not create guests …: ${guestsError.message}`);
+```
+
+A failing compensation left a **guestless invitation nobody can ever unlock**, looking valid in
+the console, while the operator was told only that the guest insert failed — the wrong thing,
+and no handle on the row. The fix captures `compensationError` and, when it is non-null, throws
+a message naming **both** failures plus the orphan's `id` and `slug`. A test proving only that
+the guest-insert failure surfaces would not have closed this: the old code already did that.
+The refusing test asserts all four facts; its permitting counterpart asserts that a SUCCESSFUL
+compensation does not claim an orphan exists.
+
+## D25 — the refusal that issues nothing
+
+`moveMemberToInvitation` takes `sourceMemberIds` and `sourceRecipientGuestId` as ARGUMENTS
+rather than reading them, and that is a deliberate consequence of what 3a.7 has to prove. The
+test asserts `calls` is `[]` — zero calls through the client, not zero writes. A repository
+that read the membership first in order to decide would have touched the database to answer a
+question it then refuses, and the assertion could only have been weakened to "zero writes".
+`canMoveMember`'s own §4 signature already takes exactly this snapshot, so the repository
+mirrors the pure function it delegates to.
+
+The cost is stated plainly: a stale snapshot could let a move empty its source. `design.md`
+D25 already answers this — the zero-member state is made **inert rather than prevented** (a
+`count(*)` cap of 0 refuses every attending RSVP, no phone matches, and the invitation stays
+visible and deletable). This slice does not introduce a second definition of existence to
+guard a race the design chose to absorb.
+
+## §8 — one function writes the pair
+
+`greetingNameColumns({ source, stored, members })` returns `{ greeting_name,
+greeting_name_source }` together and is the ONLY producer of either column in the repository.
+Both the `INSERT` in `createInvitation` and the `UPDATE` in `rewriteGreetingName` spread its
+result. Two write sites is how the stored name and the source that explains it drift apart,
+and `greeting_name_source` exists precisely so "should this be re-derived?" is a stored fact
+rather than a guess made by matching text against member names.
+
+Proven by a paired test: a `derived` invitation re-derives on every member change
+(`"Lucho e Inés"` after a nickname edit), and a `custom` one is left untouched by the same code
+path (`"Los del salón"` survives an `addMember`, source still `custom`).
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 3a.1/3a.2 | `lib/server/invitations.spec.ts` | Integration (real local Supabase) | ✅ 40/40 measured before the first edit | ✅ `Tests 4 failed \| 40 passed (44)`; `expected '' to be 'Luis Guzmán'` | ✅ `Tests 44 passed (44)` | ✅ 4 cases: solo vs group through the identical call, a custom name stored untouched, `no_members` refused, `member_without_name` refused — each refusal asserting zero rows written | ✅ create's message moved onto the shared `refusalMessage()` when 3a.6 introduced it; green after |
+| 3a.3/3a.4 | same file | Integration (fake client) | ✅ 44/44 | ✅ `expected 'Could not create guests for invitatio…' to contain 'deadlock detected'` | ✅ `Tests 46 passed (46)` | ✅ 2 cases: compensation fails (both failures + id + slug named) and compensation succeeds (no orphan claimed) — the pair is what makes the first assertion falsifiable | ➖ |
+| 3a.5/3a.6 | same file | Integration (real local Supabase) | ✅ 46/46 | ✅ `Tests 6 failed \| 46 passed (52)`; three `is not a function` | ✅ `Tests 52 passed (52)` | ✅ 6 cases: add re-derives, edit re-derives, a `custom` name is never overwritten, the LAST member is refused with the invitation intact, a two-member removal succeeds and falls back to the SOLO name, and a blanked name is refused | ✅ `readMembership`, `refuseInvalidMembership`, `rewriteGreetingName`, `REFUSAL_EXPLANATION` extracted so all three functions share one shape |
+| 3a.7/3a.8/3a.9/3a.10 | same file | Integration (fake client + real local Supabase) | ✅ 52/52 | ✅ `Tests 4 failed \| 52 passed (56)` | ✅ `Tests 56 passed (56)` | ✅ 4 cases: `would_empty_source` with zero calls, the same refusal asserted NOT to be a derivation crash, `same_invitation` with zero calls, and a real three-member move that clears the source's recipient, leaves the destination's alone and re-derives both names | ➖ |
+| 3a.11/3a.12 | same file | Integration (real local Supabase) | ✅ 56/56 | ✅ `TypeError: chooseRecipient is not a function` (captured in the 3a.7 run) | ✅ `Tests 57 passed (57)` | ✅ permitting counterpart written FIRST in the same test, so the FK refusal can fail if the constraint is dropped | ➖ |
+| 3a.13/3a.14 | same file | Integration (real local Supabase) | ✅ 57/57 | ✅ `Tests 4 failed \| 57 passed (61)` | ✅ `Tests 61 passed (61)` | ✅ 4 cases via `it.each`: zero-event deletion succeeds (invitation AND members gone), then `marked_sent`, `link_opened` and `marked_failed` each ALONE refuse, name themselves and offer rotation | ➖ |
+| 3a.15/3a.16 | same file | Integration (real local Supabase) | ✅ 61/61 | ✅ `Tests 2 failed \| 61 passed (63)` | ✅ `Tests 63 passed (63)` | ✅ 2 cases: rotation asserts the new slug's alphabet, `slug_rotated_at` set, `og_warmed_at` nulled, the warm invoked with the NEW slug, members/name/history preserved, the old slug resolving to `null` and the new one to the same id; plus a rotated-then-still-undeletable case | ➖ |
+
+### Test Summary
+
+- **Total tests written**: **23** authored `it(` blocks (one of them an `it.each` over three
+  event kinds, counted as 3), all appended to `lib/server/invitations.spec.ts`
+- **Total tests passing**: **1810** (`Test Files 97 passed (97)`), up from the batch-3 baseline
+  of **1787**. The delta is exactly the 23 authored cases; no file-scanning spec gained a case,
+  because no new source file was created
+- **Focused file**: `lib/server/invitations.spec.ts` went from **40** to **63** passing
+- **Layers used**: Integration against the real local Supabase (19), Integration against a
+  recording fake client (4). No new unit or E2E tests — every behaviour in this slice is a
+  write against a schema, and the pure logic it composes was already covered by slices 2a/2b
+- **Approval tests**: none. `createInvitation` was rewritten with a behaviour CHANGE (it now
+  validates and writes a source), so its existing tests were extended rather than preserved;
+  the three pre-existing `createInvitation` tests stayed green untouched throughout
+- **Mocks used**: zero. The fake client is a recording stub with a scripted result table, not
+  a mocking framework; the two tests that use it assert on recorded calls and thrown text
+- **Pure functions created**: 3 module-private (`greetingNameColumns`, `toDraftMember`,
+  `refusalMessage`). No new pure logic was added to `lib/server/**` — `validateInvitationDraft`,
+  `canMoveMember`, `canDeleteInvitation`, `resolveGreetingName` are all imported from
+  `lib/domain/**` and none of them was reimplemented here
+
+## Nothing in `lib/domain/**` was reimplemented
+
+Stated explicitly because it was the standing instruction for this slice. The repository
+imports and delegates: `validateInvitationDraft` (create, add, edit, remove), `canMoveMember`
+(move), `canDeleteInvitation` (delete), `resolveGreetingName` (every name write). `rg` finds
+no second copy of a refusal rule, a conjunction rule or a naming fallback under `lib/server/`.
+`mintSlug()` is reused by rotation exactly as D16 requires, so randomness stays in the adapter
+and rotation does not become the exception to D2.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `npm test -- lib/server/invitations` → `Test Files 1 passed (1)`, `Tests 63 passed (63)` (task 3a.17's own command; baseline 40) |
+| Full suite | `npm test` → **exit 0**, `Test Files 97 passed (97)`, `Tests 1810 passed (1810)` — baseline 1787 beaten by +23, zero failures, zero skips |
+| Runtime harness command/scenario and exact result | **Local Supabase (docker), exercised for real.** 19 of the 23 new tests issue genuine SQL through PostgREST against migration `0012`'s schema: the composite FK, the `clear_recipient_on_guest_move` trigger, the `invitation_guests` cascade and the `greeting_name_source` check constraint all participated. The fake-client tests cover only the two states a real database cannot be made to reach on demand (a compensation that itself fails; a refusal that must issue nothing) |
+| E2E | **Not run, and that is the correct answer here.** Only `lib/server/invitations.ts` and its own spec changed — nothing under `app/**`, `components/**` or `e2e/**`. The E2E readiness counts remain knowingly stale until task 4b.15 |
+| `npm run typecheck` | exit 0, no output |
+| `npm run lint` | exit 0, zero findings. `import "server-only"` is still the first statement of `lib/server/invitations.ts` |
+| `npm run format:check` | exit 0, "All matched files use Prettier code style!" (after `prettier --write` on the two changed files) |
+| `npm run build` | exit 0, `✓ Compiled successfully in 872ms`, same 13 routes as slice 2b |
+| Cold-start flake | `tools/eslint-zones.spec.ts` passed on the first run of every full-suite invocation and again in isolation (`Tests 14 passed (14)`). No re-run was needed |
+| Database survival check | Run before and after all database work, as instructed. Before: `auth.users` = `lumigu.dev@gmail.com`, `sruiz7541@gmail.com`; `ceremony.couple_names` = `Luis & Michell`. After: identical. `supabase db reset` was NOT run. Zero fixture rows leaked — every write-side test tears down through `withSenderFixture` |
+| Rollback boundary | Delete the seven new exported functions and their five private helpers from `lib/server/invitations.ts`, and the appended `describe` blocks from its spec. The prior read-only surface, `importInvitations`, `validateImportRow*` and every console read are untouched. No migration, no schema, no data. `git status` shows exactly 2 modified files outside `openspec/**` |
+
+## Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `lib/server/invitations.ts` | Modified | +695/−2. `createInvitation` now validates the draft before any statement and writes the greeting pair from `greetingNameColumns()`; D21's compensation captures its own error; new exports `addMember`, `editMember`, `removeMember`, `moveMemberToInvitation`, `chooseRecipient`, `deleteInvitation`, `rotateInvitationSlug`; new private helpers `greetingNameColumns`, `toDraftMember`, `refusalMessage`, `readMembership`, `refuseInvalidMembership`, `rewriteGreetingName`; `NewInvitationGuest` gains optional `nickname`, `NewInvitation` gains optional `greetingNameSource` |
+| `lib/server/invitations.spec.ts` | Modified | +1000/−0. 23 new cases across 7 `describe` blocks; a recording fake Supabase client; `withSenderFixture` and a `member()` fixture helper |
+| `openspec/changes/invitation-administration/tasks.md` | Modified | 3a.1–3a.17 marked `[x]` |
+| `openspec/changes/invitation-administration/apply-progress.md` | Modified | This section appended; the slice-1a, slice-2a and slice-2b sections above are byte-untouched |
+
+## Workload / PR Boundary
+
+- Mode: **chained slice 3a of eight**, one commit per slice, no pull requests
+- Current work unit: 3a — the repository write side
+- Boundary: starts at `4314333` with a clean tree; ends with every write-side repository
+  function shipped and green, `dispatch_recipient_guest_id` finally writable, and slice 3b not
+  started
+- **Authored changed lines: 1,697** — 1,000 insertions in the spec plus 695 insertions and 2
+  deletions in the source, all excluding `openspec/**`. Against `review_budget_lines: 800` this
+  is **2.1× over. `size:exception` is required for this slice**
+- **Not committed and not pushed**, as instructed
+
+### Why this slice could not land in 800 lines
+
+`design.md` §6 estimated slice 3a at ≈750 lines. That estimate was low, for reasons that are
+facts about the work rather than excuses:
+
+1. **Seven exported functions, not one.** The slice's own task list names `createInvitation`,
+   `addMember`, `editMember`, `removeMember`, `moveMemberToInvitation`, `chooseRecipient`,
+   `deleteInvitation` and `rotateInvitationSlug`. At this repository's established density —
+   every existing function in this file carries a 10-to-20-line rationale comment explaining
+   why it is shaped as it is — 695 source lines for eight surfaces plus six helpers is the
+   house rate, not padding.
+2. **Every refusal ships its permitting counterpart in the same test**, which the
+   invitation-administration spec requires by name. Nine refusal/permission pairs is eighteen
+   assertions' worth of fixture.
+3. **Integration fixtures are expensive.** A real-Supabase test needs a sender row, one or two
+   invitations, their members, and a full teardown. `withSenderFixture` already factors the
+   sender and teardown out; what remains is per-test data that differs per test.
+4. **A recording fake client had to be written** (≈75 lines) because two of this slice's
+   load-bearing guarantees — D21's failed compensation and D25's zero-call refusal — are
+   unreachable against a real database on demand.
+
+**One compression WAS taken, because it improved the tests**: a `member()` fixture helper
+replaced 16 repeated six-line guest literals, removing 50 lines of duplication. It is a
+REFACTOR-step deduplication, and the suite was green before and after. No comment, test or doc
+was removed to reach a number, and no further compression was attempted.
+
+A split is possible but no half is independently meaningful: `chooseRecipient` without
+`createInvitation`'s `nickname` write has nothing to choose between, and the member functions
+share `readMembership`, `refuseInvalidMembership` and `rewriteGreetingName` with each other
+and with create. The natural boundary is the whole write side.
+
+## Status
+
+69/120 tasks complete (all of slice 1a, 2a, 2b and 3a). Slice 1b and slice 3b are NOT started.
+Ready for verify.

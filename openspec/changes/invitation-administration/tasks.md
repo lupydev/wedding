@@ -185,23 +185,23 @@ estimate for that half).
 
 ## Phase 3a: Repository write side
 
-- [ ] 3a.1 RED — `lib/server/invitations.spec.ts` addendum: `createInvitation` calls `validateInvitationDraft` before writing and refuses (no invitation created) on any `DraftRefusal`; a valid draft creates the invitation and its members via ONE write path for both a solo guest and a group.
-- [ ] 3a.2 GREEN — `lib/server/invitations.ts`: `createInvitation(draft)` validates via `validateInvitationDraft`, inserts the invitation with `greeting_name` + `greeting_name_source` written together from this ONE function (`design.md` §8), then inserts every member.
-- [ ] 3a.3 RED — same file: **D21** — when the guest insert fails AND the compensating delete of the orphaned invitation ALSO fails, the thrown message names BOTH failures plus the orphaned invitation's `id` and `slug` — not only the guest-insert failure (today's bug at `:398`).
-- [ ] 3a.4 GREEN — `lib/server/invitations.ts`: capture the compensating delete's `error`; when non-null, throw a message naming both failures and the orphaned id/slug (D21). Placed here rather than `design.md`'s 3b line because the fix lives in the same function `3a.2` rewrites — splitting it into a separate commit would touch the same lines twice.
-- [ ] 3a.5 RED — same file: `addMember`/`editMember`/`removeMember` — removing the LAST member is refused, pointing at deletion; removing from a two-or-more-member invitation succeeds (paired).
-- [ ] 3a.6 GREEN — `lib/server/invitations.ts`: `addMember`, `editMember`, `removeMember` calling `validateInvitationDraft`'s member-count check before any write.
-- [ ] 3a.7 RED — same file: `moveMemberToInvitation` on a two-member source is refused via `canMoveMember` and issues NO write at all — a fake repository client records zero calls (D25's ordering guarantee).
-- [ ] 3a.8 GREEN — `lib/server/invitations.ts`: `moveMemberToInvitation` calls `canMoveMember` before issuing SQL; only a passing move updates `invitation_guests.invitation_id`, letting `clear_recipient_on_guest_move()` clear the source recipient (D11/D25).
-- [ ] 3a.9 RED — same file: an integration test proving the last-member refusal runs BEFORE any greeting-name re-derivation on `removeMember`/`moveMemberToInvitation`, so `deriveGreetingName([])` is unreachable through the real write path (closes advisory finding `R3-zero-member-derivation-throw`).
-- [ ] 3a.10 GREEN — order `removeMember`/`moveMemberToInvitation` so the member-count refusal always precedes any greeting-name re-derivation call.
-- [ ] 3a.11 RED — same file: `chooseRecipient` accepts a guest belonging to the SAME invitation; a guest belonging to a DIFFERENT invitation is refused by the composite FK, and the stored recipient is unchanged.
-- [ ] 3a.12 GREEN — `lib/server/invitations.ts`: `chooseRecipient(invitationId, guestId)` writing `dispatch_recipient_guest_id`.
-- [ ] 3a.13 RED — same file: `deleteInvitation` succeeds with zero `dispatch_events` rows and is refused (naming the offending `eventKinds`) for any dispatch history alone, including `link_opened` and `marked_failed` (paired).
-- [ ] 3a.14 GREEN — `lib/server/invitations.ts`: `deleteInvitation` calls `canDeleteInvitation` before issuing the hard delete.
-- [ ] 3a.15 RED — same file: `rotateInvitationSlug` mints a new slug via the existing `mintSlug()`, sets `slug_rotated_at = now()` and `og_warmed_at = null`, and triggers a re-warm of the new URL.
-- [ ] 3a.16 GREEN — `lib/server/invitations.ts`: `rotateInvitationSlug(client, invitationId)` per D16.
-- [ ] 3a.17 Verify: `npm test -- lib/server/invitations`, `npm run typecheck`, `npm run lint`.
+- [x] 3a.1 RED — `lib/server/invitations.spec.ts` addendum: `createInvitation` calls `validateInvitationDraft` before writing and refuses (no invitation created) on any `DraftRefusal`; a valid draft creates the invitation and its members via ONE write path for both a solo guest and a group.
+- [x] 3a.2 GREEN — `lib/server/invitations.ts`: `createInvitation(draft)` validates via `validateInvitationDraft`, inserts the invitation with `greeting_name` + `greeting_name_source` written together from this ONE function (`design.md` §8), then inserts every member.
+- [x] 3a.3 RED — same file: **D21** — when the guest insert fails AND the compensating delete of the orphaned invitation ALSO fails, the thrown message names BOTH failures plus the orphaned invitation's `id` and `slug` — not only the guest-insert failure (today's bug at `:398`).
+- [x] 3a.4 GREEN — `lib/server/invitations.ts`: capture the compensating delete's `error`; when non-null, throw a message naming both failures and the orphaned id/slug (D21). Placed here rather than `design.md`'s 3b line because the fix lives in the same function `3a.2` rewrites — splitting it into a separate commit would touch the same lines twice.
+- [x] 3a.5 RED — same file: `addMember`/`editMember`/`removeMember` — removing the LAST member is refused, pointing at deletion; removing from a two-or-more-member invitation succeeds (paired).
+- [x] 3a.6 GREEN — `lib/server/invitations.ts`: `addMember`, `editMember`, `removeMember` calling `validateInvitationDraft`'s member-count check before any write.
+- [x] 3a.7 RED — same file: `moveMemberToInvitation` on a two-member source is refused via `canMoveMember` and issues NO write at all — a fake repository client records zero calls (D25's ordering guarantee).
+- [x] 3a.8 GREEN — `lib/server/invitations.ts`: `moveMemberToInvitation` calls `canMoveMember` before issuing SQL; only a passing move updates `invitation_guests.invitation_id`, letting `clear_recipient_on_guest_move()` clear the source recipient (D11/D25).
+- [x] 3a.9 RED — same file: an integration test proving the last-member refusal runs BEFORE any greeting-name re-derivation on `removeMember`/`moveMemberToInvitation`, so `deriveGreetingName([])` is unreachable through the real write path (closes advisory finding `R3-zero-member-derivation-throw`).
+- [x] 3a.10 GREEN — order `removeMember`/`moveMemberToInvitation` so the member-count refusal always precedes any greeting-name re-derivation call.
+- [x] 3a.11 RED — same file: `chooseRecipient` accepts a guest belonging to the SAME invitation; a guest belonging to a DIFFERENT invitation is refused by the composite FK, and the stored recipient is unchanged.
+- [x] 3a.12 GREEN — `lib/server/invitations.ts`: `chooseRecipient(invitationId, guestId)` writing `dispatch_recipient_guest_id`.
+- [x] 3a.13 RED — same file: `deleteInvitation` succeeds with zero `dispatch_events` rows and is refused (naming the offending `eventKinds`) for any dispatch history alone, including `link_opened` and `marked_failed` (paired).
+- [x] 3a.14 GREEN — `lib/server/invitations.ts`: `deleteInvitation` calls `canDeleteInvitation` before issuing the hard delete.
+- [x] 3a.15 RED — same file: `rotateInvitationSlug` mints a new slug via the existing `mintSlug()`, sets `slug_rotated_at = now()` and `og_warmed_at = null`, and triggers a re-warm of the new URL.
+- [x] 3a.16 GREEN — `lib/server/invitations.ts`: `rotateInvitationSlug(client, invitationId)` per D16.
+- [x] 3a.17 Verify: `npm test -- lib/server/invitations`, `npm run typecheck`, `npm run lint`.
 
 ## Phase 3b: Server Actions; importer Zod parse + `nickname`
 
