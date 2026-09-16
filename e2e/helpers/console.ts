@@ -78,6 +78,13 @@ export interface ConsoleInvitationSeed {
   ) => Promise<void>;
   /** The stored E.164 number of one guest, read straight from the row. */
   readonly storedPhone: (fullName: string) => Promise<string | null>;
+  /**
+   * Records which member the message is addressed to, by full name.
+   *
+   * The write `chooseRecipient` performs, so a test can watch an invitation
+   * cross from blocked to sendable the way an operator makes it cross.
+   */
+  readonly chooseRecipient: (fullName: string) => Promise<void>;
   /** The whole dispatch log for this invitation, oldest first. */
   readonly dispatchEvents: () => Promise<
     readonly {
@@ -100,6 +107,16 @@ export async function seedConsoleInvitation(options: {
   ownerSenderId: string;
   greetingName: string;
   guests: readonly ConsoleGuestSeed[];
+  /**
+   * The member the message is addressed to, named in full.
+   *
+   * OMITTING IT IS A REAL STATE, NOT A SHORTCUT. Every invitation starts with
+   * nobody chosen, and migration `0012` is explicit that the column is "never
+   * backfilled from `is_primary`" — so an omitted recipient means the fixture
+   * is blocked on `no_recipient_chosen`, exactly like a freshly imported
+   * household. A fixture that needs a sendable invitation has to say who.
+   */
+  recipient?: string;
 }): Promise<ConsoleInvitationSeed> {
   const db = await connect();
   const slug = makeSlug();
@@ -129,11 +146,45 @@ export async function seedConsoleInvitation(options: {
       guestIds.set(guest.fullName, inserted.rows[0].id);
     }
 
+    /**
+     * Records the chosen recipient, refusing a name this household does not hold.
+     *
+     * The refusal is the whole reason this takes a name instead of an id: an
+     * unknown name would otherwise write a `null` and the fixture would fail
+     * later as "dispatch is blocked", which is indistinguishable from the
+     * product regressing.
+     */
+    const chooseRecipient = async (fullName: string): Promise<void> => {
+      const guestId = guestIds.get(fullName);
+
+      if (guestId === undefined) {
+        throw new Error(
+          `No member named "${fullName}" on the seeded invitation ` +
+            `"${options.greetingName}". Members: ${[...guestIds.keys()].join(", ")}.`,
+        );
+      }
+
+      const writer = await connect();
+      try {
+        await writer.query(
+          "update invitations set dispatch_recipient_guest_id = $2 where id = $1",
+          [invitationId, guestId],
+        );
+      } finally {
+        await writer.end();
+      }
+    };
+
+    if (options.recipient !== undefined) {
+      await chooseRecipient(options.recipient);
+    }
+
     return {
       invitationId,
       slug,
       greetingName: options.greetingName,
       guestIds,
+      chooseRecipient,
 
       answer: async ({ attending, attendeeNames = [], minutesAgo = 0 }) => {
         const writer = await connect();

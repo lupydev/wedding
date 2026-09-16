@@ -86,6 +86,11 @@ test.beforeAll(async ({ browser }) => {
   ana = await seedOperator({ displayName: `Ana Previa ${run}` });
   beto = await seedOperator({ displayName: `Beto Previo ${run}` });
 
+  // The recipient is CHOSEN here, because the message-preview tests below read
+  // the pane the dispatch route only renders once one is. Nothing picks a
+  // recipient on an invitation's behalf — not `is_primary`, not the fact that
+  // exactly one member has a usable number — so an invitation seeded without
+  // this line is blocked on `no_recipient_chosen` and never renders a bubble.
   household = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Previa Muñóz",
@@ -97,6 +102,7 @@ test.beforeAll(async ({ browser }) => {
       },
       { fullName: "Tomás Previo Muñóz", phoneE164: null },
     ],
+    recipient: "Ana Previa Muñóz",
   });
 
   betosHousehold = await seedConsoleInvitation({

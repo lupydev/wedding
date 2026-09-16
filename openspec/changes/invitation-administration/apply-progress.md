@@ -1266,3 +1266,164 @@ no route, no component.
 
 Maintenance unit complete: clusters 1 and 2 fixed and demonstrated; cluster 3 not reproduced in
 45 shuffled runs and deliberately left alone rather than changed on a guess.
+
+# Maintenance Unit: Browser Suite Restoration (the E2E half of task 4b.15)
+
+**Mode**: Strict TDD with the RED already standing — both failures were reproduced on the
+untouched tree before a single edit, and they are the same two slice 3b reported and knowingly
+left behind.
+**Work unit**: `ia-e2e-4b15-actor-1` — not a slice. `tasks.md` is byte-untouched by this unit.
+**Branch**: `feat/whatsapp-wedding-invitations` (base `3ed8d48`, clean tree)
+**Prior progress read**: yes — slices 1a, 2a, 2b, 3a, 3b and the order-independence maintenance
+unit above are byte-untouched.
+
+## Why
+
+The browser suite had been red since slice 2b. Slices 3a, 3b and the units after them each
+reported "E2E out of scope" and were accepted on that basis, so none of them carries
+browser-level evidence. Worse, `playwright.config.ts:76` declares `wedding-facts` with
+`dependencies: ["chromium"]`, so **two** chromium failures suspended a further thirty-eight
+tests. Two stale assertions were withholding a quarter of the suite.
+
+## RED — measured before any change
+
+`PORT=3123 npm run e2e` on the untouched tree at `3ed8d48`:
+
+| Outcome | Count |
+|---|---|
+| passed | 114 |
+| failed | **2** |
+| did not run | 38 |
+| **total declared** | **154** |
+
+A note on the brief that commissioned this unit: it stated 152 runnable. The runner declares
+`Running 154 tests using 5 workers`, and 114 + 2 + 38 = 154. The figure to beat was 154, and
+the unit adds one test, so 155 is the new total.
+
+The 38 were not a separate fault. `console-dispatch.spec.ts` and `console-preview.spec.ts` are
+both `mode: "serial"`, so a failure abandons the rest of its group (21 tests), and the suspended
+`wedding-facts` project accounts for the other 17.
+
+## Failure 1 — the rename worked exactly as designed
+
+`console-dispatch.spec.ts:132` looked for the heading `"Sin número en la agenda"`. That heading
+is gone, and its absence is the mechanism working: slice 2b renamed the preflight's blocker
+kinds **because their meaning changed**, and the `recipient_` prefix exists precisely so a stale
+assertion cannot keep passing across that change. `no_phone_on_file` asked whether the HOUSEHOLD
+held a number; `recipient_has_no_phone` asks whether the CHOSEN PERSON holds one.
+
+So the fixtures were re-derived, not the assertions relaxed:
+
+| Group | Fixture before | Fixture now | What it now proves |
+|---|---|---|---|
+| `no_recipient_chosen` | *(none — the group was not asserted)* | `Familia Sin Elegir Valencia`, two members, both with mobiles, nobody chosen | The column is never backfilled from `is_primary`: the primary member's mobile is right there and the invitation is blocked anyway |
+| `recipient_has_no_phone` | both members phoneless | `Carlos Sin Número` chosen and phoneless, **`Rosa Con Celular` holding a usable mobile** | The household is blocked even though somebody in it is reachable — the exact case the old name got wrong. The group names Carlos and is asserted NOT to name Rosa |
+| `recipient_phone_unreachable` | landline household | same, with `Casa Fija` chosen | Unchanged in meaning; the choice is now explicit |
+| `recipient_not_in_household` | *(not asserted)* | permanently empty by D23 | The section renders and says it is empty. A group that appeared only when non-empty is indistinguishable from one that stopped being computed |
+| `already_dispatched` | `marked_sent` | same, with a recipient chosen | A dispatched household had somebody chosen; the fixture now says so |
+
+The readiness count moved from `1 de 4` to `1 de 5` because the unit adds the
+`no_recipient_chosen` fixture. It was re-derived from the five fixtures, not fitted to the
+observed output.
+
+## Failure 2 — the fixture, not the product
+
+`console-preview.spec.ts:272` waited 30s for `img.wa-preview__card-image`. The bubble never
+rendered because the seeded invitation was blocked on `no_recipient_chosen`: **nobody is
+dispatched by default any more**, and the fixture never chose anyone. One line of fixture —
+`recipient: "Ana Previa Muñóz"` — and the pane renders. No product file was touched for this.
+
+**Swept for the same shape.** `seedConsoleInvitation` has five callers. Only
+`console-dispatch.spec.ts` and `console-preview.spec.ts` reach a surface that resolves a
+recipient; `console-guest-list.spec.ts` asserts only that the `Preparar envío` link exists
+(the list renders it for every owned row, ready or not), and `console-design.spec.ts` and
+`console-wedding.spec.ts` never touch dispatch. `e2e/helpers/seed.ts` is guest-facing and has
+no recipient to choose. No other fixture needed the change.
+
+## The helper gained one option and one method
+
+`e2e/helpers/console.ts`:
+
+- `seedConsoleInvitation({ …, recipient?: string })` — names the chosen member. **Omitting it
+  is a real state, not a shortcut**: it is the state every imported household starts in.
+- `seed.chooseRecipient(fullName)` — the write `chooseRecipient` performs, so one test can watch
+  an invitation cross from blocked to sendable. It refuses a name the household does not hold,
+  because an unknown name would otherwise write `null` and fail later as "dispatch is blocked",
+  which is indistinguishable from the product regressing.
+
+## What this does NOT cover, so slice 4b knows what is left
+
+The E2E half of **4b.15 is done**: dispatch is blocked before a recipient is chosen and
+unblocked after, and every readiness-count assertion is re-derived against the five-kind
+classification. Slice 4b should not redo it.
+
+What remains is the half this unit could not reach: `chooseRecipientAction` **has no caller**.
+The recipient is chosen here through the fixture, because the console offers no affordance to
+choose one — that is tasks 4b.1/4b.2 (the `GuestList` recipient indicator and its edit link).
+Once that UI lands, 4b.13 should exercise the choice through the form; the blocked/unblocked
+transition itself is already covered.
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 4b.15 (E2E half) | `e2e/console-dispatch.spec.ts` | End-to-end (production build, real Postgres, real operator session) | ✅ 114/154 measured on the untouched tree before the first edit | ✅ `names the households that cannot be sent yet` failed on a heading that no longer exists, with 13 more tests in its serial group abandoned | ✅ all 14 tests in the file green, plus the one this unit adds | ✅ 5 cases: the unchosen group naming every member, the no-phone group naming ONLY the chosen person and asserted not to name the reachable partner, the unreachable group, the D23 group asserted rendered-and-empty, and the already-sent group | ✅ the five per-group locators collapsed into one `group(heading)` helper; green after |
+| 4b.15 (blocked → unblocked) | same file | End-to-end | ✅ as above | ⚠️ **written GREEN and proved by mutation instead** — stated plainly rather than claimed. The test and `chooseRecipient` landed together, so the honest RED is the mutation run below | ✅ green. Mutation: suppressing the single `chooseRecipient` call fails it at `expect(locator).toContainText` on `p.dispatch-launcher__recipient`, "element(s) not found" — the second half is not vacuous | ✅ the chosen member is deliberately NOT the `is_primary` one, so the stored choice is the only thing that can decide it | ➖ |
+| — (fixture repair) | `e2e/console-preview.spec.ts` | End-to-end | ✅ as above | ✅ `points the preview image at the URL the crawler will fetch` timed out at 30s on `img.wa-preview__card-image`, with 8 more tests abandoned | ✅ all 20 tests in the file green | ➖ one line of fixture; the nine assertions it unblocked are the triangulation | ➖ |
+
+### Test Summary
+
+- **Total tests written**: **1** authored `it(`/`test(` block — the blocked-then-unblocked
+  transition. Everything else in this unit is a re-derived assertion or a fixture.
+- **Total E2E tests passing**: **155** (`155 passed`), up from `114 passed / 2 failed / 38 did
+  not run`. Zero failed, zero did not run.
+- **Unit tests**: **1863**, unchanged — this unit adds none and breaks none.
+- **Layers used**: End-to-end 3 files.
+- **Pure functions created**: 0. One test-local locator helper, `group(heading)`.
+
+## Verification
+
+| Command | Observed result |
+|---|---|
+| `PORT=3123 npm run e2e` | exit 0 — **155 passed**, 0 failed, **0 did not run** (`Running 155 tests using 5 workers`). Both projects ran: `wedding-facts` is no longer suspended |
+| `npm test` | exit 0 — 97 files, **1863 passed**, matches the stated baseline |
+| `npm run typecheck` | exit 0, no output |
+| `npm run lint` | exit 0, no findings |
+| `npm run format:check` | exit 0 — "All matched files use Prettier code style!" |
+| `npm run build` | exit 0 — 13 routes plus the proxy |
+| `npx vitest run --sequence.shuffle` | **Not run, and that is the correct answer here.** Nothing under `lib/**` or `supabase/tests/**` was touched; the only non-`e2e/**` change is a two-line comment correction in `components/console/DispatchPreflight.tsx` |
+
+**Database safety**: `select email from auth.users order by email;` returned
+`lumigu.dev@gmail.com` and `sruiz7541@gmail.com` before AND after; `select couple_names from
+ceremony;` returned `Luis & Michell` before AND after. `supabase db reset` was **NOT** run.
+`PORT=3123` throughout, because the user's own `next dev` may hold 3000 and the config refuses
+to reuse a server it did not build; nothing was killed. Fixture teardown left `dispatch_events`
+and `rsvp_responses` at 0; the one leftover `E2E Sender 62cf786b` was already there before this
+unit and was not touched.
+
+## Files Changed
+
+| File | Action | What Was Done |
+|---|---|---|
+| `e2e/helpers/console.ts` | Modified | +51/−0. `recipient` seed option and `chooseRecipient(fullName)`, the latter refusing a name the household does not hold |
+| `e2e/console-dispatch.spec.ts` | Modified | +108/−22. Five fixtures re-derived one per readiness group, all five group assertions rewritten, `1 de 4` → `1 de 5`, one new blocked-then-unblocked test, `noPhone` renamed `chosenHasNoPhone` because its meaning changed |
+| `e2e/console-preview.spec.ts` | Modified | +6/−0. The seeded household now names its recipient, with the reason in place |
+| `components/console/DispatchPreflight.tsx` | Modified | +2/−2. **Comment only.** Its worked example quoted `"Sin número en la agenda"`, a heading the slice-2b rename removed |
+| `openspec/changes/invitation-administration/apply-progress.md` | Modified | This section appended; every earlier batch byte-untouched |
+
+## Workload / PR Boundary
+
+- Mode: maintenance unit, outside the eight-slice chain
+- Boundary: starts at `3ed8d48` with a clean tree; ends with the browser suite fully green and
+  nothing skipped. No product behaviour is touched — the one product-file line is a comment —
+  so it reverts by reverting these four files
+- **Authored changed lines: 191** (167 insertions, 24 deletions), excluding `openspec/**`.
+  Well inside the 800-line ceiling for this unit
+- **Not committed and not pushed**, as instructed. The `gentle-ai` attempt ledger was not touched
+
+## Status
+
+Browser suite restored: **155 passed, 0 failed, 0 did not run**, from 114/2/38. The E2E half of
+task 4b.15 is complete and slice 4b should not repeat it; the UI half (4b.1/4b.2, then 4b.13
+exercising the choice through the form) is untouched and still owed, because
+`chooseRecipientAction` still has no caller.

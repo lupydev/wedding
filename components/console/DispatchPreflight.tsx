@@ -86,8 +86,8 @@ export function DispatchPreflight({ preflight }: DispatchPreflightProps) {
         >
           {/*
             The badge sits BESIDE the heading and not inside it. Inside, it becomes
-            part of the heading's accessible name — "Sin número en la agenda 2 de 4
-            invitaciones de Ana" — and every `getByRole("heading", { name })` in the
+            part of the heading's accessible name — "Con destinatario sin número 2 de
+            4 invitaciones de Ana" — and every `getByRole("heading", { name })` in the
             suite stops matching. A visual grouping is not a semantic one.
           */}
           <h3 className="text-sm font-semibold">{group.heading}</h3>

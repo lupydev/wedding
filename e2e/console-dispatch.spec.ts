@@ -36,7 +36,8 @@ const MISMATCH_NOTICE = (page: Page) => page.locator("section.device-mismatch");
 let ana: SeededOperator;
 let beto: SeededOperator;
 let ready: ConsoleInvitationSeed;
-let noPhone: ConsoleInvitationSeed;
+let nobodyChosen: ConsoleInvitationSeed;
+let chosenHasNoPhone: ConsoleInvitationSeed;
 let landline: ConsoleInvitationSeed;
 let alreadySent: ConsoleInvitationSeed;
 let betosHousehold: ConsoleInvitationSeed;
@@ -53,6 +54,16 @@ test.beforeAll(async ({ browser }) => {
   ana = await seedOperator({ displayName: `Ana Envíos ${run}` });
   beto = await seedOperator({ displayName: `Beto Envíos ${run}` });
 
+  /*
+    ONE FIXTURE PER READINESS GROUP, AND EVERY ONE OF THEM NAMES ITS RECIPIENT
+    OR DELIBERATELY DOES NOT.
+
+    Nothing chooses a recipient on an invitation's behalf — not `is_primary`,
+    not the member order, not the fact that exactly one number is usable
+    (migration `0012`). So a fixture that omits `recipient` is blocked on
+    `no_recipient_chosen`, and the four blocked groups below differ by WHO was
+    chosen rather than by what the household happens to hold.
+  */
   ready = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Lista Muñóz",
@@ -60,15 +71,38 @@ test.beforeAll(async ({ browser }) => {
       { fullName: "Ana Lista", phoneE164: "+573005552001", isPrimary: true },
       { fullName: "Niña Lista", phoneE164: null },
     ],
+    recipient: "Ana Lista",
   });
 
-  noPhone = await seedConsoleInvitation({
+  // Nobody chosen — the state every imported household starts in, and the one
+  // the first day of sending is mostly made of. Its primary member holds a
+  // perfectly good mobile and it is blocked anyway, which is the assertion:
+  // the column is never backfilled from `is_primary`.
+  nobodyChosen = await seedConsoleInvitation({
+    ownerSenderId: ana.senderId,
+    greetingName: "Familia Sin Elegir Valencia",
+    guests: [
+      {
+        fullName: "Mario Valencia",
+        phoneE164: "+573005552004",
+        isPrimary: true,
+      },
+      { fullName: "Sara Valencia", phoneE164: "+573005552005" },
+    ],
+  });
+
+  // THE CHOSEN person has no number, while their partner holds a usable mobile.
+  // Under the old household-wide reading this invitation was ready; under the
+  // current one it is blocked, and that difference is what the `recipient_`
+  // prefix exists to make visible.
+  chosenHasNoPhone = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
     greetingName: "Familia Sin Número Aristizábal",
     guests: [
       { fullName: "Carlos Sin Número", phoneE164: null, isPrimary: true },
-      { fullName: "Rosa Sin Número", phoneE164: null },
+      { fullName: "Rosa Con Celular", phoneE164: "+573005552006" },
     ],
+    recipient: "Carlos Sin Número",
   });
 
   // A Colombian landline: perfectly valid E.164, and no WhatsApp will ever
@@ -79,6 +113,7 @@ test.beforeAll(async ({ browser }) => {
     guests: [
       { fullName: "Casa Fija", phoneE164: "+576012345678", isPrimary: true },
     ],
+    recipient: "Casa Fija",
   });
 
   alreadySent = await seedConsoleInvitation({
@@ -87,6 +122,7 @@ test.beforeAll(async ({ browser }) => {
     guests: [
       { fullName: "Jorge Osorio", phoneE164: "+573005552002", isPrimary: true },
     ],
+    recipient: "Jorge Osorio",
   });
   await alreadySent.recordEvent("marked_sent", ana.senderId);
 
@@ -96,6 +132,7 @@ test.beforeAll(async ({ browser }) => {
     guests: [
       { fullName: "Luz De Beto", phoneE164: "+573005552003", isPrimary: true },
     ],
+    recipient: "Luz De Beto",
   });
 
   page = await browser.newPage();
@@ -116,7 +153,8 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(async () => {
   await page?.close();
   await ready?.cleanup();
-  await noPhone?.cleanup();
+  await nobodyChosen?.cleanup();
+  await chosenHasNoPhone?.cleanup();
   await landline?.cleanup();
   await alreadySent?.cleanup();
   await betosHousehold?.cleanup();
@@ -135,23 +173,43 @@ test.describe("the send preflight", () => {
     const preflight = page.locator("section.dispatch-preflight");
     await expect(preflight).toBeVisible();
 
-    const missing = preflight.locator("section", {
-      has: page.getByRole("heading", { name: "Sin número en la agenda" }),
-    });
+    const group = (heading: string) =>
+      preflight.locator("section", {
+        has: page.getByRole("heading", { name: heading }),
+      });
+
+    const unchosen = group("Sin destinatario elegido");
+    await expect(unchosen).toContainText("Familia Sin Elegir Valencia");
+    // EVERY member, because they are the people there are to choose between.
+    await expect(unchosen).toContainText("Mario Valencia");
+    await expect(unchosen).toContainText("Sara Valencia");
+
+    const missing = group("Con destinatario sin número");
     await expect(missing).toContainText("Familia Sin Número Aristizábal");
     await expect(missing).toContainText("Carlos Sin Número");
+    // ONLY the chosen person, and the household is blocked even though Rosa's
+    // mobile is right there. Naming her would send the operator to look at a
+    // number that is already fine.
+    await expect(missing).not.toContainText("Rosa Con Celular");
 
-    const unreachable = preflight.locator("section", {
-      has: page.getByRole("heading", {
-        name: "Con número que no recibe WhatsApp",
-      }),
-    });
+    const unreachable = group("Con destinatario que no recibe WhatsApp");
     await expect(unreachable).toContainText("Familia Fija Restrepo");
     await expect(unreachable).toContainText("Casa Fija");
 
-    const sent = preflight.locator("section", {
-      has: page.getByRole("heading", { name: "Ya enviadas" }),
-    });
+    /*
+      Permanently empty by construction — the composite foreign key refuses to
+      store a choice that names a non-member (design D23) — and rendered anyway.
+      A group that appeared only when it was non-empty would be indistinguishable
+      from a group that had stopped being computed, so what is asserted here is
+      that the section exists and says it is empty.
+    */
+    const stale = group("Con destinatario que ya no pertenece");
+    await expect(stale.locator(".dispatch-preflight__empty")).toBeVisible();
+    await expect(stale.locator(".dispatch-preflight__household")).toHaveCount(
+      0,
+    );
+
+    const sent = group("Ya enviadas");
     await expect(sent).toContainText("Familia Ya Enviada Osorio");
   });
 
@@ -159,7 +217,7 @@ test.describe("the send preflight", () => {
     await page.goto("/console");
 
     await expect(page.locator("p.dispatch-preflight__ready")).toContainText(
-      `Listas para enviar: 1 de 4 invitaciones de ${ana.displayName}`,
+      `Listas para enviar: 1 de 5 invitaciones de ${ana.displayName}`,
     );
   });
 
@@ -180,7 +238,7 @@ test.describe("the send preflight", () => {
 });
 
 test.describe("preparing and opening one dispatch", () => {
-  test("opens WhatsApp with the household's own draft, addressed to the reachable member", async () => {
+  test("opens WhatsApp with the household's own draft, addressed to the chosen member", async () => {
     lastWaUrl = null;
     await page.goto(dispatchUrl(ready));
 
@@ -270,8 +328,33 @@ test.describe("preparing and opening one dispatch", () => {
 });
 
 test.describe("households the console refuses to dispatch", () => {
-  test("explains a household with no number instead of offering a broken link", async () => {
-    await page.goto(dispatchUrl(noPhone));
+  test("refuses a household nobody has been chosen for, and prepares it once somebody is", async () => {
+    await page.goto(dispatchUrl(nobodyChosen));
+
+    await expect(
+      page.getByRole("heading", { name: /No se puede preparar el envío/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Abrir WhatsApp/ }),
+    ).toHaveCount(0);
+
+    // Sara, NOT the primary member whose number the old auto-pick would have
+    // taken. The stored choice is the only thing that decides this.
+    await nobodyChosen.chooseRecipient("Sara Valencia");
+    await page.goto(dispatchUrl(nobodyChosen));
+
+    await expect(page.locator("p.dispatch-launcher__recipient")).toContainText(
+      "Sara Valencia",
+    );
+    await expect(
+      page.getByRole("button", { name: /Abrir WhatsApp/ }),
+    ).toBeVisible();
+    // Choosing is not sending. The log is still empty.
+    expect(await nobodyChosen.dispatchEvents()).toHaveLength(0);
+  });
+
+  test("explains a chosen member with no number instead of offering their partner's", async () => {
+    await page.goto(dispatchUrl(chosenHasNoPhone));
 
     await expect(
       page.getByRole("heading", { name: /No se puede preparar el envío/ }),
@@ -328,14 +411,17 @@ test.describe("the device declaration gate", () => {
       page.getByRole("link", { name: /Preparar envío/ }),
     ).toHaveCount(0);
 
+    // Carlos is the member the readiness check is naming right now: he is the
+    // chosen recipient and he has no number. Typing his in is precisely the
+    // work a mismatched declaration must not stand in the way of.
     await page
-      .getByRole("button", { name: `Editar el número de Rosa Sin Número` })
+      .getByRole("button", { name: `Editar el número de Carlos Sin Número` })
       .click();
-    await page.getByLabel(/Número de Rosa Sin Número/).fill("3005559111");
+    await page.getByLabel(/Número de Carlos Sin Número/).fill("3005559111");
     await page.getByRole("button", { name: "Guardar" }).click();
 
     await expect
-      .poll(async () => noPhone.storedPhone("Rosa Sin Número"))
+      .poll(async () => chosenHasNoPhone.storedPhone("Carlos Sin Número"))
       .toBe("+573005559111");
   });
 
