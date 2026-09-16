@@ -1101,3 +1101,168 @@ the helper extraction that made the actions readable in the first place.
 
 84/120 tasks complete (slices 1a, 2a, 2b, 3a and 3b). Slice 1b, 4a and 4b are NOT started.
 Ready for verify.
+
+---
+
+# Maintenance Unit: Test Suite Order Independence
+
+**Mode**: Strict TDD — the RED here is a demonstrated failure under
+`npx vitest run --sequence.shuffle`, because every failing test already existed.
+**Work unit**: `ia-flake-actor-1` — not a slice. `tasks.md` is byte-untouched by this unit.
+**Branch**: `feat/whatsapp-wedding-invitations` (base `a7d40e6`, clean tree)
+**Prior progress read**: yes — slices 1a, 2a, 2b, 3a and 3b above are byte-untouched.
+
+## Why
+
+`npm test` was green in declaration order and failed roughly 1 run in 10 otherwise. Three
+slices remain (1b, 4a, 4b) and a suite that fails by luck makes every one of their
+verification reports unreadable.
+
+## RED — reproduction before any change
+
+Ten full shuffled runs, captured in full:
+
+| Run | Result |
+|---|---|
+| 1 | 1858 passed |
+| 2 | 2 failed |
+| 3 | 4 failed |
+| 4 | 2 failed |
+| 5 | 1 failed |
+| 6 | 2 failed |
+| 7 | 3 failed |
+| 8 | 2 failed |
+| 9 | 3 failed |
+| 10 | 1858 passed |
+| 11 | 2 failed |
+
+**8 of 10 runs red, 21 failures total**, across exactly five distinct tests.
+
+## Cluster 1 — `supabase/tests/rsvp-store.spec.ts` (14 of the 21 failures)
+
+**Root cause**: one invitation created in `beforeAll` and shared by every test in the file,
+against a table that is append-only by a trigger binding even `service_role`, so no case can
+undo what the case before it wrote.
+
+Observed: `reports no answer for a household that has not responded` (6), `cannot be talked
+into replacing a row` (5), `returns the newest answer after the household changes its mind` (3).
+
+**Fix**: a fresh household per test — `beforeEach` seeds an invitation and three named members
+through the existing `seedInvitation` / `seedGuests` helpers, and `afterAll` tears down every
+id it recorded. The sender stays shared because nothing writes to it. The append-only guarantee
+was NOT weakened; the two tests that had been reading a sibling's row now write their own
+first, so each still asserts exactly what it asserted before.
+
+The hard-coded slug `storeaaaaaaaaaaa` went with it: a per-test household needs a unique slug,
+and `seedInvitation` already generates one for the documented reason that parallel workers
+collide on the unique index.
+
+## Cluster 2 — `app/console/login/login-form.spec.tsx` (7 of the 21 failures)
+
+**The brief's premise for this cluster was wrong, and the wrong fix was available.** The brief
+read it as `findByRole`'s own 1000 ms budget starving under load. Measured instead:
+
+- Instrumented the file with `asyncUtilTimeout: 9000`. Both tests **still failed**, after
+  waiting the full nine seconds (file duration 18,983 ms). A longer wait is not the fix.
+- Ran the file **alone** under `--sequence.shuffle`, with no competing workers at all:
+  **7 of 8 runs red.** Nothing was starved. It is order dependence inside one file.
+- The `"A React form was unexpectedly submitted"` string in the dumped markup is React 19's
+  normal `javascript:` fallback on a form with a function action. It appears in passing runs
+  too, and is not a submission bug.
+
+**Root cause**: `states why the submit button is unavailable while the sign-in is in flight`
+submits an action backed by `new Promise(() => {})` and abandons it. React entangles async
+transitions across the whole renderer, and `useActionState` dispatches through one — so that
+never-settling transition outlives the test and every later `useActionState` commit in the file
+queues behind it forever. In declaration order this test runs last and nothing follows it.
+
+Proved deterministically with a two-test probe: pending-forever action first, notice assertion
+second → **fails 100% of the time**; release the promise at the end of the first test → passes.
+
+**Fix**: the promise is held rather than abandoned. The in-flight assertions run first and are
+unchanged; then `await act(async () => release(IDLE))` settles it before the test ends.
+
+## Cluster 3 — `lib/server/operators.spec.ts`: NOT REPRODUCED, and not fixed
+
+`lowercases the stored address, which the CHECK constraint requires` did not fail once in:
+
+- 25 full shuffled suite runs (10 before the fixes, 15 after)
+- 20 shuffled runs of `lib/server/operators.spec.ts` in isolation
+
+The file is already order-independent by construction: `seedInput()` uniquifies every address
+with `randomBytes(4)` and `afterEach` drains its own list, deleting both the `senders` row and
+the auth user. I found no shared-fixture, absent-row or cross-test coupling in it.
+
+I am not inventing a third story. On the evidence available the single observed failure is most
+consistent with the cold-start class `vitest.config.mts` already documents — a first
+database-touching test in a worker timing out at 15 s — rather than with order dependence. If it
+recurs, the message matters: `Test timed out in 15000ms` is that class, an `AssertionError` is
+not, and the full output should be captured before anything is changed.
+
+One latent coupling worth recording without acting on it: `findAuthUserByEmail` in
+`lib/server/operators.ts` pages `auth.users` 200 at a time, so this file's behaviour depends on
+the total auth population that other spec files are concurrently creating and deleting. Harmless
+at the current handful of users; it becomes a real cross-file race above 200.
+
+## Sweep for the same shape elsewhere
+
+- `beforeAll` fixtures in non-e2e specs: only `rsvp-store.spec.ts` (fixed) and
+  `operator-session-refresh.spec.ts`. The latter creates one auth user but every test calls
+  `staleBrowserCookies()`, which signs in freshly — no test consumes another's session.
+- Every other `supabase/tests/**` file goes through `withRollback` or `withSeededData`, both of
+  which leave the database as they found it. `ceremony.spec.ts` mutates a singleton table and
+  does so inside `withRollback`.
+- Abandoned promises: three more in `lib/browser/beacon.spec.ts`, all in the node project with
+  no React renderer to entangle. Left alone.
+- Module-scope mutable fixtures across `lib/**` and `supabase/tests/**`: three, all reviewed.
+
+## GREEN — after the fixes
+
+| Scope | Before | After |
+|---|---|---|
+| `login-form.spec.tsx` alone, shuffled | 7 of 8 runs red | **10 of 10 green** |
+| `rsvp-store.spec.ts` alone, shuffled | — | **10 of 10 green** |
+| `operators.spec.ts` alone, shuffled | — | **20 of 20 green** |
+| Full suite, shuffled | 8 of 10 runs red | **23 of 23 green** (15 + 8) |
+
+## Verification
+
+| Command | Observed result |
+|---|---|
+| `npm test` | exit 0 — 97 files, **1858 passed**, matches the stated baseline |
+| `npx vitest run --sequence.shuffle` ×8 | exit 0 every time — 1858 passed; seeds 1789516669890, …681792, …698659, …717756, …738333, …760725, …777519, …794825 |
+| `npm run typecheck` | exit 0, no output |
+| `npm run lint` | exit 0, no findings |
+| `npm run format:check` | exit 0 — "All matched files use Prettier code style!" |
+| `npm run build` | exit 0 — 13 routes plus the proxy |
+
+**Database safety**: `select email from auth.users order by email;` returned
+`lumigu.dev@gmail.com` and `sruiz7541@gmail.com` before AND after; `select couple_names from
+ceremony;` returned `Luis & Michell` before AND after. `supabase db reset` was never run. This
+unit left no fixture behind (`rsvp_responses` count 0). One pre-existing leftover from an
+earlier e2e run, `E2E Sender 62cf786b`, was already there and was not touched.
+
+**E2E**: out of scope and unaffected. Only two spec files changed; no product source, no schema,
+no route, no component.
+
+## Files Changed
+
+| File | Action | What Was Done |
+|---|---|---|
+| `supabase/tests/rsvp-store.spec.ts` | Modified | +54/−29. Per-test household via `beforeEach`; two tests write the row they assert on |
+| `app/console/login/login-form.spec.tsx` | Modified | +20/−2. Deferred release of the in-flight action, with the entanglement explained in place |
+| `openspec/changes/invitation-administration/apply-progress.md` | Modified | This section appended; every earlier batch byte-untouched |
+
+## Workload / PR Boundary
+
+- Mode: maintenance unit, outside the eight-slice chain
+- Boundary: starts at `a7d40e6` with a clean tree; ends with the suite green under shuffle.
+  No product behaviour is touched, so it reverts by reverting these two files
+- **Authored changed lines: 105** (74 insertions, 31 deletions), excluding `openspec/**`.
+  Well inside the 800-line ceiling for this unit
+- **Not committed and not pushed**, as instructed
+
+## Status
+
+Maintenance unit complete: clusters 1 and 2 fixed and demonstrated; cluster 3 not reproduced in
+45 shuffled runs and deliberately left alone rather than changed on a guess.

@@ -1,9 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createRsvpStore, type RsvpStore } from "@/lib/server/rsvp";
 
-import { LOCAL_API_URL, withDb } from "./helpers/db";
+import {
+  LOCAL_API_URL,
+  seedGuests,
+  seedInvitation,
+  seedSender,
+  withDb,
+} from "./helpers/db";
 import { resolveLocalKeys } from "./helpers/local-keys";
 
 /**
@@ -19,6 +25,14 @@ import { resolveLocalKeys } from "./helpers/local-keys";
  * So this file goes over PostgREST with the real secret key, exactly as the
  * server does. Fixtures are COMMITTED rather than rolled back, because the HTTP
  * client is a separate connection and would not see an open transaction.
+ *
+ * Each test gets its OWN household. `rsvp_responses` is append-only by a
+ * trigger that binds even `service_role`, which is load-bearing product
+ * behaviour and not something a test may suspend between cases — so there is no
+ * such thing as cleaning a household's history up mid-file. A single shared
+ * household therefore made every case here depend on the ones before it, and
+ * "reports no answer" only passed while it happened to run first. The sender
+ * stays shared: nothing below writes to it.
  */
 
 const keys = resolveLocalKeys();
@@ -32,34 +46,26 @@ let senderId: string;
 let invitationId: string;
 let guestIds: string[];
 
+/** Every household this file created, so teardown can find all of them. */
+const seededInvitationIds: string[] = [];
+
 beforeAll(async () => {
   store = createRsvpStore(client);
 
   await withDb(async (db) => {
-    const sender = await db.query<{ id: string }>(
-      `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
-       values ('Store Sender', 'partner_a', $1, '+573005550000')
-       returning id`,
-      [`store.${Date.now()}@example.test`],
-    );
-    senderId = sender.rows[0].id;
-
-    const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
-       values ('storeaaaaaaaaaaa', $1, 'Familia Store', 'Familia Store')
-       returning id`,
-      [senderId],
-    );
-    invitationId = invitation.rows[0].id;
-
-    const guests = await db.query<{ id: string }>(
-      `insert into invitation_guests (invitation_id, full_name)
-       select $1, unnest(array['Store Uno', 'Store Dos', 'Store Tres'])
-       returning id`,
-      [invitationId],
-    );
-    guestIds = guests.rows.map((row) => row.id);
+    senderId = await seedSender(db);
   });
+});
+
+beforeEach(async () => {
+  await withDb(async (db) => {
+    invitationId = await seedInvitation(db, senderId);
+    // Three named members, because the seat cap IS the member count and the
+    // last case below writes six seats against it.
+    guestIds = await seedGuests(db, invitationId, 3);
+  });
+
+  seededInvitationIds.push(invitationId);
 });
 
 afterAll(async () => {
@@ -67,13 +73,16 @@ afterAll(async () => {
     // `rsvp_responses` is append-only by trigger and refuses its own teardown,
     // so user triggers are suspended for this session only.
     await db.query("set session_replication_role = replica");
-    await db.query("delete from rsvp_responses where invitation_id = $1", [
-      invitationId,
+    await db.query("delete from rsvp_responses where invitation_id = any($1)", [
+      seededInvitationIds,
     ]);
-    await db.query("delete from invitation_guests where invitation_id = $1", [
-      invitationId,
+    await db.query(
+      "delete from invitation_guests where invitation_id = any($1)",
+      [seededInvitationIds],
+    );
+    await db.query("delete from invitations where id = any($1)", [
+      seededInvitationIds,
     ]);
-    await db.query("delete from invitations where id = $1", [invitationId]);
     await db.query("delete from senders where id = $1", [senderId]);
     await db.query("reset session_replication_role");
   });
@@ -119,6 +128,14 @@ describe("createRsvpStore", () => {
     // would return whichever row PostgREST happened to hand back first.
     await store.insertResponse({
       invitationId,
+      attending: true,
+      attendeeGuestIds: [guestIds[0], guestIds[1]],
+      seatsConfirmed: 2,
+      dietaryNotes: "Sin mariscos.",
+    });
+
+    await store.insertResponse({
+      invitationId,
       attending: false,
       attendeeGuestIds: [],
       seatsConfirmed: 0,
@@ -133,6 +150,14 @@ describe("createRsvpStore", () => {
   });
 
   it("cannot be talked into replacing a row", async () => {
+    await store.insertResponse({
+      invitationId,
+      attending: false,
+      attendeeGuestIds: [],
+      seatsConfirmed: 0,
+      dietaryNotes: null,
+    });
+
     // Append-only is a trigger, and this client is `service_role`, which has
     // BYPASSRLS — so this is the one identity a policy could never have stopped.
     const { error } = await client

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -117,7 +117,19 @@ describe("LoginForm", () => {
    * and start reloading. The reason travels with the attribute.
    */
   it("states why the submit button is unavailable while the sign-in is in flight", async () => {
-    const pending = new Promise<SignInState>(() => {});
+    // The promise is HELD, not abandoned. React entangles async transitions
+    // across the whole renderer, and `useActionState` dispatches through one:
+    // an action left pending forever keeps that entanglement alive after this
+    // test ends, and every later `useActionState` commit in the file waits
+    // behind it. That is invisible in declaration order, where this test runs
+    // last, and it is why the two notice assertions above failed under
+    // `--sequence.shuffle` — not because their wait was too short, but because
+    // the state they waited for could never commit.
+    let release!: (state: SignInState) => void;
+    const pending = new Promise<SignInState>((resolve) => {
+      release = resolve;
+    });
+
     render(<LoginForm action={() => pending} />);
 
     await userEvent.type(
@@ -133,6 +145,12 @@ describe("LoginForm", () => {
 
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", expect.stringMatching(/\S/));
+
+    // Settled only AFTER the in-flight assertions, so what they observe is
+    // unchanged and nothing is left in flight for the next test.
+    await act(async () => {
+      release(IDLE);
+    });
   });
 
   it("offers no sign-up, no password reset and no remembered session", () => {
