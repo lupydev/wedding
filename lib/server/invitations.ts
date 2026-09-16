@@ -1100,15 +1100,36 @@ export async function deleteInvitation(
     );
   }
 
+  // The SECOND piece of evidence that the link escaped, and the more reliable
+  // one: `link_opened` depends on a best-effort beacon that can be lost, while
+  // an answer can only exist because a guest opened the invitation and replied.
+  const { data: answers, error: answerError } = await client
+    .from("rsvp_latest")
+    .select("id")
+    .eq("invitation_id", invitationId)
+    .limit(1);
+
+  if (answerError) {
+    throw new Error(
+      `Could not read the stored answer for invitation ${invitationId}: ${answerError.message}`,
+    );
+  }
+
   const outcome = canDeleteInvitation(
     ((data ?? []) as { kind: string }[]).map((event) => ({ kind: event.kind })),
+    { hasStoredAnswer: (answers ?? []).length > 0 },
   );
 
   if (!outcome.ok) {
+    const evidence =
+      outcome.reason === "already_dispatched"
+        ? `it has dispatch history (${outcome.eventKinds.join(", ")})`
+        : "a household has already answered it";
+
     throw new Error(
-      `Could not delete invitation ${invitationId}: it has dispatch history ` +
-        `(${outcome.eventKinds.join(", ")}), so a real guest may be holding its link. ` +
-        "Rotate its slug instead, which makes the old link stop working without erasing what happened.",
+      `Could not delete invitation ${invitationId}: ${evidence}, so a real guest ` +
+        "may be holding its link. Rotate its slug instead, which makes the old link " +
+        "stop working without erasing what happened.",
     );
   }
 

@@ -451,7 +451,9 @@ export async function removeMemberAction(
  * statement (design D25): a refused move never becomes SQL and can never
  * contend with the `clear_recipient_on_guest_move` trigger.
  */
-export async function moveMemberAction(formData: FormData): Promise<void> {
+export async function moveMemberAction(
+  formData: FormData,
+): Promise<MembershipChangeImpact> {
   const operator = await requireOperator();
 
   const invitationId = requiredInvitationId(formData);
@@ -463,16 +465,44 @@ export async function moveMemberAction(formData: FormData): Promise<void> {
   );
 
   const source = await readInvitation(operator.id, invitationId);
+  const memberIdsBefore = source.guests.map((guest) => guest.id);
+
+  // A MOVE IS A REMOVAL AS FAR AS THE SOURCE IS CONCERNED.
+  //
+  // The spec states this requirement for removing OR moving a member named in a
+  // confirmed answer: both are permitted, and both must report the seat count
+  // they leave inconsistent. Only the removal half was implemented, so moving
+  // somebody out of a household that had already confirmed them left the answer
+  // contradicted with nothing anywhere saying so — and the console badge that
+  // renders this can only show what the action returns.
+  const latestAnswer = await getCurrentRsvp(
+    createServerSupabaseClient(),
+    invitationId,
+  );
 
   await moveMemberToInvitation(createServerSupabaseClient(), {
     sourceInvitationId: invitationId,
     destinationInvitationId,
     memberId: guestId,
-    sourceMemberIds: source.guests.map((guest) => guest.id),
+    sourceMemberIds: memberIdsBefore,
     sourceRecipientGuestId: source.dispatchRecipientGuestId,
   });
 
   revalidatePath(CONSOLE_ROOT_PATH);
+
+  return classifyMembershipChangeImpact({
+    memberIdsBefore,
+    memberIdsAfter: memberIdsBefore.filter((id) => id !== guestId),
+    latestAnswer:
+      latestAnswer === null
+        ? null
+        : {
+            id: latestAnswer.id,
+            attending: latestAnswer.attending,
+            seatsConfirmed: latestAnswer.seatsConfirmed,
+            attendeeGuestIds: latestAnswer.attendeeGuestIds,
+          },
+  });
 }
 
 /**

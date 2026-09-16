@@ -774,6 +774,69 @@ describe("dispatch is still owner-scoped and still device-gated", () => {
   });
 });
 
+describe("moveMemberAction — the advisory a move owes, exactly as a removal does", () => {
+  // A MOVE IS A REMOVAL FROM THE SOURCE.
+  //
+  // The spec states the requirement for BOTH operations: a member named in a
+  // confirmed answer may be removed OR MOVED, and either way the resulting
+  // inconsistency must be reported visibly. `removeMemberAction` implemented it;
+  // the move half returned void and read no answer at all, so moving Fer out of
+  // a household that had already confirmed him left the seat count wrong with
+  // nothing anywhere saying so. Slice 4b only RENDERS what this produces, so a
+  // move produced nothing to render.
+  it("reports the contradicted answer the move leaves behind in the source", async () => {
+    getCurrentRsvp.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      attending: true,
+      seatsConfirmed: 2,
+      attendeeGuestIds: [GUEST_ID, SECOND_GUEST_ID],
+    });
+
+    const impact = await moveMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        guestId: GUEST_ID,
+        destinationInvitationId: OTHER_INVITATION_ID,
+      }),
+    );
+
+    expect(moveMemberToInvitation).toHaveBeenCalledTimes(1);
+    expect(impact).toEqual({
+      removedGuestIds: [GUEST_ID],
+      contradictedAnswers: [
+        {
+          rsvpResponseId: "11111111-1111-4111-8111-111111111111",
+          seatsConfirmed: 2,
+          danglingGuestIds: [GUEST_ID],
+        },
+      ],
+      seatsConfirmedExceedsMembers: true,
+    });
+  });
+
+  it("reports nothing to act on when the source's answer never named the moved member", async () => {
+    // The permitting counterpart in the same block: a report that always
+    // reports is as useless as one that never does.
+    getCurrentRsvp.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      attending: true,
+      seatsConfirmed: 1,
+      attendeeGuestIds: [SECOND_GUEST_ID],
+    });
+
+    const impact = await moveMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        guestId: GUEST_ID,
+        destinationInvitationId: OTHER_INVITATION_ID,
+      }),
+    );
+
+    expect(impact.contradictedAnswers).toEqual([]);
+    expect(impact.seatsConfirmedExceedsMembers).toBe(false);
+  });
+});
+
 describe("removeMemberAction — the advisory it hands back", () => {
   it("reports the contradicted answer instead of refusing the removal", async () => {
     // "Fer already said yes, but now he cannot come — take him off" is the

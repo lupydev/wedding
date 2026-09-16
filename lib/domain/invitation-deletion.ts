@@ -20,7 +20,7 @@
  * removed invitation to a real guest.
  */
 
-export type DeletionRefusal = "already_dispatched";
+export type DeletionRefusal = "already_dispatched" | "already_answered";
 
 export type DeletionOutcome =
   | { readonly ok: true }
@@ -41,14 +41,33 @@ export type DeletionOutcome =
  */
 export function canDeleteInvitation(
   events: readonly { readonly kind: string }[],
+  household: { readonly hasStoredAnswer: boolean },
 ): DeletionOutcome {
-  if (events.length === 0) {
-    return { ok: true };
+  if (events.length > 0) {
+    return {
+      ok: false,
+      reason: "already_dispatched",
+      eventKinds: [...new Set(events.map((event) => event.kind))],
+    };
   }
 
-  return {
-    ok: false,
-    reason: "already_dispatched",
-    eventKinds: [...new Set(events.map((event) => event.kind))],
-  };
+  // A STORED ANSWER IS INDEPENDENT EVIDENCE THAT THE LINK ESCAPED.
+  //
+  // The dispatch log is not the only record of a link reaching a guest, and it
+  // is the less reliable of the two: `link_opened` is written by a best-effort
+  // `navigator.sendBeacon` fired from the operator's own browser as it navigates
+  // away to wa.me. An offline handset, a tab torn down before the flush, or a
+  // blocked request loses it silently. If the operator then sends the message
+  // and never answers the "was it sent?" prompt, the invitation carries zero
+  // events while a real household already holds the URL.
+  //
+  // An `rsvp_responses` row proves a guest had it, whatever the log says.
+  // Deleting anyway either destroys that household's recorded answer or dies
+  // against the append-only trigger with a raw Postgres error in the operator's
+  // face — and rotation, not deletion, is the exit for a link already out.
+  if (household.hasStoredAnswer) {
+    return { ok: false, reason: "already_answered", eventKinds: [] };
+  }
+
+  return { ok: true };
 }
