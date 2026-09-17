@@ -900,3 +900,46 @@ describe("InvitationForm — a double tap is one person, not two", () => {
     release();
   });
 });
+
+describe("InvitationForm — a failed write never leaks what was thrown", () => {
+  // NOTHING THROWN BY A WRITE IS OPERATOR COPY.
+  //
+  // It is tempting to surface a rejection's message so a refusal reads as
+  // itself instead of "check your connection". It cannot work: an incidental
+  // `TypeError: Failed to fetch` is an ordinary `Error` with a non-empty
+  // message, indistinguishable from a deliberate refusal, and Next replaces a
+  // thrown message with an opaque `digest` in production, so the refusal text
+  // never reaches the browser anyway. Delivering refusals means the actions
+  // RETURNING them instead of throwing them. Until then, this locks the door.
+  it.each([
+    ["a domain refusal", new Error("No se puede quitar al último integrante.")],
+    ["a transport failure", new TypeError("Failed to fetch")],
+    ["an empty message", new Error("")],
+    ["a plain object", { code: 500 } as unknown],
+    ["null", null as unknown],
+    ["a framework digest", Object.assign(new Error("boom"), { digest: "d1" })],
+  ])("shows the generic copy for %s", async (_label, thrown) => {
+    const action = spyAction();
+    const memberActions = memberActionSpies();
+    memberActions.calls.remove.mockImplementation(() => {
+      throw thrown;
+    });
+
+    render(
+      <InvitationForm
+        action={action}
+        invitation={invitation()}
+        memberActions={memberActions}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(row(1).getByRole("button", { name: /Quitar/i }));
+
+    // Equality, not `toHaveTextContent`: that helper is substring containment,
+    // so an alert that appended the thrown message would still pass.
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "No pudimos guardar ese cambio. Revisá la conexión y volvé a intentarlo.",
+    );
+  });
+});
