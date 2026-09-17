@@ -72,6 +72,14 @@ import {
 
 /** What each refusal means, in terms the operator can act on. */
 /** Shown when a write is refused by the server or never reaches it. */
+/**
+ * The in-flight key for the whole-form save.
+ *
+ * Member rows key by `row.key`; the form itself needs one that cannot collide
+ * with any of them, which is why this is not a plausible row key.
+ */
+const FORM_WRITE_KEY = "\u0000form";
+
 const WRITE_FAILED_COPY =
   "No pudimos guardar ese cambio. Revisá la conexión y volvé a intentarlo.";
 
@@ -550,7 +558,18 @@ export function InvitationForm({
       return;
     }
 
-    void runWrite(action, formData);
+    // THE SAME DOUBLE-TAP GUARD THE MEMBER ROWS GET, AND IT MATTERS MORE HERE.
+    //
+    // Two presses in create mode make TWO households: two slugs, two recipients
+    // to choose, and two possible dispatches to the same guest. Nothing
+    // de-duplicates downstream — `createInvitation` mints a fresh slug per call
+    // and a console-created row carries no `source_key`, so neither the
+    // duplicate-member check nor the import conflict path ever sees it.
+    if (inFlight.has(FORM_WRITE_KEY)) {
+      return;
+    }
+
+    void runWrite(action, formData, { rowKey: FORM_WRITE_KEY });
   }
 
   return (
@@ -898,7 +917,13 @@ export function InvitationForm({
         </ul>
       )}
 
-      <Button className="self-start" type="submit">
+      <Button
+        className="self-start"
+        // Visible as well as guarded: an operator who sees nothing happen
+        // presses again, which is how the second submit gets sent at all.
+        disabled={inFlight.has(FORM_WRITE_KEY)}
+        type="submit"
+      >
         Guardar invitación
       </Button>
     </form>

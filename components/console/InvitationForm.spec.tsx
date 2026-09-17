@@ -814,6 +814,47 @@ describe("InvitationForm — a double tap is one person, not two", () => {
   // it downstream: `duplicate_member_id` compares stored ids, and the two rows
   // have different ones. A duplicated member then raises the derived greeting
   // name, the member count and the seat cap — the couple's guest list, wrong.
+  it("creates one invitation when the whole form is submitted twice in flight", async () => {
+    // THE SAME BUG, ONE LEVEL UP, AND WORSE.
+    //
+    // The member rows were guarded; the whole-form save was not. In create mode
+    // two presses produce TWO households: two slugs, two recipients to choose,
+    // and two possible dispatches to the same guest. Nothing de-duplicates
+    // downstream — `createInvitation` mints a fresh slug per call and
+    // console-created rows carry a null source_key, so neither the
+    // duplicate-member check nor the source_key conflict path sees it.
+    const action = spyAction();
+
+    let release: () => void = () => {};
+    action.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }) as unknown as void,
+    );
+
+    render(<InvitationForm action={action} />);
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Nombre del hogar"),
+      "Familia Aristizábal",
+    );
+    await user.type(
+      row(1).getByLabelText("Nombre completo"),
+      "Carlos Aristizábal",
+    );
+
+    const submit = screen.getByRole("button", { name: "Guardar invitación" });
+
+    await user.click(submit);
+    await user.click(submit);
+
+    expect(action).toHaveBeenCalledTimes(1);
+
+    release();
+  });
+
   it("adds a new member once when its save is pressed twice in flight", async () => {
     const action = spyAction();
     const memberActions = memberActionSpies();
