@@ -804,3 +804,58 @@ describe("InvitationForm — the two writes nobody was watching", () => {
     expect(sent.get("guestId")).toBeNull();
   });
 });
+
+describe("InvitationForm — a double tap is one person, not two", () => {
+  // THE CONSOLE IS DESIGNED FOR A PHONE, AND PHONES GET DOUBLE-TAPPED.
+  //
+  // A row created here keeps `id: null` until the server list comes back and the
+  // re-seed adopts an id, so a second press before the first write returns takes
+  // the ADD branch again and the same person is inserted twice. Nothing catches
+  // it downstream: `duplicate_member_id` compares stored ids, and the two rows
+  // have different ones. A duplicated member then raises the derived greeting
+  // name, the member count and the seat cap — the couple's guest list, wrong.
+  it("adds a new member once when its save is pressed twice in flight", async () => {
+    const action = spyAction();
+    const memberActions = memberActionSpies();
+
+    let release: () => void = () => {};
+    memberActions.calls.add.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }) as unknown as void,
+    );
+
+    const before = invitation();
+
+    render(
+      <InvitationForm
+        action={action}
+        invitation={before}
+        memberActions={memberActions}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: /Agregar integrante/i }),
+    );
+
+    const position = before.members.length + 1;
+    await user.type(
+      row(position).getByLabelText("Nombre completo"),
+      "Tomás Guzmán",
+    );
+
+    const save = row(position).getByRole("button", {
+      name: `Guardar integrante ${position}`,
+    });
+
+    await user.click(save);
+    await user.click(save);
+
+    expect(memberActions.calls.add).toHaveBeenCalledTimes(1);
+
+    release();
+  });
+});

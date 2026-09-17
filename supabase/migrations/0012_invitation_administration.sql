@@ -104,6 +104,26 @@ alter table invitation_guests
 --
 --   Applying this migration to a database whose application has not been
 --   redeployed takes the invitation page and the console down until it is.
+--
+--   ⚠ AND THE REVERSE IS TRUE, WHICH MAKES THE OBVIOUS EMERGENCY LEVER UNSAFE.
+--
+--   Reverting the application to the previous release while this migration stays
+--   applied puts the database back in front of exactly that older reader, and it
+--   breaks the same way and just as fast. The one-line app rollback — the fastest
+--   thing anyone reaches for at 2am — takes `/i/[slug]` down for every link
+--   already in a guest's hands.
+--
+--   So the rollback is TWO steps and they are ordered:
+--
+--       1. run supabase/down/0012_invitation_administration_down.sql
+--       2. then revert the application commit
+--
+--   The down script leaves `seats_allowed` nullable on purpose (it says why), so
+--   after the code revert, close that loop by hand:
+--
+--       alter table invitations alter column seats_allowed set not null;
+--
+--   There is no safe way to revert the code alone while this constraint exists.
 alter table invitations add column dispatch_recipient_guest_id uuid;
 alter table invitations
   add constraint invitations_dispatch_recipient_fk

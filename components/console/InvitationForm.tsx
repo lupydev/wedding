@@ -358,6 +358,16 @@ export function InvitationForm({
 
   const [attempted, setAttempted] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
+  // WHICH ROWS HAVE A WRITE IN FLIGHT, BY KEY.
+  //
+  // This console is used from a phone, and phones get double-tapped. A row added
+  // here keeps a null id until the server list comes back, so a second press
+  // before the first write returns takes the ADD branch again and inserts the
+  // same person twice — and nothing downstream catches it, because
+  // `duplicate_member_id` compares stored ids and the two rows have different
+  // ones. A duplicated member raises the derived greeting name, the member count
+  // and the seat cap: the couple's guest list, silently wrong.
+  const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set());
 
   const derivedName = derivedNameOf(rows);
   const shownName = source === "derived" ? (derivedName ?? "") : customName;
@@ -449,14 +459,30 @@ export function InvitationForm({
   async function runWrite(
     write: InvitationFormAction,
     fields: FormData,
-    onFailure?: () => void,
+    options: { readonly onFailure?: () => void; readonly rowKey?: string } = {},
   ): Promise<void> {
+    const { onFailure, rowKey } = options;
+
+    if (rowKey !== undefined) {
+      setInFlight((current) => new Set(current).add(rowKey));
+    }
+
     try {
       await write(fields);
       setWriteError(null);
     } catch {
       onFailure?.();
       setWriteError(WRITE_FAILED_COPY);
+    } finally {
+      if (rowKey !== undefined) {
+        setInFlight((current) => {
+          const next = new Set(current);
+
+          next.delete(rowKey);
+
+          return next;
+        });
+      }
     }
   }
 
@@ -467,7 +493,11 @@ export function InvitationForm({
 
     const write = row.id === null ? memberActions.add : memberActions.edit;
 
-    void runWrite(write, memberFields(row));
+    if (inFlight.has(row.key)) {
+      return;
+    }
+
+    void runWrite(write, memberFields(row), { rowKey: row.key });
   }
 
   function removeMember(row: MemberRow) {
@@ -481,7 +511,11 @@ export function InvitationForm({
       return;
     }
 
-    void runWrite(memberActions.remove, memberFields(row));
+    if (inFlight.has(row.key)) {
+      return;
+    }
+
+    void runWrite(memberActions.remove, memberFields(row), { rowKey: row.key });
   }
 
   function chooseRecipient(row: MemberRow) {
@@ -498,8 +532,11 @@ export function InvitationForm({
     formData.set("invitationId", invitation.id);
     formData.set("guestId", row.id);
 
-    void runWrite(memberActions.chooseRecipient, formData, () => {
-      setRecipientId(previous);
+    void runWrite(memberActions.chooseRecipient, formData, {
+      rowKey: row.key,
+      onFailure: () => {
+        setRecipientId(previous);
+      },
     });
   }
 
@@ -617,6 +654,10 @@ export function InvitationForm({
               <div className="flex flex-wrap gap-2">
                 {invitation !== null && (
                   <Button
+                    // The guard is in `saveMember` too: this one is so the
+                    // operator SEES that the press landed, instead of pressing
+                    // again because nothing appeared to happen.
+                    disabled={inFlight.has(row.key)}
                     onClick={() => saveMember(row)}
                     size="sm"
                     type="button"
