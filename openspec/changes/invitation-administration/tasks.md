@@ -223,19 +223,19 @@ estimate for that half).
 
 ## Phase 4a: Console routes, form component, live derived name
 
-- [ ] 4a.1 RED — `components/console/InvitationForm.spec.tsx`: typing a nickname updates the live derived-name preview (calling `deriveGreetingName`/`resolveGreetingName` via the SAME import the server uses, D14); touching the name field flips the source to `'custom'`; the reset control returns it to `'derived'`; on mount, NO recipient radio option is pre-selected.
-- [ ] 4a.2 GREEN — `components/console/InvitationForm.tsx` (`'use client'`): member rows (name, nickname, phone, remove), the group-name field with live preview, the recipient radio group with no default selection, the reset-to-derived control — importing `lib/domain/greeting-name.ts` directly, no duplication (D14).
-- [ ] 4a.3 RED — same file addendum: saving a draft with zero members is refused with an explanation and creates nothing; saving with a chosen recipient not among the current members is refused (`recipient_not_a_member`); a duplicate nickname saves successfully with a visible advisory.
-- [ ] 4a.4 GREEN — wire `InvitationForm.tsx`'s submit to call `validateInvitationDraft` client-side for immediate feedback, then the Server Action for the authoritative check.
-- [ ] 4a.5 GREEN — `app/console/(authenticated)/invitations/new/page.tsx`: renders `InvitationForm` in create mode, inside the `(authenticated)` route group so `requireOperator()` and the device gate already apply. Async Server Component — Vitest cannot unit-test it (project constraint); its behaviour is proved by 4b's E2E, not an invented unit test here.
-- [ ] 4a.6 GREEN — `app/console/(authenticated)/invitations/[id]/edit/page.tsx`: loads the invitation, its current members, and its dispatch recipient, then renders `InvitationForm` in edit mode — ONE form, no mode switch.
-- [ ] 4a.7 RED — `InvitationForm.spec.tsx` addendum: editing a DISPATCHED invitation whose `greeting_name_source` is `'derived'` shows the warning that the already-delivered message keeps the old name.
-- [ ] 4a.8 GREEN — `components/console/InvitationForm.tsx`: render the post-dispatch-derived-name warning when the loaded invitation has `greeting_name_source === 'derived'` and at least one `dispatch_events` row.
-- [ ] 4a.9 RED — same file addendum: the member-management UI refuses removing/moving the last member with the message pointing at deletion, and permits it on a multi-member invitation (paired).
-- [ ] 4a.10 GREEN — wire `InvitationForm.tsx`'s member remove/move controls to preview `canMoveMember`'s outcome client-side, surfacing the same refusal text the Server Action returns.
-- [ ] 4a.11 RED — same file addendum: overriding the group name records the source as custom and shows the live derived name BESIDE the custom one, always — never string-matched against a removed member.
-- [ ] 4a.12 GREEN — `InvitationForm.tsx`: render the live-derived preview permanently alongside a custom name; never attempt to infer whether the custom text still mentions a removed member.
-- [ ] 4a.13 Verify: `npm test -- components/console/InvitationForm`, `npm run typecheck`, `npm run lint`, `npm run build`.
+- [x] 4a.1 RED — `components/console/InvitationForm.spec.tsx`: typing a nickname updates the live derived-name preview (calling `deriveGreetingName`/`resolveGreetingName` via the SAME import the server uses, D14); touching the name field flips the source to `'custom'`; the reset control returns it to `'derived'`; on mount, NO recipient radio option is pre-selected.
+- [x] 4a.2 GREEN — `components/console/InvitationForm.tsx` (`'use client'`): member rows (name, nickname, phone, remove), the group-name field with live preview, the recipient radio group with no default selection, the reset-to-derived control — importing `lib/domain/greeting-name.ts` directly, no duplication (D14).
+- [x] 4a.3 RED — same file addendum: saving a draft with zero members is refused with an explanation and creates nothing; saving with a chosen recipient not among the current members is refused (`recipient_not_a_member`); a duplicate nickname saves successfully with a visible advisory.
+- [x] 4a.4 GREEN — wire `InvitationForm.tsx`'s submit to call `validateInvitationDraft` client-side for immediate feedback, then the Server Action for the authoritative check.
+- [x] 4a.5 GREEN — `app/console/(authenticated)/invitations/new/page.tsx`: renders `InvitationForm` in create mode, inside the `(authenticated)` route group so `requireOperator()` and the device gate already apply. Async Server Component — Vitest cannot unit-test it (project constraint); its behaviour is proved by 4b's E2E, not an invented unit test here.
+- [x] 4a.6 GREEN — `app/console/(authenticated)/invitations/[id]/edit/page.tsx`: loads the invitation, its current members, and its dispatch recipient, then renders `InvitationForm` in edit mode — ONE form, no mode switch.
+- [x] 4a.7 RED — `InvitationForm.spec.tsx` addendum: editing a DISPATCHED invitation whose `greeting_name_source` is `'derived'` shows the warning that the already-delivered message keeps the old name.
+- [x] 4a.8 GREEN — `components/console/InvitationForm.tsx`: render the post-dispatch-derived-name warning when the loaded invitation has `greeting_name_source === 'derived'` and at least one `dispatch_events` row.
+- [x] 4a.9 RED — same file addendum: the member-management UI refuses removing/moving the last member with the message pointing at deletion, and permits it on a multi-member invitation (paired).
+- [x] 4a.10 GREEN — wire `InvitationForm.tsx`'s member remove/move controls to preview `canMoveMember`'s outcome client-side, surfacing the same refusal text the Server Action returns.
+- [x] 4a.11 RED — same file addendum: overriding the group name records the source as custom and shows the live derived name BESIDE the custom one, always — never string-matched against a removed member.
+- [x] 4a.12 GREEN — `InvitationForm.tsx`: render the live-derived preview permanently alongside a custom name; never attempt to infer whether the custom text still mentions a removed member.
+- [x] 4a.13 Verify: `npm test -- components/console/InvitationForm`, `npm run typecheck`, `npm run lint`, `npm run build`.
 
 ## Phase 4b: `GuestList` recipient indicator, empty state; E2E
 

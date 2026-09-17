@@ -1,0 +1,865 @@
+"use client";
+
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { whyDisabled } from "@/components/ui/why-disabled";
+import {
+  deriveGreetingName,
+  type GreetingNameSource,
+} from "@/lib/domain/greeting-name";
+import {
+  validateInvitationDraft,
+  type DraftAdvisory,
+  type DraftRefusal,
+  type InvitationDraftMember,
+} from "@/lib/domain/invitation-draft";
+
+/**
+ * The one form that creates an invitation and edits an existing one.
+ *
+ * ONE FORM FOR A SOLO GUEST AND FOR A GROUP, AND NO MODE SWITCH
+ *
+ * The model already treats a solo guest as a one-member invitation, so a UI with
+ * a "single" mode and a "group" mode would be a second definition of the same
+ * thing — free to disagree with the model, and it would, the first time somebody
+ * added a partner to a "single" invitation.
+ *
+ * THE LIVE GROUP NAME IS THE SERVER'S OWN FUNCTION, IMPORTED (design D14)
+ *
+ * `deriveGreetingName` is imported from `lib/domain/greeting-name.ts` — the same
+ * specifier `app/console/(authenticated)/actions.ts` imports on the server. One
+ * source file, bundled into two graphs: the preview cannot drift from what gets
+ * stored, because there is nothing to drift from. No rule is bent to allow it.
+ * `componentImportZone` bans `@/lib/server/*` and `@supabase/*` from components
+ * and says nothing about `lib/domain`, which is React-free and Node-free exactly
+ * so that a Client Component may import it (`tools/eslint-zones.spec.ts` pins
+ * that asymmetry, and `components/invitation/RsvpAnswer.tsx` already relies on
+ * it).
+ *
+ * NOBODY IS THE RECIPIENT UNTIL SOMEBODY CHOOSES ONE
+ *
+ * The recipient radio group starts with NOTHING selected. Not the first member,
+ * not the primary one, not the only one with a number: a confirmed decision of
+ * this capability removed the auto-pick, and a radio group that defaults to its
+ * first option would put it back where nobody would notice. The choice is a
+ * WRITE of its own (`chooseRecipientAction`), recorded the moment it is made,
+ * because the invitation's own save does not carry it.
+ *
+ * WHY THE MEMBER CONTROLS ARE PER ROW WHILE EDITING
+ *
+ * While creating, the members do not exist yet, so they travel with the one
+ * submission that creates them. While editing they DO exist, each with an id,
+ * and the server has one action per membership operation — add, edit, remove —
+ * each applying its own refusals before its first statement. Mirroring that
+ * one-for-one is what keeps a removal from being smuggled into an unrelated
+ * save, and what lets a removal report what it contradicted.
+ *
+ * THE SAME VALIDATOR RUNS HERE AND THERE, AND ONLY ONE OF THEM IS A BOUNDARY
+ *
+ * `validateInvitationDraft` is checked on every keystroke for immediate feedback
+ * and again by the Server Action, which is the one that decides. A refusal is a
+ * state the model does not permit and it stops the submission here; an advisory
+ * is a fact worth seeing and never stops anything — refusing twins for sharing a
+ * nickname would teach the couple to keep their guest list somewhere else, which
+ * is the failure this whole capability was written against.
+ *
+ * Operator-facing copy is Spanish, neutral register. Identifiers and comments
+ * stay English.
+ */
+
+/** What each refusal means, in terms the operator can act on. */
+/** Shown when a write is refused by the server or never reaches it. */
+const WRITE_FAILED_COPY =
+  "No pudimos guardar ese cambio. Revisá la conexión y volvé a intentarlo.";
+
+const REFUSAL_COPY: Readonly<Record<DraftRefusal, string>> = {
+  no_members:
+    "Una invitación tiene que quedarse con al menos una persona. Si la idea es que esta invitación desaparezca, hay que eliminarla completa en vez de dejarla sin integrantes.",
+  member_without_name: "Cada integrante necesita un nombre completo.",
+  duplicate_member_id:
+    "La misma persona figura dos veces entre los integrantes.",
+  recipient_not_a_member:
+    "La persona elegida para recibir el mensaje ya no pertenece a esta invitación. Hay que elegir de nuevo a quién se le envía.",
+  custom_name_empty:
+    "El nombre del grupo no puede quedar vacío. Si la idea era deshacer el cambio, el botón «Volver al nombre automático» lo devuelve al que sale de los integrantes.",
+};
+
+/** A fact worth showing. The save happens regardless. */
+const ADVISORY_COPY: Readonly<Record<DraftAdvisory, string>> = {
+  duplicate_nickname:
+    "Dos integrantes tienen el mismo apodo. Puede ser correcto —gemelos, por ejemplo— y se guarda igual.",
+  recipient_has_no_phone:
+    "La persona elegida para recibir el mensaje todavía no tiene un número guardado. Se puede guardar igual y agregarlo después.",
+  recipient_phone_unreachable:
+    "El número de la persona elegida es válido, pero por su tipo de línea no parece recibir WhatsApp.",
+};
+
+/**
+ * What a re-derived name does NOT do to a message that already went out.
+ *
+ * The greeting travels inside the WhatsApp text, and the text is in the guest's
+ * chat history: no console can reach in and edit it. So an invitation whose name
+ * is derived keeps re-deriving — correctly — while every household that already
+ * received it goes on reading the name as it stood the day it was sent. Stated
+ * where the name is edited, as text on the page rather than a tooltip, for the
+ * same reason `WeddingFactsForm` states the cached Open Graph card: the
+ * operators are on phones, and a phone cannot hover.
+ */
+const DISPATCHED_DERIVED_WARNING =
+  "Esta invitación ya se envió. El mensaje que llegó a WhatsApp conserva el " +
+  "nombre que tenía ese día: cambiar los integrantes o sus apodos actualiza el " +
+  "nombre acá y en la página de la invitación, pero no reescribe la " +
+  "conversación que ya salió.";
+
+/** A bound Server Action, as every form in this codebase receives one. */
+export type InvitationFormAction = (formData: FormData) => void | Promise<void>;
+
+/** The membership writes, which exist only for an invitation that exists. */
+export interface InvitationMemberActions {
+  readonly add: InvitationFormAction;
+  readonly edit: InvitationFormAction;
+  readonly remove: InvitationFormAction;
+  readonly chooseRecipient: InvitationFormAction;
+}
+
+/** One member as the server currently holds them. */
+export interface InvitationFormMember {
+  readonly id: string;
+  readonly fullName: string;
+  readonly nickname: string | null;
+  readonly phoneE164: string | null;
+  readonly isChild: boolean;
+  /** Computed upstream by `classifyPhoneDispatchability`, as elsewhere. */
+  readonly dispatchable: boolean;
+}
+
+/** The invitation being edited. Absent while one is being created. */
+export interface InvitationFormInvitation {
+  readonly id: string;
+  readonly displayName: string;
+  readonly greetingName: string;
+  readonly greetingNameSource: GreetingNameSource;
+  /** ISO calendar day, or `null` for an invitation that never closes. */
+  readonly rsvpDeadline: string | null;
+  readonly dispatchRecipientGuestId: string | null;
+  readonly members: readonly InvitationFormMember[];
+  /** True when at least one `dispatch_events` row exists for it. */
+  readonly dispatched: boolean;
+}
+
+export interface InvitationFormProps {
+  /**
+   * `createInvitationAction` while creating, `updateInvitationAction` while
+   * editing. Bound by the page, so the acting operator is never a client value.
+   */
+  readonly action: InvitationFormAction;
+  readonly invitation?: InvitationFormInvitation | null;
+  /** Required to edit membership; there is none to edit while creating. */
+  readonly memberActions?: InvitationMemberActions;
+}
+
+/** One row of the member editor, saved or not. */
+interface MemberRow {
+  /** Stable across re-renders, including for a row with no id yet. */
+  readonly key: string;
+  /** `null` for a row this form added that has never been written. */
+  readonly id: string | null;
+  readonly fullName: string;
+  readonly nickname: string;
+  readonly phone: string;
+  readonly isChild: boolean;
+  /**
+   * Whether a WhatsApp could reach the number.
+   *
+   * For a persisted row it is what the server computed. For a row being typed
+   * it is only "there is a number", because deciding a LINE TYPE needs the
+   * phone metadata library and this is immediate feedback, not a boundary — the
+   * Server Action re-classifies every number it stores.
+   */
+  readonly dispatchable: boolean;
+}
+
+const NO_MEMBERS: readonly InvitationFormMember[] = [];
+
+function rowOf(member: InvitationFormMember): MemberRow {
+  return {
+    key: member.id,
+    id: member.id,
+    fullName: member.fullName,
+    nickname: member.nickname ?? "",
+    phone: member.phoneE164 ?? "",
+    isChild: member.isChild,
+    dispatchable: member.dispatchable,
+  };
+}
+
+/** A row nobody has typed into yet — what a new invitation starts as. */
+function blankRow(): MemberRow {
+  return {
+    key: `new-${globalThis.crypto.randomUUID()}`,
+    id: null,
+    fullName: "",
+    nickname: "",
+    phone: "",
+    isChild: false,
+    dispatchable: false,
+  };
+}
+
+function rowsOf(members: readonly InvitationFormMember[]): MemberRow[] {
+  return members.length === 0 ? [blankRow()] : members.map(rowOf);
+}
+
+/** The row as the pure validator wants it. */
+function draftMemberOf(row: MemberRow): InvitationDraftMember {
+  return {
+    id: row.id,
+    fullName: row.fullName,
+    nickname: nicknameOf(row),
+    phoneE164: row.phone.trim() === "" ? null : row.phone.trim(),
+    isChild: row.isChild,
+    dispatchable: row.dispatchable,
+  };
+}
+
+/** An emptied field is the absence of a nickname, not a blank one. */
+function nicknameOf(row: MemberRow): string | null {
+  const trimmed = row.nickname.trim();
+
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * The rows that can contribute a name, and therefore the ones the preview reads.
+ *
+ * A row with neither a name nor a nickname is a row somebody is about to fill
+ * in. Feeding it to the derivation would render a stray conjunction next to an
+ * empty field and make the preview look broken while it is merely early.
+ */
+function nameableRows(rows: readonly MemberRow[]): readonly MemberRow[] {
+  return rows.filter(
+    (candidate) =>
+      candidate.fullName.trim() !== "" || candidate.nickname.trim() !== "",
+  );
+}
+
+/**
+ * What the CURRENT rows derive to, or `null` when nothing is named yet.
+ *
+ * `deriveGreetingName` throws on an empty list on purpose (an invitation with no
+ * members must not exist), and an empty creation form is exactly that list. The
+ * guard is here rather than in the domain so the throw keeps its meaning for
+ * every other caller.
+ */
+function derivedNameOf(rows: readonly MemberRow[]): string | null {
+  const nameable = nameableRows(rows);
+
+  if (nameable.length === 0) {
+    return null;
+  }
+
+  return deriveGreetingName(
+    nameable.map((member) => ({
+      fullName: member.fullName,
+      nickname: nicknameOf(member),
+    })),
+  );
+}
+
+export function InvitationForm({
+  action,
+  invitation = null,
+  memberActions,
+}: InvitationFormProps) {
+  const persisted = invitation?.members ?? NO_MEMBERS;
+
+  const [rows, setRows] = useState<readonly MemberRow[]>(() =>
+    rowsOf(persisted),
+  );
+  const [displayName, setDisplayName] = useState(invitation?.displayName ?? "");
+  const [source, setSource] = useState<GreetingNameSource>(
+    invitation?.greetingNameSource ?? "derived",
+  );
+  const [customName, setCustomName] = useState(
+    invitation === null || invitation.greetingNameSource === "derived"
+      ? ""
+      : invitation.greetingName,
+  );
+  const [deadline, setDeadline] = useState(invitation?.rsvpDeadline ?? "");
+  const [recipientId, setRecipientId] = useState(
+    invitation?.dispatchRecipientGuestId ?? null,
+  );
+
+  // THE SERVER'S MEMBER LIST WINS WHEN IT CHANGES.
+  //
+  // A membership write revalidates this route, so new props arrive while the
+  // form is still mounted holding the rows as they were BEFORE it. Re-seeding
+  // from the new list is what makes a just-added member appear with the real id
+  // the server gave them — without which their row would still read `null` and a
+  // second save would add them twice. Adjusting state during render rather than
+  // in an effect is React's own answer for this: it re-renders immediately
+  // instead of painting the stale list first.
+  const [seededFrom, setSeededFrom] = useState(persisted);
+
+  if (persisted !== seededFrom) {
+    setSeededFrom(persisted);
+    // MERGE, NEVER REPLACE.
+    //
+    // The edit page revalidates this route after every membership write, so this
+    // branch runs while the operator may be mid-word in another row. Replacing
+    // the array discarded that text silently. Server rows decide WHO is in the
+    // household and carry the ids this branch exists to adopt; a local row's own
+    // field values win, because they are what the operator can see and has not
+    // saved yet. Rows never saved at all have no server counterpart and survive.
+    setRows((current) => {
+      const locallyEdited = new Map(
+        current.filter((row) => row.id !== null).map((row) => [row.id, row]),
+      );
+      const unsaved = current.filter((row) => row.id === null);
+      const absorbed = new Set<string>();
+
+      const merged = rowsOf(persisted).map((row) => {
+        const local = locallyEdited.get(row.id);
+
+        if (local !== undefined) {
+          return { ...local, id: row.id };
+        }
+
+        // A ROW WHOSE ADD JUST LANDED IS THE SAME PERSON, NOT A SECOND ONE.
+        //
+        // A member added here has no id until the server accepts them. When the
+        // list comes back carrying them WITH an id, keeping the local row too
+        // renders that person twice and a second save adds them twice — which is
+        // the double-add this whole branch exists to prevent. Matched by name
+        // because a row with no id has nothing else to be matched by.
+        const justLanded = unsaved.find(
+          (candidate) =>
+            !absorbed.has(candidate.key) &&
+            candidate.fullName.trim() !== "" &&
+            candidate.fullName.trim() === row.fullName.trim(),
+        );
+
+        if (justLanded !== undefined) {
+          absorbed.add(justLanded.key);
+
+          return { ...justLanded, id: row.id };
+        }
+
+        return row;
+      });
+
+      return [...merged, ...unsaved.filter((row) => !absorbed.has(row.key))];
+    });
+    setRecipientId(invitation?.dispatchRecipientGuestId ?? null);
+  }
+
+  const [attempted, setAttempted] = useState(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
+
+  const derivedName = derivedNameOf(rows);
+  const shownName = source === "derived" ? (derivedName ?? "") : customName;
+
+  const { refusals, advisories } = validateInvitationDraft({
+    displayName,
+    greetingName: shownName,
+    greetingNameSource: source,
+    members: rows.map(draftMemberOf),
+    dispatchRecipientGuestId: recipientId,
+    rsvpDeadline: deadline === "" ? null : deadline,
+  });
+
+  function patchRow(key: string, patch: Partial<MemberRow>) {
+    setRows((current) =>
+      current.map((candidate) =>
+        candidate.key === key ? { ...candidate, ...patch } : candidate,
+      ),
+    );
+  }
+
+  /** One member's own fields, as every membership action reads them back. */
+  function memberFields(row: MemberRow): FormData {
+    const formData = new FormData();
+
+    if (invitation !== null) {
+      formData.set("invitationId", invitation.id);
+    }
+
+    if (row.id !== null) {
+      formData.set("guestId", row.id);
+    }
+
+    formData.set("fullName", row.fullName);
+    formData.set("nickname", row.nickname);
+    formData.set("phone", row.phone);
+    formData.set("isChild", row.isChild ? "true" : "false");
+
+    return formData;
+  }
+
+  /**
+   * Why this member cannot be taken off the invitation, or `null`.
+   *
+   * The SAME rule the Server Action applies, run on the membership the removal
+   * would leave behind: `removeMember` validates the after-state before its
+   * first statement and refuses `no_members`, so previewing it here cannot
+   * disagree with it. An unsaved row is exempt — it exists only in this form,
+   * and removing it writes nothing.
+   *
+   * A removed member's own recipient choice is cleared by the database rather
+   * than refused, so the check is against the members that REMAIN, exactly as
+   * `refuseInvalidMembership` does it.
+   */
+  function removalRefusalOf(row: MemberRow): string | null {
+    if (invitation === null || row.id === null) {
+      return null;
+    }
+
+    const after = rows.filter((candidate) => candidate.key !== row.key);
+    const outcome = validateInvitationDraft({
+      displayName,
+      greetingName: shownName,
+      greetingNameSource: source,
+      members: after.map(draftMemberOf),
+      dispatchRecipientGuestId: after.some(
+        (candidate) => candidate.id === recipientId,
+      )
+        ? recipientId
+        : null,
+      rsvpDeadline: deadline === "" ? null : deadline,
+    });
+
+    return outcome.refusals.includes("no_members")
+      ? REFUSAL_COPY.no_members
+      : null;
+  }
+
+  /**
+   * RUNS A WRITE AND MAKES ITS FAILURE VISIBLE.
+   *
+   * Every write here used to be fire-and-forget: the promise was discarded and
+   * no rejection reached the operator. The recipient case was the worst of them —
+   * local state was updated first, so a rejected write left the radio rendered
+   * as chosen while the server had recorded nothing, and dispatch stayed blocked
+   * with no explanation anywhere. `onFailure` is how a caller undoes whatever it
+   * showed optimistically.
+   */
+  async function runWrite(
+    write: InvitationFormAction,
+    fields: FormData,
+    onFailure?: () => void,
+  ): Promise<void> {
+    try {
+      await write(fields);
+      setWriteError(null);
+    } catch {
+      onFailure?.();
+      setWriteError(WRITE_FAILED_COPY);
+    }
+  }
+
+  function saveMember(row: MemberRow) {
+    if (memberActions === undefined) {
+      return;
+    }
+
+    const write = row.id === null ? memberActions.add : memberActions.edit;
+
+    void runWrite(write, memberFields(row));
+  }
+
+  function removeMember(row: MemberRow) {
+    // An unsaved row exists only here, so removing it is a local edit and there
+    // is nothing for the server to refuse.
+    if (row.id === null || memberActions === undefined) {
+      setRows((current) =>
+        current.filter((candidate) => candidate.key !== row.key),
+      );
+
+      return;
+    }
+
+    void runWrite(memberActions.remove, memberFields(row));
+  }
+
+  function chooseRecipient(row: MemberRow) {
+    if (row.id === null || invitation === null || memberActions === undefined) {
+      return;
+    }
+
+    const previous = recipientId;
+
+    setRecipientId(row.id);
+
+    const formData = new FormData();
+
+    formData.set("invitationId", invitation.id);
+    formData.set("guestId", row.id);
+
+    void runWrite(memberActions.chooseRecipient, formData, () => {
+      setRecipientId(previous);
+    });
+  }
+
+  function save(formData: FormData) {
+    // The operator learns about a refusal the moment they ask to save, not after
+    // a round trip — and, until they ask, an incomplete form is not scolded for
+    // being incomplete.
+    setAttempted(true);
+
+    if (refusals.length > 0) {
+      return;
+    }
+
+    void runWrite(action, formData);
+  }
+
+  return (
+    <form
+      action={save}
+      className="invitation-form flex flex-col gap-6"
+      // The console is operated on phones; the browser's own name and phone
+      // suggestions are the operator's own identity, never a guest's.
+      autoComplete="off"
+    >
+      {invitation !== null && (
+        <input type="hidden" name="invitationId" value={invitation.id} />
+      )}
+
+      <fieldset className="invitation-form__members flex flex-col gap-4">
+        <legend className="text-sm font-medium">Integrantes</legend>
+
+        {rows.map((row, index) => {
+          const removalRefusal = removalRefusalOf(row);
+
+          return (
+            <fieldset
+              className="invitation-form__member flex flex-col gap-2 rounded-lg border border-input px-3 py-3"
+              key={row.key}
+            >
+              <legend className="px-1 text-xs text-muted-foreground">
+                Integrante {index + 1}
+              </legend>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`member-${row.key}-full-name`}>
+                  Nombre completo
+                </Label>
+                <Input
+                  className="h-11"
+                  id={`member-${row.key}-full-name`}
+                  // The four member columns travel with the CREATE submission and
+                  // are read as parallel arrays. While editing, membership has its
+                  // own actions and these inputs submit nothing.
+                  name={invitation === null ? "memberFullName" : undefined}
+                  onChange={(event) =>
+                    patchRow(row.key, { fullName: event.target.value })
+                  }
+                  value={row.fullName}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`member-${row.key}-nickname`}>Apodo</Label>
+                <Input
+                  className="h-11"
+                  id={`member-${row.key}-nickname`}
+                  name={invitation === null ? "memberNickname" : undefined}
+                  onChange={(event) =>
+                    patchRow(row.key, { nickname: event.target.value })
+                  }
+                  value={row.nickname}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`member-${row.key}-phone`}>Teléfono</Label>
+                <Input
+                  className="h-11"
+                  id={`member-${row.key}-phone`}
+                  inputMode="tel"
+                  name={invitation === null ? "memberPhone" : undefined}
+                  onChange={(event) =>
+                    patchRow(row.key, {
+                      phone: event.target.value,
+                      dispatchable: event.target.value.trim() !== "",
+                    })
+                  }
+                  value={row.phone}
+                />
+              </div>
+
+              <Label className="gap-2" htmlFor={`member-${row.key}-is-child`}>
+                <input
+                  checked={row.isChild}
+                  id={`member-${row.key}-is-child`}
+                  onChange={(event) =>
+                    patchRow(row.key, { isChild: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                Es niño o niña
+              </Label>
+
+              {/* An unchecked checkbox submits NOTHING, which would shift every
+                row after it in the parallel columns the action reads. The value
+                travels in a hidden field that is always present instead. */}
+              {invitation === null && (
+                <input
+                  name="memberIsChild"
+                  type="hidden"
+                  value={row.isChild ? "true" : "false"}
+                />
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {invitation !== null && (
+                  <Button
+                    onClick={() => saveMember(row)}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    Guardar integrante {index + 1}
+                  </Button>
+                )}
+
+                <Button
+                  {...whyDisabled(removalRefusal)}
+                  onClick={() => removeMember(row)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Quitar integrante {index + 1}
+                </Button>
+              </div>
+
+              {/* The reason as TEXT, not only as the `title` the disabled props
+                carry: the operators are on phones, and a phone cannot hover. */}
+              {removalRefusal !== null && (
+                <p
+                  className="max-w-[68ch] text-xs text-muted-foreground"
+                  data-testid="invitation-member-refusal"
+                  role="status"
+                >
+                  {removalRefusal}
+                </p>
+              )}
+            </fieldset>
+          );
+        })}
+
+        <Button
+          className="self-start"
+          onClick={() => setRows((current) => [...current, blankRow()])}
+          type="button"
+          variant="secondary"
+        >
+          Agregar integrante
+        </Button>
+      </fieldset>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="invitation-display-name">Nombre del hogar</Label>
+        <p
+          className="max-w-[68ch] text-xs text-muted-foreground"
+          id="invitation-display-name-hint"
+        >
+          Es el nombre con el que esta invitación aparece en el panel. No es el
+          saludo.
+        </p>
+        <Input
+          aria-describedby="invitation-display-name-hint"
+          className="h-11"
+          id="invitation-display-name"
+          name="displayName"
+          onChange={(event) => setDisplayName(event.target.value)}
+          required
+          value={displayName}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="invitation-greeting-name">Nombre del grupo</Label>
+        <p
+          className="max-w-[68ch] text-xs text-muted-foreground"
+          id="invitation-greeting-name-hint"
+        >
+          Es el saludo con el que abre la invitación. Se arma solo con los
+          nombres y apodos de arriba; si se escribe algo distinto, queda tal
+          cual y deja de actualizarse.
+        </p>
+        <Input
+          aria-describedby="invitation-greeting-name-hint"
+          className="h-11"
+          id="invitation-greeting-name"
+          name="greetingName"
+          onChange={(event) => {
+            // TOUCHING THE FIELD IS THE DECISION. There is no separate "use a
+            // custom name" toggle: a toggle can disagree with the text beside
+            // it, and the text is what gets stored.
+            setSource("custom");
+            setCustomName(event.target.value);
+          }}
+          value={shownName}
+        />
+
+        {/*
+          `imported` is submitted as `custom`, deliberately.
+          An imported name is a string a script wrote and nobody has reviewed;
+          the domain treats it like a custom one until an operator acts on it,
+          and saving this form IS acting on it. Submitting `imported` would be
+          read as "not custom" by the action and silently replace the stored name
+          with the derived one.
+        */}
+        <input
+          data-testid="invitation-greeting-source"
+          name="greetingNameSource"
+          type="hidden"
+          value={source === "derived" ? "derived" : "custom"}
+        />
+
+        {invitation !== null &&
+          invitation.dispatched &&
+          invitation.greetingNameSource === "derived" && (
+            <p
+              className="max-w-[68ch] rounded-lg border border-input px-3 py-2 text-xs text-muted-foreground"
+              data-testid="invitation-dispatched-warning"
+            >
+              {DISPATCHED_DERIVED_WARNING}
+            </p>
+          )}
+
+        {/*
+          SHOWN ALWAYS, INCLUDING BESIDE A CUSTOM NAME (B3).
+          The alternative would be working out whether a hand-written name
+          "still mentions" a member who has since been removed — by matching its
+          text against the member names. That is unreliable in both directions: a
+          nickname that is a common word matches a name that is not there, and a
+          diminutive nobody typed misses one that is. A wrong answer either
+          silently rewrites the couple's own wording or silently keeps a greeting
+          that names somebody who is not coming. So nothing is inferred: both
+          strings are on screen, and the operator decides.
+        */}
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="invitation-derived-name"
+        >
+          Nombre automático: {derivedName ?? "todavía sin integrantes"}
+          {source === "derived"
+            ? ""
+            : " — es el que saldría de los integrantes de arriba; no se está usando porque el nombre está escrito a mano."}
+        </p>
+
+        <Button
+          className="self-start"
+          onClick={() => setSource("derived")}
+          type="button"
+          variant="ghost"
+        >
+          Volver al nombre automático
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="invitation-rsvp-deadline">
+          Fecha límite para confirmar
+        </Label>
+        <Input
+          className="h-11"
+          id="invitation-rsvp-deadline"
+          name="rsvpDeadline"
+          onChange={(event) => setDeadline(event.target.value)}
+          type="date"
+          value={deadline}
+        />
+      </div>
+
+      {invitation === null || memberActions === undefined ? (
+        <p
+          className="max-w-[68ch] text-sm text-muted-foreground"
+          data-testid="invitation-recipient-later"
+        >
+          A quién se le envía el mensaje se elige después de guardar: las
+          personas todavía no existen, así que no hay a quién dejar registrado.
+        </p>
+      ) : (
+        <fieldset className="invitation-form__recipient flex flex-col gap-2">
+          <legend className="text-sm font-medium">
+            ¿Quién recibe el mensaje?
+          </legend>
+          <p className="max-w-[68ch] text-xs text-muted-foreground">
+            Nadie queda elegido por defecto. Mientras no se marque a alguien, el
+            envío de esta invitación queda bloqueado.
+          </p>
+
+          {rows
+            .filter((row): row is MemberRow & { id: string } => row.id !== null)
+            .map((row) => (
+              <Label
+                className="gap-2"
+                htmlFor={`recipient-${row.id}`}
+                key={row.id}
+              >
+                <input
+                  checked={recipientId === row.id}
+                  id={`recipient-${row.id}`}
+                  name="recipientChoice"
+                  onChange={() => chooseRecipient(row)}
+                  type="radio"
+                  value={row.id}
+                />
+                {row.fullName === "" ? "Sin nombre" : row.fullName}
+                {row.phone.trim() === "" ? " — sin número guardado" : ""}
+              </Label>
+            ))}
+        </fieldset>
+      )}
+
+      {writeError !== null && (
+        <p
+          className="max-w-[68ch] rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-3 text-sm"
+          data-testid="invitation-write-error"
+          // A write that failed is announced, because the alternative is what
+          // this replaced: the form showing a change the server never took.
+          role="alert"
+        >
+          {writeError}
+        </p>
+      )}
+
+      {attempted && refusals.length > 0 && (
+        <ul
+          className="flex max-w-[68ch] list-disc flex-col gap-1 rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-3 text-sm"
+          data-testid="invitation-refusals"
+          // Announced, not merely rendered: the operator asked to save and the
+          // answer is that nothing was saved.
+          role="alert"
+        >
+          {refusals.map((refusal) => (
+            <li key={refusal}>{REFUSAL_COPY[refusal]}</li>
+          ))}
+        </ul>
+      )}
+
+      {advisories.length > 0 && (
+        <ul
+          className="flex max-w-[68ch] list-disc flex-col gap-1 rounded-lg border border-input px-6 py-3 text-sm text-muted-foreground"
+          data-testid="invitation-advisories"
+          role="status"
+        >
+          {advisories.map((advisory) => (
+            <li key={advisory}>{ADVISORY_COPY[advisory]}</li>
+          ))}
+        </ul>
+      )}
+
+      <Button className="self-start" type="submit">
+        Guardar invitación
+      </Button>
+    </form>
+  );
+}

@@ -1427,3 +1427,166 @@ Browser suite restored: **155 passed, 0 failed, 0 did not run**, from 114/2/38. 
 task 4b.15 is complete and slice 4b should not repeat it; the UI half (4b.1/4b.2, then 4b.13
 exercising the choice through the form) is untouched and still owed, because
 `chooseRecipientAction` still has no caller.
+
+# Slice 4a — Console routes, form component, live derived name
+
+**Change**: invitation-administration
+**Mode**: Strict TDD (`openspec/config.yaml` → `strict_tdd: true`, `test_command: "npm test"`)
+**Work unit**: 4a only (tasks 4a.1–4a.13) — the console's first hand-made invitation
+**Starts at**: `227de27` (the browser-suite restoration unit), clean tree
+**Prior progress read**: yes — every section above, kept byte-untouched and appended to.
+**Not started, deliberately**: slice 4b in full (`GuestList`'s recipient indicator, the
+create/edit affordances, the empty-state rewrite, `contradictedAnswers`, and the three E2E
+files), and slice 1b, unstarted since batch 1.
+**Over budget, stated up front**: **1,730 authored changed lines** against
+`review_budget_lines: 800`, excluding `openspec/**`. The form is 774 lines (528 of them code)
+and its spec 585; see *Why this slice could not land in 800 lines*. Nothing was deleted to
+reach a number.
+
+## The one task that is not done as literally written, and why
+
+**4a.10 asks the remove AND move controls to preview `canMoveMember`. Only the remove control
+ships, and it previews `validateInvitationDraft` instead.** Both halves of that are deliberate.
+
+1. **No move affordance ships in 4a.** A destination picker needs a list of the other
+   invitations, which neither page in this slice reads, and no task in 4a or 4b exercises a
+   move through the UI. `moveMemberAction` therefore still has no caller — the same state
+   `chooseRecipientAction` was in before this slice, and worth saying out loud rather than
+   leaving to be discovered.
+2. **`canMoveMember` is the wrong mirror for a removal.** The control that exists is wired to
+   `removeMemberAction`, and `removeMember` refuses through `refuseInvalidMembership` →
+   `validateInvitationDraft` → `no_members`. It never calls `canMoveMember`. Previewing
+   `canMoveMember` here would preview a function the Server Action does not run, which is the
+   opposite of 4a.10's own requirement to surface *the same refusal the Server Action returns*
+   — and it would need a fabricated `destinationInvitationId` to do it. The emptiness rule
+   previewed is the same rule, from the same module, that the action applies.
+
+The spec requirement itself ("Moving or deleting the last member of an invitation is refused")
+holds on every path that exists: the removal path in the form, and the move path in
+`moveMemberToInvitation`, proved at 2b.9/2b.10 and 3a.
+
+## Completed Tasks
+
+| Task | Status | Evidence |
+|---|---|---|
+| 4a.1 RED — live preview, custom flip, reset, no recipient pre-selected | ✅ | New spec file; RED `Failed to resolve import "./InvitationForm"`, `Tests no tests` |
+| 4a.2 GREEN — `components/console/InvitationForm.tsx` (`'use client'`) | ✅ | `Tests 10 passed (10)`. Imports `deriveGreetingName` from `@/lib/domain/greeting-name` — the same specifier `actions.ts` imports (D14); no second joining rule exists to drift |
+| 4a.3 RED — zero members, stale recipient, duplicate nickname | ✅ | First RED was WRONG-REASON on two cases and was fixed before any implementation: the `required` household-name field, not the component, was what stopped the save. After filling it, `AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times` ×3 plus two missing regions — `Tests 5 failed \| 13 passed (18)` |
+| 4a.4 GREEN — `validateInvitationDraft` client-side, then the Server Action | ✅ | `Tests 18 passed (18)`. Refusals block the submit and are announced; advisories render live and never block |
+| 4a.5 GREEN — `app/console/(authenticated)/invitations/new/page.tsx` | ✅ | Async RSC; **no unit test invented for it** — the task says so and Vitest cannot render one. Proved by `npm run build` listing `ƒ /console/invitations/new`, and its behaviour is owed to 4b's E2E |
+| 4a.6 GREEN — `app/console/(authenticated)/invitations/[id]/edit/page.tsx` | ✅ | Same form, no mode switch. `ƒ /console/invitations/[id]/edit` in the build. Loads through `findInvitationMembership`, which is the read the membership WRITES already validate against |
+| 4a.7 RED — post-dispatch derived-name warning | ✅ | `Unable to find an element by: [data-testid="invitation-dispatched-warning"]`, `Tests 1 failed \| 20 passed (21)` |
+| 4a.8 GREEN — render it for `greeting_name_source === 'derived'` + any dispatch event | ✅ | `Tests 21 passed (21)`. Keyed on the LOADED source and on `dispatch_events.length > 0`, including `link_opened` and `marked_failed` |
+| 4a.9 RED — last member refused, multi-member permitted (paired) | ✅ | `expect(element).toBeDisabled()` … `Received element is not disabled`, `Tests 1 failed \| 23 passed (24)` |
+| 4a.10 GREEN — the remove control previews the refusal client-side | ✅ (see the deviation above) | `Tests 24 passed (24)`. `whyDisabled` carries the reason with the attribute, and the sentence is rendered as TEXT because the operators are on phones |
+| 4a.11 RED — custom name shown BESIDE the live derived one, always | ✅ | `Unable to find an element by: [data-testid="invitation-derived-name"]` ×3, `Tests 3 failed \| 24 passed (27)` |
+| 4a.12 GREEN — the preview is permanent, never string-matched | ✅ | `Tests 27 passed (27)`. Nothing compares the custom text to member names in either direction |
+| 4a.13 Verify | ✅ | See the Verification table below; all six commands plus two shuffled runs |
+| — consequential — `findInvitationMembership` exported | ✅ | RED `TypeError: findInvitationMembership is not a function`, `Tests 2 failed \| 70 passed (72)`; GREEN `Tests 72 passed (72)` |
+
+## Why this slice could not land in 800 lines
+
+The 774-line component is one form with four member fields per row, four invitation-level
+fields, a recipient group, three announcement regions and five bound actions, formatted by
+Prettier at one prop per line; 168 of those lines are comments and 79 blank. The 585-line
+spec is 27 tests over five behaviours, each refusal shipped with its permitting pair as
+`strict_tdd` requires. The two pages are 280 lines, of which roughly half is the reasoning
+this codebase keeps beside its async containers. Splitting the form would have meant a second
+component that could disagree with the first about what an invitation is, which is the whole
+argument of "ONE form, no mode switch".
+
+## Three things found while implementing, worth keeping
+
+1. **`imported` is submitted as `custom`, never as itself.** `createInvitationAction` and
+   `updateInvitationAction` read `greetingNameSource === "custom" ? "custom" : "derived"`, so
+   a form that echoed a stored `imported` source would have had the action record it as
+   `derived` — and `greetingNameColumns` would then have overwritten the imported name with
+   the derived one on the first save. The form submits `custom` for any non-derived source,
+   which is what the domain already means by `imported` ("treated like custom until an
+   operator acts on it"), and saving IS acting on it.
+2. **`rsvpDeadline` has to be a field, not an omission.** Both actions read it with
+   `optionalText`, which turns an absent form field into `null`. A form that did not render
+   the deadline would have silently cleared it on every save of an invitation that had one.
+3. **The edit route revalidates itself.** The shipped actions revalidate only
+   `CONSOLE_ROOT_PATH`, so without the thin `"use server"` wrappers in the page the form would
+   keep rendering the membership as it was before a write — and a just-added member would
+   still carry `id: null`, so a second save would add them twice. The form re-seeds its rows
+   when the server's member list changes, which is what makes the new id arrive.
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 4a.1/4a.2 | `components/console/InvitationForm.spec.tsx` | Component (jsdom, Testing Library) | ✅ 1863/1863 measured on the clean tree before the first edit | ✅ `Failed to resolve import "./InvitationForm"`, `Test Files 1 failed (1)`, `Tests no tests` | ✅ `Tests 10 passed (10)` | ✅ 10 cases: two-member and one-member derivations and a nickname typed mid-list, all expected against `deriveGreetingName` CALLED rather than a literal; the derived/custom/reset triple; **no radio checked on mount PAIRED with a stored choice that is checked**, so a component that never checks anything fails the pair | ➖ first shape |
+| 4a.3/4a.4 | same file | Component | ✅ 10/10 before the edit | ✅ `AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times` ×3, `Unable to find an element by: [data-testid="invitation-advisories"]` ×2; `Tests 5 failed \| 13 passed (18)` | ✅ `Tests 18 passed (18)` | ✅ 8 cases: three refusals each with its permitting pair, the duplicate-nickname advisory against a distinct-nickname control, and the no-phone advisory asserted alongside `action` being called | ➖ |
+| — (RED repair) | same file | Component | — | The first RED had two cases passing their "nothing was created" assertion because the `required` household-name field blocked the submit. The test was corrected to fill it first, and re-run, BEFORE any implementation | — | — | — |
+| 4a.7/4a.8 | same file | Component | ✅ 18/18 before the edit | ✅ `Unable to find an element by: [data-testid="invitation-dispatched-warning"]`; `Tests 1 failed \| 20 passed (21)` | ✅ `Tests 21 passed (21)` | ✅ 3 cases: dispatched + derived warns; never-dispatched is silent; dispatched + custom is silent, because a custom name does not move when the membership does | ➖ |
+| 4a.9/4a.10 | same file | Component | ✅ 21/21 before the edit | ✅ `expect(element).toBeDisabled()` … `Received element is not disabled`; `Tests 1 failed \| 23 passed (24)` | ✅ `Tests 24 passed (24)` | ✅ 3 cases: the solo invitation refuses AND the action is not called, the two-member invitation removes and submits the right `guestId`, and the CREATION form may still empty itself — there is no invitation to delete instead | ➖ |
+| 4a.11/4a.12 | same file | Component | ✅ 24/24 before the edit | ✅ `Unable to find an element by: [data-testid="invitation-derived-name"]` ×3; `Tests 3 failed \| 24 passed (27)` | ✅ `Tests 27 passed (27)` | ✅ 3 cases: typing a custom name keeps the preview; a STORED custom name that mentions a non-member is rendered unchanged beside the fresh derivation; the derivation keeps moving as nicknames change while the custom text stays put | ➖ |
+| consequential — the editor's read | `lib/server/invitations.spec.ts` | Integration (local Supabase, real rows) | ✅ 70/70 before the edit | ✅ `TypeError: findInvitationMembership is not a function`; `Tests 2 failed \| 70 passed (72)` | ✅ `Tests 72 passed (72)` | ✅ 2 cases: the nickname and `greeting_name_source` the console list projection cannot supply, and `null` — not a throw — for an invitation nobody has | ✅ `readMembership` became a thin throwing wrapper over the new exported reader; its message and every existing caller are unchanged |
+
+### Test Summary
+
+- **Total tests written**: **29** authored `it(` blocks — 27 in the new component spec, 2 in
+  `lib/server/invitations.spec.ts`.
+- **Total tests passing**: **1902** (`Test Files 98 passed (98)`), up from **1863**
+  (`97 passed (97)`). The +39 is 29 authored plus **10** from the two file-scanning tools
+  (`tools/no-seats-allowed.spec.ts` 234 and `tools/no-source-placeholders.spec.ts` 126), which
+  generate one case per source file and therefore grew by the four files this slice adds.
+- **E2E**: **155 passed**, unchanged — this slice adds no E2E and breaks none.
+- **Layers used**: Component (jsdom) 1 file, Integration (local Supabase) 1 file.
+- **Pure functions created**: 0. `deriveGreetingName`, `validateInvitationDraft` and
+  `classifyPhoneDispatchability` are imported, never re-implemented.
+
+## Verification
+
+| Command | Observed result |
+|---|---|
+| `npm test` | exit 0 — `Test Files 98 passed (98)`, **`Tests 1902 passed (1902)`** |
+| `npm test -- components/console/InvitationForm` | exit 0 — `Tests 27 passed (27)` |
+| `npm run typecheck` | exit 0, no output |
+| `npm run lint` | exit 0, no findings — the domain import from a `'use client'` component needed no exception |
+| `npm run format:check` | exit 0 — "All matched files use Prettier code style!" |
+| `npm run build` | exit 0 — 15 routes, now including `ƒ /console/invitations/new` and `ƒ /console/invitations/[id]/edit` |
+| `PORT=3123 npm run e2e` | exit 0 — `Running 155 tests using 5 workers` → **`155 passed (27.4s)`**, 0 failed, 0 did not run |
+| `npx vitest run --sequence.shuffle` (1st) | exit 0 — `98 passed (98)`, `1902 passed (1902)` |
+| `npx vitest run --sequence.shuffle` (2nd) | exit 0 — `98 passed (98)`, `1902 passed (1902)` |
+
+**Database safety**: `select email from auth.users order by email;` returned
+`lumigu.dev@gmail.com` and `sruiz7541@gmail.com` before AND after; `select couple_names from
+ceremony;` returned `Luis & Michell` before AND after. `supabase db reset` was **NOT** run.
+`PORT=3123` throughout; nothing on 3000 was touched.
+
+## Files Changed
+
+| File | Action | What Was Done |
+|---|---|---|
+| `components/console/InvitationForm.tsx` | Added | 774 lines. The one form: member rows, the live derived name via a direct `lib/domain/greeting-name` import (D14), the custom/reset pair, the permanent derived preview (B3), the recipient group with nothing pre-selected, the client-side `validateInvitationDraft` pass, the last-member refusal and the post-dispatch warning |
+| `components/console/InvitationForm.spec.tsx` | Added | 585 lines, 27 tests. Every expectation about a derived name is computed by CALLING `deriveGreetingName`, so a component that grew its own joining rule would fail |
+| `app/console/(authenticated)/invitations/new/page.tsx` | Added | 87 lines. Async RSC inside the `(authenticated)` group; a thin `"use server"` wrapper creates and then redirects to the console list, because the action returns no id to navigate to |
+| `app/console/(authenticated)/invitations/[id]/edit/page.tsx` | Added | 193 lines. Loads the membership, the recipient and the dispatch log; binds five actions, each wrapped to revalidate this route as well as the list; classifies each member's phone so the form's advisory means what the preflight means |
+| `lib/server/invitations.ts` | Modified | +37/−5. `readMembership` split into the exported `findInvitationMembership` (returns `null`) and a throwing wrapper; `InvitationMembership` exported. No existing behaviour or message changed |
+| `lib/server/invitations.spec.ts` | Modified | +54/−0. Two tests for the new reader, against real rows |
+| `openspec/changes/invitation-administration/tasks.md` | Modified | 4a.1–4a.13 checked |
+| `openspec/changes/invitation-administration/apply-progress.md` | Modified | This section appended; every earlier batch byte-untouched |
+
+## Workload / PR Boundary
+
+- Mode: slice 4a of the eight-slice chain
+- Boundary: starts at `227de27` with a clean tree; ends with two new console routes, one new
+  component and one newly exported repository read. Nothing existing changed behaviour, which
+  is why the 1863 prior unit tests and the 155 E2E tests are all still green
+- **Authored changed lines: 1,730** (1,725 insertions, 5 deletions), excluding `openspec/**`.
+  Over the 800-line ceiling, stated at the top of this section rather than at the end
+- **Not committed and not pushed**, as instructed. The `gentle-ai` attempt ledger was not
+  touched
+
+## Status
+
+Slice 4a is complete except for the move affordance discussed above. The console can now create
+an invitation by hand and edit any existing one, a group name derives live from the same
+function the server stores with, and a recipient can finally be chosen through the UI — which
+is what `chooseRecipientAction` has been waiting for since slice 3a. Slice 4b still owes the
+list's recipient indicator, the create/edit links that make these two routes reachable without
+typing a URL, the empty-state rewrite, `contradictedAnswers`, and the two E2E files that have
+not already been done by the browser-suite restoration unit.

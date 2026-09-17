@@ -17,6 +17,7 @@ import {
   editMember,
   removeMember,
   findInvitationBySlug,
+  findInvitationMembership,
   findGuestInvitationOwner,
   importInvitations,
   moveMemberToInvitation,
@@ -2266,6 +2267,59 @@ describe("importInvitations — the nickname reaches the row (local Supabase)", 
         { full_name: "Ana Guzmán", nickname: null },
         { full_name: "Luis Guzmán", nickname: "Lucho" },
       ]);
+    });
+  });
+});
+
+describe("findInvitationMembership — what the invitation editor loads", () => {
+  it("returns the nicknames and the name source the form must not invent", async () => {
+    // The console list projection carries neither: it has no `nickname` column
+    // in its select and no `greeting_name_source` at all. A form that loaded
+    // from there would show every nickname as blank and would re-derive a name
+    // a person had written by hand.
+    await withSenderFixture(async (senderId) => {
+      const client = createServerSupabaseClient();
+
+      const created = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: "Familia Guzmán",
+        greetingName: "",
+        greetingNameSource: "derived",
+        rsvpDeadline: null,
+        guests: [
+          member("Luis Guzmán", {
+            nickname: "Lucho",
+            phoneE164: "+573001234567",
+            isPrimary: true,
+          }),
+          member("Inés Guzmán"),
+        ],
+      });
+
+      const membership = await findInvitationMembership(client, created.id);
+
+      expect(membership?.greetingNameSource).toBe("derived");
+      expect(membership?.members.map((each) => each.nickname)).toEqual([
+        "Lucho",
+        null,
+      ]);
+      expect(membership?.dispatchRecipientGuestId).toBeNull();
+      expect(membership?.displayName).toBe("Familia Guzmán");
+    });
+  });
+
+  it("answers null for an invitation nobody has, instead of throwing", async () => {
+    // The page turns that into a 404. A throw would render the error boundary,
+    // which tells an operator who mistyped a URL that the server is broken.
+    await withSenderFixture(async () => {
+      const client = createServerSupabaseClient();
+
+      await expect(
+        findInvitationMembership(
+          client,
+          "00000000-0000-4000-8000-000000000000",
+        ),
+      ).resolves.toBeNull();
     });
   });
 });

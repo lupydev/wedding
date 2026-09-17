@@ -627,7 +627,7 @@ function refusalMessage(refusals: readonly DraftRefusal[]): string {
 }
 
 /** An invitation's naming and membership, as the pure validator wants them. */
-interface InvitationMembership {
+export interface InvitationMembership {
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
   readonly dispatchRecipientGuestId: string | null;
@@ -661,11 +661,24 @@ const MEMBERSHIP_SELECT =
   "dispatch_recipient_guest_id, " +
   "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, is_child)";
 
-/** Reads one invitation's current naming and membership, or throws. */
-async function readMembership(
+/**
+ * Reads one invitation's current naming and membership, or `null`.
+ *
+ * The read the invitation editor loads from, and the one every membership write
+ * below validates against — one select, so the form and the writes can never
+ * disagree about what the invitation currently IS. The console list projection
+ * cannot serve here: it carries no `nickname` and no `greeting_name_source`, so
+ * a form built on it would blank every nickname and re-derive a name somebody
+ * wrote by hand.
+ *
+ * `null` rather than a throw, because a missing invitation is a 404 on a page
+ * and an error boundary would report a mistyped URL as a broken server. The
+ * callers that cannot proceed without one use `readMembership` below.
+ */
+export async function findInvitationMembership(
   client: SupabaseClient,
   invitationId: string,
-): Promise<InvitationMembership> {
+): Promise<InvitationMembership | null> {
   const { data, error } = await client
     .from("invitations")
     .select(MEMBERSHIP_SELECT)
@@ -689,7 +702,7 @@ async function readMembership(
   }
 
   if (!data) {
-    throw new Error(`No invitation with id ${invitationId} exists.`);
+    return null;
   }
 
   return {
@@ -707,6 +720,20 @@ async function readMembership(
       dispatchable: guest.phone_e164 !== null,
     })),
   };
+}
+
+/** The same read, for the writes that have nothing to do without it. */
+async function readMembership(
+  client: SupabaseClient,
+  invitationId: string,
+): Promise<InvitationMembership> {
+  const membership = await findInvitationMembership(client, invitationId);
+
+  if (membership === null) {
+    throw new Error(`No invitation with id ${invitationId} exists.`);
+  }
+
+  return membership;
 }
 
 /**
