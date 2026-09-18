@@ -128,9 +128,21 @@ export default async function EditInvitationPage({
   async function chooseRecipient(formData: FormData) {
     "use server";
 
-    await chooseRecipientAction(formData);
+    // The refusals travel THROUGH this wrapper to the form. Returning them is
+    // the whole point: a thrown refusal is replaced by an opaque digest in
+    // production, so the wrapper is where a delivered refusal would quietly stop
+    // being delivered if it awaited and discarded like the ones above.
+    const refusals = await chooseRecipientAction(formData);
+
+    // A refused write changed nothing, so there is nothing to revalidate — and
+    // revalidating would re-seed the form over whatever the operator is typing.
+    if (refusals.length > 0) {
+      return refusals;
+    }
 
     revalidatePath(editPath);
+
+    return refusals;
   }
 
   return (

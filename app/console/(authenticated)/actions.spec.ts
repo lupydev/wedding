@@ -920,14 +920,24 @@ describe("chooseRecipientAction — the member must belong to the invitation", (
     ]);
   });
 
-  it("refuses a guest id the invitation does not name, and writes nothing", async () => {
-    await expect(
-      chooseRecipientAction(
-        form({ invitationId: INVITATION_ID, guestId: STRANGER_GUEST_ID }),
-      ),
-    ).rejects.toThrow(/no pertenece a esta invitación/i);
+  // A REFUSAL IS RETURNED, NOT THROWN.
+  //
+  // Next replaces a thrown message with an opaque digest in production, so a
+  // thrown refusal never reaches the browser — and a thrown value carries no
+  // proof of who wrote it, since a transport TypeError is also an Error with a
+  // non-empty message. The code travels instead, and the console owns the copy:
+  // `recipient_not_a_member` already exists in DraftRefusal and already has
+  // Spanish copy in InvitationForm's REFUSAL_COPY.
+  it("answers with the refusal code instead of throwing prose", async () => {
+    const refusals = await chooseRecipientAction(
+      form({ invitationId: INVITATION_ID, guestId: STRANGER_GUEST_ID }),
+    );
 
+    expect(refusals).toEqual(["recipient_not_a_member"]);
     expect(chooseRecipient).not.toHaveBeenCalled();
+    // And nothing is revalidated, because nothing changed. A throw used to skip
+    // this for free; a return has to mean it on purpose.
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 

@@ -6,6 +6,7 @@ import { dispatchIsBlockedBy } from "@/lib/domain/device-declaration";
 import { consoleDispatchPath } from "@/lib/domain/dispatch-message";
 import {
   classifyMembershipChangeImpact,
+  type DraftRefusal,
   type MembershipChangeImpact,
 } from "@/lib/domain/invitation-draft";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
@@ -512,8 +513,22 @@ export async function moveMemberAction(
  * server-side before the write. The composite foreign key refuses a foreign
  * member regardless — this check exists so the operator is told which fact was
  * wrong instead of being shown a constraint violation.
+ *
+ * THE REFUSAL IS RETURNED, NOT THROWN.
+ *
+ * Next replaces a thrown message with an opaque `digest` in production
+ * expressly to keep server text out of the browser, so a thrown refusal reaches
+ * nobody where it matters. A thrown value also carries no proof of who wrote
+ * it: a transport `TypeError` is an ordinary `Error` with a non-empty message,
+ * indistinguishable from this sentence. So the CODE travels and the console owns
+ * the copy — the same `DraftRefusal` the client-side validator already returns
+ * and `InvitationForm` already translates. An empty array means the write
+ * happened; `revalidatePath` runs only then, because a refused write changed
+ * nothing to revalidate.
  */
-export async function chooseRecipientAction(formData: FormData): Promise<void> {
+export async function chooseRecipientAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
   const operator = await requireOperator();
 
   const invitationId = requiredInvitationId(formData);
@@ -522,15 +537,15 @@ export async function chooseRecipientAction(formData: FormData): Promise<void> {
   const invitation = await readInvitation(operator.id, invitationId);
 
   if (!invitation.guests.some((guest) => guest.id === guestId)) {
-    throw new Error(
-      "Esa persona no pertenece a esta invitación, así que no puede recibir su mensaje.",
-    );
+    return ["recipient_not_a_member"];
   }
 
   await chooseRecipient(createServerSupabaseClient(), invitationId, guestId);
 
   revalidatePath(CONSOLE_ROOT_PATH);
   revalidatePath(consoleDispatchPath(invitationId));
+
+  return [];
 }
 
 /**

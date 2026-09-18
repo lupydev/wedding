@@ -8,6 +8,8 @@ import {
   InvitationForm,
   type InvitationFormInvitation,
   type InvitationFormMember,
+  type InvitationFormAction,
+  type InvitationRefusingAction,
   type InvitationMemberActions,
 } from "./InvitationForm";
 
@@ -45,20 +47,27 @@ const MICHELL = "33333333-3333-4333-8333-333333333333";
 
 /** A typed stand-in for a bound Server Action. */
 function spyAction() {
-  return vi.fn<(formData: FormData) => void>();
+  return vi.fn<InvitationFormAction>();
+}
+
+/** The stand-in for a write that must answer. See `InvitationRefusingAction`. */
+function spyRefusingAction() {
+  return vi.fn<InvitationRefusingAction>();
 }
 
 function memberActionSpies(): InvitationMemberActions & {
-  readonly calls: Record<
-    keyof InvitationMemberActions,
-    ReturnType<typeof spyAction>
-  >;
+  readonly calls: {
+    readonly add: ReturnType<typeof spyAction>;
+    readonly edit: ReturnType<typeof spyAction>;
+    readonly remove: ReturnType<typeof spyAction>;
+    readonly chooseRecipient: ReturnType<typeof spyRefusingAction>;
+  };
 } {
   const calls = {
     add: spyAction(),
     edit: spyAction(),
     remove: spyAction(),
-    chooseRecipient: spyAction(),
+    chooseRecipient: spyRefusingAction(),
   };
 
   return { ...calls, calls };
@@ -898,6 +907,45 @@ describe("InvitationForm — a double tap is one person, not two", () => {
     expect(memberActions.calls.add).toHaveBeenCalledTimes(1);
 
     release();
+  });
+});
+
+describe("InvitationForm — a returned refusal is shown as itself", () => {
+  // A REFUSAL THE SERVER RETURNS IS THE ONE THING WORTH SAYING OUT LOUD.
+  //
+  // Thrown text can never be trusted or, in production, even delivered — which
+  // is what the block below locks down. A RETURNED code is different in kind:
+  // the server chose it from a closed vocabulary, and this component already
+  // owns the Spanish for every member of that vocabulary in REFUSAL_COPY. So a
+  // returned refusal must read as itself, not as "revisá la conexión", which is
+  // advice guaranteed to be futile for a rule that will refuse identically on
+  // every retry.
+  it("translates the code instead of blaming the connection", async () => {
+    const action = spyAction();
+    const memberActions = memberActionSpies();
+    memberActions.calls.chooseRecipient.mockResolvedValue([
+      "recipient_not_a_member",
+    ]);
+
+    render(
+      <InvitationForm
+        action={action}
+        invitation={invitation()}
+        memberActions={memberActions}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[1]);
+
+    const alert = await screen.findByTestId("invitation-write-error");
+
+    expect(alert.textContent).toBe(
+      "La persona elegida para recibir el mensaje ya no pertenece a esta invitación. Hay que elegir de nuevo a quién se le envía.",
+    );
+    // And the radio does not keep showing a choice the server refused.
+    expect((radios[1] as HTMLInputElement).checked).toBe(false);
   });
 });
 

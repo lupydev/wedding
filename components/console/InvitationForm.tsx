@@ -122,15 +122,44 @@ const DISPATCHED_DERIVED_WARNING =
   "nombre acá y en la página de la invitación, pero no reescribe la " +
   "conversación que ya salió.";
 
-/** A bound Server Action, as every form in this codebase receives one. */
-export type InvitationFormAction = (formData: FormData) => void | Promise<void>;
+/**
+ * A bound Server Action, as every form in this codebase receives one.
+ *
+ * A membership write may ANSWER with the refusals that stopped it. Returning
+ * them is the only channel that survives production: Next replaces a thrown
+ * message with an opaque `digest` expressly to keep server text out of the
+ * browser, and a thrown value proves nothing about who wrote it anyway. An
+ * absent or empty answer means the write happened.
+ */
+export type InvitationFormAction = (
+  formData: FormData,
+) => void | Promise<void | readonly DraftRefusal[]>;
 
-/** The membership writes, which exist only for an invitation that exists. */
+/**
+ * A write that MUST answer, even when it has nothing to refuse.
+ *
+ * The refusals cross two hops to reach the operator — the action returns them
+ * and the route's wrapper passes them on — and a wrapper that awaited and
+ * discarded would break the chain silently, which is precisely what the two
+ * pre-existing returns in this codebase do (`MembershipChangeImpact` is returned
+ * and rendered nowhere). `InvitationFormAction` permits `void`, so it cannot
+ * catch that. This type can: discarding the answer is a compile error.
+ */
+export type InvitationRefusingAction = (
+  formData: FormData,
+) => Promise<readonly DraftRefusal[]>;
+
+/**
+ * The membership writes, which exist only for an invitation that exists.
+ *
+ * `chooseRecipient` answers; the other three still throw their refusals and are
+ * migrating. The difference is deliberate and visible in the types.
+ */
 export interface InvitationMemberActions {
   readonly add: InvitationFormAction;
   readonly edit: InvitationFormAction;
   readonly remove: InvitationFormAction;
-  readonly chooseRecipient: InvitationFormAction;
+  readonly chooseRecipient: InvitationRefusingAction;
 }
 
 /** One member as the server currently holds them. */
@@ -476,7 +505,28 @@ export function InvitationForm({
     }
 
     try {
-      await write(fields);
+      // A RETURNED REFUSAL IS AN ANSWER, NOT A FAULT.
+      //
+      // The write reached the server and the server declined it, naming which
+      // rule stopped it. That is worth saying out loud: the codes come from a
+      // closed vocabulary this component already translates, and a rule that
+      // refused once refuses identically on every retry, so the connectivity
+      // copy below would be futile advice. `onFailure` still runs — whatever was
+      // shown optimistically was shown on a promise the server did not keep.
+      //
+      // `?? []` is the void arm: an action with nothing to refuse returns
+      // nothing. Narrowing with `Array.isArray` instead would widen the codes to
+      // `any` and lose the `REFUSAL_COPY` key check, which is the one thing
+      // making an untranslated refusal a compile error.
+      const refusals: readonly DraftRefusal[] = (await write(fields)) ?? [];
+
+      if (refusals.length > 0) {
+        onFailure?.();
+        setWriteError(refusals.map((code) => REFUSAL_COPY[code]).join(" "));
+
+        return;
+      }
+
       setWriteError(null);
     } catch {
       onFailure?.();
