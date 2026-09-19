@@ -61,7 +61,10 @@ const SCANNED_GLOBS = [
  *    `0013` spec will need in slice 1b: an assertion that the concept is gone,
  *    which has to say the word once in order to say it is gone.
  */
-const EXEMPT_PATHS = ["scripts/import-guests.spec.ts"] as const;
+const EXEMPT_PATHS = [
+  "scripts/import-guests.spec.ts",
+  "supabase/tests/seats-allowed-dropped.spec.ts",
+] as const;
 
 const SCANNED = SCANNED_GLOBS.flatMap((pattern) =>
   globSync(pattern, { cwd: REPO_ROOT }),
@@ -107,18 +110,28 @@ describe("no source file reads a seat allowance", () => {
     }
   });
 
-  it("exempts exactly the one file that proves the old format is rejected", () => {
+  it("exempts exactly the two files that must name the column to assert it is gone", () => {
     // The exemption is a whitelist, not a pattern, and this assertion is the
-    // one that has to be argued with before it grows. The argument for its
-    // single entry, made in full beside the list itself: the importer spec
-    // asserts that a source file in the PRE-CHANGE format is rejected, and
-    // `seatsAllowed` was the exact key that format required. A test that
-    // rejects a format cannot avoid naming it, and naming it indirectly would
-    // make the assertion both weaker and unreadable.
+    // one that has to be argued with before it grows. Both arguments, made in
+    // full beside the list itself:
     //
-    // What this does NOT license is a wildcard, a directory, or an entry whose
-    // justification points at a test that does not exist.
-    expect(EXEMPT_PATHS).toEqual(["scripts/import-guests.spec.ts"]);
+    //  - the importer spec asserts that a source file in the PRE-CHANGE format
+    //    is rejected, and `seatsAllowed` was the exact key that format
+    //    required. A test that rejects a format cannot avoid naming it.
+    //  - the database spec asserts the column is ABSENT from the live schema
+    //    and that its down script brings it back. This scanner reads source
+    //    text and cannot see a database, so it cannot tell a tree that merely
+    //    stopped reading the column from one where 0013 actually dropped it —
+    //    the state 0012 deliberately left standing for one migration.
+    //
+    // Both name the column in order to assert something about its absence,
+    // which is the only justification this list accepts. What it does NOT
+    // license is a wildcard, a directory, or an entry whose justification
+    // points at a test that does not exist.
+    expect(EXEMPT_PATHS).toEqual([
+      "scripts/import-guests.spec.ts",
+      "supabase/tests/seats-allowed-dropped.spec.ts",
+    ]);
 
     // A path listed but absent would exempt nothing while reading as coverage.
     for (const exempt of EXEMPT_PATHS as readonly string[]) {
