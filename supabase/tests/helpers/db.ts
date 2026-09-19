@@ -65,6 +65,56 @@ export async function withRollback<T>(
   });
 }
 
+/**
+ * Runs `body` in a rolled-back transaction holding every table it can touch.
+ *
+ * For a test that runs real DDL — a migration or a down script — against the
+ * shared local database.
+ *
+ * WHY THIS EXISTS: A DEADLOCK, NOT A TIMEOUT.
+ *
+ * A script like this takes ACCESS EXCLUSIVE on `invitations` and then goes on to
+ * touch `invitation_guests`. Fixture helpers do it the other way round, and some
+ * of them commit rather than roll back — `withSeededData` deliberately so, since
+ * PostgREST reads its rows over HTTP on another connection. So an
+ * `invitation_guests` insert holds its row while waiting on `invitations` for a
+ * foreign key check.
+ *
+ * Two transactions, two tables, opposite order: a cycle. Postgres does not wait
+ * it out, it picks a victim and raises `deadlock detected` — which surfaced as
+ * ONE failing test roughly one run in eight, a different test each time, every
+ * one of them green when its file ran alone. Raising a timeout cannot fix that;
+ * nobody was slow.
+ *
+ * WHY THE LOCKS ARE TAKEN UP FRONT RATHER THAN BY AGREEMENT.
+ *
+ * The first attempt asked both sides to serialize on a shared advisory key. It
+ * cut the rate to one run in twenty and did not fix it, because there is more
+ * than one fixture helper that commits and only one of them had been taught the
+ * agreement. A cooperation protocol is only as good as the list of participants,
+ * and that list is not ours to close.
+ *
+ * Acquiring both tables in ONE statement before doing anything needs no
+ * cooperation. A transaction that already holds every lock it will need never
+ * waits while holding, so it cannot be half of a cycle: other transactions queue
+ * behind this one and proceed. `LOCK TABLE` is transaction-scoped, so the same
+ * `rollback` that undoes the DDL releases them, including when the body throws.
+ *
+ * The list is exactly what the scripts touch. A script that starts altering
+ * another table must be added here, or the cycle comes back through it.
+ */
+export async function withExclusiveSchema<T>(
+  body: (db: Client) => Promise<T>,
+): Promise<T> {
+  return withRollback(async (db) => {
+    await db.query(
+      "lock table invitations, invitation_guests in access exclusive mode",
+    );
+
+    return body(db);
+  });
+}
+
 /** Captures the error message raised by `body`, or `null` when it succeeded. */
 export async function captureError(
   body: () => Promise<unknown>,

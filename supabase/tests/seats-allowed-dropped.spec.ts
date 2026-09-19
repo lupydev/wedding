@@ -8,7 +8,7 @@ import {
   seedInvitation,
   seedSender,
   withDb,
-  withRollback,
+  withExclusiveSchema,
 } from "./helpers/db";
 
 /**
@@ -38,10 +38,31 @@ import {
  * real schema and no other test can observe a difference. Reading the file rather
  * than a copy of its statements is what keeps this honest — a down script edited
  * into something Postgres refuses fails here.
+ *
+ * AND THE CHAIN IS EXERCISED, NOT JUST ITS LAST LINK
+ *
+ * Rolling `seats_allowed` back is TWO scripts in order, and the interesting work
+ * is in the second one. 0013's own down script only re-creates the column and
+ * reconstructs a value; 0012's is what restores the `between 1 and 12` check, and
+ * it has to survive a household the check would reject — nobody named, or more
+ * than twelve named — which it handles by clamping and printing a NOTICE.
+ *
+ * The clamp lives there and not in 0013's script on purpose: 0012's runs it on
+ * every out-of-range value, including whatever 0013's reconstruction wrote, and
+ * it runs it BEFORE adding the check. Duplicating it one script earlier would
+ * print two notices for one household and leave two copies to keep in step.
+ *
+ * So the last case runs both scripts, in order, against households built to fall
+ * outside the range — which is the whole rollback chain proved without ever
+ * taking a real database down.
  */
 
 const DOWN_SCRIPT = fileURLToPath(
   new URL("../down/0013_drop_seats_allowed_down.sql", import.meta.url),
+);
+
+const DOWN_0012 = fileURLToPath(
+  new URL("../down/0012_invitation_administration_down.sql", import.meta.url),
 );
 
 const MIGRATION = fileURLToPath(
@@ -71,19 +92,15 @@ describe("migration 0013 — seats_allowed is dropped", () => {
   });
 
   it("is brought back by its own down script, which Postgres accepts", async () => {
+    await withExclusiveSchema(async (db) => {
+      await db.query(readFileSync(DOWN_SCRIPT, "utf8"));
+
+      expect(await columnExists(db)).toBe(true);
+    });
+
+    // And the rollback put the schema back, so nothing here leaked into the
+    // suite that runs next.
     await withDb(async (db) => {
-      await db.query("begin");
-
-      try {
-        await db.query(readFileSync(DOWN_SCRIPT, "utf8"));
-
-        expect(await columnExists(db)).toBe(true);
-      } finally {
-        await db.query("rollback");
-      }
-
-      // And the rollback put the schema back, so nothing here leaked into the
-      // suite that runs next.
       expect(await columnExists(db)).toBe(false);
     });
   });
@@ -101,7 +118,7 @@ describe("migration 0013 — seats_allowed is dropped", () => {
     // predicate: it finds the row that disagrees AND leaves alone the rows that
     // agree, which the down script's reconstruction has just made of every
     // other invitation.
-    await withRollback(async (db) => {
+    await withExclusiveSchema(async (db) => {
       await db.query(readFileSync(DOWN_SCRIPT, "utf8"));
 
       const invitationId = await seedInvitation(db, await seedSender(db));
@@ -130,6 +147,72 @@ describe("migration 0013 — seats_allowed is dropped", () => {
       expect(printed).toContain(
         "(Familia Prueba) had seats_allowed=7 with 2 named members",
       );
+    });
+  });
+
+  it("clamps a household the restored check would reject, and says so", async () => {
+    // 0012's down script is the one that puts `between 1 and 12` back, so it is
+    // the one that has to survive a household the check forbids, and nothing
+    // exercised it.
+    //
+    // WHAT THIS PROVES IS THE CHAIN, NOT EITHER CLAMP, AND THAT IS DELIBERATE.
+    //
+    // The script clamps twice: once inside the backfill loop over NULL rows, and
+    // once afterwards over every out-of-range value. Mutation says each alone is
+    // sufficient — disabling either still leaves this green, because the other
+    // catches the row. Disabling BOTH fails, and fails in the way production
+    // would: `check constraint "invitations_seats_allowed_check" ... is violated
+    // by some row`, thrown mid-rollback as the check goes back on.
+    //
+    // So the redundancy is real and this test is what says so. Removing one of
+    // the two clamps as dead code would leave this passing and the rollback one
+    // edit away from dying at the worst possible moment.
+    await withExclusiveSchema(async (db) => {
+      await db.query(readFileSync(DOWN_SCRIPT, "utf8"));
+
+      const owner = await seedSender(db);
+      const nobody = await seedInvitation(db, owner);
+      const crowd = await seedInvitation(db, owner);
+
+      await seedGuests(db, crowd, 13);
+
+      // Back to NULL, which is the state 0012 left the relaxed column in for any
+      // invitation written while nothing maintained it. That is the row the
+      // backfill is for, so it is the row the NOTICE has to name.
+      await db.query(
+        "update invitations set seats_allowed = null where id = any($1)",
+        [[nobody, crowd]],
+      );
+
+      const notices: string[] = [];
+      const collect = (notice: { readonly message?: string }) => {
+        notices.push(notice.message ?? "");
+      };
+
+      db.on("notice", collect);
+
+      try {
+        await db.query(readFileSync(DOWN_0012, "utf8"));
+      } finally {
+        db.off("notice", collect);
+      }
+
+      const printed = notices.join("\n");
+
+      expect(printed).toContain("has 0 members, outside");
+      expect(printed).toContain("has 13 members, outside");
+
+      // And the clamp actually landed, which is what lets the check go back on.
+      const clamped = await db.query<{ id: string; seats_allowed: number }>(
+        "select id, seats_allowed from invitations where id = any($1)",
+        [[nobody, crowd]],
+      );
+      const byId = new Map(
+        clamped.rows.map((row) => [row.id, row.seats_allowed]),
+      );
+
+      expect(byId.get(nobody)).toBe(1);
+      expect(byId.get(crowd)).toBe(12);
     });
   });
 
