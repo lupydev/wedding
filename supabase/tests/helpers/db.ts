@@ -119,24 +119,57 @@ export async function withRollback<T>(
  */
 export async function withExclusiveSchema<T>(
   body: (db: Client) => Promise<T>,
-  attemptsLeft = 4,
 ): Promise<T> {
-  try {
-    return await withRollback(async (db) => {
+  return retryOnDeadlock(() =>
+    withRollback(async (db) => {
       await db.query(
         "lock table invitations, invitation_guests in access exclusive mode",
       );
 
       return body(db);
-    });
-  } catch (cause) {
-    const deadlocked = (cause as { code?: string }).code === "40P01";
+    }),
+  );
+}
 
-    if (!deadlocked || attemptsLeft <= 1) {
-      throw cause;
+/** Postgres's code for a transaction it aborted to break a lock cycle. */
+const DEADLOCK_DETECTED = "40P01";
+
+/**
+ * Runs `run`, repeating it while Postgres reports a deadlock.
+ *
+ * SEPARATE FROM THE DATABASE ACCESS ON PURPOSE.
+ *
+ * What is worth pinning here is a DECISION — repeat a `40P01`, and nothing else —
+ * and the deadlock it exists for is a race between two connections that cannot be
+ * summoned to order. Testing the decision through `withExclusiveSchema` would
+ * mean four more transactions taking ACCESS EXCLUSIVE on two tables in order to
+ * assert something that has nothing to do with either table. Widening the very
+ * window this code exists to survive, to test the code that survives it.
+ *
+ * So the policy takes any thunk and `db.spec.ts` exercises it with plain
+ * functions, touching no database at all.
+ *
+ * Both halves of the decision matter. Repeating everything would report a broken
+ * migration four times and bury which attempt mattered; repeating nothing leaves
+ * the residual deadlock showing up as a rotating red test, which is the state all
+ * of this replaced. Repeating is only safe because the caller above always rolls
+ * back, so a repeat has nothing to undo.
+ */
+export async function retryOnDeadlock<T>(
+  run: () => Promise<T>,
+  attempts = 4,
+): Promise<T> {
+  for (let remaining = attempts; ; remaining -= 1) {
+    try {
+      return await run();
+    } catch (cause) {
+      const deadlocked =
+        (cause as { code?: string }).code === DEADLOCK_DETECTED;
+
+      if (!deadlocked || remaining <= 1) {
+        throw cause;
+      }
     }
-
-    return withExclusiveSchema(body, attemptsLeft - 1);
   }
 }
 
