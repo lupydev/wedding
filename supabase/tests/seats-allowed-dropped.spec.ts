@@ -3,7 +3,13 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { withDb } from "./helpers/db";
+import {
+  seedGuests,
+  seedInvitation,
+  seedSender,
+  withDb,
+  withRollback,
+} from "./helpers/db";
 
 /**
  * `seats_allowed` IS GONE FROM THE SCHEMA, AND THIS ASSERTS IT AGAINST THE REAL ONE.
@@ -36,6 +42,10 @@ import { withDb } from "./helpers/db";
 
 const DOWN_SCRIPT = fileURLToPath(
   new URL("../down/0013_drop_seats_allowed_down.sql", import.meta.url),
+);
+
+const MIGRATION = fileURLToPath(
+  new URL("../migrations/0013_drop_seats_allowed.sql", import.meta.url),
 );
 
 /** Whether `invitations` currently has the column, per the live catalog. */
@@ -75,6 +85,51 @@ describe("migration 0013 — seats_allowed is dropped", () => {
       // And the rollback put the schema back, so nothing here leaked into the
       // suite that runs next.
       expect(await columnExists(db)).toBe(false);
+    });
+  });
+
+  it("names a disagreeing row in the notices it prints before destroying it", async () => {
+    // THE ONLY SURVIVING RECORD HAS TO BE PROVED, NOT ASSERTED IN A COMMENT.
+    //
+    // Both SQL files call this report the last place a `seats_allowed` that
+    // disagreed with its member count can still be read. Its cheapest failure is
+    // to match nothing and print an empty list, which reads exactly like a clean
+    // run — and the next statement destroys the data. So the report is run
+    // against a household built to disagree, and the notices are read.
+    //
+    // Asserting "1 of N" rather than "at least 1" proves both halves of the
+    // predicate: it finds the row that disagrees AND leaves alone the rows that
+    // agree, which the down script's reconstruction has just made of every
+    // other invitation.
+    await withRollback(async (db) => {
+      await db.query(readFileSync(DOWN_SCRIPT, "utf8"));
+
+      const invitationId = await seedInvitation(db, await seedSender(db));
+
+      await seedGuests(db, invitationId, 2);
+      await db.query("update invitations set seats_allowed = 7 where id = $1", [
+        invitationId,
+      ]);
+
+      const notices: string[] = [];
+      const collect = (notice: { readonly message?: string }) => {
+        notices.push(notice.message ?? "");
+      };
+
+      db.on("notice", collect);
+
+      try {
+        await db.query(readFileSync(MIGRATION, "utf8"));
+      } finally {
+        db.off("notice", collect);
+      }
+
+      const printed = notices.join("\n");
+
+      expect(printed).toMatch(/seats_allowed: 1 of \d+ rows/);
+      expect(printed).toContain(
+        "(Familia Prueba) had seats_allowed=7 with 2 named members",
+      );
     });
   });
 
