@@ -1474,11 +1474,44 @@ describe("member management — add, edit, remove (local Supabase)", () => {
         invitation.slug,
       );
 
-      expect(added.fullName).toBe("Fernando Guzmán");
+      // THE ROW SURVIVES THE NEW SHAPE. `addMember` answers with refusals AND
+      // the record, because it is the only one of the three writes that creates
+      // a row and the id it mints exists nowhere else yet. Asserting the record
+      // here is what stops a later tidy-up from deleting it for symmetry.
+      expect(added.refusals).toEqual([]);
+      expect(added.guest?.fullName).toBe("Fernando Guzmán");
       expect(reread?.guests).toHaveLength(3);
       expect((await storedGreeting(invitation.id)).greeting_name).toBe(
         "Lucho, Inés y Fer",
       );
+    });
+  });
+
+  it("refuses a member with no name and ANSWERS with the code, writing nothing", async () => {
+    await withSenderFixture(async (senderId) => {
+      const invitation = await makeInvitation(senderId, [
+        { fullName: "Luis Guzmán", nickname: null },
+      ]);
+
+      const added = await addMember(
+        createServerSupabaseClient(),
+        invitation.id,
+        { fullName: "   ", nickname: null, phoneE164: null, isChild: false },
+      );
+
+      expect(added.refusals).toEqual(["member_without_name"]);
+      // Null exactly when the refusals are not empty: there is no row to hand
+      // back, because the return happens where the insert would have been.
+      expect(added.guest).toBeNull();
+
+      const survivors = await findInvitationBySlug(
+        createServerSupabaseClient(),
+        invitation.slug,
+      );
+
+      expect(survivors?.guests.map((guest) => guest.fullName)).toEqual([
+        "Luis Guzmán",
+      ]);
     });
   });
 
@@ -1533,21 +1566,27 @@ describe("member management — add, edit, remove (local Supabase)", () => {
     });
   });
 
-  it("refuses to remove the LAST member, pointing at deleting the invitation", async () => {
+  it("refuses to remove the LAST member and ANSWERS with the code", async () => {
+    // THE REFUSAL IS RETURNED, NOT THROWN.
+    //
+    // A thrown refusal is replaced by an opaque `digest` in production
+    // expressly to keep server text out of the browser, so the operator would
+    // be told "check your connection" about a rule that will refuse identically
+    // on every retry. The CODE travels and the console owns the copy — which is
+    // also why this asserts `no_members` rather than an English sentence: the
+    // sentence belonged to the throw, and the operator never read it.
     await withSenderFixture(async (senderId) => {
       const invitation = await makeInvitation(senderId, [
         { fullName: "Luis Guzmán", nickname: null },
       ]);
 
-      const failure = await captureError(() =>
-        removeMember(
-          createServerSupabaseClient(),
-          invitation.id,
-          invitation.guests[0].id,
-        ),
+      const refusals = await removeMember(
+        createServerSupabaseClient(),
+        invitation.id,
+        invitation.guests[0].id,
       );
 
-      expect(failure).toMatch(/delete the invitation/i);
+      expect(refusals).toEqual(["no_members"]);
 
       const survivors = await findInvitationBySlug(
         createServerSupabaseClient(),
@@ -1587,23 +1626,21 @@ describe("member management — add, edit, remove (local Supabase)", () => {
     });
   });
 
-  it("refuses to blank out a member's name", async () => {
+  it("refuses to blank out a member's name and ANSWERS with the code", async () => {
     await withSenderFixture(async (senderId) => {
       const invitation = await makeInvitation(senderId, [
         { fullName: "Luis Guzmán", nickname: null },
         { fullName: "Inés Guzmán", nickname: null },
       ]);
 
-      const failure = await captureError(() =>
-        editMember(
-          createServerSupabaseClient(),
-          invitation.id,
-          invitation.guests[0].id,
-          { fullName: "   " },
-        ),
+      const refusals = await editMember(
+        createServerSupabaseClient(),
+        invitation.id,
+        invitation.guests[0].id,
+        { fullName: "   " },
       );
 
-      expect(failure).toContain("member_without_name");
+      expect(refusals).toEqual(["member_without_name"]);
 
       const survivors = await findInvitationBySlug(
         createServerSupabaseClient(),

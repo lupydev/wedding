@@ -365,37 +365,71 @@ export async function updateInvitationAction(
   revalidatePath(CONSOLE_ROOT_PATH);
 }
 
-/** Adds one member to an existing invitation. */
-export async function addMemberAction(formData: FormData): Promise<void> {
+/**
+ * Adds one member to an existing invitation, ANSWERING with any refusal.
+ *
+ * The created row is deliberately dropped here even though `addMember` hands it
+ * back: the form learns about the new member from the route's revalidation,
+ * which re-reads the whole membership and gives the local row its server id. The
+ * id matters to the REPOSITORY's caller, which is why it is returned there.
+ */
+export async function addMemberAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
   await requireOperator();
 
   const invitationId = requiredInvitationId(formData);
 
-  await addMember(createServerSupabaseClient(), invitationId, {
-    fullName: requiredText(formData, "fullName", "el nombre de la persona"),
-    nickname: optionalText(formData, "nickname"),
-    phoneE164: storedPhone(text(formData, "phone")),
-    isChild: flag(text(formData, "isChild")),
-  });
+  const { refusals } = await addMember(
+    createServerSupabaseClient(),
+    invitationId,
+    {
+      fullName: requiredText(formData, "fullName", "el nombre de la persona"),
+      nickname: optionalText(formData, "nickname"),
+      phoneE164: storedPhone(text(formData, "phone")),
+      isChild: flag(text(formData, "isChild")),
+    },
+  );
+
+  // A refused write changed nothing, so there is nothing to revalidate — and
+  // revalidating would re-seed the form over whatever the operator is typing.
+  if (refusals.length > 0) {
+    return refusals;
+  }
 
   revalidatePath(CONSOLE_ROOT_PATH);
+
+  return refusals;
 }
 
-/** Rewrites one member's own fields. */
-export async function editMemberAction(formData: FormData): Promise<void> {
+/** Rewrites one member's own fields, ANSWERING with any refusal. */
+export async function editMemberAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
   await requireOperator();
 
   const invitationId = requiredInvitationId(formData);
   const guestId = requiredText(formData, "guestId", "a qué persona se edita");
 
-  await editMember(createServerSupabaseClient(), invitationId, guestId, {
-    fullName: requiredText(formData, "fullName", "el nombre de la persona"),
-    nickname: optionalText(formData, "nickname"),
-    phoneE164: storedPhone(text(formData, "phone")),
-    isChild: flag(text(formData, "isChild")),
-  });
+  const refusals = await editMember(
+    createServerSupabaseClient(),
+    invitationId,
+    guestId,
+    {
+      fullName: requiredText(formData, "fullName", "el nombre de la persona"),
+      nickname: optionalText(formData, "nickname"),
+      phoneE164: storedPhone(text(formData, "phone")),
+      isChild: flag(text(formData, "isChild")),
+    },
+  );
+
+  if (refusals.length > 0) {
+    return refusals;
+  }
 
   revalidatePath(CONSOLE_ROOT_PATH);
+
+  return refusals;
 }
 
 /**
@@ -409,10 +443,19 @@ export async function editMemberAction(formData: FormData): Promise<void> {
  *
  * The membership is read BEFORE the removal, because afterwards there is
  * nothing left to say who was removed.
+ *
+ * IT ANSWERS TWO QUESTIONS, SO IT ANSWERS WITH AN OBJECT.
+ *
+ * `refusals` is which rules stopped it — `no_members`, when this was the last
+ * member — and `impact` is what a removal that HAPPENED left inconsistent.
+ * `impact` is null exactly when `refusals` is non-empty: a refused removal
+ * contradicted nothing, and classifying a removal that never occurred would put
+ * a badge on the console naming a guest who is still there.
  */
-export async function removeMemberAction(
-  formData: FormData,
-): Promise<MembershipChangeImpact> {
+export async function removeMemberAction(formData: FormData): Promise<{
+  readonly refusals: readonly DraftRefusal[];
+  readonly impact: MembershipChangeImpact | null;
+}> {
   const operator = await requireOperator();
 
   const invitationId = requiredInvitationId(formData);
@@ -425,23 +468,34 @@ export async function removeMemberAction(
     invitationId,
   );
 
-  await removeMember(createServerSupabaseClient(), invitationId, guestId);
+  const refusals = await removeMember(
+    createServerSupabaseClient(),
+    invitationId,
+    guestId,
+  );
+
+  if (refusals.length > 0) {
+    return { refusals, impact: null };
+  }
 
   revalidatePath(CONSOLE_ROOT_PATH);
 
-  return classifyMembershipChangeImpact({
-    memberIdsBefore,
-    memberIdsAfter: memberIdsBefore.filter((id) => id !== guestId),
-    latestAnswer:
-      latestAnswer === null
-        ? null
-        : {
-            id: latestAnswer.id,
-            attending: latestAnswer.attending,
-            seatsConfirmed: latestAnswer.seatsConfirmed,
-            attendeeGuestIds: latestAnswer.attendeeGuestIds,
-          },
-  });
+  return {
+    refusals,
+    impact: classifyMembershipChangeImpact({
+      memberIdsBefore,
+      memberIdsAfter: memberIdsBefore.filter((id) => id !== guestId),
+      latestAnswer:
+        latestAnswer === null
+          ? null
+          : {
+              id: latestAnswer.id,
+              attending: latestAnswer.attending,
+              seatsConfirmed: latestAnswer.seatsConfirmed,
+              attendeeGuestIds: latestAnswer.attendeeGuestIds,
+            },
+    }),
+  };
 }
 
 /**

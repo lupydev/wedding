@@ -99,30 +99,66 @@ export default async function EditInvitationPage({
     revalidatePath(editPath);
   }
 
+  /**
+   * THE REFUSALS TRAVEL THROUGH THESE WRAPPERS, AND THAT IS THE WHOLE POINT.
+   *
+   * A thrown refusal is replaced by an opaque `digest` in production, so this is
+   * the only channel that survives — and it is a TWO-HOP channel: the action
+   * returns the codes and the wrapper passes them on. A wrapper that awaited and
+   * discarded would break it silently, which is exactly what these three did.
+   * `InvitationRefusingAction` is what makes that a compile error now.
+   *
+   * Each skips `revalidatePath` on a refusal: a refused write changed nothing,
+   * and re-seeding the form would throw away whatever the operator is typing.
+   */
   async function addMember(formData: FormData) {
     "use server";
 
-    await addMemberAction(formData);
+    const refusals = await addMemberAction(formData);
+
+    if (refusals.length > 0) {
+      return refusals;
+    }
 
     revalidatePath(editPath);
+
+    return refusals;
   }
 
   async function editMember(formData: FormData) {
     "use server";
 
-    await editMemberAction(formData);
+    const refusals = await editMemberAction(formData);
+
+    if (refusals.length > 0) {
+      return refusals;
+    }
 
     revalidatePath(editPath);
+
+    return refusals;
   }
 
   async function removeMember(formData: FormData) {
     "use server";
 
-    // The impact it returns is what the console list renders as an advisory
-    // badge; this route revalidates that list rather than restating it here.
-    await removeMemberAction(formData);
+    // THIS WRAPPER IS THE ADAPTER. `removeMemberAction` answers two questions —
+    // which rules refused it, and what a removal that happened contradicted —
+    // and the form asks only the first. So the impact stays on the server: it is
+    // what the console list renders as an advisory badge, and this route
+    // revalidates that list rather than restating it here.
+    //
+    // It renders nowhere today. That is a known, separate gap, recorded as such
+    // and deliberately not fixed here.
+    const { refusals } = await removeMemberAction(formData);
+
+    if (refusals.length > 0) {
+      return refusals;
+    }
 
     revalidatePath(editPath);
+
+    return refusals;
   }
 
   async function chooseRecipient(formData: FormData) {

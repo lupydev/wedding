@@ -152,13 +152,19 @@ export type InvitationRefusingAction = (
 /**
  * The membership writes, which exist only for an invitation that exists.
  *
- * `chooseRecipient` answers; the other three still throw their refusals and are
- * migrating. The difference is deliberate and visible in the types.
+ * ALL FOUR ANSWER. Every membership refusal now travels as a code and is
+ * translated below, so none of the four is permitted to discard its answer on
+ * the way here — `InvitationRefusingAction` makes a wrapper that awaited and
+ * threw the refusals away a compile error rather than a silence nobody notices.
+ *
+ * The whole-form `action` prop is still the permissive `InvitationFormAction`:
+ * `createInvitationAction` and `updateInvitationAction` are a separate slice and
+ * still throw theirs.
  */
 export interface InvitationMemberActions {
-  readonly add: InvitationFormAction;
-  readonly edit: InvitationFormAction;
-  readonly remove: InvitationFormAction;
+  readonly add: InvitationRefusingAction;
+  readonly edit: InvitationRefusingAction;
+  readonly remove: InvitationRefusingAction;
   readonly chooseRecipient: InvitationRefusingAction;
 }
 

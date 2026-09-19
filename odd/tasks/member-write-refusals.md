@@ -96,13 +96,17 @@ Out: the unrendered `MembershipChangeImpact` — it is a separate gap.
       Note the hazard: several specs use `findByRole("alert")`, which THROWS on
       multiple matches, and the refusals `<ul>` already carries `role="alert"`.
       `components/console/InvitationForm.spec.tsx:587-640` will become ambiguous.
-- [ ] T5 — Extend to `removeMemberAction`. Its return becomes a union with
+- [x] T5 — Extend to `removeMemberAction`. Its return becomes a union with
       `MembershipChangeImpact`; three assertion blocks need narrowing
       (`actions.spec.ts:840-909`).
-- [ ] T6 — Extend to `addMemberAction` and `editMemberAction`.
+- [x] T6 — Extend to `addMemberAction` and `editMemberAction`.
 - [ ] T7 — Delete the now-dead English copy map `REFUSAL_EXPLANATION`
       (`lib/server/invitations.ts:613-621`) and the `refusalMessage` formatter
       (`:623-627`) if nothing else reads them. One union, one copy map.
+      NOT DEAD, and not deletable from here — see Progress. `refusalMessage` has
+      two live readers left, `createInvitation` and `updateInvitation`, both the
+      whole-form save, which this change lists as out of scope. Carried to the
+      slice that converts it.
 
 ## Verification
 
@@ -155,3 +159,63 @@ radio not reverting.
 Verified: 1917 tests / 98 files, typecheck, eslint, prettier clean, and the two
 touched specs green across three shuffled runs plus four shuffled full-suite
 runs.
+
+T5 + T6 done, as one work unit with T7's verdict.
+
+The repository stopped stringifying. `refuseInvalidMembership` became
+`membershipRefusals(membership, afterMembers)` and RETURNS the codes; the
+`action` string parameter is gone, because it existed only to build the thrown
+sentence. `addMember` answers `{ refusals, guest }`, `editMember` and
+`removeMember` answer `readonly DraftRefusal[]`. The asymmetry is deliberate and
+stated at `addMember`: it is the only one of the three that mints a row, and the
+id it mints exists nowhere else until it is returned. Collapsing the three into
+one shape would have to throw that record away.
+
+Only the REFUSAL channel changed. Every internal throw stayed a throw — the
+Supabase error wrappers, `readMembership`'s missing invitation, and the
+"does not belong to invitation" guards. Those are developer-facing invariants,
+not operator copy.
+
+A refusal returns exactly where the throw stood, before the insert / update /
+delete, so a refused write still writes nothing. Mutation 3 is the evidence that
+this ordering is load-bearing rather than tidy: deleting `removeMember`'s early
+return made the suite fail with "cannot derive a greeting name from zero
+members" — the precise crash the Member-management docblock predicts for a
+re-derivation placed before the refusal.
+
+`removeMemberAction` now answers BOTH questions, so it answers with an object:
+`{ refusals, impact }`, `impact` null exactly when refusals is non-empty. A
+refused removal contradicted nothing, and classifying one that never happened
+would badge the console with a guest who is still there. Its route wrapper is the
+ADAPTER — it keeps the impact server-side and hands the form only the refusals.
+The impact still renders nowhere; that remains the separate gap this change
+declared out of scope.
+
+`revalidatePath` is now conditional in all six places (three actions, three
+wrappers). A throw skipped it for free; a return has to mean it on purpose, and
+two mutations confirm the suite notices when it does not.
+
+T7 IS NOT DOABLE FROM HERE, and that is a finding rather than a shortfall.
+`rg` says `refusalMessage` still has two readers — `lib/server/invitations.ts:454`
+(`createInvitation`) and `:569` (`updateInvitation`). Both are the whole-form
+save, which this change's own Scope section lists as out. Deleting the pair now
+would only relocate the same English into those two template strings. Left in
+place, with its docblock narrowed to name the two callers that still read it so
+the next slice finds them. One union and one copy map is still the destination;
+it is one slice further away than T7 assumed.
+
+Proofs recorded, seven mutations red: addMember's refusal return removed
+(`expected [] to deeply equal [ 'member_without_name' ]`), editMember's removed
+(same), removeMember's removed (the zero-member derivation crash), addMember's
+created record dropped (`expected undefined to be 'Fernando Guzmán'`),
+addMemberAction revalidating on a refusal (`expected "vi.fn()" to not be called
+at all, but actually been called 1 times`), removeMemberAction classifying a
+refused removal (`expected { …(3) } to be null`), and editMemberAction
+discarding its refusal. The component's own claim is a TYPE claim, and its RED
+was `tsc`: widening `InvitationMemberActions` broke `edit/page.tsx` at lines 190,
+191 and 192 — the three wrappers that awaited and discarded — exactly as
+`InvitationRefusingAction` exists to do. `runWrite` needed no change; it already
+read the answer.
+
+Verified: 1923 tests / 98 files, typecheck, eslint, prettier clean, the three
+touched specs green across three shuffled runs, plus a shuffled full suite.

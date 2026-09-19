@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { deriveGreetingName } from "@/lib/domain/greeting-name";
+import type { DraftRefusal } from "@/lib/domain/invitation-draft";
 
 import {
   InvitationForm,
@@ -55,18 +56,21 @@ function spyRefusingAction() {
   return vi.fn<InvitationRefusingAction>();
 }
 
+// ALL FOUR MEMBERSHIP WRITES ANSWER NOW, so all four stand-ins must be able to.
+// A `spyAction()` here would type the spy as permitted to return nothing, which
+// is the contract these writes just stopped having.
 function memberActionSpies(): InvitationMemberActions & {
   readonly calls: {
-    readonly add: ReturnType<typeof spyAction>;
-    readonly edit: ReturnType<typeof spyAction>;
-    readonly remove: ReturnType<typeof spyAction>;
+    readonly add: ReturnType<typeof spyRefusingAction>;
+    readonly edit: ReturnType<typeof spyRefusingAction>;
+    readonly remove: ReturnType<typeof spyRefusingAction>;
     readonly chooseRecipient: ReturnType<typeof spyRefusingAction>;
   };
 } {
   const calls = {
-    add: spyAction(),
-    edit: spyAction(),
-    remove: spyAction(),
+    add: spyRefusingAction(),
+    edit: spyRefusingAction(),
+    remove: spyRefusingAction(),
     chooseRecipient: spyRefusingAction(),
   };
 
@@ -868,12 +872,15 @@ describe("InvitationForm — a double tap is one person, not two", () => {
     const action = spyAction();
     const memberActions = memberActionSpies();
 
+    // A write that has not answered yet. `add` must resolve to the refusals now,
+    // so the held promise resolves to the permitted answer — no cast, because
+    // the type it has to satisfy is the one the real action has.
     let release: () => void = () => {};
     memberActions.calls.add.mockImplementation(
       () =>
-        new Promise<void>((resolve) => {
-          release = resolve;
-        }) as unknown as void,
+        new Promise<readonly DraftRefusal[]>((resolve) => {
+          release = () => resolve([]);
+        }),
     );
 
     const before = invitation();
@@ -946,6 +953,36 @@ describe("InvitationForm — a returned refusal is shown as itself", () => {
     );
     // And the radio does not keep showing a choice the server refused.
     expect((radios[1] as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("says why a removal was refused, for the member writes too", async () => {
+    // THE THREE MEMBERSHIP WRITES ANSWER NOW, NOT ONLY THE RECIPIENT CHOICE.
+    //
+    // `removeMember` is the one with a refusal an operator meets in ordinary use:
+    // taking the last member off a household. It used to arrive as "revisá la
+    // conexión", which is advice guaranteed to be futile — the rule refuses
+    // identically on every retry, and what the operator actually needs to hear is
+    // that the invitation itself is what gets deleted.
+    const action = spyAction();
+    const memberActions = memberActionSpies();
+    memberActions.calls.remove.mockResolvedValue(["no_members"]);
+
+    render(
+      <InvitationForm
+        action={action}
+        invitation={invitation()}
+        memberActions={memberActions}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(row(1).getByRole("button", { name: /Quitar/i }));
+
+    expect(
+      (await screen.findByTestId("invitation-write-error")).textContent,
+    ).toBe(
+      "Una invitación tiene que quedarse con al menos una persona. Si la idea es que esta invitación desaparezca, hay que eliminarla completa en vez de dejarla sin integrantes.",
+    );
   });
 });
 

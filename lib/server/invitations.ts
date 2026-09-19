@@ -609,7 +609,16 @@ export async function updateInvitation(
  * the invitation — the same action, reported as a bug.
  */
 
-/** What each refusal means, in the terms the operator can act on. */
+/**
+ * What each refusal means, for the two THROWN messages that still exist.
+ *
+ * Not operator copy, and no longer read by any membership write: `createInvitation`
+ * and `updateInvitation` are the last two readers, both of them the whole-form
+ * save, which is a separate slice and still throws. The console owns the Spanish
+ * for every one of these codes, and the member writes now return the code so it
+ * gets used. Deleting this pair is what closes that slice; deleting it now would
+ * only move the English into the two template strings below.
+ */
 const REFUSAL_EXPLANATION: Readonly<Record<DraftRefusal, string>> = {
   no_members:
     "an invitation must keep at least one member, so delete the invitation itself instead",
@@ -737,14 +746,26 @@ async function readMembership(
 }
 
 /**
- * Refuses the change, BEFORE any statement, when the resulting membership is
- * one the model does not permit.
+ * The refusals the resulting membership would raise, BEFORE any statement.
+ *
+ * ANSWERS, RATHER THAN THROWING.
+ *
+ * These are the only refusals in this file an OPERATOR can act on, and a thrown
+ * one reaches nobody where it matters: Next replaces a thrown message with an
+ * opaque `digest` in production expressly to keep server text out of the
+ * browser, so the console could only ever say "check your connection" about a
+ * rule that will refuse identically on every retry. So the CODE travels and the
+ * console owns the copy — the same `DraftRefusal` its client-side validator
+ * already returns and already translates.
+ *
+ * An empty array means the change is permitted. Every OTHER failure below stays
+ * a throw: a Supabase error, a missing invitation, a member who belongs to
+ * another household. Those are developer-facing invariants, not operator copy.
  */
-function refuseInvalidMembership(
+function membershipRefusals(
   membership: InvitationMembership,
   afterMembers: readonly InvitationDraftMember[],
-  action: string,
-): void {
+): readonly DraftRefusal[] {
   const { refusals } = validateInvitationDraft({
     displayName: membership.displayName,
     greetingName: membership.greetingName,
@@ -760,9 +781,7 @@ function refuseInvalidMembership(
     rsvpDeadline: membership.rsvpDeadline,
   });
 
-  if (refusals.length > 0) {
-    throw new Error(`Could not ${action}: ${refusalMessage(refusals)}.`);
-  }
+  return refusals;
 }
 
 /**
@@ -807,12 +826,31 @@ export interface MemberEdit {
   readonly isChild?: boolean;
 }
 
-/** Adds one member to an existing invitation, re-deriving the group name. */
+/**
+ * Adds one member to an existing invitation, re-deriving the group name.
+ *
+ * ANSWERS WITH BOTH THE REFUSALS AND THE ROW, AND THAT ASYMMETRY IS DELIBERATE.
+ *
+ * `editMember` and `removeMember` answer with codes alone, because a caller of
+ * either already holds everything it needs to name what changed. This one does
+ * not: it MINTS a row, and the id it mints exists nowhere else until it is
+ * returned — `lib/server/invitations.spec.ts` reads it back to prove the member
+ * really landed, and a console that added a member without learning their id
+ * would have nothing to address the next edit to. Collapsing the three
+ * signatures into one shape for the sake of symmetry would have to throw that
+ * record away, so it is not collapsed.
+ *
+ * `guest` is null exactly when `refusals` is non-empty: the refusal returns
+ * where the insert would have been, so there is no row to hand back.
+ */
 export async function addMember(
   client: SupabaseClient,
   invitationId: string,
   member: NewMember,
-): Promise<InvitationGuestRecord> {
+): Promise<{
+  readonly refusals: readonly DraftRefusal[];
+  readonly guest: InvitationGuestRecord | null;
+}> {
   const membership = await readMembership(client, invitationId);
   const candidate: InvitationDraftMember = {
     id: null,
@@ -823,11 +861,16 @@ export async function addMember(
     dispatchable: member.phoneE164 !== null,
   };
 
-  refuseInvalidMembership(
-    membership,
-    [...membership.members, candidate],
-    `add a member to invitation ${invitationId}`,
-  );
+  const refusals = membershipRefusals(membership, [
+    ...membership.members,
+    candidate,
+  ]);
+
+  // Exactly where the throw stood: before the insert, so a refused add writes
+  // nothing at all rather than writing and reporting.
+  if (refusals.length > 0) {
+    return { refusals, guest: null };
+  }
 
   const { data, error } = await client
     .from("invitation_guests")
@@ -867,23 +910,30 @@ export async function addMember(
   );
 
   return {
-    id: data.id,
-    fullName: data.full_name,
-    nickname: data.nickname,
-    phoneE164: data.phone_e164,
-    phoneLast8: data.phone_last8,
-    isPrimary: data.is_primary,
-    isChild: data.is_child,
+    refusals: [],
+    guest: {
+      id: data.id,
+      fullName: data.full_name,
+      nickname: data.nickname,
+      phoneE164: data.phone_e164,
+      phoneLast8: data.phone_last8,
+      isPrimary: data.is_primary,
+      isChild: data.is_child,
+    },
   };
 }
 
-/** Rewrites one member's own fields, re-deriving the group name. */
+/**
+ * Rewrites one member's own fields, re-deriving the group name.
+ *
+ * Answers with the refusals that stopped it; an empty array means it happened.
+ */
 export async function editMember(
   client: SupabaseClient,
   invitationId: string,
   guestId: string,
   edit: MemberEdit,
-): Promise<void> {
+): Promise<readonly DraftRefusal[]> {
   const membership = await readMembership(client, invitationId);
   const current = membership.members.find((member) => member.id === guestId);
 
@@ -906,11 +956,11 @@ export async function editMember(
     member.id === guestId ? edited : member,
   );
 
-  refuseInvalidMembership(
-    membership,
-    afterMembers,
-    `edit member ${guestId} of invitation ${invitationId}`,
-  );
+  const refusals = membershipRefusals(membership, afterMembers);
+
+  if (refusals.length > 0) {
+    return refusals;
+  }
 
   const { error } = await client
     .from("invitation_guests")
@@ -933,20 +983,23 @@ export async function editMember(
     membership.greetingName,
     afterMembers,
   );
+
+  return [];
 }
 
 /**
  * Removes one member, re-deriving the group name.
  *
- * Removing the LAST member is refused and the refusal points at deleting the
- * invitation, because an invitation with no members can never be unlocked by
- * anyone while still looking valid in the console.
+ * Removing the LAST member is refused with `no_members`, and the console's copy
+ * for that code points at deleting the invitation — because an invitation with
+ * no members can never be unlocked by anyone while still looking valid in the
+ * console. Answers with the refusals; an empty array means it happened.
  */
 export async function removeMember(
   client: SupabaseClient,
   invitationId: string,
   guestId: string,
-): Promise<void> {
+): Promise<readonly DraftRefusal[]> {
   const membership = await readMembership(client, invitationId);
   const afterMembers = membership.members.filter(
     (member) => member.id !== guestId,
@@ -961,11 +1014,11 @@ export async function removeMember(
   // The member-count refusal runs HERE, before any derivation and before any
   // statement (design R3): with zero members left there is nothing to derive a
   // name from, and the operator's actual next action is deleting the invitation.
-  refuseInvalidMembership(
-    membership,
-    afterMembers,
-    `remove member ${guestId} from invitation ${invitationId}`,
-  );
+  const refusals = membershipRefusals(membership, afterMembers);
+
+  if (refusals.length > 0) {
+    return refusals;
+  }
 
   const { error } = await client
     .from("invitation_guests")
@@ -983,6 +1036,8 @@ export async function removeMember(
     membership.greetingName,
     afterMembers,
   );
+
+  return [];
 }
 
 /** Why a move was refused, in the terms the operator can act on. */

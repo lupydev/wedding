@@ -159,9 +159,12 @@ beforeEach(() => {
     slug: "aaaaaaaaaaaaaaaa",
   });
   updateInvitation.mockResolvedValue(undefined);
-  addMember.mockResolvedValue({ id: GUEST_ID });
-  editMember.mockResolvedValue(undefined);
-  removeMember.mockResolvedValue(undefined);
+  // The three membership writes ANSWER now, so their defaults are the shape a
+  // permitted write returns: no refusals. `addMember` also hands back the row it
+  // created, because it is the only one of the three that mints an id.
+  addMember.mockResolvedValue({ refusals: [], guest: { id: GUEST_ID } });
+  editMember.mockResolvedValue([]);
+  removeMember.mockResolvedValue([]);
   moveMemberToInvitation.mockResolvedValue(undefined);
   chooseRecipient.mockResolvedValue(undefined);
   deleteInvitation.mockResolvedValue(undefined);
@@ -848,7 +851,7 @@ describe("removeMemberAction — the advisory it hands back", () => {
       attendeeGuestIds: [GUEST_ID, SECOND_GUEST_ID],
     });
 
-    const impact = await removeMemberAction(
+    const { impact } = await removeMemberAction(
       form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
     );
 
@@ -874,13 +877,13 @@ describe("removeMemberAction — the advisory it hands back", () => {
       attendeeGuestIds: [SECOND_GUEST_ID],
     });
 
-    const impact = await removeMemberAction(
+    const { impact } = await removeMemberAction(
       form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
     );
 
-    expect(impact.contradictedAnswers).toEqual([]);
-    expect(impact.seatsConfirmedExceedsMembers).toBe(false);
-    expect(impact.removedGuestIds).toEqual([GUEST_ID]);
+    expect(impact?.contradictedAnswers).toEqual([]);
+    expect(impact?.seatsConfirmedExceedsMembers).toBe(false);
+    expect(impact?.removedGuestIds).toEqual([GUEST_ID]);
   });
 
   it("reads the members BEFORE the removal, so the impact can name who left", async () => {
@@ -898,6 +901,10 @@ describe("removeMemberAction — the advisory it hands back", () => {
     });
     removeMember.mockImplementation(async () => {
       order.push("remove");
+
+      // The permitted answer. `removeMember` returns the refusals now, so a
+      // stand-in that returned nothing would be asserting the OLD contract.
+      return [];
     });
 
     await removeMemberAction(
@@ -905,6 +912,98 @@ describe("removeMemberAction — the advisory it hands back", () => {
     );
 
     expect(order).toEqual(["read", "remove"]);
+  });
+});
+
+describe("the three member writes answer with the refusal instead of throwing prose", () => {
+  // THE SAME CHANNEL `chooseRecipientAction` ALREADY USES, FOR THE OTHER THREE.
+  //
+  // A thrown refusal is replaced by an opaque `digest` in production expressly
+  // to keep server text out of the browser, so the operator was shown "revisá la
+  // conexión" for a rule that refuses identically on every retry. The CODE
+  // travels and the console owns the copy.
+  //
+  // AND `revalidatePath` MUST NOT RUN ON A REFUSAL. A throw skipped it for free;
+  // a return has to mean it on purpose, and re-seeding the form over a refused
+  // write would throw away whatever the operator is still typing.
+  it("hands back addMemberAction's refusal and revalidates nothing", async () => {
+    addMember.mockResolvedValue({
+      refusals: ["member_without_name"],
+      guest: null,
+    });
+
+    const refusals = await addMemberAction(
+      form({ invitationId: INVITATION_ID, fullName: "Ana", phone: "" }),
+    );
+
+    expect(refusals).toEqual(["member_without_name"]);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hands back editMemberAction's refusal and revalidates nothing", async () => {
+    editMember.mockResolvedValue(["member_without_name"]);
+
+    const refusals = await editMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        guestId: GUEST_ID,
+        fullName: "Ana",
+      }),
+    );
+
+    expect(refusals).toEqual(["member_without_name"]);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hands back removeMemberAction's refusal, with no impact to report", async () => {
+    // A REFUSED REMOVAL CONTRADICTED NOTHING.
+    //
+    // This action answers two questions at once — which rules refused it, and
+    // what a removal that HAPPENED left inconsistent — so the second answer must
+    // be absent rather than a classification of a removal that never occurred.
+    removeMember.mockResolvedValue(["no_members"]);
+    getCurrentRsvp.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      attending: true,
+      seatsConfirmed: 2,
+      attendeeGuestIds: [GUEST_ID, SECOND_GUEST_ID],
+    });
+
+    const { refusals, impact } = await removeMemberAction(
+      form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(refusals).toEqual(["no_members"]);
+    expect(impact).toBeNull();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  // THE PERMITTING COUNTERPARTS, so the three above cannot pass by never
+  // revalidating anything at all.
+  it("revalidates and answers empty when the three writes are permitted", async () => {
+    const addRefusals = await addMemberAction(
+      form({ invitationId: INVITATION_ID, fullName: "Ana", phone: "" }),
+    );
+    const editRefusals = await editMemberAction(
+      form({
+        invitationId: INVITATION_ID,
+        guestId: GUEST_ID,
+        fullName: "Ana",
+      }),
+    );
+    const removal = await removeMemberAction(
+      form({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(addRefusals).toEqual([]);
+    expect(editRefusals).toEqual([]);
+    expect(removal.refusals).toEqual([]);
+    expect(removal.impact).not.toBeNull();
+    expect(revalidatePath.mock.calls.map((call) => call[0])).toEqual([
+      "/console",
+      "/console",
+      "/console",
+    ]);
   });
 });
 
