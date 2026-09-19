@@ -327,6 +327,34 @@ describe("GuestList — who receives the message, and how to change it", () => {
       "/console/invitations/11111111-1111-4111-8111-111111111111/edit",
     );
   });
+
+  it("withdraws the edit affordance from a row the operator does not own", () => {
+    // Not because the route would refuse — it does not; console administration
+    // is deliberately not owner-scoped, and `actions.spec.ts` pins that. Because
+    // the partition these rows appear in has already told the operator they may
+    // not edit them, and withdraws the inline phone editor to say so. An edit
+    // door standing open beside a withdrawn control makes the screen tell two
+    // stories, and the one a person believes is whichever they read second.
+    renderList([
+      row({
+        ownedByViewer: false,
+        ownerSenderId: BETO,
+        ownerDisplayName: "Beto Operador",
+      }),
+    ]);
+
+    expect(
+      screen.queryByRole("link", { name: /Editar invitación/i }),
+    ).toBeNull();
+  });
+
+  it("withdraws it from a read-only render too", () => {
+    renderList([row()], { readOnly: true });
+
+    expect(
+      screen.queryByRole("link", { name: /Editar invitación/i }),
+    ).toBeNull();
+  });
 });
 
 describe("GuestList — the console can create an invitation now", () => {

@@ -275,14 +275,44 @@ export function GuestList({
                 </Button>
               )}
 
-              <Button asChild variant="secondary">
-                <a
-                  className="guest-list__edit-link"
-                  href={consoleInvitationEditPath(row.invitationId)}
-                >
-                  Editar invitación de {row.greetingName}
-                </a>
-              </Button>
+              {/*
+                GATED LIKE ITS NEIGHBOURS, AND NOT FOR THE SAME REASON.
+
+                The preview link above is gated because its route answers
+                `notFound()` for anything else, so an ungated one would link to a
+                404. This route does NOT refuse: it takes `requireOperator()` and
+                then reads the invitation with no owner filter, because console
+                administration is deliberately not owner-scoped (confirmed
+                decision 4, pinned in `actions.spec.ts`). So this link would
+                work.
+
+                It is withdrawn anyway, because the partition it would appear in
+                already tells the operator they may not edit these households —
+                the inline phone editor is removed there for exactly that reason.
+                An edit door standing open beside a withdrawn control makes the
+                screen tell two stories, and the one a person believes is
+                whichever they read second.
+
+                Withdrawing an affordance is not a security boundary and is not
+                pretending to be one: the route still accepts either operator,
+                by design, for anybody who navigates to it.
+
+                `readOnly` is in the condition as well as ownership, because that
+                prop's own contract is "may not edit at all". Today the only
+                caller passes it together with rows the viewer does not own, so
+                the two guards never disagree — which is exactly why leaving one
+                out would go unnoticed until they did.
+              */}
+              {row.ownedByViewer && !readOnly && (
+                <Button asChild variant="secondary">
+                  <a
+                    className="guest-list__edit-link"
+                    href={consoleInvitationEditPath(row.invitationId)}
+                  >
+                    Editar invitación de {row.greetingName}
+                  </a>
+                </Button>
+              )}
             </div>
           </li>
         ))}
