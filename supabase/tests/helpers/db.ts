@@ -86,33 +86,58 @@ export async function withRollback<T>(
  * one of them green when its file ran alone. Raising a timeout cannot fix that;
  * nobody was slow.
  *
- * WHY THE LOCKS ARE TAKEN UP FRONT RATHER THAN BY AGREEMENT.
+ * TWO ATTEMPTS THAT DID NOT WORK, AND WHY THEY ARE WORTH KNOWING.
  *
- * The first attempt asked both sides to serialize on a shared advisory key. It
- * cut the rate to one run in twenty and did not fix it, because there is more
- * than one fixture helper that commits and only one of them had been taught the
- * agreement. A cooperation protocol is only as good as the list of participants,
- * and that list is not ours to close.
+ * The first asked both sides to serialize on a shared advisory key. It cut the
+ * rate to one run in twenty and did not fix it, because more than one fixture
+ * helper commits and only one had been taught the agreement. A cooperation
+ * protocol is worth its list of participants, and that list is not ours to close.
  *
- * Acquiring both tables in ONE statement before doing anything needs no
- * cooperation. A transaction that already holds every lock it will need never
- * waits while holding, so it cannot be half of a cycle: other transactions queue
- * behind this one and proceed. `LOCK TABLE` is transaction-scoped, so the same
- * `rollback` that undoes the DDL releases them, including when the body throws.
+ * The second took both tables up front and claimed that ended it. IT DOES NOT,
+ * and the claim was the dangerous part. `LOCK TABLE a, b` acquires the relations
+ * ONE AT A TIME in the order written, so between them this transaction holds
+ * `invitations` while waiting for `invitation_guests` — the same half-cycle.
+ * Measured on this database rather than argued: with another session holding
+ * `invitation_guests`, `pg_locks` shows this transaction granted on
+ * `invitations` and ungranted on `invitation_guests` at the same instant.
  *
- * The list is exactly what the scripts touch. A script that starts altering
- * another table must be added here, or the cycle comes back through it.
+ * And no ordering fixes it, because the fixture helpers acquire BOTH tables and
+ * hold them until they commit. Whichever table is named first here, they can be
+ * holding the other.
+ *
+ * SO THE LOCK NARROWS THE WINDOW AND A RETRY COVERS WHAT IS LEFT.
+ *
+ * The up-front lock is still worth having: no application work happens between
+ * the two acquisitions, which took the observed rate from one run in eight to
+ * none in thirty. But narrow is not gone, so the deadlock Postgres reports is
+ * retried rather than denied — which is exactly what Postgres recommends for
+ * `40P01`, and it is safe here because this transaction always rolls back and so
+ * has nothing to repeat.
+ *
+ * The table list is exactly what the scripts touch. A script that starts altering
+ * another table must be added here, or the wait widens again.
  */
 export async function withExclusiveSchema<T>(
   body: (db: Client) => Promise<T>,
+  attemptsLeft = 4,
 ): Promise<T> {
-  return withRollback(async (db) => {
-    await db.query(
-      "lock table invitations, invitation_guests in access exclusive mode",
-    );
+  try {
+    return await withRollback(async (db) => {
+      await db.query(
+        "lock table invitations, invitation_guests in access exclusive mode",
+      );
 
-    return body(db);
-  });
+      return body(db);
+    });
+  } catch (cause) {
+    const deadlocked = (cause as { code?: string }).code === "40P01";
+
+    if (!deadlocked || attemptsLeft <= 1) {
+      throw cause;
+    }
+
+    return withExclusiveSchema(body, attemptsLeft - 1);
+  }
 }
 
 /** Captures the error message raised by `body`, or `null` when it succeeded. */
