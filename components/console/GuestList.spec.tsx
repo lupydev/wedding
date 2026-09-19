@@ -272,3 +272,90 @@ describe("GuestList", () => {
     ).toHaveLength(3);
   });
 });
+
+describe("GuestList — who receives the message, and how to change it", () => {
+  // THE RECIPIENT IS A DECISION SOMEBODY MADE, AND THE LIST IS WHERE IT IS READ.
+  //
+  // Nothing infers a recipient: not `is_primary`, not ordering, not being the
+  // only reachable number. A confirmed decision of this capability deleted the
+  // auto-pick, so `null` is the honest starting state of every invitation — and
+  // dispatch stays blocked until somebody chooses.
+  //
+  // That makes the ABSENCE the important case. A list that simply renders no
+  // indicator when nobody is chosen shows the same thing for "not chosen yet"
+  // and for "chosen, and it is this person" — and the operator only finds out
+  // which when the send refuses. So the absence is stated, not omitted.
+  it("marks the member the message goes to", () => {
+    renderList([row({ dispatchRecipientGuestId: "g1" })]);
+
+    const household = screen
+      .getByRole("heading", { name: "Familia Muñóz" })
+      .closest("li") as HTMLElement;
+    const recipient = within(household)
+      .getByText("Ana Muñóz")
+      .closest("li") as HTMLElement;
+
+    expect(
+      within(recipient).getByText(/Recibe el mensaje/i),
+    ).toBeInTheDocument();
+
+    // And nobody else on the row is marked, which is what makes the mark mean
+    // something.
+    const other = within(household)
+      .getByText("Niña Muñóz")
+      .closest("li") as HTMLElement;
+
+    expect(within(other).queryByText(/Recibe el mensaje/i)).toBeNull();
+  });
+
+  it("says plainly when nobody has been chosen yet", () => {
+    renderList([row({ dispatchRecipientGuestId: null })]);
+
+    expect(
+      screen.getByText(/Nadie elegido para recibir el mensaje/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Recibe el mensaje/i)).toBeNull();
+  });
+
+  it("offers a way to go and choose one, pointed at this invitation", () => {
+    renderList([row({ dispatchRecipientGuestId: null })]);
+
+    expect(
+      screen.getByRole("link", { name: /Editar invitación/i }),
+    ).toHaveAttribute(
+      "href",
+      "/console/invitations/11111111-1111-4111-8111-111111111111/edit",
+    );
+  });
+});
+
+describe("GuestList — the console can create an invitation now", () => {
+  // The importer is no longer the only door, and the empty state used to say it
+  // was. An operator reading that has no reason to look for another way in.
+  it("links to the create form", () => {
+    renderList([row()]);
+
+    expect(
+      screen.getByRole("link", { name: /Crear invitación/i }),
+    ).toHaveAttribute("href", "/console/invitations/new");
+  });
+
+  it("points the empty state at creating one instead of at the importer", () => {
+    renderList([]);
+
+    expect(
+      screen.getByText("No hay invitaciones en esta vista."),
+    ).toBeInTheDocument();
+    // Not "no importer anywhere" — the importer still exists and still works.
+    // What had to go is the claim that it is the ONLY way in, which is the
+    // sentence an operator reads before concluding there is nothing else to try.
+    expect(
+      screen.queryByText(
+        "Las invitaciones se cargan con el importador de invitados.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /Crear invitación/i }),
+    ).toBeInTheDocument();
+  });
+});

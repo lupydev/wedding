@@ -70,6 +70,21 @@ export function consolePreviewPath(invitationId: string): string {
 }
 
 /**
+ * Where an invitation is edited — members, names, and who receives the message.
+ *
+ * Built here rather than interpolated at each call site for the same reason
+ * `consolePreviewPath` is: the guest list, the dispatch screen and the form all
+ * link to it, and a route that moves should break the build rather than only the
+ * links somebody remembered to grep for.
+ */
+export function consoleInvitationEditPath(invitationId: string): string {
+  return `${CONSOLE_ROOT_PATH}/invitations/${invitationId}/edit`;
+}
+
+/** Where an invitation is created by hand, rather than by the importer. */
+export const CONSOLE_NEW_INVITATION_PATH = `${CONSOLE_ROOT_PATH}/invitations/new`;
+
+/**
  * Console routes that answer machines rather than people.
  *
  * Everything under here is a route handler, and every one of them authenticates

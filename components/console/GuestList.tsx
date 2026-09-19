@@ -10,7 +10,11 @@ import {
   type ConsoleListRow,
 } from "@/lib/domain/console-list";
 import { consoleDispatchPath } from "@/lib/domain/dispatch-message";
-import { consolePreviewPath } from "@/lib/domain/operator-session";
+import {
+  consoleInvitationEditPath,
+  consolePreviewPath,
+  CONSOLE_NEW_INVITATION_PATH,
+} from "@/lib/domain/operator-session";
 
 import { GuestPhoneField } from "./GuestPhoneField";
 import { StatusBadge } from "./StatusBadge";
@@ -111,108 +115,148 @@ export function GuestList({
   dispatchBlocked = false,
   emptyMessage,
 }: GuestListProps) {
+  /**
+   * The door the empty state used to deny existed.
+   *
+   * Rendered in both branches on purpose: an operator staring at an empty list
+   * is the one who most needs it, and an operator with a full list still has to
+   * add the household that called yesterday.
+   */
+  const createLink = (
+    <Button asChild variant="secondary">
+      <a className="guest-list__create-link" href={CONSOLE_NEW_INVITATION_PATH}>
+        Crear invitación
+      </a>
+    </Button>
+  );
+
   if (rows.length === 0) {
     // The "nothing yet" state, which is frequently correct before an import runs.
     // The filtered counterpart — `NoMatchesState` — is a different component with a
     // different exit, because an operator who reads "there is nothing" on a
     // filtered list concludes the data is gone.
     return (
-      <div className="guest-list__empty">
+      <div className="guest-list__empty flex flex-col items-start gap-3">
         <EmptyState
-          body="Las invitaciones se cargan con el importador de invitados."
+          body="Se pueden cargar con el importador de invitados o crear de a una desde acá."
           title={emptyMessage}
         />
+        {createLink}
       </div>
     );
   }
 
   return (
-    <ul className="guest-list flex flex-col gap-2">
-      {rows.map((row) => (
-        <li
-          className="guest-list__row rounded-lg border border-border bg-card px-3 py-3"
-          key={row.invitationId}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h3 className="text-base leading-snug text-balance">
-                {row.greetingName}
-              </h3>
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">{createLink}</div>
 
-              <p className="guest-list__owner truncate text-xs text-muted-foreground">
-                {row.ownedByViewer
-                  ? `Gestionas tú (${row.ownerDisplayName})`
-                  : `Gestiona ${row.ownerDisplayName}`}
-              </p>
+      <ul className="guest-list flex flex-col gap-2">
+        {rows.map((row) => (
+          <li
+            className="guest-list__row rounded-lg border border-border bg-card px-3 py-3"
+            key={row.invitationId}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base leading-snug text-balance">
+                  {row.greetingName}
+                </h3>
+
+                <p className="guest-list__owner truncate text-xs text-muted-foreground">
+                  {row.ownedByViewer
+                    ? `Gestionas tú (${row.ownerDisplayName})`
+                    : `Gestiona ${row.ownerDisplayName}`}
+                </p>
+              </div>
+
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <p className="guest-list__dispatch">
+                  <StatusBadge
+                    label={dispatchLabel(row.dispatchState)}
+                    tone={dispatchStateTone(row.dispatchState)}
+                  />
+                </p>
+
+                <p className="guest-list__answer">
+                  <StatusBadge
+                    label={RSVP_ANSWER_LABELS[row.answer]}
+                    tone={rsvpAnswerTone(row.answer)}
+                  />
+                </p>
+              </div>
             </div>
 
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <p className="guest-list__dispatch">
-                <StatusBadge
-                  label={dispatchLabel(row.dispatchState)}
-                  tone={dispatchStateTone(row.dispatchState)}
-                />
+            <p className="guest-list__seats mt-1 text-xs text-hint">
+              {membersSentence(row)}
+            </p>
+
+            {/*
+              WHY THE ABSENCE IS WRITTEN OUT INSTEAD OF SHOWING NOTHING.
+
+              No recipient is inferred anywhere — not from `is_primary`, not from
+              ordering, not from being the only reachable number — so `null` is
+              where every invitation starts, and dispatch stays blocked until
+              somebody chooses. A row that renders no indicator for `null` looks
+              identical to a row whose choice is simply further down, and the
+              operator learns which only when the send refuses.
+            */}
+            {row.dispatchRecipientGuestId === null && (
+              <p className="guest-list__no-recipient mt-1 text-xs text-hint">
+                Nadie elegido para recibir el mensaje.
               </p>
+            )}
 
-              <p className="guest-list__answer">
-                <StatusBadge
-                  label={RSVP_ANSWER_LABELS[row.answer]}
-                  tone={rsvpAnswerTone(row.answer)}
-                />
-              </p>
-            </div>
-          </div>
-
-          <p className="guest-list__seats mt-1 text-xs text-hint">
-            {membersSentence(row)}
-          </p>
-
-          <ul className="guest-list__guests mt-2 flex flex-col gap-1 border-t border-border pt-2">
-            {row.guests.map((guest) => (
-              <li
-                className="flex flex-wrap items-baseline gap-x-2 gap-y-1"
-                key={guest.id}
-              >
-                <span className="guest-list__guest-name min-w-0 truncate text-sm text-foreground">
-                  {guest.fullName}
-                </span>
-                {guest.isChild && (
-                  <span className="guest-list__child text-xs text-muted-foreground">
-                    {" "}
-                    (menor)
+            <ul className="guest-list__guests mt-2 flex flex-col gap-1 border-t border-border pt-2">
+              {row.guests.map((guest) => (
+                <li
+                  className="flex flex-wrap items-baseline gap-x-2 gap-y-1"
+                  key={guest.id}
+                >
+                  <span className="guest-list__guest-name min-w-0 truncate text-sm text-foreground">
+                    {guest.fullName}
                   </span>
-                )}
-                <GuestPhoneField
-                  guestId={guest.id}
-                  guestName={guest.fullName}
-                  phoneE164={guest.phoneE164}
-                  lineType={guest.lineType}
-                  dispatchable={guest.dispatchable}
-                  action={updatePhoneAction}
-                  readOnly={readOnly}
-                />
-              </li>
-            ))}
-          </ul>
+                  {guest.isChild && (
+                    <span className="guest-list__child text-xs text-muted-foreground">
+                      {" "}
+                      (menor)
+                    </span>
+                  )}
+                  {guest.id === row.dispatchRecipientGuestId && (
+                    <span className="guest-list__recipient text-xs text-foreground">
+                      Recibe el mensaje
+                    </span>
+                  )}
+                  <GuestPhoneField
+                    guestId={guest.id}
+                    guestName={guest.fullName}
+                    phoneE164={guest.phoneE164}
+                    lineType={guest.lineType}
+                    dispatchable={guest.dispatchable}
+                    action={updatePhoneAction}
+                    readOnly={readOnly}
+                  />
+                </li>
+              ))}
+            </ul>
 
-          {/*
+            {/*
             The send affordance exists only for a row this operator owns, and
             only while the device declaration agrees with the session — the one
             thing that gate is for. Editing a number stays available either way.
           */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {row.ownedByViewer && !dispatchBlocked && (
-              <Button asChild size="lg">
-                <a
-                  className="guest-list__dispatch-link"
-                  href={consoleDispatchPath(row.invitationId)}
-                >
-                  Preparar envío para {row.greetingName}
-                </a>
-              </Button>
-            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {row.ownedByViewer && !dispatchBlocked && (
+                <Button asChild size="lg">
+                  <a
+                    className="guest-list__dispatch-link"
+                    href={consoleDispatchPath(row.invitationId)}
+                  >
+                    Preparar envío para {row.greetingName}
+                  </a>
+                </Button>
+              )}
 
-            {/*
+              {/*
             The preview is a READ, so unlike the send affordance above it
             survives a device-declaration mismatch: looking at an invitation
             sends nothing from any account, and the operator on the wrong
@@ -220,19 +264,29 @@ export function GuestList({
             Owned-only, though, because the route answers `notFound()` for
             anything else and a link to a 404 is an affordance that lies.
           */}
-            {row.ownedByViewer && (
-              <Button asChild size="lg" variant="ghost">
+              {row.ownedByViewer && (
+                <Button asChild size="lg" variant="ghost">
+                  <a
+                    className="guest-list__preview-link"
+                    href={consolePreviewPath(row.invitationId)}
+                  >
+                    Ver la invitación de {row.greetingName}
+                  </a>
+                </Button>
+              )}
+
+              <Button asChild variant="secondary">
                 <a
-                  className="guest-list__preview-link"
-                  href={consolePreviewPath(row.invitationId)}
+                  className="guest-list__edit-link"
+                  href={consoleInvitationEditPath(row.invitationId)}
                 >
-                  Ver la invitación de {row.greetingName}
+                  Editar invitación de {row.greetingName}
                 </a>
               </Button>
-            )}
-          </div>
-        </li>
-      ))}
-    </ul>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
