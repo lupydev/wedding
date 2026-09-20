@@ -120,19 +120,47 @@ export async function withRollback<T>(
 export async function withExclusiveSchema<T>(
   body: (db: Client) => Promise<T>,
 ): Promise<T> {
-  return retryOnDeadlock(() =>
-    withRollback(async (db) => {
-      await db.query(
-        "lock table invitations, invitation_guests in access exclusive mode",
-      );
+  return retryOnLockContention(
+    () =>
+      withRollback(async (db) => {
+        // WE VOLUNTEER AS THE VICTIM, RATHER THAN LETTING POSTGRES CHOOSE.
+        //
+        // `LOCK TABLE a, b` takes the relations one at a time (measured: `pg_locks`
+        // shows this transaction granted on the first and waiting on the second at
+        // the same instant), so between them we hold one and want the other — half
+        // of a cycle a committing fixture closes by holding an `invitation_guests`
+        // row and needing `invitations` for its foreign key.
+        //
+        // Postgres breaks that cycle by aborting SOMEBODY, and when it chose the
+        // fixture the failure landed in an unrelated test — measured at two runs in
+        // ten. `deadlock_timeout` is 1000ms here (read from `pg_settings`, not
+        // assumed), so a shorter `lock_timeout` makes OUR wait abort first, every
+        // time: we roll back, release what we hold, the fixture proceeds, and the
+        // retry above brings us back. No ordering avoids the cycle — the fixtures
+        // hold both tables until they commit — so choosing who pays is the fix.
+        await db.query("set local lock_timeout = '400ms'");
+        await db.query(
+          "lock table invitations, invitation_guests in access exclusive mode",
+        );
+        // Cleared once we hold both: the script's own statements may legitimately
+        // wait, and they are no longer able to be half of a cycle.
+        await db.query("set local lock_timeout = 0");
 
-      return body(db);
-    }),
+        return body(db);
+      }),
+    // More attempts than the default, because with the timeout above contention
+    // is now the ORDINARY outcome here rather than a rare cycle: eight tries of
+    // at most 400ms is under four seconds against a 15s test budget, and a schema
+    // test that still cannot get the table after that should fail loudly.
+    8,
   );
 }
 
 /** Postgres's code for a transaction it aborted to break a lock cycle. */
 const DEADLOCK_DETECTED = "40P01";
+
+/** Its code for a lock wait this transaction asked to abort itself. */
+const LOCK_NOT_AVAILABLE = "55P03";
 
 /**
  * Runs `run`, repeating it while Postgres reports a deadlock.
@@ -155,7 +183,7 @@ const DEADLOCK_DETECTED = "40P01";
  * of this replaced. Repeating is only safe because the caller above always rolls
  * back, so a repeat has nothing to undo.
  */
-export async function retryOnDeadlock<T>(
+export async function retryOnLockContention<T>(
   run: () => Promise<T>,
   attempts = 4,
 ): Promise<T> {
@@ -163,10 +191,11 @@ export async function retryOnDeadlock<T>(
     try {
       return await run();
     } catch (cause) {
-      const deadlocked =
-        (cause as { code?: string }).code === DEADLOCK_DETECTED;
+      const code = (cause as { code?: string }).code;
+      const contended =
+        code === DEADLOCK_DETECTED || code === LOCK_NOT_AVAILABLE;
 
-      if (!deadlocked || remaining <= 1) {
+      if (!contended || remaining <= 1) {
         throw cause;
       }
     }

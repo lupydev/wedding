@@ -1965,7 +1965,15 @@ describe("deleteInvitation — refused by ANY dispatch history (local Supabase)"
     await withSenderFixture(async (senderId) => {
       const invitation = await makeDeletable(senderId);
 
-      await deleteInvitation(createServerSupabaseClient(), invitation.id);
+      const outcome = await deleteInvitation(
+        createServerSupabaseClient(),
+        invitation.id,
+      );
+
+      // The permitted case ANSWERS too, and its answer is what tells the
+      // console the invitation is gone — which is the only thing that may
+      // revalidate and navigate away from a page that no longer has a row.
+      expect(outcome).toEqual({ ok: true });
 
       const remaining = await withDb(async (db) => ({
         invitations: (
@@ -1986,18 +1994,31 @@ describe("deleteInvitation — refused by ANY dispatch history (local Supabase)"
   });
 
   it.each(["marked_sent", "link_opened", "marked_failed"])(
-    "refuses deletion for a %s event alone, naming it, and offers rotation",
+    "RETURNS the refusal for a %s event alone, naming the kind it found",
     async (kind) => {
       await withSenderFixture(async (senderId) => {
         const invitation = await makeDeletable(senderId);
         await recordEvent(invitation.id, senderId, kind);
 
-        const failure = await captureError(() =>
-          deleteInvitation(createServerSupabaseClient(), invitation.id),
+        // THE REFUSAL IS DATA, NOT AN EXCEPTION.
+        //
+        // It used to be thrown with the operator's advice spelled out in
+        // English inside the message. Next replaces a thrown message with an
+        // opaque `digest` before it reaches a browser, so that sentence could
+        // only ever be read by a developer. What the console needs is the
+        // REASON and the kinds, which is exactly what `canDeleteInvitation`
+        // already returns — so it travels as itself and the Spanish copy lives
+        // where copy lives.
+        const outcome = await deleteInvitation(
+          createServerSupabaseClient(),
+          invitation.id,
         );
 
-        expect(failure).toContain(kind);
-        expect(failure).toMatch(/rotat/i);
+        expect(outcome).toEqual({
+          ok: false,
+          reason: "already_dispatched",
+          eventKinds: [kind],
+        });
 
         const survived = await withDb(
           async (db) =>
@@ -2225,9 +2246,11 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         warm: async () => true,
       });
 
-      expect(
-        await captureError(() => deleteInvitation(client, invitation.id)),
-      ).toContain("marked_sent");
+      expect(await deleteInvitation(client, invitation.id)).toEqual({
+        ok: false,
+        reason: "already_dispatched",
+        eventKinds: ["marked_sent"],
+      });
     });
   });
 });

@@ -3,20 +3,24 @@ import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 
 import { InvitationForm } from "@/components/console/InvitationForm";
+import { InvitationLifecycle } from "@/components/console/InvitationLifecycle";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
 import { classifyPhoneDispatchability } from "@/lib/domain/phone-reachability";
 import { isWellFormedUuid } from "@/lib/domain/uuid";
 import { requireOperator } from "@/lib/server/console-session";
 import { listDispatchEvents } from "@/lib/server/dispatch";
-import { requiredDefaultPhoneCountry } from "@/lib/server/env";
+import { requiredDefaultPhoneCountry, siteOrigin } from "@/lib/server/env";
 import { findInvitationMembership } from "@/lib/server/invitations";
+import { invitationPageUrl } from "@/lib/server/og-warm";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
 import {
   addMemberAction,
   chooseRecipientAction,
+  deleteInvitationAction,
   editMemberAction,
   removeMemberAction,
+  rotateSlugAction,
   updateInvitationAction,
 } from "../../../actions";
 
@@ -181,6 +185,28 @@ export default async function EditInvitationPage({
     return refusals;
   }
 
+  /**
+   * Rotates the slug and hands back the ADDRESS, not just the slug.
+   *
+   * The new slug exists nowhere else after the write — the action returns it and
+   * this is its only other reader — so losing it here leaves an invitation whose
+   * address nobody knows. The origin is resolved on the server, as it is for the
+   * dispatch and preview routes, because a browser cannot be trusted to know the
+   * deployment's own public origin.
+   *
+   * This route is not revalidated: nothing it renders depends on the slug, and
+   * re-seeding the form would throw away whatever the operator is typing. The
+   * action already revalidated the console list and the compose view, which are
+   * the two surfaces that do show it.
+   */
+  async function rotateThisSlug(formData: FormData) {
+    "use server";
+
+    const slug = await rotateSlugAction(formData);
+
+    return invitationPageUrl(siteOrigin(), slug);
+  }
+
   return (
     // A `div`, not a `main`: `ConsoleShell` already renders this page's one
     // `main` landmark.
@@ -228,6 +254,28 @@ export default async function EditInvitationPage({
           remove: removeMember,
           chooseRecipient,
         }}
+      />
+
+      {/*
+        BELOW the form, and outside it. Neither of these edits the invitation —
+        one destroys it, the other moves it to a new address — and a destructive
+        control inside the save flow of an unrelated form is one mis-tap from a
+        deleted household.
+
+        DELETION IS THE ONE WRITE ON THIS PAGE THAT NEEDS NO WRAPPER, because
+        there is nothing for one to add. `deleteInvitationAction` already returns
+        the `DeletionOutcome` the component renders, and this route must NOT be
+        revalidated on either outcome: a refusal changed nothing, and a deletion
+        that happened leaves no invitation here to render — re-running this page
+        would resolve `findInvitationMembership` to `null` and answer with
+        `notFound()` instead of the confirmation naming the household that is
+        gone. The action revalidates the console list, which is where the
+        component's own link leads.
+      */}
+      <InvitationLifecycle
+        deleteInvitation={deleteInvitationAction}
+        invitation={{ id, displayName: membership.displayName }}
+        rotateSlug={rotateThisSlug}
       />
 
       <a

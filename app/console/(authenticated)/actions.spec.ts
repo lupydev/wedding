@@ -167,7 +167,8 @@ beforeEach(() => {
   removeMember.mockResolvedValue([]);
   moveMemberToInvitation.mockResolvedValue(undefined);
   chooseRecipient.mockResolvedValue(undefined);
-  deleteInvitation.mockResolvedValue(undefined);
+  // A permitted deletion ANSWERS, like every other write that can be refused.
+  deleteInvitation.mockResolvedValue({ ok: true });
   rotateInvitationSlug.mockResolvedValue("zzzzzzzzzzzzzzzz");
 });
 
@@ -1040,10 +1041,27 @@ describe("chooseRecipientAction — the member must belong to the invitation", (
   });
 });
 
-describe("deleteInvitationAction — the refusal it must not swallow", () => {
-  it("deletes an invitation with no dispatch history", async () => {
-    await deleteInvitationAction(form({ invitationId: INVITATION_ID }));
+/**
+ * WHY THIS DESCRIBE CHANGED SHAPE.
+ *
+ * It used to assert that the refusal was thrown and reached the caller as a
+ * thrown message — "surfaces the repository's refusal verbatim". The intent was
+ * right and the mechanism was dead: Next replaces a thrown message with an
+ * opaque `digest` before it crosses to a browser, so the sentence naming the
+ * event kinds and offering rotation was readable only in a server log. The four
+ * membership writes were converted for this exact reason; this is the fifth.
+ *
+ * So the assertions moved rather than relaxed. The refusal is now DATA whose
+ * reason and kinds are pinned exactly, instead of a sentence matched by regex,
+ * and the console owns the Spanish it is rendered as.
+ */
+describe("deleteInvitationAction — the refusal it must RETURN", () => {
+  it("deletes an invitation with no dispatch history, and says so", async () => {
+    const outcome = await deleteInvitationAction(
+      form({ invitationId: INVITATION_ID }),
+    );
 
+    expect(outcome).toEqual({ ok: true });
     expect(deleteInvitation).toHaveBeenCalledTimes(1);
     expect(rotateInvitationSlug).not.toHaveBeenCalled();
     expect(revalidatePath.mock.calls.map((call) => call[0])).toContain(
@@ -1051,23 +1069,40 @@ describe("deleteInvitationAction — the refusal it must not swallow", () => {
     );
   });
 
-  it("surfaces the repository's refusal verbatim, kinds and rotation and all", async () => {
-    // The action must not catch and reword this. `canDeleteInvitation` names
-    // the event kinds it found and offers slug rotation, and an operator shown
-    // "no se pudo eliminar" instead has been told nothing they can act on.
-    deleteInvitation.mockRejectedValue(
-      new Error(
-        `Could not delete invitation ${INVITATION_ID}: it has dispatch history ` +
-          "(link_opened, marked_failed), so a real guest may be holding its link. " +
-          "Rotate its slug instead, which makes the old link stop working without erasing what happened.",
-      ),
-    );
+  it("RETURNS the repository's refusal, kinds and all, instead of throwing it", async () => {
+    // `canDeleteInvitation` names the event kinds it found, and an operator
+    // shown "no se pudo eliminar" instead has been told nothing they can act
+    // on. A thrown sentence tells them nothing either, because production
+    // replaces it with a digest — so the codes travel and the console
+    // translates them beside the rotation button that is the actual exit.
+    deleteInvitation.mockResolvedValue({
+      ok: false,
+      reason: "already_dispatched",
+      eventKinds: ["link_opened", "marked_failed"],
+    });
 
     await expect(
       deleteInvitationAction(form({ invitationId: INVITATION_ID })),
-    ).rejects.toThrow(
-      /link_opened, marked_failed[\s\S]*Rotate its slug instead/,
-    );
+    ).resolves.toEqual({
+      ok: false,
+      reason: "already_dispatched",
+      eventKinds: ["link_opened", "marked_failed"],
+    });
+  });
+
+  it("revalidates NOTHING when the deletion was refused", async () => {
+    // A throw skipped `revalidatePath` for free. A return has to mean it on
+    // purpose: the invitation is still there, so re-reading the console list
+    // would cost a round trip to display exactly what is already on screen.
+    deleteInvitation.mockResolvedValue({
+      ok: false,
+      reason: "already_answered",
+      eventKinds: [],
+    });
+
+    await deleteInvitationAction(form({ invitationId: INVITATION_ID }));
+
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { retryOnDeadlock } from "./db";
+import { retryOnLockContention } from "./db";
 
 /**
  * THE RETRY POLICY, PROVED WHERE IT CAN BE.
@@ -21,11 +21,11 @@ function deadlock(): Error {
   return Object.assign(new Error("deadlock detected"), { code: "40P01" });
 }
 
-describe("retryOnDeadlock", () => {
+describe("retryOnLockContention", () => {
   it("runs the work once when nothing goes wrong", async () => {
     let calls = 0;
 
-    const seen = await retryOnDeadlock(async () => {
+    const seen = await retryOnLockContention(async () => {
       calls += 1;
 
       return "done";
@@ -38,7 +38,7 @@ describe("retryOnDeadlock", () => {
   it("runs it again when Postgres reports a deadlock", async () => {
     let calls = 0;
 
-    const seen = await retryOnDeadlock(async () => {
+    const seen = await retryOnLockContention(async () => {
       calls += 1;
 
       if (calls === 1) {
@@ -56,7 +56,7 @@ describe("retryOnDeadlock", () => {
     let calls = 0;
 
     await expect(
-      retryOnDeadlock(async () => {
+      retryOnLockContention(async () => {
         calls += 1;
 
         throw deadlock();
@@ -67,13 +67,40 @@ describe("retryOnDeadlock", () => {
     expect(calls).toBe(4);
   });
 
+  it("repeats a lock wait that timed out, not only a detected cycle", async () => {
+    // 55P03 is `lock_not_available`: the schema helper sets a `lock_timeout`
+    // below Postgres's 1000ms `deadlock_timeout` so its OWN wait aborts before
+    // the detector can pick a victim. That makes this code the ordinary outcome
+    // of contention here, and a retry that only knew 40P01 would turn the
+    // mechanism into a hard failure.
+    let calls = 0;
+
+    const seen = await retryOnLockContention(async () => {
+      calls += 1;
+
+      if (calls === 1) {
+        throw Object.assign(
+          new Error("canceling statement due to lock timeout"),
+          {
+            code: "55P03",
+          },
+        );
+      }
+
+      return "recovered";
+    });
+
+    expect(seen).toBe("recovered");
+    expect(calls).toBe(2);
+  });
+
   it("does NOT repeat anything that is not a deadlock", async () => {
     // The half that keeps a real failure readable. Repeating a broken migration
     // would report it four times and bury which attempt mattered.
     let calls = 0;
 
     await expect(
-      retryOnDeadlock(async () => {
+      retryOnLockContention(async () => {
         calls += 1;
 
         throw new Error("the down script is malformed");
@@ -89,7 +116,7 @@ describe("retryOnDeadlock", () => {
     let calls = 0;
 
     await expect(
-      retryOnDeadlock(async () => {
+      retryOnLockContention(async () => {
         calls += 1;
 
         throw deadlock();

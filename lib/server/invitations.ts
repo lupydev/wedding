@@ -22,7 +22,10 @@ import {
   type InvitationDraftMember,
   type MoveRefusal,
 } from "@/lib/domain/invitation-draft";
-import { canDeleteInvitation } from "@/lib/domain/invitation-deletion";
+import {
+  canDeleteInvitation,
+  type DeletionOutcome,
+} from "@/lib/domain/invitation-deletion";
 import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
 import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
 import { isWellFormedUuid } from "@/lib/domain/uuid";
@@ -1160,8 +1163,21 @@ export async function chooseRecipient(
  * operator only BELIEVES it did not arrive, and both mean a real guest may be
  * holding that URL. The refusal names the kinds it found, because "already
  * dispatched" on an invitation nobody remembers sending reads as a bug until it
- * says which events it means, and it points at slug rotation — the actual
- * remedy for "sent by mistake".
+ * says which events it means.
+ *
+ * THE REFUSAL IS RETURNED. THE FAULTS ARE STILL THROWN.
+ *
+ * It used to be thrown, carrying its advice as English prose in the message.
+ * That advice reached nobody: Next replaces a thrown message with an opaque
+ * `digest` before it crosses to a browser, expressly so server text cannot leak
+ * — so the one sentence telling the operator to rotate the slug instead was
+ * readable only in a server log. `canDeleteInvitation` already answers with a
+ * `DeletionOutcome` carrying the reason and the kinds, so that outcome travels
+ * out of here unchanged and the Spanish copy lives in the console, next to the
+ * button that offers rotation.
+ *
+ * A Supabase failure still throws. It is not an operator's decision to make and
+ * there is nothing for them to act on in it.
  *
  * Where it is permitted it is a real hard delete. There is no soft-delete
  * state, so no second definition of "exists" that one read could forget to
@@ -1170,7 +1186,7 @@ export async function chooseRecipient(
 export async function deleteInvitation(
   client: SupabaseClient,
   invitationId: string,
-): Promise<void> {
+): Promise<DeletionOutcome> {
   const { data, error } = await client
     .from("dispatch_events")
     .select("kind")
@@ -1203,16 +1219,7 @@ export async function deleteInvitation(
   );
 
   if (!outcome.ok) {
-    const evidence =
-      outcome.reason === "already_dispatched"
-        ? `it has dispatch history (${outcome.eventKinds.join(", ")})`
-        : "a household has already answered it";
-
-    throw new Error(
-      `Could not delete invitation ${invitationId}: ${evidence}, so a real guest ` +
-        "may be holding its link. Rotate its slug instead, which makes the old link " +
-        "stop working without erasing what happened.",
-    );
+    return outcome;
   }
 
   // `invitation_guests.invitation_id` cascades, so the members go with it.
@@ -1226,6 +1233,8 @@ export async function deleteInvitation(
       `Could not delete invitation ${invitationId}: ${deleteError.message}`,
     );
   }
+
+  return { ok: true };
 }
 
 /** How a rotation re-warms the card for its new URL. */

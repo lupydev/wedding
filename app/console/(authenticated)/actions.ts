@@ -9,6 +9,7 @@ import {
   type DraftRefusal,
   type MembershipChangeImpact,
 } from "@/lib/domain/invitation-draft";
+import type { DeletionOutcome } from "@/lib/domain/invitation-deletion";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
 import { normalizeForStorage } from "@/lib/domain/phone";
 import {
@@ -603,23 +604,46 @@ export async function chooseRecipientAction(
 }
 
 /**
- * Permanently deletes an invitation — or lets the repository refuse it.
+ * Permanently deletes an invitation, ANSWERING with the refusal that stopped it.
  *
- * The refusal is deliberately NOT caught and reworded. `canDeleteInvitation`
- * names the dispatch event kinds it found and points at slug rotation, and an
- * operator shown a generic failure instead has been told nothing they can act
- * on.
+ * THE REFUSAL IS RETURNED, NOT THROWN, FOR THE SAME REASON AS THE FIVE ABOVE.
+ *
+ * It used to be neither: `deleteInvitation` threw a sentence naming the dispatch
+ * event kinds it found and offering slug rotation, and this action deliberately
+ * let it through unreworded so the operator would be told something actionable.
+ * The intent was right and the mechanism was dead — Next replaces a thrown
+ * message with an opaque `digest` in production expressly to keep server text
+ * out of the browser, so that sentence reached nobody where it mattered. The
+ * `DeletionOutcome` travels instead: `already_dispatched` carries the kinds,
+ * `already_answered` carries the fact that a stored answer exists, and the
+ * console renders both in Spanish beside the rotation button they point at.
+ *
+ * A Supabase failure, a missing invitation and a malformed id still throw. None
+ * of them is a decision the operator can act on.
+ *
+ * `revalidatePath` runs ONLY when the deletion happened. A throw skipped it for
+ * free; a return has to mean it on purpose, and a refused deletion left the
+ * console list showing exactly what it already shows.
  */
 export async function deleteInvitationAction(
   formData: FormData,
-): Promise<void> {
+): Promise<DeletionOutcome> {
   await requireOperator();
 
   const invitationId = requiredInvitationId(formData);
 
-  await deleteInvitation(createServerSupabaseClient(), invitationId);
+  const outcome = await deleteInvitation(
+    createServerSupabaseClient(),
+    invitationId,
+  );
+
+  if (!outcome.ok) {
+    return outcome;
+  }
 
   revalidatePath(CONSOLE_ROOT_PATH);
+
+  return outcome;
 }
 
 /**

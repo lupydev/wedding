@@ -5,6 +5,7 @@ import {
   seedGuests,
   seedInvitation,
   seedSender,
+  withExclusiveSchema,
   withRollback,
 } from "./helpers/db";
 
@@ -215,7 +216,13 @@ describe("dispatch recipient: moving a guest between invitations", () => {
     // The backstop, proved rather than claimed. The default `NO ACTION` refuses
     // the move outright (measured probe 3), which is why `0012` writes no
     // `on update` clause and why adding one later cannot pass unnoticed.
-    const message = await withRollback(async (db) => {
+    // `withExclusiveSchema`, not `withRollback`: dropping a trigger takes ACCESS
+    // EXCLUSIVE on `invitation_guests`, which makes this case a schema mutator
+    // and therefore half of the lock cycle a committing fixture closes from the
+    // other side. The helper takes both tables up front under a `lock_timeout`
+    // shorter than `deadlock_timeout`, so this transaction is the one that aborts
+    // and retries instead of an unrelated test being chosen as the victim.
+    const message = await withExclusiveSchema(async (db) => {
       const { destination, chosenId } = await seedMovePair(db);
 
       await db.query(
