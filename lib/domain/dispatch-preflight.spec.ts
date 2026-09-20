@@ -70,6 +70,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     // blocker, so a fixture without one would make every "ready" case in this
     // file green for the wrong reason.
     dispatchRecipientGuestId: "g1",
+    attendeeGuestIds: [],
     guests: [guest()],
     ...overrides,
   };

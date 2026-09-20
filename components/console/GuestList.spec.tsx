@@ -38,6 +38,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     seatsConfirmed: 0,
     answeredAt: null,
     dispatchRecipientGuestId: null,
+    attendeeGuestIds: [],
     guests: [
       {
         id: "g1",
@@ -354,6 +355,111 @@ describe("GuestList — who receives the message, and how to change it", () => {
     expect(
       screen.queryByRole("link", { name: /Editar invitación/i }),
     ).toBeNull();
+  });
+});
+
+describe("GuestList — an answer the household no longer agrees with", () => {
+  /**
+   * THE DANGLING ATTENDEE ID, MADE LEGIBLE ON THE ROW.
+   *
+   * `attendee_guest_ids` is a bare `uuid[]` — Postgres cannot foreign-key array
+   * elements — and `rsvp_responses` is append-only against `service_role` too.
+   * So removing a member who had already been confirmed leaves their id inside a
+   * stored answer that nothing cascades to and nobody can ever correct.
+   *
+   * Removing them is PERMITTED and is the couple's actual workflow: "Fer already
+   * said yes, but now he cannot come". What is not acceptable is the tool staying
+   * quiet about it, which is how a seat count nobody can explain reaches a
+   * caterer. The badge is rendered from `classifyMembershipChangeImpact` — the
+   * same rule the write side reports with, not a second one that could disagree.
+   */
+  function contradicted(overrides: Partial<ConsoleListRow> = {}) {
+    return row({
+      answer: "attending",
+      seatsConfirmed: 2,
+      memberCount: 1,
+      guests: [
+        {
+          id: "g1",
+          fullName: "Ana Muñóz",
+          isChild: false,
+          phoneE164: "+573001234567",
+          lineType: "mobile",
+          dispatchable: true,
+        },
+      ],
+      attendeeGuestIds: ["g1", "g-fer"],
+      ...overrides,
+    });
+  }
+
+  it("flags a row whose stored answer names somebody who has since left", () => {
+    renderList([contradicted()]);
+
+    const household = screen
+      .getByRole("heading", { name: "Familia Muñóz" })
+      .closest("li") as HTMLElement;
+
+    expect(
+      within(household).getByText(/La respuesta ya no cuadra/i),
+    ).toBeInTheDocument();
+  });
+
+  it("flags it in the red the colour rule reserves for data that does not add up", () => {
+    const { container } = renderList([contradicted()]);
+
+    expect(
+      container.querySelector(".guest-list__answer-mismatch [data-tone]"),
+    ).toHaveAttribute("data-tone", "broken");
+  });
+
+  it("flags nothing on a row whose answer names only current members", () => {
+    // The quiet row is what makes the flagged one visible. A badge on every
+    // answered household is a badge nobody reads.
+    renderList([contradicted({ seatsConfirmed: 1, attendeeGuestIds: ["g1"] })]);
+
+    expect(screen.queryByText(/La respuesta ya no cuadra/i)).toBeNull();
+  });
+
+  it("flags nothing on a declined household, whatever ids its answer still holds", () => {
+    // A declined answer confirms nobody, so no membership change can contradict
+    // it. Sending the operator to reconcile an answer that seats no one is a
+    // false alarm, and false alarms are how a real one stops being read.
+    renderList([contradicted({ answer: "declined", seatsConfirmed: 0 })]);
+
+    expect(screen.queryByText(/La respuesta ya no cuadra/i)).toBeNull();
+  });
+
+  /**
+   * Task 4b.11: the attendee list resolves each id against the current members,
+   * and an id that resolves to nobody is rendered AS REMOVED.
+   *
+   * Neither of the two easy failures is acceptable. Crashing on a `get` that
+   * returns nothing takes the whole console down over data the schema permits.
+   * Filtering the id out is worse than crashing, because the answer then reads
+   * as one person shorter than the household actually confirmed — and it reads
+   * that way permanently, with nothing on screen to suggest otherwise.
+   */
+  it("names every attendee the answer confirmed, and says which of them is gone", () => {
+    renderList([contradicted()]);
+
+    const household = screen
+      .getByRole("heading", { name: "Familia Muñóz" })
+      .closest("li") as HTMLElement;
+    const attendees = within(household)
+      .getByRole("list", { name: /confirm/i })
+      .querySelectorAll("li");
+
+    // Two stored ids, two rendered entries. Not one.
+    expect(attendees).toHaveLength(2);
+    expect(attendees[0].textContent).toContain("Ana Muñóz");
+    expect(attendees[1].textContent).toMatch(/ya no figura/i);
+  });
+
+  it("renders no attendee list where the answer still names only current members", () => {
+    renderList([contradicted({ seatsConfirmed: 1, attendeeGuestIds: ["g1"] })]);
+
+    expect(screen.queryByRole("list", { name: /confirm/i })).toBeNull();
   });
 });
 

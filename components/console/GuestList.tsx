@@ -1,12 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { dispatchStateTone, rsvpAnswerTone } from "@/lib/design/console-status";
+import {
+  CONTRADICTED_ANSWER_TONE,
+  dispatchStateTone,
+  rsvpAnswerTone,
+} from "@/lib/design/console-status";
 import {
   DISPATCH_STATE_LABELS,
   type DispatchState,
 } from "@/lib/domain/dispatch-state";
 import {
   RSVP_ANSWER_LABELS,
+  classifyAnswerConsistency,
+  type AnswerConsistency,
   type ConsoleListRow,
 } from "@/lib/domain/console-list";
 import { consoleDispatchPath } from "@/lib/domain/dispatch-message";
@@ -108,6 +114,82 @@ function dispatchLabel(state: DispatchState): string {
   return DISPATCH_STATE_LABELS[state];
 }
 
+function people(count: number): string {
+  return count === 1 ? "persona" : "personas";
+}
+
+/**
+ * How far the stored answer and the current member list have drifted apart.
+ *
+ * Both numbers, because either one alone is unactionable: "somebody who
+ * confirmed is gone" does not say how much of the answer is still good, and a
+ * bare seat count does not say that anything is wrong with it.
+ */
+function mismatchSentence(consistency: AnswerConsistency): string {
+  const confirmed = consistency.attendees.length;
+  const gone = consistency.danglingGuestIds.length;
+
+  return (
+    `Confirmó a ${confirmed} ${people(confirmed)} y ${gone} de ellas ya no ` +
+    `${gone === 1 ? "figura" : "figuran"} entre los integrantes.`
+  );
+}
+
+/** The copy for an id that resolves to nobody. Never an omission, never a crash. */
+const REMOVED_ATTENDEE_LABEL = "Alguien que ya no figura en la invitación";
+
+/**
+ * The stored answer, where the household it belongs to has moved on without it.
+ *
+ * RENDERED FROM THE WRITE SIDE'S OWN RULE. `classifyAnswerConsistency` asks
+ * `classifyMembershipChangeImpact` — the same function `removeMemberAction` and
+ * `moveMemberAction` report with. A second rule here could drift from that one,
+ * and the two would then disagree about the same household in the same session:
+ * the form would say the answer is fine and the list would say it is not.
+ *
+ * NOTHING AT ALL FOR A ROW THAT STILL ADDS UP. A flag on every answered
+ * household is a flag nobody reads, which is the state the reference console's
+ * four-green-buttons row was in.
+ *
+ * WHY THE NAMES ARE HERE AND NOT ONE TAP DEEPER. "Something is inconsistent" is
+ * not actionable; "Fer confirmed and Fer is gone" is. The list is rendered whole,
+ * including the ids that resolve to nobody: an answer shown one name short reads
+ * as a smaller answer than the household gave, and it reads that way for good,
+ * because `rsvp_responses` is append-only and nothing will correct it later.
+ */
+function AnswerMismatchNotice({ row }: { readonly row: ConsoleListRow }) {
+  const consistency = classifyAnswerConsistency(row);
+
+  if (!consistency.contradicted) {
+    return null;
+  }
+
+  return (
+    <div className="guest-list__answer-mismatch mt-1 flex flex-col items-start gap-1">
+      <StatusBadge
+        label="La respuesta ya no cuadra"
+        tone={CONTRADICTED_ANSWER_TONE}
+      />
+
+      <p className="text-xs text-hint">{mismatchSentence(consistency)}</p>
+
+      <ul
+        aria-label={`Personas que confirmó la respuesta de ${row.greetingName}`}
+        className="guest-list__attendees flex flex-col gap-0.5"
+      >
+        {consistency.attendees.map((attendee) => (
+          <li
+            className="guest-list__attendee text-xs text-muted-foreground"
+            key={attendee.guestId}
+          >
+            {attendee.fullName ?? REMOVED_ATTENDEE_LABEL}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function GuestList({
   rows,
   updatePhoneAction,
@@ -189,6 +271,15 @@ export function GuestList({
             <p className="guest-list__seats mt-1 text-xs text-hint">
               {membersSentence(row)}
             </p>
+
+            {/*
+              Directly under the seat sentence, because it is that number the
+              answer disagrees with. An operator who reads "2 de 1 personas
+              confirmadas" and finds no explanation beside it concludes the
+              console is broken — and then stops trusting the counts that are
+              right.
+            */}
+            <AnswerMismatchNotice row={row} />
 
             {/*
               WHY THE ABSENCE IS WRITTEN OUT INSTEAD OF SHOWING NOTHING.

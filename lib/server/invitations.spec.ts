@@ -752,6 +752,84 @@ describe("listConsoleInvitations (local Supabase)", () => {
     });
   });
 
+  /**
+   * WHO the household confirmed, not just how many.
+   *
+   * `attendee_guest_ids` is the only record of that, and the console is the only
+   * surface that can make a stale entry in it legible. A row that arrives without
+   * the ids cannot: the badge and the D24 count both read this field, and with an
+   * empty array they report every household as perfectly consistent.
+   */
+  it("carries the attendee ids of the current answer out of rsvp_latest", async () => {
+    await withConsoleFixture(async (fixture) => {
+      await withDb(async (db) => {
+        await db.query(
+          `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+           values ($1, true, 1, $2)`,
+          [fixture.anaInvitationId, [fixture.anaGuestId]],
+        );
+      });
+
+      const rows = await listConsoleInvitations(createServerSupabaseClient(), {
+        viewerSenderId: fixture.anaId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+
+      expect(rows[0].attendeeGuestIds).toEqual([fixture.anaGuestId]);
+    });
+  });
+
+  /**
+   * The dangling uuid, produced by real SQL rather than described.
+   *
+   * `attendee_guest_ids` is a bare `uuid[]`: Postgres cannot foreign-key array
+   * elements, so removing a member leaves their id inside an answer that nothing
+   * cascades to and that `rsvp_responses` will never let anybody correct. The
+   * only available remedy is to see it.
+   */
+  it("surfaces an answer left naming a member who was afterwards removed", async () => {
+    await withConsoleFixture(async (fixture) => {
+      const removedGuestId = await withDb(async (db) => {
+        const guests = await db.query<{ id: string }>(
+          `insert into invitation_guests (invitation_id, full_name, phone_e164)
+           values ($1, 'Fer Muñóz', '+573001234568')
+           returning id`,
+          [fixture.anaInvitationId],
+        );
+        const removed = guests.rows[0].id;
+
+        await db.query(
+          `insert into rsvp_responses (invitation_id, attending, seats_confirmed, attendee_guest_ids)
+           values ($1, true, 2, $2)`,
+          [fixture.anaInvitationId, [fixture.anaGuestId, removed]],
+        );
+        // The couple's actual workflow: Fer already said yes, and now cannot
+        // come. The removal is PERMITTED — the stored answer is what goes stale.
+        await db.query("delete from invitation_guests where id = $1", [
+          removed,
+        ]);
+
+        return removed;
+      });
+
+      const rows = await listConsoleInvitations(createServerSupabaseClient(), {
+        viewerSenderId: fixture.anaId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+
+      expect(rows[0].attendeeGuestIds).toEqual([
+        fixture.anaGuestId,
+        removedGuestId,
+      ]);
+      expect(rows[0].guests.map((guest) => guest.id)).toEqual([
+        fixture.anaGuestId,
+      ]);
+      expect(summarizeConsoleList(rows).contradictedAnswers).toBe(1);
+    });
+  });
+
   it("keeps an opened link out of the confirmed-send count", async () => {
     await withConsoleFixture(async (fixture) => {
       await withDb(async (db) => {

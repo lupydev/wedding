@@ -54,6 +54,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     // Chosen on purpose: an unchosen recipient is itself a blocker now, so a
     // fixture without one would put every row in the wrong group.
     dispatchRecipientGuestId: "g1",
+    attendeeGuestIds: [],
     guests: [guest()],
     ...overrides,
   };

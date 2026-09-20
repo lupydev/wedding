@@ -76,6 +76,24 @@ export function rsvpAnswerTone(answer: RsvpAnswer): ConsoleTone {
   }
 }
 
+/**
+ * The tone for a stored answer its household's members no longer agree with.
+ *
+ * A constant rather than a function, because there is no union to be total over:
+ * the row says nothing at all while the answer still names only current members,
+ * so the only state that wears a colour is the contradicted one. A literal
+ * `"broken"` at the call site would be the very thing this module exists to
+ * remove — a colour chosen in the row by whoever wrote that row.
+ *
+ * BROKEN, NOT ATTENTION. Gold promises work the operator can finish. There is
+ * none: `rsvp_responses` is append-only against `service_role` too, and
+ * `attendee_guest_ids` is a bare `uuid[]` no foreign key can clean up, so a
+ * removed member's id stays in the answer permanently. What is left is data that
+ * does not add up and has to be read honestly, which is the same thing
+ * `no_recipient_chosen` is red for.
+ */
+export const CONTRADICTED_ANSWER_TONE: ConsoleTone = "broken";
+
 /** The tone for one readiness-check group. */
 export function preflightGroupTone(kind: PreflightBlockerKind): ConsoleTone {
   switch (kind) {

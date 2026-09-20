@@ -220,6 +220,28 @@ export interface ContradictedAnswer {
   readonly danglingGuestIds: readonly string[];
 }
 
+/**
+ * The attendees a stored answer names who are no longer members.
+ *
+ * The rule alone, with no answer identity in it. Deciding "does this answer
+ * still agree with this membership" needs the two lists and nothing else, and
+ * two callers ask it for different reasons: a removal reports what it just
+ * contradicted, and the console list reports what is contradicted right now.
+ *
+ * Extracted because the second caller has no `rsvp_responses.id` to offer. It
+ * had been passing the INVITATION id into a field named for the response id and
+ * discarding the result — contained, commented, and still a value of the wrong
+ * kind travelling through a typed field that cannot tell two strings apart.
+ */
+export function danglingAttendeeIds(
+  attendeeGuestIds: readonly string[],
+  memberIds: readonly string[],
+): readonly string[] {
+  const members = new Set(memberIds);
+
+  return attendeeGuestIds.filter((guestId) => !members.has(guestId));
+}
+
 export interface MembershipChangeImpact {
   readonly removedGuestIds: readonly string[];
   readonly contradictedAnswers: readonly ContradictedAnswer[];
@@ -263,8 +285,9 @@ export function classifyMembershipChangeImpact(input: {
     };
   }
 
-  const danglingGuestIds = answer.attendeeGuestIds.filter(
-    (id) => !after.has(id),
+  const danglingGuestIds = danglingAttendeeIds(
+    answer.attendeeGuestIds,
+    input.memberIdsAfter,
   );
 
   return {

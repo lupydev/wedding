@@ -27,6 +27,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     seatsConfirmed: 0,
     answeredAt: null,
     dispatchRecipientGuestId: null,
+    attendeeGuestIds: [],
     guests: [],
     ...overrides,
   };

@@ -4,13 +4,26 @@ import {
   ALL_INVITATIONS_POPULATION,
   RSVP_ANSWER_LABELS,
   assembleConsoleRows,
+  classifyAnswerConsistency,
   deriveRsvpAnswer,
   ownedPopulation,
   scopedMetrics,
   summarizeConsoleList,
   type ConsoleInvitationInput,
+  type ConsoleListGuest,
   type ConsoleListRow,
 } from "./console-list";
+
+function guest(id: string, fullName = `Persona ${id}`): ConsoleListGuest {
+  return {
+    id,
+    fullName,
+    isChild: false,
+    phoneE164: "+573001234567",
+    lineType: "mobile",
+    dispatchable: true,
+  };
+}
 
 function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
   return {
@@ -28,9 +41,22 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     seatsConfirmed: 0,
     answeredAt: null,
     dispatchRecipientGuestId: null,
+    attendeeGuestIds: [],
     guests: [],
     ...overrides,
   };
+}
+
+/** A household whose stored answer still names a member who has since left. */
+function contradictedRow(overrides: Partial<ConsoleListRow> = {}) {
+  return row({
+    answer: "attending",
+    seatsConfirmed: 2,
+    memberCount: 1,
+    guests: [guest("g1", "Ana Muñóz")],
+    attendeeGuestIds: ["g1", "g2"],
+    ...overrides,
+  });
 }
 
 describe("deriveRsvpAnswer", () => {
@@ -120,6 +146,96 @@ describe("summarizeConsoleList", () => {
     // The "has been invited" population: operator testimony only.
     expect(summary.operatorAssertedSends).toBe(2);
   });
+
+  /**
+   * THE COUNT THAT MAKES THE ROW BADGE IMPOSSIBLE TO MISS (design D24).
+   *
+   * `attendee_guest_ids` is a bare `uuid[]`, so removing or moving a member
+   * leaves their id inside a stored answer that append-only history can never
+   * correct. A badge on one row of a scrolling list is invisible until somebody
+   * reaches that row; a count is on screen before anybody scrolls.
+   */
+  it("counts an invitation whose stored answer names a member who has since left", () => {
+    const summary = summarizeConsoleList([
+      contradictedRow(),
+      row({
+        answer: "attending",
+        seatsConfirmed: 1,
+        memberCount: 1,
+        guests: [guest("g1", "Ana Muñóz")],
+        attendeeGuestIds: ["g1"],
+      }),
+    ]);
+
+    expect(summary.contradictedAnswers).toBe(1);
+  });
+
+  it("counts no contradiction where nobody answered at all", () => {
+    const summary = summarizeConsoleList([
+      row({ guests: [guest("g1")], attendeeGuestIds: [] }),
+    ]);
+
+    expect(summary.contradictedAnswers).toBe(0);
+  });
+
+  /**
+   * A declined answer confirms nobody, so nothing it names can be contradicted
+   * by a membership change — which is `classifyMembershipChangeImpact`'s rule,
+   * reused here rather than restated. A hand-rolled "is this id still a member?"
+   * filter would count this household and send the operator to reconcile an
+   * answer that seats no one.
+   */
+  it("leaves a declined answer out of the count, whatever ids it still holds", () => {
+    const summary = summarizeConsoleList([
+      contradictedRow({ answer: "declined", seatsConfirmed: 0 }),
+    ]);
+
+    expect(summary.contradictedAnswers).toBe(0);
+  });
+});
+
+describe("classifyAnswerConsistency — the stored answer, measured against today", () => {
+  it("resolves every id the answer names, and reports the ones that left", () => {
+    const consistency = classifyAnswerConsistency(
+      contradictedRow({ guests: [guest("g1", "Ana Muñóz")] }),
+    );
+
+    expect(consistency.contradicted).toBe(true);
+    expect(consistency.danglingGuestIds).toEqual(["g2"]);
+    // Every stored id keeps its place: an answer rendered one name short
+    // understates what the household actually confirmed.
+    expect(consistency.attendees).toEqual([
+      { guestId: "g1", fullName: "Ana Muñóz" },
+      { guestId: "g2", fullName: null },
+    ]);
+  });
+
+  it("reports an answer that names only current members as consistent", () => {
+    const consistency = classifyAnswerConsistency(
+      row({
+        answer: "attending",
+        seatsConfirmed: 1,
+        memberCount: 1,
+        guests: [guest("g1", "Ana Muñóz")],
+        attendeeGuestIds: ["g1"],
+      }),
+    );
+
+    expect(consistency.contradicted).toBe(false);
+    expect(consistency.danglingGuestIds).toEqual([]);
+    expect(consistency.attendees).toEqual([
+      { guestId: "g1", fullName: "Ana Muñóz" },
+    ]);
+  });
+
+  it("reports an unanswered household as consistent and naming nobody", () => {
+    const consistency = classifyAnswerConsistency(
+      row({ guests: [guest("g1", "Ana Muñóz")] }),
+    );
+
+    expect(consistency.contradicted).toBe(false);
+    expect(consistency.attendees).toEqual([]);
+  });
 });
 
 describe("scopedMetrics — the scope is in the label", () => {
@@ -204,6 +320,36 @@ describe("scopedMetrics — the scope is in the label", () => {
     );
     expect(sent?.text).toBe(
       "Marcadas como enviadas: 1 de 2 invitaciones de Ana Operadora",
+    );
+  });
+
+  /**
+   * D24's exact sentence, in the same shape as every other metric on the screen.
+   *
+   * A second rendering convention for this one count would be a line an operator
+   * reads differently from the ones beside it — and a count with no population
+   * is the defect `scopedMetrics` exists to prevent.
+   */
+  it("names the invitations whose stored answer no longer adds up", () => {
+    const metrics = scopedMetrics(
+      summarizeConsoleList([
+        contradictedRow(),
+        row({
+          answer: "attending",
+          seatsConfirmed: 1,
+          memberCount: 1,
+          guests: [guest("g1", "Ana Muñóz")],
+          attendeeGuestIds: ["g1"],
+        }),
+      ]),
+      ownedPopulation("Luzma"),
+    );
+    const contradicted = metrics.find(
+      (metric) => metric.key === "contradicted_answers",
+    );
+
+    expect(contradicted?.text).toBe(
+      "Respuestas que ya no cuadran: 1 de 2 invitaciones de Luzma",
     );
   });
 
@@ -337,6 +483,7 @@ describe("assembleConsoleRows", () => {
           invitationId: HOUSEHOLD,
           attending: false,
           seatsConfirmed: 0,
+          attendeeGuestIds: [],
           submittedAt: "2026-02-02T10:00:00Z",
         },
       ],
@@ -346,6 +493,48 @@ describe("assembleConsoleRows", () => {
     expect(rows[0].answer).toBe("declined");
     expect(rows[0].seatsConfirmed).toBe(0);
     expect(rows[0].answeredAt).toBe("2026-02-02T10:00:00Z");
+  });
+
+  /**
+   * WHY THE ATTENDEE IDS TRAVEL AT ALL.
+   *
+   * `attendee_guest_ids` is the only record of WHO a household confirmed, and it
+   * is a bare `uuid[]`: removing a member leaves their id in a row that
+   * append-only history can never correct. The console is where that becomes
+   * legible, and it cannot become legible from a count alone.
+   */
+  it("carries the attendee ids the stored answer names", () => {
+    const rows = assembleConsoleRows({
+      viewerSenderId: ANA,
+      defaultCountry: "CO",
+      invitations: [invitation()],
+      latestAnswers: [
+        {
+          invitationId: HOUSEHOLD,
+          attending: true,
+          seatsConfirmed: 2,
+          attendeeGuestIds: ["g1", "g2"],
+          submittedAt: "2026-02-02T10:00:00Z",
+        },
+      ],
+      events: [],
+    });
+
+    expect(rows[0].attendeeGuestIds).toEqual(["g1", "g2"]);
+  });
+
+  it("gives a household with no stored answer an empty attendee list, never null", () => {
+    // `[]` rather than a nullable field: every consumer asks "does this answer
+    // name somebody who left", and `[]` answers that with no null check.
+    const rows = assembleConsoleRows({
+      viewerSenderId: ANA,
+      defaultCountry: "CO",
+      invitations: [invitation()],
+      latestAnswers: [],
+      events: [],
+    });
+
+    expect(rows[0].attendeeGuestIds).toEqual([]);
   });
 
   it("leaves a household with no reduced response pending", () => {

@@ -1654,7 +1654,9 @@ async function readLatestAnswers(
 ): Promise<readonly ConsoleLatestAnswer[]> {
   const { data, error } = await client
     .from("rsvp_latest")
-    .select("invitation_id, attending, seats_confirmed, submitted_at")
+    .select(
+      "invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at",
+    )
     .in("invitation_id", invitationIds);
 
   if (error) {
@@ -1665,6 +1667,14 @@ async function readLatestAnswers(
     invitationId: row.invitation_id as string,
     attending: row.attending as boolean,
     seatsConfirmed: row.seats_confirmed as number,
+    // WHO was confirmed, and not only how many. The console is the only surface
+    // that can make a stale entry here legible: the column is a bare `uuid[]`
+    // (`0001`: `not null default '{}'`, so never null), Postgres cannot
+    // foreign-key array elements, and `rsvp_responses` is append-only against
+    // `service_role` too — so a removed member's id stays in the answer forever
+    // and nothing cascades to it. Reading the count without the ids would report
+    // every one of those households as perfectly consistent.
+    attendeeGuestIds: row.attendee_guest_ids as string[],
     submittedAt: row.submitted_at as string,
   }));
 }

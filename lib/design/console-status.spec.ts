@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONSOLE_TONE_VALUES,
+  CONTRADICTED_ANSWER_TONE,
   dispatchStateTone,
   preflightGroupTone,
   rsvpAnswerTone,
@@ -118,5 +119,22 @@ describe("preflightGroupTone", () => {
       expect(preflightGroupTone(kind)).not.toBe("");
     }
     expect(PREFLIGHT_BLOCKER_ORDER).toHaveLength(5);
+  });
+});
+
+describe("CONTRADICTED_ANSWER_TONE", () => {
+  it("is one of the four tones, like every other console status", () => {
+    expect(CONSOLE_TONE_VALUES).toContain(CONTRADICTED_ANSWER_TONE);
+  });
+
+  it("calls an answer its household no longer agrees with broken", () => {
+    // Red for the same reason `no_recipient_chosen` is red: the data does not
+    // add up and somebody has to look. Gold would promise work the operator can
+    // finish, and there is none — `rsvp_responses` is append-only, so the stored
+    // answer can never be corrected, only read honestly.
+    expect(CONTRADICTED_ANSWER_TONE).toBe("broken");
+    // And never green: on this screen green means exactly one thing, that the
+    // household is coming.
+    expect(CONTRADICTED_ANSWER_TONE).not.toBe(rsvpAnswerTone("attending"));
   });
 });

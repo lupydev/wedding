@@ -1,3 +1,4 @@
+import { danglingAttendeeIds } from "./invitation-draft";
 import {
   DISPATCH_STATE_LABELS,
   countsAsOperatorAssertedSend,
@@ -119,7 +120,79 @@ export interface ConsoleListRow {
    * a person nobody looked at, so the preflight reports it as a blocker.
    */
   readonly dispatchRecipientGuestId: string | null;
+  /**
+   * The members the stored answer named, straight from `attendee_guest_ids`.
+   *
+   * `[]` for an invitation nobody answered, NOT `null`. Every consumer asks the
+   * same question of this field — "does this answer name somebody who left?" —
+   * and `[]` answers it without a null check at each call site. A nullable field
+   * would buy nothing: there is no third state to distinguish, because a stored
+   * answer always names at least the people it confirmed and an absent answer
+   * names nobody either way.
+   *
+   * The column is a bare `uuid[]` with no foreign key (Postgres cannot key array
+   * elements), so an id here may name a guest who no longer exists. That is not
+   * repairable — `rsvp_responses` is append-only against `service_role` too — so
+   * it is made legible instead: see `classifyAnswerConsistency`.
+   */
+  readonly attendeeGuestIds: readonly string[];
   readonly guests: readonly ConsoleListGuest[];
+}
+
+/** One id from a stored answer, looked up in the household as it stands now. */
+export interface ResolvedAttendee {
+  readonly guestId: string;
+  /** The member's name, or `null` for an id the household no longer holds. */
+  readonly fullName: string | null;
+}
+
+/** One household's stored answer, measured against its current members. */
+export interface AnswerConsistency {
+  /**
+   * Every id the answer named, in stored order, each one resolved or marked
+   * unresolved. Never filtered: dropping an unresolvable id would render the
+   * answer one name short, which understates what the household confirmed.
+   */
+  readonly attendees: readonly ResolvedAttendee[];
+  /** The ids this invitation's members no longer include. */
+  readonly danglingGuestIds: readonly string[];
+  readonly contradicted: boolean;
+}
+
+/**
+ * Whether one row's stored answer still agrees with its member list.
+ *
+ * The rule itself is NOT restated here: `danglingAttendeeIds` owns it, and
+ * `classifyMembershipChangeImpact` asks it the same question for a removal. One
+ * definition of "this answer names somebody who is gone", two screens.
+ *
+ * What this function adds is the row's framing. A removal reports what it just
+ * contradicted; this reports what is contradicted right now, and it resolves
+ * every named id to a member so the operator sees WHO rather than how many.
+ */
+export function classifyAnswerConsistency(
+  row: ConsoleListRow,
+): AnswerConsistency {
+  // Only an ATTENDING answer can be contradicted. A decline confirms nobody, so
+  // nothing it names can stop agreeing with the membership, and an unanswered
+  // invitation names nobody at all.
+  const danglingGuestIds =
+    row.answer === "attending"
+      ? danglingAttendeeIds(
+          row.attendeeGuestIds,
+          row.guests.map((guest) => guest.id),
+        )
+      : [];
+  const names = new Map(row.guests.map((guest) => [guest.id, guest.fullName]));
+
+  return {
+    attendees: row.attendeeGuestIds.map((guestId) => ({
+      guestId,
+      fullName: names.get(guestId) ?? null,
+    })),
+    danglingGuestIds,
+    contradicted: danglingGuestIds.length > 0,
+  };
 }
 
 /** Counts over one scoped population of invitations. */
@@ -139,6 +212,15 @@ export interface ConsoleSummary {
    * the app cannot observe a send and an opened link is only a click.
    */
   readonly operatorAssertedSends: number;
+  /**
+   * Invitations in this scope whose stored answer names a since-removed member.
+   *
+   * On screen beside every other count, deliberately (design D24). The row badge
+   * alone would be decoration: a badge lives on one row of a scrolling list and
+   * is invisible until somebody reaches that row, while a count is read before
+   * anybody scrolls and cannot be styled away without deleting a metric.
+   */
+  readonly contradictedAnswers: number;
 }
 
 const EMPTY_DISPATCH_COUNTS = (): Record<DispatchState, number> => ({
@@ -160,6 +242,7 @@ export function summarizeConsoleList(
   let seats = 0;
   let seatsConfirmed = 0;
   let operatorAssertedSends = 0;
+  let contradictedAnswers = 0;
 
   for (const row of rows) {
     byDispatchState[row.dispatchState] += 1;
@@ -168,6 +251,10 @@ export function summarizeConsoleList(
 
     if (countsAsOperatorAssertedSend(row.dispatchState)) {
       operatorAssertedSends += 1;
+    }
+
+    if (classifyAnswerConsistency(row).contradicted) {
+      contradictedAnswers += 1;
     }
 
     if (row.answer === "attending") {
@@ -188,6 +275,7 @@ export function summarizeConsoleList(
     seatsConfirmed,
     byDispatchState,
     operatorAssertedSends,
+    contradictedAnswers,
   };
 }
 
@@ -300,6 +388,15 @@ export function scopedMetrics(
       summary.seats,
       `personas invitadas en ${population}`,
     ),
+    // D24. Measured against households rather than against people, because the
+    // thing being counted is an invitation whose answer no longer adds up.
+    metric(
+      "contradicted_answers",
+      "Respuestas que ya no cuadran",
+      summary.contradictedAnswers,
+      households,
+      population,
+    ),
   ];
 }
 
@@ -326,6 +423,8 @@ export interface ConsoleInvitationInput {
 export interface ConsoleLatestAnswer extends LatestRsvpRef {
   readonly invitationId: string;
   readonly submittedAt: string;
+  /** `attendee_guest_ids`, verbatim — a bare `uuid[]` with no foreign key. */
+  readonly attendeeGuestIds: readonly string[];
 }
 
 /** One `dispatch_events` row, as the reduction cares about it. */
@@ -389,6 +488,7 @@ export function assembleConsoleRows(input: {
       answer: deriveRsvpAnswer(answer),
       seatsConfirmed: answer?.seatsConfirmed ?? 0,
       answeredAt: answer?.submittedAt ?? null,
+      attendeeGuestIds: answer?.attendeeGuestIds ?? [],
       guests: invitation.guests.map((guest) => ({
         id: guest.id,
         fullName: guest.fullName,
