@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 
 import compromiso from "@/img/compromiso.jpg";
 
 import { MusicToggle } from "@/components/landing/MusicToggle";
 import { SaveTheDate } from "@/components/landing/SaveTheDate";
 import { COUPLE_NAMES, formatWeddingDate } from "@/lib/domain/wedding-day";
+
+import { STREAM_PATH } from "./robots";
 
 /**
  * The public save-the-date.
@@ -227,7 +230,43 @@ export default function Home() {
             Nos casamos
           </p>
 
-          <SaveTheDate />
+          {/*
+            WRAPPED WITH THE LINK, AND THE WRAPPER IS NOT DECORATION.
+
+            Below `lg` this column is `justify-between` with exactly two
+            children: the script line at the top and this block at the foot. A
+            third child would have made it three evenly spread rows and pushed
+            the heading into the middle of the photograph, across the couple.
+            One wrapper keeps the count at two.
+          */}
+          <div className="flex flex-col items-center gap-7">
+            <SaveTheDate />
+
+            {/*
+              The door to `/transmision`, for the guests who cannot be in the
+              room. Phrased in the infinitive rather than conjugated: the rest
+              of this product addresses households as "ustedes", and an
+              imperative plural here ("acompáñennos") reads stiff for what is
+              really a signpost.
+
+              A `<Link>` rather than an `<a>`: Next prefetches the route on
+              hover, and that page reads the database, so the round trip has
+              already started by the time the tap lands.
+            */}
+            <Link
+              href={STREAM_PATH}
+              className="
+                rounded-full border border-[#f6efe2]/25 bg-black/20 px-5 py-2.5
+                text-sm text-[#f6efe2]/85 backdrop-blur-sm transition-colors
+                duration-(--console-motion-fast) ease-(--ease-console-out)
+                hover:bg-black/40 hover:text-[#f6efe2]
+                focus-visible:outline-2 focus-visible:outline-offset-2
+                focus-visible:outline-[#f6efe2]
+              "
+            >
+              Cómo acompañarnos por Zoom
+            </Link>
+          </div>
         </div>
       </div>
 

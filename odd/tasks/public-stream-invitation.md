@@ -105,19 +105,60 @@ units. TDD: **strict**. Runner `npm test` (`vitest run`).
 
 ### Unit B — the page, and the way in
 
-- [ ] B1. `components/invitation/StreamInvitation.spec.tsx`: names the couple,
+- [x] B1. `components/invitation/StreamInvitation.spec.tsx`: names the couple,
       carries the four details verbatim, says the ceremony is streamed. RED.
-- [ ] B2. `components/invitation/StreamInvitation.tsx`. GREEN.
-- [ ] B3. `app/transmision/page.tsx`: reads the row, composes, `metadata` with
+- [x] B2. `components/invitation/StreamInvitation.tsx`. GREEN.
+- [x] B3. `app/transmision/page.tsx`: reads the row, composes, `metadata` with
       `robots: { index: false }`.
-- [ ] B4. `app/page.tsx`: the door — a link to `/transmision`.
-- [ ] B5. `npm test` + typecheck + lint + format + build, and drive both pages
+- [x] B4. `app/page.tsx`: the door — a link to `/transmision`.
+- [x] B5. `npm test` + typecheck + lint + format + build, and drive both pages
       in a real browser at phone and laptop widths. Commit unit B.
 
 ## Progress
 
-Unit A done: StreamDetails extracted with CeremonyStream.spec untouched and green; the stream path is disallowed.
+Both units done.
+
+- Unit A — commit `884cc0e`. `StreamDetails` extracted, `CeremonyStream.spec`
+  untouched and green, `STREAM_PATH` disallowed.
+- Unit B — `StreamInvitation`, `app/transmision/page.tsx`, the door on `/`.
+
+Verified, not assumed:
+
+- 2048 tests, 108 files, green. typecheck, lint, format:check, build clean.
+- `curl /robots.txt` returns `Disallow: /transmision` alongside `/i/` and
+  `/console`, and no `Disallow: /`.
+- Driven in Chromium: tapping the link on `/` lands on `/transmision`, the
+  served `<meta name="robots">` reads `noindex, nofollow`, zero console errors.
+- The four values render verbatim. The live row still holds seeded placeholders
+  for the time, the meeting id and the passcode, and the page shows them as
+  such — which is the doctrine working, and also the couple's to-do list.
+
+**One defect caught by reading the build output rather than trusting a
+comment.** The first build reported `○ (Static)` for this route: reading the
+database is NOT enough to make a page dynamic, because Next cannot tell that a
+promise touches a network. The meeting id and passcode were baked into the build
+output, so correcting either from the console would have changed nothing until a
+redeploy — silently, on the one day it matters. Fixed with `await connection()`,
+which the installed docs name as the successor to
+`export const dynamic = 'force-dynamic'`
+(`04-functions/use-search-params.md:264`). The build now reports `ƒ`.
+
+A second, smaller one caught by looking: the blurred backdrop rendered as flat
+black, so the visual continuity its comment claimed did not exist. The
+photograph is a dusk shot; it needed the exposure lifted, not only the opacity.
+
+## Discovered while verifying
+
+The live `ceremony` row ALREADY holds real values for `couple_names`
+("Luis & Michell") and `ceremony_date` ("28-11-2026"). The landing renders both
+from constants in `lib/domain/wedding-day.ts` instead. The duplication recorded
+in `odd/tasks/wedding-landing.md` as bounded and theoretical is therefore live:
+two places hold this wedding's date, and they already disagree in form.
 
 ## Next step
 
-B1.
+For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`
+in the console — the stream page shows the seeded placeholders until they do.
+
+For the code: wire `/` to the `ceremony` row and delete the constants. Only the
+countdown instant still needs a column that does not exist.
