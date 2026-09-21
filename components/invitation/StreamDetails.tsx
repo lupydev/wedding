@@ -58,10 +58,25 @@ export interface StreamDetailsValues {
 export function StreamDetails({
   ceremony,
   className,
+  showDate = true,
 }: {
   readonly ceremony: StreamDetailsValues;
   /** The host surface's own spacing. Never its colours. */
   readonly className?: string;
+  /**
+   * Whether to state the day, or leave it to something above.
+   *
+   * False on `/transmision`, where the landing's announcement sits directly
+   * above this block and names the day in prose. Repeating it put the same
+   * date on one small screen twice in two formats — "sábado, 28 de noviembre
+   * de 2026" and "28-11-2026" — which reads as a defect however good each
+   * reason is.
+   *
+   * The HOUR is never dropped: nothing above it says the hour, and a guest
+   * joining a call needs one. The invitation behind the phone gate keeps both,
+   * because it has no announcement above it.
+   */
+  readonly showDate?: boolean;
 }) {
   return (
     /*
@@ -80,9 +95,13 @@ export function StreamDetails({
       aria-label="Detalles de la transmisión"
     >
       <div className="mb-4 flex items-baseline justify-center gap-2 text-sm opacity-70">
-        <dt className="sr-only">Fecha</dt>
-        <dd className="m-0">{ceremony.ceremonyDate}</dd>
-        <span aria-hidden="true">·</span>
+        {showDate ? (
+          <>
+            <dt className="sr-only">Fecha</dt>
+            <dd className="m-0">{ceremony.ceremonyDate}</dd>
+            <span aria-hidden="true">·</span>
+          </>
+        ) : null}
         <dt className="sr-only">Hora</dt>
         <dd className="m-0">{ceremony.ceremonyTime}</dd>
       </div>

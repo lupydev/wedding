@@ -1,13 +1,14 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { COUPLE_NAMES } from "@/lib/domain/wedding-day";
+
 import {
   StreamInvitation,
   type StreamInvitationCeremony,
 } from "./StreamInvitation";
 
 const CEREMONY: StreamInvitationCeremony = {
-  coupleNames: "Luis & Michell",
   ceremonyDate: "sábado 28 de noviembre de 2026",
   ceremonyTime: "5:00 p. m.",
   streamMeetingId: "123 4567 8901",
@@ -28,15 +29,50 @@ const CALENDAR = {
  * public and ungated, so anything it COULD render, a stranger could read.
  */
 describe("StreamInvitation", () => {
-  it("names the couple as its heading", () => {
+  /**
+   * THE HEADING COMES FROM `SaveTheDate`, WHICH IS THE LANDING'S OWN BLOCK.
+   *
+   * Asserted against the domain constant rather than a prop, because that is
+   * where it genuinely comes from. This page used to render its own `<h1>` from
+   * the `ceremony` row; sharing the landing's block is what makes the two pages
+   * identical instead of merely similar, and a copy would have drifted on the
+   * first tweak to either.
+   */
+  it("carries the landing's own announcement block", () => {
     render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
     expect(
-      screen.getByRole("heading", { level: 1, name: CEREMONY.coupleNames }),
+      screen.getByRole("heading", { level: 1, name: COUPLE_NAMES }),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("save-the-date-when")).toBeInTheDocument();
   });
 
-  it("carries the four details, each beside its own label", () => {
+  /**
+   * INCLUDING THE COUNTDOWN.
+   *
+   * The couple asked for this page to open exactly as the landing does. The
+   * countdown is the part that would have been quietly left out — it is the
+   * one element that does not look like copy — and it is the reason the whole
+   * announcement is shared rather than reproduced.
+   */
+  it("counts down here too", () => {
+    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+
+    expect(screen.getByTestId("countdown-summary")).toBeInTheDocument();
+  });
+
+  /**
+   * THREE PAIRS, NOT FOUR, AND THE MISSING ONE IS DELIBERATE.
+   *
+   * The announcement above already names the day in prose. Repeating it here
+   * put the same date on one small screen twice, in two formats, which reads as
+   * a defect however good each reason is. The HOUR stays: nothing above says
+   * it, and a guest joining a call needs one.
+   *
+   * Read as PAIRS. Asserting the texts are each "somewhere on the page" would
+   * pass with the passcode rendered where the meeting id belongs.
+   */
+  it("carries the joining details, each beside its own label", () => {
     render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
     const details = screen.getByRole("group", { name: /transmisión/i });
@@ -49,11 +85,22 @@ describe("StreamInvitation", () => {
           term.nextElementSibling?.textContent,
         ]),
     ).toEqual([
-      ["Fecha", CEREMONY.ceremonyDate],
       ["Hora", CEREMONY.ceremonyTime],
       ["ID de la reunión", CEREMONY.streamMeetingId],
       ["Clave de acceso", CEREMONY.streamPasscode],
     ]);
+  });
+
+  /**
+   * And the day is not repeated, which is the point of dropping it.
+   *
+   * The date the page DOES show comes from `SaveTheDate` above, in prose and
+   * from the domain. This asserts the row's own rendering of it is absent.
+   */
+  it("does not state the day twice", () => {
+    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+
+    expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
   });
 
   /**

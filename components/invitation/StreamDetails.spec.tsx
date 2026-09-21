@@ -167,4 +167,35 @@ describe("StreamDetails", () => {
       expect(error).not.toHaveBeenCalled();
     });
   });
+
+  /**
+   * THE DATE CAN BE LEFT OUT WHERE SOMETHING ABOVE ALREADY SAID IT.
+   *
+   * On `/transmision` the landing's announcement sits directly above this
+   * block and names the day in prose. Repeating it here put the same date on
+   * one small screen twice, in two formats — "sábado, 28 de noviembre de 2026"
+   * and "28-11-2026" — which reads as a defect however good each reason is.
+   *
+   * The HOUR stays, because nothing above it says the hour and a stream guest
+   * needs one. The invitation behind the phone gate keeps both: it has no
+   * announcement above it.
+   */
+  describe("when the date is already stated above", () => {
+    it("keeps the hour and drops the day", () => {
+      render(<StreamDetails ceremony={CEREMONY} showDate={false} />);
+
+      const terms = screen.getAllByRole("term").map((term) => term.textContent);
+
+      expect(terms).toEqual(["Hora", "ID de la reunión", "Clave de acceso"]);
+      expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
+      expect(screen.getByText(CEREMONY.ceremonyTime)).toBeInTheDocument();
+    });
+
+    it("still shows both by default", () => {
+      render(<StreamDetails ceremony={CEREMONY} />);
+
+      expect(screen.getByText(CEREMONY.ceremonyDate)).toBeInTheDocument();
+      expect(screen.getByText(CEREMONY.ceremonyTime)).toBeInTheDocument();
+    });
+  });
 });

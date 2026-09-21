@@ -139,7 +139,6 @@ export default async function StreamPage() {
         */}
         <StreamInvitation
           ceremony={{
-            coupleNames: ceremony.coupleNames,
             ceremonyDate: ceremony.ceremonyDate,
             ceremonyTime: ceremony.ceremonyTime,
             streamMeetingId: ceremony.streamMeetingId,

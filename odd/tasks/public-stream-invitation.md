@@ -411,6 +411,36 @@ at either size, zero console errors, and the copy button still writes to a real
 clipboard from the dark surface. 2092 tests green; typecheck, lint, format and
 build clean.
 
+### Unit K — the announcement is one component, not two that match
+
+The couple asked for `/transmision` to open exactly as the landing does,
+countdown included. It renders `SaveTheDate` now — the landing's own block —
+rather than reproducing its four elements. Rebuilding them would have matched
+today and drifted on the first tweak to either, which is the failure this
+capability has already paid for twice.
+
+Consequences taken rather than worked around:
+
+- `StreamInvitationCeremony` lost `coupleNames`. The heading comes from the
+  domain through `SaveTheDate`, so the prop was unused — and an unused prop is
+  a lie about where a value comes from. Its spec asserts the heading against
+  `COUPLE_NAMES` for the same reason: against the fixture it would have passed
+  for the wrong reason the day the two diverged.
+- The page now reads the couple and the date from `lib/domain/wedding-day.ts`
+  rather than the `ceremony` row, which is the landing's known debt extended by
+  one surface. When that row gains a machine-readable instant, both pages start
+  reading it together.
+- `StreamDetails` gained `showDate`. With the announcement directly above it,
+  the same date appeared on one small screen twice in two formats — "sábado, 28
+  de noviembre de 2026" and "28-11-2026" — which reads as a defect however good
+  each reason is. The HOUR is never dropped: nothing above states it and a
+  guest joining a call needs one. The invitation behind the phone gate keeps
+  both, because it has no announcement above it.
+
+Verified at 390×844 and 1440×900: one screen on a phone, no horizontal overflow
+at either size, zero console errors. 2096 tests green; typecheck, lint, format
+and build clean.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`

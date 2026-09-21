@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SaveTheDate } from "@/components/landing/SaveTheDate";
+
 import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
 
 /**
@@ -30,9 +32,16 @@ import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
  * Guest-facing copy is Spanish, neutral register. Identifiers and comments stay
  * English.
  */
-export interface StreamInvitationCeremony extends StreamDetailsValues {
-  readonly coupleNames: string;
-}
+/**
+ * Exactly the stream half of the `ceremony` row, and nothing more.
+ *
+ * `coupleNames` used to be here, for an `<h1>` this component rendered itself.
+ * The announcement is `SaveTheDate` now — the landing's own block, shared so
+ * the two pages are identical rather than similar — and it reads the couple
+ * from the domain. An unused prop is a lie about where a value comes from, so
+ * it went with the heading.
+ */
+export type StreamInvitationCeremony = StreamDetailsValues;
 
 /**
  * Where "add it to my calendar" points.
@@ -66,28 +75,38 @@ export function StreamInvitation({
    */
   return (
     <>
-      <div className="flex w-full max-w-md flex-col items-center gap-5 text-center">
+      <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
         <p className="font-script text-3xl text-[#f6efe2]/90 [text-shadow:0_1px_14px_rgba(0,0,0,0.6)] sm:text-4xl">
           Nos casamos
         </p>
 
-        <h1 className="font-display text-4xl leading-[1.05] text-[#f6efe2] [text-shadow:0_2px_24px_rgba(0,0,0,0.55)] sm:text-5xl">
-          {ceremony.coupleNames}
-        </h1>
+        {/*
+          THE LANDING'S OWN ANNOUNCEMENT, SHARED RATHER THAN REPRODUCED.
+
+          The couple asked for this page to open exactly as `/` does, countdown
+          included. Rebuilding those four elements here would have matched today
+          and diverged on the first tweak to either — the failure this session
+          has already paid for twice. One component, two pages.
+
+          It reads the couple and the date from `lib/domain/wedding-day.ts`
+          rather than from the `ceremony` row, which is the same known debt the
+          landing carries: when that row gains a machine-readable instant, both
+          pages start reading it together.
+        */}
+        <SaveTheDate />
 
         {/*
-          WARMTH FIRST, THE PRACTICAL FACT SECOND.
+          WARMTH AFTER THE ANNOUNCEMENT, THE PRACTICAL FACT INSIDE IT.
 
-          This page is read by the guests who cannot be in the room. Opened with
-          the logistics it reads as a calendar entry; opened with "te esperamos"
-          it reads as what it is, and the streaming is then the answer to how.
+          This page is read by the guests who cannot be in the room, so it still
+          has to say it is an invitation and not a set of credentials.
 
           SINGULAR, AND THAT IS A DELIBERATE BREAK FROM THE REST OF THE PRODUCT.
           `/i/[slug]` says "ustedes" throughout and is right to: that invitation
           belongs to a household and names every member. This page is read by
           one person at a time, so it speaks to one person.
         */}
-        <p className="max-w-sm text-[#f6efe2]/85 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">
+        <p className="max-w-sm text-sm text-[#f6efe2]/85 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">
           Te esperamos. Vamos a transmitir la ceremonia en vivo para que puedas
           acompañarnos desde donde estés.
         </p>
@@ -107,7 +126,12 @@ export function StreamInvitation({
           `StreamDetails` carries no colours of its own, so it simply becomes
           cream here and stays near-black on the invitation's paper.
         */}
-        <StreamDetails ceremony={ceremony} className="block w-full text-left" />
+        <StreamDetails
+          ceremony={ceremony}
+          className="block w-full text-left"
+          /* The announcement above already names the day, in prose. */
+          showDate={false}
+        />
 
         {/*
           THE REMINDER, WHICH IS THE ONLY THING ON THIS PAGE THAT SPEAKS UP BY
