@@ -57,19 +57,58 @@ describe("StreamInvitation", () => {
   });
 
   /**
-   * IT MUST SAY WHAT KIND OF INVITATION THIS IS.
+   * IT MUST SAY IT IS AN INVITATION BEFORE IT SAYS ANYTHING PRACTICAL.
    *
-   * A page that shows a date and a meeting id without saying "we are streaming
-   * the ceremony, join us from wherever you are" reads as a calendar entry. The
-   * guests who land here are the ones who cannot be in the room, and the first
-   * thing they should read is that they were thought of.
+   * A page that opens with a date and a meeting id reads as a calendar entry.
+   * The guests who land here are the ones who cannot be in the room, and the
+   * first thing they should read is that they were thought of — so the warmth
+   * comes first and the streaming fact second.
    */
-  it("says the ceremony is streamed and they are invited to it", () => {
+  it("welcomes the reader before it explains anything", () => {
     render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
+    expect(screen.getByText(/te esperamos/i)).toBeInTheDocument();
     expect(
       screen.getByText(/transmitir la ceremonia en vivo/i),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * IT SPEAKS TO ONE PERSON, NOT TO A HOUSEHOLD.
+   *
+   * `/i/[slug]` addresses a household and says "ustedes" throughout, correctly:
+   * that invitation belongs to a family and names every member. THIS page is
+   * read by one person at a time, and the couple asked for it to sound like it.
+   *
+   * The plural forms are what would drift back in, because the rest of the
+   * product is written in them and this component sits in the same folder. Each
+   * one asserted here is a form that appeared in this very copy before it was
+   * rewritten.
+   */
+  it("keeps the whole page in the singular", () => {
+    const { container } = render(
+      <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
+    );
+
+    expect(container.textContent).not.toMatch(
+      /\bpueden\b|\bestén\b|\babran\b|\belijan\b|\bescriban\b/i,
+    );
+  });
+
+  /**
+   * AND IT DOES NOT EXPLAIN ZOOM.
+   *
+   * It carried a line telling the reader to open Zoom, choose "Unirse" and type
+   * the id before the passcode. The couple removed it for a reason worth
+   * recording: everybody already knows how to join a Zoom call, and a page that
+   * explains it anyway is a page that thinks less of whoever is reading it.
+   */
+  it("does not explain how to use Zoom", () => {
+    const { container } = render(
+      <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
+    );
+
+    expect(container.textContent).not.toMatch(/unirse/i);
   });
 
   /**

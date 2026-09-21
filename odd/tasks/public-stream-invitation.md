@@ -318,6 +318,31 @@ Verified against a real Chromium with clipboard permission: the value actually
 reached the clipboard, the button read "Copiado" and reverted after two seconds,
 zero console errors. 2090 tests green; typecheck, lint, format and build clean.
 
+### Unit H — the page speaks to one person, and explains nothing
+
+Two copy changes from the couple, and one of them carries a decision.
+
+The lead was "Vamos a transmitir la ceremonia en vivo por Zoom, así que pueden
+acompañarnos desde donde estén." It is now "Te esperamos. Vamos a transmitir la
+ceremonia en vivo para que puedas acompañarnos desde donde estés." Warmth first,
+the practical fact second: opened with logistics this page reads as a calendar
+entry, and the guests who land here are the ones who cannot be in the room.
+
+THE REGISTER CHANGED WITH IT, DELIBERATELY. "Te esperamos" and "puedas" are
+singular, and the rest of the product is plural. That is not an inconsistency
+to fix later — `/i/[slug]` addresses a HOUSEHOLD and names every member, so
+"ustedes" is right there; this page is read by one person at a time. The
+couple's own wording for the landing's door ("Acompáñanos por Zoom") had already
+chosen the singular. The page is now singular throughout, and a test asserts it:
+the plural forms are what would drift back in, since this component sits in the
+same folder as the ones written in them.
+
+And the line explaining how to use Zoom is gone. The couple's reason is worth
+recording: everybody already knows how to join a Zoom call, and a page that
+explains it anyway is a page that thinks less of whoever is reading it.
+
+2092 tests green; typecheck, lint, format and build clean.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`

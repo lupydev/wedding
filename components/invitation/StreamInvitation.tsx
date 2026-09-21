@@ -59,9 +59,21 @@ export function StreamInvitation({
         {ceremony.coupleNames}
       </h1>
 
+      {/*
+        WARMTH FIRST, THE PRACTICAL FACT SECOND.
+        
+        This page is read by the guests who cannot be in the room. Opened with
+        the logistics it reads as a calendar entry; opened with "te esperamos"
+        it reads as what it is, and the streaming is then the answer to how.
+        
+        SINGULAR, AND THAT IS A DELIBERATE BREAK FROM THE REST OF THE PRODUCT.
+        `/i/[slug]` says "ustedes" throughout and is right to: that invitation
+        belongs to a household and names every member of it. This page is read
+        by one person at a time, so it speaks to one person.
+      */}
       <p className="max-w-sm text-[#f6efe2]/85 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">
-        Vamos a transmitir la ceremonia en vivo por Zoom, así que pueden
-        acompañarnos desde donde estén.
+        Te esperamos. Vamos a transmitir la ceremonia en vivo para que puedas
+        acompañarnos desde donde estés.
       </p>
 
       {/*
@@ -92,17 +104,6 @@ export function StreamInvitation({
         */}
         <StreamDetails ceremony={ceremony} className="block" />
       </div>
-
-      {/*
-        The one instruction that is not on the card, because it is advice rather
-        than a value to copy: Zoom asks for the id first and the passcode
-        second, and a guest who pastes the passcode into the id field gets an
-        error that explains nothing.
-      */}
-      <p className="text-sm text-[#f6efe2]/70 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">
-        Abran Zoom, elijan <span className="whitespace-nowrap">“Unirse”</span> y
-        escriban primero el ID y después la clave.
-      </p>
 
       {/*
         THE REMINDER, WHICH IS THE ONLY THING ON THIS PAGE THAT SPEAKS UP BY
