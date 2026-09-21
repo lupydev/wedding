@@ -272,6 +272,52 @@ link and the navigation was the real one.
 
 2085 tests green; typecheck, lint, format and build clean.
 
+### Unit G — the card stops being a form
+
+The four values were four identical rows in two columns, and that was the
+defect: they are not four of the same thing. The date and the time are READ,
+glanced at once for context. The meeting id and the passcode are TRANSCRIBED —
+typed into another application, on a phone, often while the ceremony is already
+starting. Giving an eleven digit number the same weight as the word "Fecha" is
+what made it read as a form.
+
+So the date and time became a centred caption, the two credentials became the
+content, and each carries a copy button. The caption's `<dt>` labels are
+`sr-only` rather than deleted: "28-11-2026 · 5:00 p. m." needs no label for a
+reader and very much needs one for a screen reader.
+
+`StreamDetails` is now a client component, which `CeremonyStream` inherits — the
+household behind the phone gate gets the same card and the same buttons, which
+is the point of having extracted it.
+
+TWO CORRECTIONS MADE WHILE BUILDING IT, both worth keeping:
+
+- The credentials were set in `font-display` (Yeseva One) beside a comment
+  arguing that tabular figures matter here. The two contradicted each other:
+  Yeseva is a decorative single-weight serif with no tabular set, so the utility
+  had nothing to apply. They are set in the body grotesque now, which is the
+  face that keeps a 1 from becoming a 7.
+- Two tests went red because `stubClipboard` ran BEFORE `userEvent.setup()`, and
+  user-event installs a working clipboard fake of its own. The stub was being
+  overwritten, the write "succeeded", and the refusal case could not happen at
+  all. Set the user up first, then replace the clipboard.
+
+The button is icon-only and so is its confirmation, deliberately: its accessible
+name carries everything ("Copiar el ID de la reunión", then "Copiado"), so it
+contributes no TEXT to the `<dd>` it sits in. That is what keeps each value
+readable as exactly the value — by a screen reader, and by the pair assertions
+this card has had since it was extracted.
+
+A refused write does NOT set the copied state. `navigator.clipboard` is
+undefined outside a secure context and can be refused by permission inside one;
+a button claiming "copiado" over an empty clipboard sends a guest to Zoom to
+paste nothing, convinced they have the id. The value stays on screen either way,
+so failing quietly costs nothing and lying costs the call.
+
+Verified against a real Chromium with clipboard permission: the value actually
+reached the clipboard, the button read "Copiado" and reverted after two seconds,
+zero console errors. 2090 tests green; typecheck, lint, format and build clean.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`

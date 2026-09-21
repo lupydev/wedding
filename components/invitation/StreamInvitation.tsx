@@ -79,15 +79,18 @@ export function StreamInvitation({
         It re-declares the palette, so the block below needs no colours of its
         own.
       */}
-      <div className="paper-surface w-full rounded-[var(--radius)] px-6 py-6 text-left shadow-[0_18px_60px_rgba(0,0,0,0.5)]">
+      <div className="paper-surface w-full rounded-[var(--radius)] px-6 py-7 text-left shadow-[0_18px_60px_rgba(0,0,0,0.5)]">
         <h2 className="mb-4 text-center font-display text-lg">
           Para entrar a la transmisión
         </h2>
 
-        <StreamDetails
-          ceremony={ceremony}
-          className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm [&>dd]:font-medium [&>dd]:break-words [&>dt]:text-[var(--paper-hint)]"
-        />
+        {/*
+          No grid here any more. `StreamDetails` owns its own arrangement now
+          that its four values are no longer four equal rows — a caption for the
+          date and time, and the two credentials as the content — and a layout
+          imposed from outside would fight it.
+        */}
+        <StreamDetails ceremony={ceremony} className="block" />
       </div>
 
       {/*
