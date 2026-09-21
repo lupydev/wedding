@@ -52,6 +52,26 @@ asserted from there. Two tests that used to read per-operator sentences now
 prove their invariant over rows in `console-list.spec.ts` instead, and the two
 that must stay in the browser assert the shape (`/^\d+ de \d+$/`) and a floor.
 
+## Done — adding somebody to a household
+
+"Agregar integrante" claimed to add a person and added nobody: it opened a blank
+card, and the person reached the invitation on a SECOND press, on a different
+button, further down. An operator who pressed it once and walked away had added
+no one, and the screen had told them otherwise.
+
+- The button says what it opens: **"Agregar otra persona"**.
+- The card it opens is legended **"Integrante N · sin guardar"**, and only while
+  it is unsaved. On the create form no card carries it — the whole form is one
+  submit, so there is nothing to distinguish.
+- The cursor lands in the new name. It was press, AIM, type, save; the aiming
+  was on a phone, at a field that had just appeared below the fold.
+
+Two consequences taken rather than worked around: the spec's `row(position)`
+helper matched the legend as a literal, so it became a pattern anchored at both
+ends (`Integrante 1` must not match `Integrante 10`); and `autoFocus` is driven
+by a state that starts `null`, so no card can match it on the first render and
+nothing steals focus when the page loads.
+
 ## Next
 
 - Merge the two guest lists into one. The home still renders the operator's own

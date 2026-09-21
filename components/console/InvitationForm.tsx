@@ -412,6 +412,15 @@ export function InvitationForm({
   // and the seat cap: the couple's guest list, silently wrong.
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set());
 
+  /**
+   * The card whose name field should take the cursor, or `null` for none.
+   *
+   * `null` on the first render, always, which is what keeps this from stealing
+   * focus when the page loads: no card's key can match it, so `autoFocus` is
+   * false everywhere until the operator presses "Agregar otra persona".
+   */
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+
   const derivedName = derivedNameOf(rows);
   const shownName = source === "derived" ? (derivedName ?? "") : customName;
 
@@ -651,8 +660,17 @@ export function InvitationForm({
               className="invitation-form__member flex flex-col gap-2 rounded-lg border border-input px-3 py-3"
               key={row.key}
             >
+              {/*
+                The marker is only on cards that are NOT on the invitation yet,
+                and that is the whole signal: on every card it would be
+                decoration, and an operator learns to ignore decoration.
+
+                On the create form every card is unsaved — the whole form is one
+                submit — so there is nothing to distinguish and no marker.
+              */}
               <legend className="px-1 text-xs text-muted-foreground">
                 Integrante {index + 1}
+                {invitation !== null && row.id === null ? " · sin guardar" : ""}
               </legend>
 
               <div className="flex flex-col gap-1.5">
@@ -660,6 +678,9 @@ export function InvitationForm({
                   Nombre completo
                 </Label>
                 <Input
+                  // Only ever true for a card the operator just opened: the
+                  // state starts `null`, so nothing is focused on load.
+                  autoFocus={row.key === focusKey}
                   className="h-11"
                   id={`member-${row.key}-full-name`}
                   // The four member columns travel with the CREATE submission and
@@ -768,13 +789,30 @@ export function InvitationForm({
           );
         })}
 
+        {/*
+          IT USED TO SAY "Agregar integrante", AND IT ADDED NOBODY.
+
+          Pressing it opens a blank card; the person reaches the invitation on a
+          SECOND press, on a different button, further down. An operator who
+          pressed this once and walked away had added no one, and the screen had
+          told them otherwise.
+
+          So it says what it opens, the card it opens says it is not saved yet,
+          and the cursor lands in the name — press, type, save, with nothing to
+          aim at in between.
+        */}
         <Button
           className="self-start"
-          onClick={() => setRows((current) => [...current, blankRow()])}
+          onClick={() => {
+            const opened = blankRow();
+
+            setRows((current) => [...current, opened]);
+            setFocusKey(opened.key);
+          }}
           type="button"
           variant="secondary"
         >
-          Agregar integrante
+          Agregar otra persona
         </Button>
       </fieldset>
 

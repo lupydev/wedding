@@ -143,9 +143,20 @@ function renderEdit(overrides: Partial<InvitationFormInvitation> = {}) {
   };
 }
 
-/** The row fieldset for one member, by its position in the form. */
+/**
+ * The row fieldset for one member, by its position in the form.
+ *
+ * A pattern rather than a literal: a card for somebody who is not on the
+ * invitation yet is legended "Integrante 3 · sin guardar", so its accessible
+ * name carries the marker too. Anchored at both ends so "Integrante 1" cannot
+ * match "Integrante 10".
+ */
 function row(position: number) {
-  return within(screen.getByRole("group", { name: `Integrante ${position}` }));
+  return within(
+    screen.getByRole("group", {
+      name: new RegExp(`^Integrante ${position}(?: · sin guardar)?$`),
+    }),
+  );
 }
 
 function derivedPreview(): string {
@@ -158,7 +169,7 @@ describe("InvitationForm's live derived group name", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar otra persona" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
 
@@ -175,7 +186,7 @@ describe("InvitationForm's live derived group name", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar otra persona" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
@@ -393,7 +404,7 @@ describe("InvitationForm's advisories, which never block the save", () => {
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar otra persona" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Luis Ruiz");
     await user.type(row(2).getByLabelText("Apodo"), "Lucho");
@@ -418,7 +429,7 @@ describe("InvitationForm's advisories, which never block the save", () => {
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar otra persona" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
     await user.type(row(2).getByLabelText("Apodo"), "Michu");
@@ -680,7 +691,7 @@ describe("InvitationForm — re-seeding must not eat unsaved typing", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar integrante/i }),
+      screen.getByRole("button", { name: /Agregar otra persona/i }),
     );
 
     const added = row(before.members.length + 1);
@@ -791,7 +802,7 @@ describe("InvitationForm — the two writes nobody was watching", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar integrante/i }),
+      screen.getByRole("button", { name: /Agregar otra persona/i }),
     );
 
     const position = before.members.length + 1;
@@ -895,7 +906,7 @@ describe("InvitationForm — a double tap is one person, not two", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar integrante/i }),
+      screen.getByRole("button", { name: /Agregar otra persona/i }),
     );
 
     const position = before.members.length + 1;
@@ -1026,5 +1037,72 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
     expect((await screen.findByRole("alert")).textContent).toBe(
       "No pudimos guardar ese cambio. Revisá la conexión y volvé a intentarlo.",
     );
+  });
+
+  /**
+   * THE BUTTON USED TO SAY IT ADDED SOMEBODY, AND IT DID NOT.
+   *
+   * "Agregar otra persona" only opened a blank card; the person reached the
+   * invitation on a SECOND press, on a different button, further down. An
+   * operator who pressed it once and walked away had added nobody, and the
+   * screen had told them otherwise.
+   *
+   * So the card says out loud that it is not saved yet, and the button that
+   * opens it says what it opens.
+   */
+  describe("adding a person to the household", () => {
+    it("names the button for what it actually does", () => {
+      renderEdit();
+
+      expect(
+        screen.getByRole("button", { name: "Agregar otra persona" }),
+      ).toBeInTheDocument();
+      // The old wording, which claimed the press added somebody.
+      expect(
+        screen.queryByRole("button", { name: "Agregar integrante" }),
+      ).toBeNull();
+    });
+
+    it("marks the new card as not yet saved", async () => {
+      const { user } = renderEdit();
+
+      await user.click(
+        screen.getByRole("button", { name: "Agregar otra persona" }),
+      );
+
+      expect(screen.getByText(/sin guardar/i)).toBeInTheDocument();
+    });
+
+    /**
+     * And a saved card never claims to be unsaved.
+     *
+     * The marker is the whole signal, so it has to be absent where the person
+     * is already on the invitation — otherwise it is decoration and an operator
+     * learns to ignore it.
+     */
+    it("does not mark the people who are already saved", () => {
+      renderEdit();
+
+      expect(screen.queryByText(/sin guardar/i)).toBeNull();
+    });
+
+    /**
+     * The cursor lands in the new name field.
+     *
+     * Adding somebody is: press, type, save. Without this it is press, AIM,
+     * type, save — and the aiming is on a phone, at a field that just appeared
+     * below the fold.
+     */
+    it("puts the cursor in the new person's name", async () => {
+      const { user } = renderEdit();
+
+      await user.click(
+        screen.getByRole("button", { name: "Agregar otra persona" }),
+      );
+
+      const names = screen.getAllByLabelText("Nombre completo");
+
+      expect(names.at(-1)).toHaveFocus();
+    });
   });
 });

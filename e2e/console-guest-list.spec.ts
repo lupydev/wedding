@@ -544,7 +544,7 @@ test.describe("creating a group through the console", () => {
 
     await member(0).getByLabel("Teléfono").fill(LUCIA_PHONE_TYPED);
 
-    await page.getByRole("button", { name: "Agregar integrante" }).click();
+    await page.getByRole("button", { name: "Agregar otra persona" }).click();
     await member(1).getByLabel("Nombre completo").fill(MATEO);
     await member(1).getByLabel("Apodo").fill("Teo");
 
@@ -572,7 +572,7 @@ test.describe("creating a group through the console", () => {
     await expect(derivedLine()).toContainText("Lucha y Teo");
     await expect(derivedLine()).toContainText("escrito a mano");
 
-    await page.getByRole("button", { name: "Agregar integrante" }).click();
+    await page.getByRole("button", { name: "Agregar otra persona" }).click();
     await member(2).getByLabel("Nombre completo").fill(SARA);
     await member(2).getByLabel("Apodo").fill("Sarita");
 
