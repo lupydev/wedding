@@ -1324,7 +1324,15 @@ export async function deleteInvitation(
     return outcome;
   }
 
-  // `invitation_guests.invitation_id` cascades, so the members go with it.
+  /*
+    THE MEMBERS SURVIVE THIS. `invitation_guests.invitation_id` was `on delete
+    cascade` until migration 0015 and is now `on delete set null`, so deleting
+    the household RELEASES its people into the directory rather than deleting
+    them. Asked and answered by the couple: "vuelven a la libreta".
+
+    The invitation's answers and dispatch events still cascade away with it —
+    they belong to the invitation, not to the people.
+  */
   const { error: deleteError } = await client
     .from("invitations")
     .delete()

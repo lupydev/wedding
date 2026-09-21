@@ -118,6 +118,23 @@ describe("InvitationLifecycle — deletion is irreversible, so it asks twice", (
         name: new RegExp(`Sí, eliminar «${HOUSEHOLD}»`),
       }),
     ).toBeInTheDocument();
+
+    /*
+      AND IT SAYS WHAT SURVIVES, BECAUSE IT USED TO SAY THE OPPOSITE.
+
+      The sentence read "con todas las personas que tiene dentro", which was
+      true while `invitation_guests.invitation_id` cascaded. Migration 0015
+      releases them instead — asked and answered by the couple: "vuelven a la
+      libreta" — so the old sentence now frightens an operator away from the
+      one action that fixes a household assembled wrong.
+
+      The deletion is still irreversible and still says so. What changed is the
+      scope of the loss: the invitation, not the people.
+    */
+    expect(
+      confirmation.getByText(/vuelven a la lista de invitados/i),
+    ).toBeInTheDocument();
+    expect(confirmation.queryByText(/con todas las personas/i)).toBeNull();
   });
 
   it("deletes on the confirmation, naming the invitation it acts on", async () => {
