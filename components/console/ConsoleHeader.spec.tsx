@@ -17,7 +17,6 @@ describe("ConsoleHeader", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        newInvitationPath="/console/invitations/new"
         signOutPath="/console/auth/sign-out"
       />,
     );
@@ -31,7 +30,6 @@ describe("ConsoleHeader", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        newInvitationPath="/console/invitations/new"
         signOutPath="/console/auth/sign-out"
       />,
     );
@@ -52,18 +50,18 @@ describe("ConsoleHeader", () => {
    * A link rather than a button, so it works with no JavaScript, like every
    * other destination in this header.
    */
-  it("offers creating an invitation as a link, above the fold", () => {
+  it("leaves creating an invitation to the navigation", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Michell"
-        newInvitationPath="/console/invitations/new"
         signOutPath="/console/auth/sign-out"
       />,
     );
 
-    expect(
-      screen.getByRole("link", { name: "Nueva invitación" }),
-    ).toHaveAttribute("href", "/console/invitations/new");
+    // It lived here for one commit, between the foot of a scrolling list and
+    // the nav. Two doors to one screen is the pattern this console is losing
+    // everywhere else.
+    expect(screen.queryByRole("link", { name: "Nueva invitación" })).toBeNull();
   });
 
   /**
@@ -79,7 +77,6 @@ describe("ConsoleHeader", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Michell"
-        newInvitationPath="/console/invitations/new"
         signOutPath="/console/auth/sign-out"
       />,
     );
@@ -91,7 +88,6 @@ describe("ConsoleHeader", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        newInvitationPath="/console/invitations/new"
         signOutPath="/console/auth/sign-out"
       />,
     );
@@ -109,7 +105,6 @@ describe("ConsoleHeader", () => {
     const { container } = render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        newInvitationPath="/console/invitations/new"
         signOutPath="/console/auth/sign-out"
       />,
     );

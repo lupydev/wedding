@@ -529,13 +529,18 @@ test.describe("creating a group through the console", () => {
   const createdRow = () =>
     mine().locator("li.guest-list__row").filter({ hasText: customGreeting });
 
-  test("creating an invitation is one click from the header", async () => {
+  test("creating an invitation is one click from the navigation", async () => {
     await page.goto("/console");
 
-    // From the header, which is where creation lives now. It used to be a
-    // button at the foot of the guest list — offered in BOTH lists, so this
-    // query had to be scoped to the owned partition to be unambiguous at all.
-    await page.getByRole("link", { name: "Nueva invitación" }).click();
+    // From the navigation, which is where creation lives now. It started at
+    // the foot of the guest list — offered in BOTH lists, so this query had to
+    // be scoped to the owned partition to be unambiguous at all — then spent
+    // one commit in the header. The sidebar is where a destination belongs, and
+    // on a phone that bar is at the bottom of the screen under the thumb.
+    //
+    // `.first()` because the bar renders twice, once as a sidebar and once as
+    // the bottom tabs, with CSS deciding which is on screen.
+    await page.getByRole("link", { name: "Agregar" }).first().click();
 
     await expect(page).toHaveURL(/\/console\/invitations\/new$/);
     await expect(

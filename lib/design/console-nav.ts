@@ -1,5 +1,8 @@
 import { CONSOLE_DEVICE_PATH } from "@/lib/domain/device-declaration";
-import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
+import {
+  CONSOLE_NEW_INVITATION_PATH,
+  CONSOLE_ROOT_PATH,
+} from "@/lib/domain/operator-session";
 import { CONSOLE_WEDDING_PATH } from "@/lib/domain/wedding-facts";
 
 /**
@@ -41,7 +44,8 @@ export const CONSOLE_BREAKPOINT_VARIANT = "md";
 export const CONSOLE_TABBAR_BASE_PX = 56;
 
 /** Which lucide icon a tab draws. Resolved in the component, not here. */
-export type ConsoleNavIcon = "list" | "check" | "users" | "phone" | "calendar";
+export type ConsoleNavIcon =
+  "list" | "check" | "users" | "phone" | "calendar" | "plus";
 
 export interface ConsoleNavItem {
   readonly key: string;
@@ -96,6 +100,28 @@ export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
     href: CONSOLE_ROOT_PATH,
     label: "Invitaciones",
     icon: "list",
+  },
+  {
+    /*
+      CREATION IS A DESTINATION, AND IT BELONGS HERE.
+
+      It lived in the header, which is better than where it started — the foot
+      of a scrolling list, with nothing in the navigation pointing at it — but
+      the couple looked at a sidebar with three entries and found no way to add
+      anybody. On a phone this bar is at the bottom, under the thumb, which is
+      the most reachable place on the screen.
+    */
+    key: "new",
+    href: CONSOLE_NEW_INVITATION_PATH,
+    /*
+      "Agregar" and not "Nueva invitación", which is 16 characters against the
+      14 this bar allows. The limit is not arbitrary: a label that wraps makes
+      the bar taller than the height the content's bottom padding was
+      calculated from, so the last row of the list ends up underneath it.
+      "Boda" carries the same note for the same reason.
+    */
+    label: "Agregar",
+    icon: "plus",
   },
   {
     key: "wedding",

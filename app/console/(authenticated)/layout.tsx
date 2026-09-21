@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { CONSOLE_NEW_INVITATION_PATH } from "@/lib/domain/operator-session";
-
 import { ConsoleHeader } from "@/components/console/ConsoleHeader";
 import { ConsoleNavCurrent } from "@/components/console/ConsoleNavCurrent";
 import { ConsoleShell } from "@/components/console/ConsoleShell";
@@ -65,7 +63,6 @@ export default async function AuthenticatedConsoleLayout({
       className="console"
       header={
         <ConsoleHeader
-          newInvitationPath={CONSOLE_NEW_INVITATION_PATH}
           operatorDisplayName={operator.displayName}
           signOutPath="/console/auth/sign-out"
         />

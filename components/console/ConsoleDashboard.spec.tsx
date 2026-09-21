@@ -39,14 +39,21 @@ function figureFor(label: string): string {
  * `summarizeConsoleList`, which already computed all of it.
  */
 describe("ConsoleDashboard", () => {
-  it("shows the four figures, and nothing else", () => {
+  /**
+   * TWO FIGURES, AND THERE WERE FOUR.
+   *
+   * The couple asked for "invitaciones enviadas y asistentes". The two extra
+   * tiles were never requested and are what made the row unreadable: beside
+   * "Invitaciones enviadas: 0 de 3" sat "Sin enviar: 2 de 3", and the missing
+   * third had merely had its link opened. True, and no business being a puzzle
+   * on the first screen a non-technical operator meets.
+   */
+  it("shows the two figures that were asked for, and nothing else", () => {
     render(<ConsoleDashboard summary={SUMMARY} />);
 
     expect(screen.getAllByRole("term").map((t) => t.textContent)).toEqual([
       "Invitaciones enviadas",
       "Personas confirmadas",
-      "Sin enviar",
-      "Sin responder",
     ]);
   });
 
@@ -77,13 +84,6 @@ describe("ConsoleDashboard", () => {
     render(<ConsoleDashboard summary={SUMMARY} />);
 
     expect(figureFor("Personas confirmadas")).toBe("37 de 84");
-  });
-
-  it("shows what is left to do", () => {
-    render(<ConsoleDashboard summary={SUMMARY} />);
-
-    expect(figureFor("Sin enviar")).toBe("8 de 30");
-    expect(figureFor("Sin responder")).toBe("16 de 30");
   });
 
   /**

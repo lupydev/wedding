@@ -12,9 +12,15 @@ import type { ConsoleSummary } from "@/lib/domain/console-list";
  * different denominators, and eight of the ten lines were dispatch-state and
  * RSVP breakdowns that a two-person team reads once and never again.
  *
- * These four answer the two questions the couple actually ask ("how many did we
- * send?", "how many are coming?") and the two that follow from them ("what is
- * left to send?", "who has not answered?").
+ * TWO FIGURES, AND THERE WERE FOUR.
+ *
+ * The couple asked for "invitaciones enviadas y asistentes" and got two extra
+ * tiles nobody requested — "Sin enviar" and "Sin responder" — and those two are
+ * what made the row unreadable. Beside "Invitaciones enviadas: 0 de 3" sat "Sin
+ * enviar: 2 de 3", and a reader is entitled to ask where the third went. The
+ * answer is that its link was opened but nobody confirmed the send, so it
+ * counts as neither — true, documented, and no business being a puzzle on the
+ * first screen of a console two people share.
  *
  * NOT ONE NEW QUERY OR ONE NEW SUM. Every field comes from
  * `summarizeConsoleList`, which already computed all of it —
@@ -65,12 +71,6 @@ export function ConsoleDashboard({
       count: summary.seatsConfirmed,
       outOf: summary.seats,
     },
-    {
-      label: "Sin enviar",
-      count: summary.byDispatchState.not_dispatched,
-      outOf: summary.total,
-    },
-    { label: "Sin responder", count: summary.pending, outOf: summary.total },
   ];
 
   return (

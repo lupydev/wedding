@@ -56,6 +56,10 @@ function HouseholdLine({
 }
 
 export function DispatchPreflight({ preflight }: DispatchPreflightProps) {
+  const blocking = preflight.groups.filter(
+    (group) => group.households.length > 0,
+  );
+
   return (
     <section className="dispatch-preflight rounded-lg border border-border bg-card px-4 py-4">
       <h2 className="text-base leading-snug">Revisión previa al envío</h2>
@@ -71,47 +75,52 @@ export function DispatchPreflight({ preflight }: DispatchPreflightProps) {
         {preflight.readyText}
       </p>
 
-      <p
-        className="dispatch-preflight__intro mt-1 text-sm text-hint"
-        style={{ maxWidth: "48ch" }}
-      >
-        Esta revisión no envía nada. Señala, antes de empezar, qué invitaciones
-        todavía no pueden salir y qué hace falta para que puedan.
-      </p>
+      {/*
+        ONLY THE GROUPS WITH SOMETHING IN THEM, AND ONE LINE WHEN THERE IS
+        NOTHING.
 
-      {preflight.groups.map((group) => (
-        <section
-          className="dispatch-preflight__group mt-4 rounded-md bg-muted px-3 py-3"
-          key={group.kind}
-        >
-          {/*
-            The badge sits BESIDE the heading and not inside it. Inside, it becomes
-            part of the heading's accessible name — "Con destinatario sin número 2 de
-            4 invitaciones de Ana" — and every `getByRole("heading", { name })` in the
-            suite stops matching. A visual grouping is not a semantic one.
-          */}
-          <h3 className="text-sm font-semibold">{group.heading}</h3>
+        Every group used to render always — heading, badge, a paragraph of
+        explanation and the word "Ninguna" — five panels and about nine hundred
+        pixels of mostly-empty boxes above the list the operator came to read.
 
-          <p className="dispatch-preflight__count mt-1">
-            <StatusBadge
-              label={group.text}
-              tone={preflightGroupTone(group.kind)}
-            />
-          </p>
-          <p className="dispatch-preflight__explanation mt-1 text-sm text-muted-foreground">
-            {group.explanation}
-          </p>
+        The reasoning behind that is kept, because it was right: a check that
+        omits its clean sections reads as "this check did not run", and those
+        are not tellable apart. It simply does not take five panels to say it.
+        When nothing is blocked, this says nothing is blocked, once.
 
-          {group.households.length === 0 ? (
-            /*
-              An empty group renders as EMPTY, never as nothing. A check that omits
-              its clean sections cannot be read as "nothing is wrong here" — it
-              reads as "this check did not run", and those are not tellable apart.
-            */
-            <p className="dispatch-preflight__empty mt-2 text-sm text-hint">
-              Ninguna
+        The explanations survive too, and only where they are earned: the moment
+        a group HAS households is the moment somebody needs to be told what to
+        do about it. A paragraph over the word "Ninguna" is a paragraph nobody
+        has a reason to read.
+      */}
+      {blocking.length === 0 ? (
+        <p className="dispatch-preflight__clear mt-2 text-sm text-hint">
+          Todo en orden: no hay nada pendiente antes de enviar.
+        </p>
+      ) : (
+        blocking.map((group) => (
+          <section
+            className="dispatch-preflight__group mt-4 rounded-md bg-muted px-3 py-3"
+            key={group.kind}
+          >
+            {/*
+              The badge sits BESIDE the heading and not inside it. Inside, it
+              becomes part of the heading's accessible name and every
+              `getByRole("heading", { name })` in the suite stops matching. A
+              visual grouping is not a semantic one.
+            */}
+            <h3 className="text-sm font-semibold">{group.heading}</h3>
+
+            <p className="dispatch-preflight__count mt-1">
+              <StatusBadge
+                label={group.text}
+                tone={preflightGroupTone(group.kind)}
+              />
             </p>
-          ) : (
+            <p className="dispatch-preflight__explanation mt-1 text-sm text-muted-foreground">
+              {group.explanation}
+            </p>
+
             <ul className="dispatch-preflight__households mt-2 flex flex-col gap-1">
               {group.households.map((household) => (
                 <HouseholdLine
@@ -120,9 +129,9 @@ export function DispatchPreflight({ preflight }: DispatchPreflightProps) {
                 />
               ))}
             </ul>
-          )}
-        </section>
-      ))}
+          </section>
+        ))
+      )}
     </section>
   );
 }
