@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -6,16 +6,35 @@ import { MusicToggle } from "./MusicToggle";
 
 const SRC = "/audio/nuestra-cancion.mp3";
 
+/** What the browser does when asked to make noise. */
+type Policy = "allows" | "refuses" | "refuses-until-gesture";
+
 /**
  * jsdom ships no media stack at all.
  *
  * `HTMLMediaElement.prototype.play` exists but throws "Not implemented", and
  * `pause` does nothing observable. Both are replaced per test, which is also
- * the only way to drive the rejected-`play()` case that the whole design of
- * this component exists to handle.
+ * the only way to drive the refusal that this component is built around.
+ *
+ * `refuses-until-gesture` is the one that matters most: it is what every real
+ * browser does. The first call — the one made on page load, with no gesture
+ * behind it — is rejected, and every call afterwards succeeds because by then
+ * the visitor has touched something.
  */
-function stubMedia({ play }: { play: () => Promise<void> }) {
-  const playSpy = vi.fn(play);
+function stubMedia(policy: Policy) {
+  let calls = 0;
+
+  const playSpy = vi.fn(() => {
+    calls += 1;
+
+    const blocked =
+      policy === "refuses" ||
+      (policy === "refuses-until-gesture" && calls === 1);
+
+    return blocked
+      ? Promise.reject(new DOMException("blocked", "NotAllowedError"))
+      : Promise.resolve();
+  });
   const pauseSpy = vi.fn();
 
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(playSpy);
@@ -28,6 +47,11 @@ function toggle(): HTMLElement {
   return screen.getByRole("button", { name: /música/i });
 }
 
+/** Any gesture, anywhere on the page — a tap on the photograph will do. */
+function touchSomething() {
+  fireEvent.pointerDown(document.body);
+}
+
 describe("MusicToggle", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -37,11 +61,12 @@ describe("MusicToggle", () => {
    * THE SONG IS 4.7 MB AND IT MAY NOT COMPETE WITH THE PHOTOGRAPH.
    *
    * `preload="none"` means the browser fetches nothing until somebody asks for
-   * the song. The default, `metadata`, opens a connection during the first
-   * paint — on a phone on mobile data that connection is taken from the hero
-   * image, which is the one thing the visitor is actually waiting for.
+   * the song — and since the attempt to start it waits for the window's `load`
+   * event, nothing asks until the photograph is already on screen.
    */
-  it("downloads nothing until the visitor asks for it", () => {
+  it("downloads nothing until it is asked to play", () => {
+    stubMedia("allows");
+
     const { container } = render(<MusicToggle src={SRC} />);
     const audio = container.querySelector("audio");
 
@@ -50,67 +75,143 @@ describe("MusicToggle", () => {
     expect(audio).toHaveProperty("loop", true);
   });
 
-  it("starts silent, and says what pressing it will do", () => {
-    stubMedia({ play: () => Promise.resolve() });
+  describe("when the browser allows it", () => {
+    it("starts on its own, without anybody pressing anything", async () => {
+      const { playSpy } = stubMedia("allows");
 
-    render(<MusicToggle src={SRC} />);
+      render(<MusicToggle src={SRC} />);
 
-    expect(toggle()).toHaveAccessibleName("Poner la música");
-  });
-
-  it("plays on the first press and offers to pause on the second", async () => {
-    const { playSpy, pauseSpy } = stubMedia({ play: () => Promise.resolve() });
-    const user = userEvent.setup();
-
-    render(<MusicToggle src={SRC} />);
-
-    await user.click(toggle());
-    expect(playSpy).toHaveBeenCalledOnce();
-    expect(toggle()).toHaveAccessibleName("Pausar la música");
-
-    await user.click(toggle());
-    expect(pauseSpy).toHaveBeenCalledOnce();
-    expect(toggle()).toHaveAccessibleName("Poner la música");
-  });
-
-  /**
-   * A REJECTED `play()` IS THE ORDINARY CASE, NOT THE EXCEPTION.
-   *
-   * Every browser refuses to start audio without a user gesture, and refuses
-   * again on a page the visitor has never interacted with — the promise rejects
-   * with `NotAllowedError`. Unhandled it becomes an unhandled promise rejection
-   * in the console; handled badly it leaves the control claiming the song is
-   * playing while the page is silent, and the visitor presses it again to stop
-   * a sound that was never there.
-   *
-   * The control must end this exactly where it started: silent, and offering to
-   * play.
-   */
-  it("stays silent and offers to play again when the browser refuses", async () => {
-    stubMedia({
-      play: () =>
-        Promise.reject(new DOMException("blocked", "NotAllowedError")),
+      await waitFor(() => expect(playSpy).toHaveBeenCalled());
+      expect(toggle()).toHaveAccessibleName("Pausar la música");
     });
-    const user = userEvent.setup();
 
-    render(<MusicToggle src={SRC} />);
+    /**
+     * Nothing is left listening once the song is playing.
+     *
+     * The fallback below attaches document-wide listeners, and a listener that
+     * outlives its purpose is how a visitor who pauses the song finds it
+     * starting again the next time they tap the page.
+     */
+    it("leaves no listener behind waiting for a gesture", async () => {
+      const { playSpy } = stubMedia("allows");
 
-    await user.click(toggle());
+      render(<MusicToggle src={SRC} />);
+      await waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
 
-    expect(toggle()).toHaveAccessibleName("Poner la música");
+      touchSomething();
+
+      expect(playSpy).toHaveBeenCalledOnce();
+    });
   });
 
-  it("reports nothing to the console when the browser refuses", async () => {
-    stubMedia({
-      play: () =>
-        Promise.reject(new DOMException("blocked", "NotAllowedError")),
+  describe("when the browser refuses until the visitor touches something", () => {
+    /**
+     * THIS IS THE ORDINARY CASE, NOT THE EXCEPTION.
+     *
+     * Every browser rejects `play()` with `NotAllowedError` on a page nobody
+     * has interacted with. So the attempt on load is expected to fail, and the
+     * page must stay silent and honest about it rather than claiming to play.
+     */
+    it("stays silent and keeps offering to play", async () => {
+      const { playSpy } = stubMedia("refuses-until-gesture");
+
+      render(<MusicToggle src={SRC} />);
+
+      await waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
+      expect(toggle()).toHaveAccessibleName("Poner la música");
     });
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const user = userEvent.setup();
 
-    render(<MusicToggle src={SRC} />);
-    await user.click(toggle());
+    /**
+     * The first gesture anywhere starts it — a tap on the photograph, a scroll,
+     * a key. The visitor never has to find the button, which is the whole point
+     * of the fallback: the browser's rule is satisfied by ANY interaction with
+     * the page, not only by one aimed at the control.
+     */
+    it("starts at the first touch anywhere on the page", async () => {
+      const { playSpy } = stubMedia("refuses-until-gesture");
 
-    expect(error).not.toHaveBeenCalled();
+      render(<MusicToggle src={SRC} />);
+      await waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
+
+      touchSomething();
+
+      await waitFor(() =>
+        expect(toggle()).toHaveAccessibleName("Pausar la música"),
+      );
+    });
+
+    it("asks only once, however many times the page is touched", async () => {
+      const { playSpy } = stubMedia("refuses-until-gesture");
+
+      render(<MusicToggle src={SRC} />);
+      await waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
+
+      touchSomething();
+      await waitFor(() => expect(playSpy).toHaveBeenCalledTimes(2));
+
+      touchSomething();
+      touchSomething();
+
+      expect(playSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("the control itself", () => {
+    /**
+     * IT MUST ALWAYS BE POSSIBLE TO STOP IT, and that is not a nicety.
+     *
+     * Audio that starts by itself and plays for more than three seconds has to
+     * come with a way to stop it — WCAG 2.2, success criterion 1.4.2. The
+     * button is that way, and it is on screen from the first paint.
+     */
+    it("stops the song, and offers to start it again", async () => {
+      const { pauseSpy, playSpy } = stubMedia("allows");
+      const user = userEvent.setup();
+
+      render(<MusicToggle src={SRC} />);
+      await waitFor(() =>
+        expect(toggle()).toHaveAccessibleName("Pausar la música"),
+      );
+
+      await user.click(toggle());
+
+      expect(pauseSpy).toHaveBeenCalledOnce();
+      expect(toggle()).toHaveAccessibleName("Poner la música");
+
+      await user.click(toggle());
+
+      expect(playSpy).toHaveBeenCalledTimes(2);
+      expect(toggle()).toHaveAccessibleName("Pausar la música");
+    });
+
+    /**
+     * A refused press leaves the control exactly where it started.
+     *
+     * Handled badly, a refusal leaves the button claiming the song is playing
+     * while the room is silent, and the visitor presses it again to stop a
+     * sound that was never there.
+     */
+    it("goes back to offering to play when a press is refused", async () => {
+      stubMedia("refuses");
+      const user = userEvent.setup();
+
+      render(<MusicToggle src={SRC} />);
+
+      await user.click(toggle());
+
+      expect(toggle()).toHaveAccessibleName("Poner la música");
+    });
+
+    it("reports nothing to the console when the browser refuses", async () => {
+      stubMedia("refuses");
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const user = userEvent.setup();
+
+      render(<MusicToggle src={SRC} />);
+      await user.click(toggle());
+      touchSomething();
+
+      expect(error).not.toHaveBeenCalled();
+    });
   });
 });

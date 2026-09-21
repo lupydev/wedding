@@ -83,10 +83,26 @@ a placeholder (`{{CEREMONY_DATE}}`), so there is nothing yet to drift from.
 - **Audio cannot be statically imported.** The mp3 must be served verbatim, so it
   goes to `public/`, which is the one folder Next serves from the base URL
   (`01-app/01-getting-started/12-images.md`, "Local images").
-- **No browser autoplays audio with sound.** `HTMLMediaElement.play()` returns a
-  promise that REJECTS with `NotAllowedError` without a user gesture. The song is
-  therefore off until the visitor presses a button, and the rejection is handled
-  rather than left to become an unhandled promise rejection.
+- **No browser autoplays audio with sound, and no setting on our side changes
+  it.** `HTMLMediaElement.play()` rejects with `NotAllowedError` on a page nobody
+  has interacted with, and the `autoplay` attribute is silently ignored under the
+  same rule. Measured in Chromium at the default policy: after `load` the element
+  is `paused` and not one byte of the mp3 has been fetched.
+
+  What IS possible is two attempts. Ask once after the window's `load` event —
+  a visitor Chrome scores as engaged with this origin is allowed, and for them
+  the song simply starts (measured with `--autoplay-policy=no-user-gesture-required`:
+  `paused=false`, `currentTime=1.68` with nothing pressed). If refused, wait for
+  ANY gesture anywhere: the browser's rule is satisfied by any interaction, not
+  only one aimed at a control, so a tap on the photograph is enough (measured:
+  `paused=false`, `currentTime=1.69`, `loop=true` after one raw click).
+
+  The attempt waits for `load` rather than firing on mount, so the 4.7 MB never
+  competes with the photograph for the connection.
+
+- **Audio that starts by itself needs a way to stop it** — WCAG 2.2 success
+  criterion 1.4.2, for anything over three seconds. That is what the button is
+  for now, and it is on screen from the first paint.
 - **The countdown may not be rendered on the server.** `/` is statically
   generated; a server-rendered figure would be frozen at build time and would
   either ship stale or mismatch on hydration. The first client render matches the
