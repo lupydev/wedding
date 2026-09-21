@@ -112,8 +112,21 @@ export default async function StreamPage() {
   );
 
   return (
-    <PhotoStage>
-      <div className="relative col-start-1 row-start-1 flex min-h-dvh flex-col items-center justify-center gap-9 px-6 py-14 lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:px-4 lg:py-0">
+    <PhotoStage mobilePhoto="band">
+      {/*
+        ROW TWO ON A PHONE, COLUMN TWO ON A LAPTOP.
+
+        In `band` mode the photograph is a strip across the top and these words
+        flow BENEATH it — `row-start-2` — rather than sharing its cell. Left in
+        row one they overlaid the strip and put the heading straight back across
+        the couple's faces, which is the whole thing this layout exists to
+        avoid.
+
+        No `min-h-dvh` here either: the strip already takes 42dvh, and forcing a
+        full viewport underneath it would push the page to nearly two screens
+        for content that needs half of one.
+      */}
+      <div className="relative col-start-1 row-start-2 flex flex-col items-center gap-7 px-6 pt-8 pb-14 lg:col-start-2 lg:row-start-1 lg:px-4 lg:py-0">
         {/*
           `coupleNames` and the four stream values come from the row and nothing
           else. The venue and its address are on that same row and are NOT

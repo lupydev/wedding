@@ -343,6 +343,38 @@ explains it anyway is a page that thinks less of whoever is reading it.
 
 2092 tests green; typecheck, lint, format and build clean.
 
+### Unit I — the couple stop being covered, on both pages
+
+Two reports, one cause: on a phone the words and the couple were competing for
+the same vertical space. MEASURED ON THE PHOTOGRAPH — they occupy from 52% to
+88% of its height; above 45% there is nobody, only sky, waterfall and the
+lantern.
+
+**The landing.** The words moved from the foot of the screen to the top. They
+had been `justify-between`, which put the heading, the date and four figures
+straight across the couple — and the block had grown past what the bottom could
+hold once the countdown gained a button and a line of explanation. The block is
+about 300px and the free band above is 380, so it fits with room and the two of
+them are completely clear. The top scrim grew to 55% and the bottom one shrank
+to a short anchor; 80% falling to nothing still lets the lantern read through.
+
+**The stream invitation.** `PhotoStage`'s boolean became `mobilePhoto:
+"overlay" | "band"`. Overlay was tried first on this page and measured: its
+content is about 700px on an 844px screen, so the card landed squarely on the
+couple — their feet showing and nothing else — and a paragraph fell across the
+lit lantern. The photograph was present and the two people in it were gone.
+
+`band` puts the photograph in a 38dvh strip at the top, cropped at 72% where the
+couple are, and the words in grid ROW TWO beneath it. Left in row one they
+overlaid the strip and put the heading straight back across their faces, which
+is the whole point of the mode.
+
+Verified at 390×844: the landing is one screen with the couple entirely
+unobscured; the stream page is 1046px with the meeting id at y=744, above the
+fold. Desktop is untouched at 1440×900 — both changes are below `lg`. No
+horizontal overflow and zero console errors at any size. 2092 tests green;
+typecheck, lint, format and build clean.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`

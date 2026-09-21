@@ -25,27 +25,34 @@ import compromiso from "@/img/compromiso.jpg";
  * Grid placement rather than two trees, so there is ONE copy of the photograph
  * and ONE copy of the words at every size.
  */
+/**
+ * How the photograph shares a narrow screen with the words.
+ *
+ * `overlay` — the photograph fills the viewport and the words sit on it. Right
+ * when the words are a heading, a date and four figures.
+ *
+ * `band` — the photograph is a band across the top and the words flow beneath.
+ * Right when there are too many words to lay over anything. Tried as an overlay
+ * first and measured: the stream invitation's content is about 700px on an
+ * 844px screen, so its card landed squarely on the couple and left their feet
+ * showing, while a paragraph fell across the lit lantern. The photograph was
+ * present and the two people in it were gone.
+ */
+export type MobilePhoto = "overlay" | "band";
+
 export function PhotoStage({
   children,
-  overlayOnMobile = false,
+  mobilePhoto = "band",
 }: {
   /**
    * The words. It owns its own grid placement: `col-start-1 row-start-1` to
    * share the cell with the photograph, `lg:col-start-2` to sit beside it.
    */
   readonly children: React.ReactNode;
-  /**
-   * Below `lg`, does the photograph fill the screen behind the words?
-   *
-   * True on the landing, where the words are a heading, a date and four
-   * figures and the photograph IS the page. False on the stream invitation,
-   * whose content is a card of credentials and two paragraphs — laid over a
-   * photograph that is unreadable, and stacked above one it is pushed off the
-   * screen. There the photograph appears only at `lg`, where there is room
-   * beside it, and the blurred ground carries the continuity on a phone.
-   */
-  readonly overlayOnMobile?: boolean;
+  /** How the photograph and the words share a narrow screen. */
+  readonly mobilePhoto?: MobilePhoto;
 }) {
+  const overlay = mobilePhoto === "overlay";
   return (
     /*
      * `min-h-dvh`, not `min-h-screen`. On a phone `100vh` is the viewport with
@@ -97,11 +104,11 @@ export function PhotoStage({
       >
         <figure
           className={`
-            relative col-start-1 row-start-1 m-0
-            lg:mx-auto lg:aspect-[737/1600] lg:h-[86dvh] lg:w-auto
-            lg:overflow-hidden lg:rounded-2xl
+            relative col-start-1 row-start-1 m-0 w-full
+            lg:row-start-1 lg:mx-auto lg:aspect-[737/1600] lg:h-[86dvh]
+            lg:w-auto lg:overflow-hidden lg:rounded-2xl
             lg:shadow-[0_24px_80px_rgba(0,0,0,0.6)] lg:ring-1 lg:ring-white/10
-            ${overlayOnMobile ? "h-dvh w-full" : "hidden lg:block"}
+            ${overlay ? "h-dvh" : "h-[38dvh]"}
           `}
         >
           <Image
@@ -138,19 +145,27 @@ export function PhotoStage({
              * two agree by construction, and cover is the one that cannot leave
              * a hairline of background inside the rounded frame.
              */
-            className="object-contain lg:object-cover"
+            className={`lg:object-center lg:object-cover ${
+              overlay ? "object-contain" : "object-[center_72%] object-cover"
+            }`}
           />
         </figure>
 
         {/*
           THE SCRIMS BELONG TO THE OVERLAY LAYOUT ONLY.
 
-          Where the words are on the photograph they need a ground under them:
-          dark at the top for a line of script, darker and taller at the bottom
-          for a heading, a date and four figures, and nearly clear through the
-          middle where the couple are. At `lg` the words have moved off the
-          photograph, so the same gradients would be dimming a framed print for
-          no reader's benefit.
+          Where the words are on the photograph they need a ground under them.
+          The top one is the tall one now: the whole block sits up there, so it
+          reaches to 55% and fades out just above the couple, who begin at 52%
+          of the photograph and are the one thing that must not be veiled. The
+          bottom one is a short anchor for the foot of the screen.
+
+          It has to survive the lantern, which is the brightest thing in the
+          frame at around a third of the way down. 80% at the top falling to
+          nothing is enough for the text and still lets the glow read through.
+
+          At `lg` the words have moved off the photograph entirely, so the same
+          gradients would be dimming a framed print for no reader's benefit.
 
           `relative` on each, and it is load-bearing. They share a grid cell
           with an absolutely-positioned image, and painting order is NOT DOM
@@ -159,15 +174,15 @@ export function PhotoStage({
           photograph and the page showed the picture and nothing else, with no
           error anywhere.
         */}
-        {overlayOnMobile ? (
+        {overlay ? (
           <>
             <div
               aria-hidden="true"
-              className="relative col-start-1 row-start-1 h-1/4 w-full self-start bg-gradient-to-b from-black/70 to-transparent lg:hidden"
+              className="relative col-start-1 row-start-1 h-[55%] w-full self-start bg-gradient-to-b from-black/80 via-black/55 to-transparent lg:hidden"
             />
             <div
               aria-hidden="true"
-              className="relative col-start-1 row-start-1 h-3/5 w-full self-end bg-gradient-to-t from-black/90 via-black/55 to-transparent lg:hidden"
+              className="relative col-start-1 row-start-1 h-1/5 w-full self-end bg-gradient-to-t from-black/75 to-transparent lg:hidden"
             />
           </>
         ) : null}

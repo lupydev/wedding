@@ -60,13 +60,13 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <PhotoStage overlayOnMobile>
+    <PhotoStage mobilePhoto="overlay">
       <div
         className="
           relative col-start-1 row-start-1 flex min-h-dvh flex-col items-center
-          justify-between gap-12 px-6 pt-10
+          justify-start gap-6 px-6 pt-8
           pb-[max(3rem,env(safe-area-inset-bottom))]
-          sm:pt-14 sm:pb-14
+          sm:gap-8 sm:pt-12 sm:pb-14
           lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:justify-center lg:gap-9
           lg:px-4 lg:py-0
         "
@@ -82,13 +82,20 @@ export default function Home() {
         </p>
 
         {/*
-          WRAPPED WITH THE LINK, AND THE WRAPPER IS NOT DECORATION.
+          EVERYTHING AT THE TOP ON A PHONE, AND THE PHOTOGRAPH IS WHY.
 
-          Below `lg` this column is `justify-between` with exactly two children:
-          the script line at the top and this block at the foot. A third child
-          would have made it three evenly spread rows and pushed the heading
-          into the middle of the photograph, across the couple. One wrapper
-          keeps the count at two.
+          The words used to sit at the foot of the screen, with the script line
+          at the head and the whole viewport between them. That put the heading,
+          the date and four figures squarely across the couple — measured on the
+          photograph, they occupy from 52% to 88% of its height, and the block
+          had grown to reach them once the countdown gained a button and a line
+          of explanation beneath it.
+
+          Above 45% there is nobody: sky, the waterfall and the lantern. The
+          block is about 300px and a phone gives it 380 up there, so it fits
+          with room and the two of them are left completely clear. At `lg` the
+          words are in their own column and this does not apply, which is why
+          the centring returns at that breakpoint.
         */}
         <div className="flex flex-col items-center gap-7">
           <SaveTheDate />
