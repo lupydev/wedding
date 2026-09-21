@@ -13,6 +13,8 @@
  * Guest-facing copy is Spanish. Identifiers and comments stay English.
  */
 
+import { RSVP_DEADLINE_TEXT } from "@/lib/domain/wedding-day";
+
 export interface InvitationBodyGuest {
   readonly id: string;
   readonly fullName: string;
@@ -27,7 +29,6 @@ export interface InvitationBodyGuest {
  */
 export interface InvitationBodyInvitation {
   readonly greetingName: string;
-  readonly rsvpDeadline: string | null;
   readonly guests: readonly InvitationBodyGuest[];
 }
 
@@ -124,11 +125,23 @@ export function InvitationBody({
         <section className="invitation__rsvp">{rsvp}</section>
       )}
 
-      {invitation.rsvpDeadline === null ? null : (
-        <p className="invitation__deadline">
-          Confirmen su asistencia antes del {invitation.rsvpDeadline}.
-        </p>
-      )}
+      {/*
+        ONE DEADLINE FOR THE WHOLE WEDDING, AND IT IS NOT A PROP.
+
+        It used to arrive per household, which meant the couple typed the same
+        date into every invitation they created — and one they forgot was an
+        invitation that said nothing and never closed. There is one wedding, so
+        it comes from the wedding's own facts.
+
+        And it is spelled the way a person writes a date. The ISO day went
+        straight onto the page before this: "Confirmen su asistencia antes del
+        2026-11-21", a machine's spelling on the one surface written for people.
+        Both this sentence and the gate in `lib/server/rsvp.ts` derive from the
+        same instant, so they cannot name different days.
+      */}
+      <p className="invitation__deadline">
+        Confirmen su asistencia antes del {RSVP_DEADLINE_TEXT}.
+      </p>
     </article>
   );
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { calendarDateInZone } from "./rsvp-deadline";
+import { calendarDateInZone, isRsvpOpen } from "./rsvp-deadline";
 import {
+  RSVP_DEADLINE,
+  RSVP_DEADLINE_DAYS_BEFORE,
   WEDDING_INSTANT,
   WEDDING_TIME_ZONE,
   formatWeddingDate,
@@ -87,5 +89,50 @@ describe("formatWeddingDate", () => {
 describe("formatWeddingWeekday", () => {
   it("names the day of the week in Spanish, uncapitalised", () => {
     expect(formatWeddingWeekday(WEDDING_INSTANT)).toBe("sábado");
+  });
+});
+
+describe("RSVP_DEADLINE", () => {
+  /**
+   * DERIVED FROM THE WEDDING, BECAUSE THAT IS WHAT THE COUPLE SAID.
+   *
+   * They asked for "hasta una semana antes de la boda" — a rule, not a date. A
+   * literal "2026-11-21" would be the same answer today and the wrong one the
+   * moment the wedding itself moved, and it would be wrong silently: nothing
+   * about a stale deadline looks broken until a household is refused an answer
+   * it should have been allowed to give.
+   */
+  it("is one week before the wedding, as a calendar day in Bogota", () => {
+    expect(RSVP_DEADLINE).toBe("2026-11-21");
+  });
+
+  it("follows the wedding rather than restating a date", () => {
+    expect(RSVP_DEADLINE_DAYS_BEFORE).toBe(7);
+    expect(
+      calendarDateInZone(
+        new Date(
+          WEDDING_INSTANT.getTime() - RSVP_DEADLINE_DAYS_BEFORE * 86_400_000,
+        ),
+        WEDDING_TIME_ZONE,
+      ),
+    ).toBe(RSVP_DEADLINE);
+  });
+
+  /**
+   * It is the shape `isRsvpOpen` demands, which is not decoration.
+   *
+   * That function THROWS on anything but `YYYY-MM-DD`, deliberately — defaulting
+   * either way would silently accept answers the couple believe are closed, or
+   * lock out a household over a typo. A deadline that could not be parsed would
+   * therefore take down the RSVP for everybody.
+   */
+  it("is a plain ISO calendar day", () => {
+    expect(RSVP_DEADLINE).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(
+      isRsvpOpen(RSVP_DEADLINE, new Date("2026-11-21T23:00:00-05:00")),
+    ).toBe(true);
+    expect(
+      isRsvpOpen(RSVP_DEADLINE, new Date("2026-11-22T00:30:00-05:00")),
+    ).toBe(false);
   });
 });

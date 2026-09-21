@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { isRsvpOpen } from "@/lib/domain/rsvp-deadline";
+import { RSVP_DEADLINE } from "@/lib/domain/wedding-day";
+
 import { signUnlockCookie } from "./cookies";
 import {
   DIETARY_NOTES_MAX_LENGTH,
@@ -55,7 +58,6 @@ const NOW = new Date("2026-04-01T15:00:00Z");
 function household(overrides: Partial<RsvpTarget> = {}): RsvpTarget {
   return {
     id: INVITATION_ID,
-    rsvpDeadline: "2026-05-01",
     guestIds: [GUEST_ONE, GUEST_TWO, GUEST_THREE],
     ...overrides,
   };
@@ -172,7 +174,7 @@ describe("submitRsvp authorization", () => {
       unlockCookie: signUnlockCookie(INVITATION_ID, NOW.getTime()),
       // 181 days later: past the 180-day cookie lifetime.
       now: new Date(NOW.getTime() + 181 * 24 * 60 * 60 * 1000),
-      invitation: household({ rsvpDeadline: null }),
+      invitation: household(),
     });
 
     expect(outcome).toEqual({ status: "not_authorized" });
@@ -187,7 +189,7 @@ describe("submitRsvp authorization", () => {
     const outcome = await submit({
       store,
       unlockCookie: "",
-      invitation: household({ rsvpDeadline: "2020-01-01" }),
+      invitation: household(),
       formData: form({ attending: "maybe", attendees: ["not-a-uuid"] }),
     });
 
@@ -444,20 +446,25 @@ describe("submitRsvp append-only history", () => {
   });
 });
 
+/**
+ * THE DEADLINE IS THE WEDDING'S, NOT THE HOUSEHOLD'S.
+ *
+ * These instants used to be relative to a date passed in per invitation. There
+ * is one deadline now — one week before the wedding, derived in
+ * `lib/domain/wedding-day.ts` — so they are relative to that.
+ */
 describe("submitRsvp deadline", () => {
   it("refuses a submission after the deadline day has ended in Bogota", async () => {
     const { store, inserted } = fakeStore();
+    // 2026-11-22T04:00Z is 23:00 on the 21st in Bogota — still open — so this
+    // is the first instant of the 22nd there.
+    const now = new Date("2026-11-22T05:00:00Z");
 
     const outcome = await submit({
       store,
-      invitation: household({ rsvpDeadline: "2026-05-01" }),
-      // 2026-05-02T04:00Z is 23:00 on 1 May in Bogota — still open — so this is
-      // the first instant of 2 May there.
-      now: new Date("2026-05-02T05:00:00Z"),
-      unlockCookie: signUnlockCookie(
-        INVITATION_ID,
-        new Date("2026-05-02T05:00:00Z").getTime(),
-      ),
+      invitation: household(),
+      now,
+      unlockCookie: signUnlockCookie(INVITATION_ID, now.getTime()),
     });
 
     expect(outcome).toEqual({ status: "closed" });
@@ -465,15 +472,15 @@ describe("submitRsvp deadline", () => {
   });
 
   it("accepts a submission on the evening of the deadline day", async () => {
-    // The defect `rsvp-deadline.ts` exists to prevent: compared as a timestamp,
-    // this instant is already "past" 2026-05-01, and the guest answering at
-    // 23:00 on the day they were given would be told they are late.
+    // The defect `rsvp-deadline.ts` exists to prevent: compared as a bare
+    // timestamp this instant is already "past" the 21st, and a guest answering
+    // at 23:00 on the day they were given would be told they are late.
     const { store, inserted } = fakeStore();
-    const now = new Date("2026-05-02T04:00:00Z");
+    const now = new Date("2026-11-22T04:00:00Z");
 
     const outcome = await submit({
       store,
-      invitation: household({ rsvpDeadline: "2026-05-01" }),
+      invitation: household(),
       now,
       unlockCookie: signUnlockCookie(INVITATION_ID, now.getTime()),
     });
@@ -482,17 +489,25 @@ describe("submitRsvp deadline", () => {
     expect(inserted).toHaveLength(1);
   });
 
-  it("accepts a submission when the invitation has no deadline", async () => {
+  /**
+   * AND A DATE STILL SITTING ON THE ROW CANNOT REACH THIS AT ALL.
+   *
+   * `invitations.rsvp_deadline` is still a column — dropping it is a separate,
+   * destructive step, the way 0012 and 0013 split the last one — but
+   * `RsvpTarget` no longer has a field for it, so a stored date has no path
+   * into the gate. The guarantee is structural rather than behavioural, which
+   * is the stronger of the two: there is nothing to pass and therefore nothing
+   * to pass wrongly.
+   */
+  it("answers on the wedding's deadline regardless of what a row holds", async () => {
     const { store, inserted } = fakeStore();
+    const now = new Date("2026-11-01T12:00:00Z");
 
     const outcome = await submit({
       store,
-      invitation: household({ rsvpDeadline: null }),
-      now: new Date("2030-01-01T00:00:00Z"),
-      unlockCookie: signUnlockCookie(
-        INVITATION_ID,
-        new Date("2030-01-01T00:00:00Z").getTime(),
-      ),
+      invitation: household(),
+      now,
+      unlockCookie: signUnlockCookie(INVITATION_ID, now.getTime()),
     });
 
     expect(outcome).toEqual({ status: "recorded" });
@@ -501,23 +516,23 @@ describe("submitRsvp deadline", () => {
 });
 
 describe("rsvpIsOpenNow", () => {
-  it("is open for an invitation with no deadline", () => {
-    expect(rsvpIsOpenNow(null)).toBe(true);
-  });
-
-  it("is open before a deadline far in the future", () => {
-    expect(rsvpIsOpenNow("2999-12-31")).toBe(true);
-  });
-
-  it("is closed after a deadline long past", () => {
-    expect(rsvpIsOpenNow("2020-01-01")).toBe(false);
+  it("answers for the wedding's own deadline", () => {
+    expect(rsvpIsOpenNow()).toBe(isRsvpOpen(RSVP_DEADLINE, new Date()));
   });
 
   it("reads the clock here so the Server Component never does", () => {
-    // The mirror of `unlockCookieUnlocks`: `isRsvpOpen` takes `now` as an
-    // argument so it stays deterministic (design D2), and this adapter is the
-    // one place that supplies it for a render. A page that called `Date.now()`
-    // itself would be a page whose deadline behaviour no unit test can pin.
-    expect(rsvpIsOpenNow.length).toBe(1);
+    /*
+      The mirror of `unlockCookieUnlocks`: `isRsvpOpen` takes `now` as an
+      argument so it stays deterministic (design D2), and this adapter is the
+      one place that supplies it for a render. A page that called `Date.now()`
+      itself would be a page whose deadline behaviour no unit test can pin.
+
+      The arity flipped from one to ZERO with this change, and that is the
+      assertion now. It used to be handed a per-invitation deadline; there is
+      one wedding and one deadline, so there is nothing left for a caller to
+      pass — and nothing left for a caller to pass WRONG.
+    */
+    expect(rsvpIsOpenNow.length).toBe(0);
+    expect(isRsvpOpen.length).toBeGreaterThanOrEqual(2);
   });
 });

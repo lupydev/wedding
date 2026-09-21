@@ -478,7 +478,6 @@ describe("console writes are not owner-scoped (confirmed decision 4)", () => {
         displayName: "Familia Restrepo Gómez",
         greetingName: "Los Restrepo",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
       },
     ]);
   });

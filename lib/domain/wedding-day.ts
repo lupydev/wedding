@@ -59,6 +59,51 @@ export const WEDDING_ISO_DAY = calendarDateInZone(
   WEDDING_TIME_ZONE,
 );
 
+/**
+ * How long before the wedding the RSVP closes.
+ *
+ * The couple said "hasta una semana antes de la boda" — a RULE, not a date — so
+ * the code says the rule and derives the date. A literal "2026-11-21" would be
+ * the same answer today and the wrong one the moment the wedding moved, and it
+ * would be wrong silently: nothing about a stale deadline looks broken until a
+ * household is refused an answer it should have been allowed to give.
+ *
+ * It happens to be the same seven days as `STREAM_WINDOW_DAYS`, and they are
+ * NOT shared. Two decisions that coincide today are still two decisions:
+ * widening the stream's window must not quietly move the day the RSVP closes.
+ */
+export const RSVP_DEADLINE_DAYS_BEFORE = 7;
+
+/**
+ * The last day a household may answer, as a calendar day where the wedding is.
+ *
+ * `YYYY-MM-DD`, because that is what `isRsvpOpen` demands and that function
+ * THROWS on anything else — a deadline it could not parse would take the RSVP
+ * down for everybody. Open through the END of this day in `WEDDING_TIME_ZONE`:
+ * a guest answering on the evening of the 21st in Bogota is on time.
+ *
+ * ONE VALUE FOR THE WHOLE WEDDING, AND IT USED TO BE ONE PER INVITATION.
+ * `invitations.rsvp_deadline` meant the couple typed the same date into every
+ * household they created, and a forgotten one meant an invitation that never
+ * closed. There is one wedding, so there is one deadline.
+ */
+export const RSVP_DEADLINE = calendarDateInZone(
+  new Date(WEDDING_INSTANT.getTime() - RSVP_DEADLINE_DAYS_BEFORE * 86_400_000),
+  WEDDING_TIME_ZONE,
+);
+
+/**
+ * The deadline as a guest reads it: "21 de noviembre de 2026".
+ *
+ * The invitation used to print the ISO day verbatim — "Confirmen su asistencia
+ * antes del 2026-11-21" — which is a machine's spelling of a date on the one
+ * page written for people. Derived from the same instant, so the sentence and
+ * the gate can never name different days.
+ */
+export const RSVP_DEADLINE_TEXT = formatWeddingDate(
+  new Date(WEDDING_INSTANT.getTime() - RSVP_DEADLINE_DAYS_BEFORE * 86_400_000),
+);
+
 /** How the couple's names are written, exactly as they gave them. */
 export const COUPLE_NAMES = "Luis & Michell";
 

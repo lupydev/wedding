@@ -186,7 +186,6 @@ export interface InvitationFormInvitation {
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
   /** ISO calendar day, or `null` for an invitation that never closes. */
-  readonly rsvpDeadline: string | null;
   readonly dispatchRecipientGuestId: string | null;
   readonly members: readonly InvitationFormMember[];
   /** True when at least one `dispatch_events` row exists for it. */
@@ -331,7 +330,6 @@ export function InvitationForm({
       ? ""
       : invitation.greetingName,
   );
-  const [deadline, setDeadline] = useState(invitation?.rsvpDeadline ?? "");
   const [recipientId, setRecipientId] = useState(
     invitation?.dispatchRecipientGuestId ?? null,
   );
@@ -430,7 +428,6 @@ export function InvitationForm({
     greetingNameSource: source,
     members: rows.map(draftMemberOf),
     dispatchRecipientGuestId: recipientId,
-    rsvpDeadline: deadline === "" ? null : deadline,
   });
 
   function patchRow(key: string, patch: Partial<MemberRow>) {
@@ -490,7 +487,6 @@ export function InvitationForm({
       )
         ? recipientId
         : null,
-      rsvpDeadline: deadline === "" ? null : deadline,
     });
 
     return outcome.refusals.includes("no_members")
@@ -918,19 +914,18 @@ export function InvitationForm({
         </Button>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="invitation-rsvp-deadline">
-          Fecha límite para confirmar
-        </Label>
-        <Input
-          className="h-11"
-          id="invitation-rsvp-deadline"
-          name="rsvpDeadline"
-          onChange={(event) => setDeadline(event.target.value)}
-          type="date"
-          value={deadline}
-        />
-      </div>
+      {/*
+        THE DEADLINE IS NOT ASKED FOR HERE ANY MORE.
+
+        A "Fecha límite para confirmar" field stood here, on the create form and
+        on the edit form, which meant the couple typed the same date into every
+        household they made — and a household where they forgot was one whose
+        invitation said nothing about confirming and never closed.
+
+        There is one wedding, so there is one deadline. It is derived from the
+        wedding's own date in `lib/domain/wedding-day.ts`, one week before, and
+        every invitation reads the same value.
+      */}
 
       {invitation === null || memberActions === undefined ? (
         <p

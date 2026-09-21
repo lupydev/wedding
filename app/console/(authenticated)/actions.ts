@@ -332,7 +332,6 @@ export async function createInvitationAction(
     greetingName: text(formData, "greetingName"),
     greetingNameSource:
       text(formData, "greetingNameSource") === "custom" ? "custom" : "derived",
-    rsvpDeadline: optionalText(formData, "rsvpDeadline"),
     guests: members.map((member, index) => ({
       fullName: member.fullName,
       nickname: member.nickname,
@@ -360,7 +359,6 @@ export async function updateInvitationAction(
     greetingName: text(formData, "greetingName"),
     greetingNameSource:
       text(formData, "greetingNameSource") === "custom" ? "custom" : "derived",
-    rsvpDeadline: optionalText(formData, "rsvpDeadline"),
   });
 
   revalidatePath(CONSOLE_ROOT_PATH);

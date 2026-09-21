@@ -226,7 +226,6 @@ export default async function EditInvitationPage({
           displayName: membership.displayName,
           greetingName: membership.greetingName,
           greetingNameSource: membership.greetingNameSource,
-          rsvpDeadline: membership.rsvpDeadline,
           dispatchRecipientGuestId: membership.dispatchRecipientGuestId,
           // ANY event at all, including an opened link and a marked failure: the
           // warning is about a message that left, and the application cannot

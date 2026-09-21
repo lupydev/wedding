@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { RSVP_DEADLINE_TEXT } from "@/lib/domain/wedding-day";
+
 import {
   InvitationBody,
   type InvitationBodyInvitation,
@@ -37,7 +39,6 @@ const household: InvitationBodyInvitation = {
   // `deriveGreetingName` produces — deliberately NOT one member's full name,
   // because the list below renders full names and the two must not collide.
   greetingName: "Ñoño, Aurelia y Tomás",
-  rsvpDeadline: "2027-05-01",
   guests: [
     { id: "g1", fullName: "Ñoño Muñóz", isChild: false },
     { id: "g2", fullName: "Aurelia Muñóz", isChild: false },
@@ -124,21 +125,28 @@ describe("InvitationBody", () => {
     expect(screen.getByText("Aurelia Muñóz")).toBeInTheDocument();
   });
 
-  it("states the confirmation deadline the household was given", () => {
+  /**
+   * ONE DEADLINE FOR THE WHOLE WEDDING, AND IT IS NO LONGER A PROP.
+   *
+   * It used to arrive per household — so the couple typed the same date into
+   * every invitation they created, and one they forgot was an invitation that
+   * said nothing and never closed. The "household with no deadline" case went
+   * with it: there is one wedding, so there is always a deadline.
+   *
+   * Asserted against the domain constant rather than a literal, for the same
+   * reason `SaveTheDate.spec.tsx` asserts against `COUPLE_NAMES`: this date is
+   * going to be corrected at least once, and a spec holding a copy of it would
+   * fail for the one reason a spec must never fail — the truth changed and the
+   * test was still holding the old answer.
+   */
+  it("states the wedding's confirmation deadline, spelled for a person", () => {
     render(<InvitationBody invitation={household} wedding={wedding} />);
 
-    expect(screen.getByText(/2027-05-01/)).toBeInTheDocument();
-  });
-
-  it("says nothing about a deadline when the household has none", () => {
-    render(
-      <InvitationBody
-        invitation={{ ...household, rsvpDeadline: null }}
-        wedding={wedding}
-      />,
-    );
-
-    expect(screen.queryByText(/Confirmen/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(RSVP_DEADLINE_TEXT)),
+    ).toBeInTheDocument();
+    // And not the machine's spelling of it, which is what used to be printed.
+    expect(screen.queryByText(/\d{4}-\d{2}-\d{2}/)).not.toBeInTheDocument();
   });
 
   /**

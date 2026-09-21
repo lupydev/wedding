@@ -99,7 +99,6 @@ function invitation(
     displayName: "Familia Guzmán",
     greetingName: "Luis y Michell",
     greetingNameSource: "derived",
-    rsvpDeadline: null,
     dispatchRecipientGuestId: null,
     dispatched: false,
     members: [

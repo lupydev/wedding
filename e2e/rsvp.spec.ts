@@ -372,26 +372,30 @@ test.describe("the seat cap", () => {
 });
 
 test.describe("the RSVP deadline", () => {
-  test("shows a contact message instead of the form once it has passed", async ({
-    page,
-  }) => {
-    const invitation = await household({ rsvpDeadline: "2020-01-01" });
+  /*
+    THE CLOSED SURFACE CANNOT BE REACHED FROM A BROWSER TEST ANY MORE, AND THAT
+    IS A REAL LOSS, RECORDED RATHER THAN HIDDEN.
 
-    try {
-      await unlock(page, invitation);
+    This test seeded a household with `rsvpDeadline: "2020-01-01"` and asserted
+    the page showed "Ya cerramos las confirmaciones" and no form. There is one
+    deadline for the whole wedding now — the couple asked for exactly that, so
+    they would stop typing the same date into every invitation — and it is one
+    week before a date in the future. No fixture can be past it, and the browser
+    cannot help: the decision is made on the SERVER, from the server's own
+    clock, so `page.clock` reaches nothing.
 
-      await expect(
-        page.getByText(/Ya cerramos las confirmaciones/),
-      ).toBeVisible();
-      // Not a disabled form. No form.
-      await expect(page.locator("form.rsvp__form")).toHaveCount(0);
-      await expect(
-        page.getByRole("button", { name: "Enviar respuesta" }),
-      ).toHaveCount(0);
-    } finally {
-      await invitation.cleanup();
-    }
-  });
+    What survives, and where: the closed surface itself is asserted in
+    `components/invitation/RsvpClosed.spec.tsx` — the message, and that there is
+    nothing to fill in and nothing to submit. The decision is asserted in
+    `lib/domain/rsvp-deadline.spec.ts` and `lib/server/rsvp.spec.ts`, over
+    explicit instants either side of the deadline, including the Bogota
+    end-of-day boundary this project exists to get right.
+
+    What is NOT covered any more is the wiring between them: that
+    `app/i/[slug]/page.tsx` picks the closed branch. One `if`, reachable again
+    the week of the wedding, and the honest thing is to say so here rather than
+    leave a reader to notice the gap.
+  */
 
   test("accepts an answer on the deadline day itself", async ({ page }) => {
     // The Bogota day-end rule, end to end: the invitation stays open through

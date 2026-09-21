@@ -117,7 +117,7 @@ export default async function InvitationPage({ params }: RouteParams) {
     // The deadline decides which surface the body gets, and it decides it on
     // the SERVER. A form rendered past the deadline and refused on submit is a
     // form a household fills in believing they answered.
-    const open = rsvpIsOpenNow(invitation.rsvpDeadline);
+    const open = rsvpIsOpenNow();
     const current = open ? await loadCurrentRsvp(record.id) : null;
     // Every wedding fact this page shows, from the one row that holds them.
     // Read unconditionally inside this branch rather than only when the RSVP is

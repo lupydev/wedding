@@ -41,9 +41,19 @@ export interface InvitationDraft {
   readonly displayName: string;
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
+  /**
+   * OPTIONAL, AND ON ITS WAY OUT.
+   *
+   * The console stopped asking for it: there is one wedding, so there is one
+   * deadline, derived in `lib/domain/wedding-day.ts` and read by every
+   * invitation. `invitations.rsvp_deadline` is still a column — dropping it is
+   * a separate, destructive step, the way 0012 and 0013 split the last one —
+   * and the paths that still carry a stored value keep type-checking through
+   * this field.
+   */
+  readonly rsvpDeadline?: string | null;
   readonly members: readonly InvitationDraftMember[];
   readonly dispatchRecipientGuestId: string | null;
-  readonly rsvpDeadline: string | null;
 }
 
 /** A state the model does not permit. The save does not happen. */

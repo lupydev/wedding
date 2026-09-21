@@ -101,7 +101,7 @@ export interface NewInvitation {
    * nothing may overwrite it. A console draft states `derived` or `custom`.
    */
   readonly greetingNameSource?: GreetingNameSource;
-  readonly rsvpDeadline: string | null;
+  readonly rsvpDeadline?: string | null;
   readonly guests: readonly NewInvitationGuest[];
 }
 
@@ -116,7 +116,7 @@ export interface InvitationRecord {
   readonly ownerSenderId: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline: string | null;
+  readonly rsvpDeadline?: string | null;
   readonly guests: readonly InvitationGuestRecord[];
 }
 
@@ -131,7 +131,7 @@ export interface GuestFacingInvitation {
   readonly slug: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline: string | null;
+  readonly rsvpDeadline?: string | null;
   readonly guests: readonly GuestFacingGuest[];
 }
 
@@ -502,7 +502,6 @@ export async function createInvitation(
     // A member that has never been written cannot have been chosen to receive
     // the message, so creation never carries a recipient.
     dispatchRecipientGuestId: null,
-    rsvpDeadline: input.rsvpDeadline,
   });
 
   if (refusals.length > 0) {
@@ -589,7 +588,7 @@ export interface InvitationEdit {
   readonly displayName: string;
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
-  readonly rsvpDeadline: string | null;
+  readonly rsvpDeadline?: string | null;
 }
 
 /**
