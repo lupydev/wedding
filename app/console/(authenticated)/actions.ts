@@ -350,7 +350,12 @@ export async function createInvitationAction(
     // which partition the invitation appears in and who may dispatch it; it no
     // longer decides who may edit it.
     ownerSenderId: operator.id,
-    displayName: requiredText(formData, "displayName", "el nombre del hogar"),
+    /*
+      NOT READ, AND NOT MISSING. The form stopped asking for a separate
+      "nombre del hogar" — the console shows the greeting everywhere and that
+      column surfaces only in the sentence confirming a deletion — so the
+      repository fills it from the greeting it resolves.
+    */
     greetingName: text(formData, "greetingName"),
     greetingNameSource:
       text(formData, "greetingNameSource") === "custom" ? "custom" : "derived",
@@ -407,7 +412,6 @@ export async function updateInvitationAction(
   const invitationId = requiredInvitationId(formData);
 
   await updateInvitation(createServerSupabaseClient(), invitationId, {
-    displayName: requiredText(formData, "displayName", "el nombre del hogar"),
     greetingName: text(formData, "greetingName"),
     greetingNameSource:
       text(formData, "greetingNameSource") === "custom" ? "custom" : "derived",

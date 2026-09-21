@@ -342,10 +342,6 @@ describe("InvitationForm's refusals, checked before the round trip", () => {
     // browser that refuses to submit an incomplete field would carry the "no
     // invitation was created" assertion below on its own — leaving the refusal
     // this test exists for unproven.
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.click(
       screen.getByRole("button", { name: "Quitar integrante 1" }),
     );
@@ -366,10 +362,6 @@ describe("InvitationForm's refusals, checked before the round trip", () => {
     const { action, user } = renderCreate();
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.click(
       screen.getByRole("button", { name: "Guardar invitación" }),
     );
@@ -410,10 +402,6 @@ describe("InvitationForm's refusals, checked before the round trip", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     // Filled for the same reason: `required` must not be what stops the save.
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.clear(screen.getByLabelText("Nombre del grupo"));
     await user.click(
       screen.getByRole("button", { name: "Guardar invitación" }),
@@ -437,10 +425,6 @@ describe("InvitationForm's advisories, which never block the save", () => {
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Luis Ruiz");
     await user.type(row(2).getByLabelText("Apodo"), "Lucho");
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.click(
       screen.getByRole("button", { name: "Guardar invitación" }),
     );
@@ -890,10 +874,6 @@ describe("InvitationForm — a double tap is one person, not two", () => {
 
     const user = userEvent.setup();
     await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Aristizábal",
-    );
-    await user.type(
       row(1).getByLabelText("Nombre completo"),
       "Carlos Aristizábal",
     );
@@ -1201,10 +1181,6 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
 
       // `required`, so a browser refuses to submit without it and the
       // assertion below would never be reached.
-      await user.type(
-        screen.getByLabelText("Nombre del hogar"),
-        "Familia Guzmán Peña",
-      );
       await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
       await user.click(
         screen.getByRole("button", { name: "Agregar otra persona" }),
@@ -1347,13 +1323,12 @@ describe("picking somebody who is already in the directory", () => {
   it("sends one id column entry per member, so the arrays cannot slip", async () => {
     const { user } = renderCreate([freeGuest()]);
 
-    await user.type(screen.getByLabelText("Nombre del hogar"), "Familia Ruiz");
     await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
     await user.click(
       screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
     );
 
-    const form = screen.getByLabelText("Nombre del hogar").closest("form")!;
+    const form = screen.getByLabelText("Nombre del grupo").closest("form")!;
     const sent = new FormData(form);
 
     expect(sent.getAll("memberFullName")).toEqual(["Ana Ruiz", "Tía Marta"]);
@@ -1404,5 +1379,56 @@ describe("picking somebody who is already in the directory", () => {
     expect(
       await screen.findByText(/ya quedó en otra invitación/i),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * ONE NAME FIELD, AND THERE WERE TWO.
+ *
+ * The form asked for a "Nombre del hogar" and a "Nombre del grupo", each under
+ * its own paragraph explaining how it differs from the other — about ten lines
+ * of prose to distinguish two values, one of which the operator will never see
+ * again. `displayName` is read back on exactly one surface in the whole
+ * console: the sentence that confirms a deletion. Every list, heading and label
+ * shows the greeting.
+ *
+ * The column still exists and the server fills it from the resolved greeting,
+ * so nothing internal changed. What went away is a question asked of somebody
+ * with no way to know the answer does not matter.
+ */
+describe("the household's name", () => {
+  it("asks once, for the name the invitation will actually say", () => {
+    renderCreate();
+
+    expect(screen.getByLabelText("Nombre del grupo")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nombre del hogar")).toBeNull();
+  });
+
+  it("asks once on the edit screen too", () => {
+    renderEdit();
+
+    expect(screen.queryByLabelText("Nombre del hogar")).toBeNull();
+  });
+
+  /**
+   * AND THE FORM STOPS SENDING IT.
+   *
+   * A hidden field carrying a copy of the visible one would be the same two
+   * values with one of them invisible — which is the defect, not the fix. The
+   * server fills the column from the greeting it resolves.
+   */
+  it("sends no household name at all", async () => {
+    const user = userEvent.setup();
+    const { action } = renderCreate();
+
+    await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
+    await user.click(
+      screen.getByRole("button", { name: "Guardar invitación" }),
+    );
+
+    const sent = action.mock.calls[0][0] as FormData;
+
+    expect(sent.get("displayName")).toBeNull();
+    expect(sent.get("greetingName")).toBe("Ana Ruiz");
   });
 });

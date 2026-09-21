@@ -225,7 +225,7 @@ export function buildImportAdvisory(
 
       if (!dispatchable) {
         undispatchablePhones.push({
-          displayName: invitation.displayName,
+          displayName: invitation.displayName ?? invitation.greetingName,
           fullName: guest.fullName,
           lineType,
         });

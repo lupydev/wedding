@@ -226,7 +226,6 @@ test.describe("building an invitation from the directory", () => {
   test("picking them builds the household around them, without a second record", async () => {
     const household = `Familia Armada ${run}`;
 
-    await page.getByLabel("Nombre del hogar").fill(household);
     // NAMED BY HAND, because the console lists a household by its GREETING and
     // the greeting derives from its members — which here is the picked
     // person's own name. Writing it makes the row findable by the name this
@@ -491,7 +490,6 @@ test.describe("what the couple reported", () => {
   test("shows it again on the invitation built from that person", async () => {
     await page.goto("/console/invitations/new");
 
-    await page.getByLabel("Nombre del hogar").fill(household);
     await page.getByLabel("Nombre del grupo").fill(household);
     await page
       .getByRole("button", { name: `Agregar de la lista: ${second}` })

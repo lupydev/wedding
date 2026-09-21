@@ -73,8 +73,20 @@ the couple asked for exactly two CRUDs.
 - [x] **U2 — one press sends to one person.** A send affordance on a guest who
       belongs to no household: it mints their one-person invitation, addresses
       it to them, and lands on the dispatch screen.
-- [ ] **U3 — fewer steps and less noise in both CRUDs.** Named against the
-      screens as they actually are, once U1 and U2 have settled what they hold.
+- [x] **U3a — the invitation form stops asking for two names.** It asks for
+      "Nombre del hogar" AND "Nombre del grupo". `displayName` is read back on
+      exactly one surface — the deletion sentence — while every list, heading
+      and label shows `greetingName`. So one of the two fields is a question
+      about a value the operator will never see again, asked of somebody who
+      has no way to know that.
+- [ ] **U3b — a guest's row says less and offers one obvious action.** It now
+      carries a name line, a household line, a recipient line and up to three
+      buttons. Times forty people, that is a wall rather than a list.
+- [ ] **U3c — the invitation form leads with picking, not typing.** The
+      directory picker sits under the member cards, so the default path is
+      re-typing somebody who already exists. "Mucho más simple poder escoger un
+      invitado" means the picker comes first and typing a new person is the
+      secondary affordance.
 
 ## Checks per unit
 
@@ -160,4 +172,36 @@ else.
 Green: 2249 unit and component tests, 196 browser tests, typecheck, lint,
 format, build.
 
-### Next: U3 — fewer steps and less noise in both CRUDs.
+### U3a — done
+
+The form asked for a "Nombre del hogar" and a "Nombre del grupo", each under
+its own paragraph explaining how it differed from the other — about ten lines
+of prose to separate two values, one of which the operator never sees again.
+
+**`display_name` surfaces on exactly ONE surface in the whole console**: the
+sentence confirming a deletion. Every list, heading, aria-label and error shows
+the greeting. So the form was asking a non-technical operator to invent a value
+with no way to know it did not matter.
+
+The column stays — it is what those messages name — and the repository fills it
+from the greeting it resolves, on creation and on edit alike. The internal
+label and the name on screen can no longer disagree.
+
+**No hidden field.** Submitting a copy of the visible value under another name
+would be the same two values with one of them invisible, which is the defect
+rather than the fix. `displayName` became optional on `NewInvitation` and
+`InvitationEdit`; the importer still supplies one, because its file is the
+source of truth for the households it describes.
+
+**One ownership test was tightened while passing through.** It asserted a
+subset of what the update action forwards; it now asserts the whole argument,
+so a field creeping back in fails rather than passing unnoticed.
+
+**Two stale sentences on the edit screen.** It promised that "el nombre del
+hogar, el saludo y la fecha límite" are saved by the final button. The
+household name has just gone, and the per-invitation deadline went in migration 0016.
+
+Green: 2254 unit and component tests, 196 browser tests, typecheck, lint,
+format, build.
+
+### Next: U3b — a guest's row says less and offers one obvious action.

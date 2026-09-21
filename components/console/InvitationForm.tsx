@@ -380,7 +380,6 @@ export function InvitationForm({
   const [rows, setRows] = useState<readonly MemberRow[]>(() =>
     rowsOf(persisted),
   );
-  const [displayName, setDisplayName] = useState(invitation?.displayName ?? "");
   const [source, setSource] = useState<GreetingNameSource>(
     invitation?.greetingNameSource ?? "derived",
   );
@@ -492,7 +491,9 @@ export function InvitationForm({
   const shownName = source === "derived" ? (derivedName ?? "") : customName;
 
   const { refusals, advisories } = validateInvitationDraft({
-    displayName,
+    // The validator wants a label for its messages, and the greeting is the
+    // one the operator can see. The server fills the column from it too.
+    displayName: shownName,
     greetingName: shownName,
     greetingNameSource: source,
     members: rows.map(draftMemberOf),
@@ -612,7 +613,7 @@ export function InvitationForm({
 
     const after = rows.filter((candidate) => candidate.key !== row.key);
     const outcome = validateInvitationDraft({
-      displayName,
+      displayName: shownName,
       greetingName: shownName,
       greetingNameSource: source,
       members: after.map(draftMemberOf),
@@ -1013,26 +1014,20 @@ export function InvitationForm({
         </Button>
       </fieldset>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="invitation-display-name">Nombre del hogar</Label>
-        <p
-          className="max-w-[68ch] text-xs text-muted-foreground"
-          id="invitation-display-name-hint"
-        >
-          Es el nombre con el que esta invitación aparece en el panel. No es el
-          saludo.
-        </p>
-        <Input
-          aria-describedby="invitation-display-name-hint"
-          className="h-11"
-          id="invitation-display-name"
-          name="displayName"
-          onChange={(event) => setDisplayName(event.target.value)}
-          required
-          value={displayName}
-        />
-      </div>
+      {/*
+        ONE NAME FIELD, AND THERE WERE TWO.
 
+        This asked for a "Nombre del hogar" as well, each field under its own
+        paragraph explaining how it differed from the other — ten lines of
+        prose to separate two values, one of which the operator never sees
+        again. `display_name` surfaces on exactly ONE surface in the whole
+        console: the sentence confirming a deletion. Everything else — every
+        list, heading and label — shows the greeting.
+
+        The column still exists and the server fills it from the greeting it
+        resolves, so nothing internal changed. What went away is a question
+        asked of somebody with no way to know the answer did not matter.
+      */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="invitation-greeting-name">Nombre del grupo</Label>
         <p

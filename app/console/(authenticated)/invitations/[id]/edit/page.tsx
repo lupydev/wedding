@@ -244,8 +244,8 @@ export default async function EditInvitationPage({
 
       <p className="max-w-[68ch] text-sm text-muted-foreground">
         Cualquiera de las dos cuentas puede editar esta invitación. Los cambios
-        de integrantes se guardan uno por uno; el nombre del hogar, el saludo y
-        la fecha límite se guardan con el botón del final.
+        de integrantes se guardan uno por uno; el nombre del grupo se guarda con
+        el botón del final.
       </p>
 
       <InvitationForm

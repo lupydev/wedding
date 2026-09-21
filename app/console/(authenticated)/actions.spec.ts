@@ -473,9 +473,11 @@ describe("console writes are not owner-scoped (confirmed decision 4)", () => {
     );
 
     expect(createInvitation).toHaveBeenCalledTimes(1);
+    // No `displayName`: the form stopped asking for a second name, and the
+    // repository fills that column from the greeting it resolves. What this
+    // test is about is the OWNER, which is the session's and not the form's.
     expect(createInvitation.mock.calls[0][1]).toMatchObject({
       ownerSenderId: BETO.id,
-      displayName: "Familia Restrepo",
       greetingNameSource: "derived",
       guests: [
         {
@@ -499,10 +501,13 @@ describe("console writes are not owner-scoped (confirmed decision 4)", () => {
     );
 
     expect(updateInvitation).toHaveBeenCalledTimes(1);
+    // The form's own `displayName` is ignored now, wherever it came from: the
+    // repository fills that column from the greeting. Asserting the whole
+    // argument rather than a subset is deliberate — a field creeping back in
+    // should fail here rather than pass unnoticed.
     expect(updateInvitation.mock.calls[0].slice(1)).toEqual([
       INVITATION_ID,
       {
-        displayName: "Familia Restrepo Gómez",
         greetingName: "Los Restrepo",
         greetingNameSource: "custom",
       },

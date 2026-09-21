@@ -497,8 +497,6 @@ test.describe("the console never becomes a way past the guest gate", () => {
  * Ana's partition, and the count assertions above are written against three.
  */
 test.describe("creating a group through the console", () => {
-  /** The household name shown in the panel. Never the greeting. */
-  let householdName: string;
   /** The greeting an operator writes over the derived one. */
   let customGreeting: string;
 
@@ -512,7 +510,6 @@ test.describe("creating a group through the console", () => {
   test.beforeAll(() => {
     // Suffixed per run for the same reason the operators are: this file shares
     // one database with every other spec and with whatever an aborted run left.
-    householdName = `Restrepo Vélez ${run}`;
     customGreeting = `Los Restrepo de siempre ${run}`;
   });
 
@@ -577,7 +574,6 @@ test.describe("creating a group through the console", () => {
   });
 
   test("an override survives a member added after it", async () => {
-    await page.getByLabel("Nombre del hogar").fill(householdName);
     await page.getByLabel("Nombre del grupo").fill(customGreeting);
 
     // Touching the field IS the decision, so the hidden source flips with it —
@@ -668,9 +664,6 @@ test.describe("creating a group through the console", () => {
     // stored as derived, this field would now read "Lucha, Teo y Sarita".
     await expect(page.getByLabel("Nombre del grupo")).toHaveValue(
       customGreeting,
-    );
-    await expect(page.getByLabel("Nombre del hogar")).toHaveValue(
-      householdName,
     );
     await expect(page.getByTestId("invitation-greeting-source")).toHaveValue(
       "custom",

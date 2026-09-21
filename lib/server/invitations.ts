@@ -105,7 +105,15 @@ export interface NewInvitation {
    * without a key to be idempotent on.
    */
   readonly sourceKey?: string | null;
-  readonly displayName: string;
+  /**
+   * The console's own label for this household.
+   *
+   * OPTIONAL, because the form stopped asking for it. Left out, it becomes the
+   * greeting the invitation resolved to — which is what every screen shows
+   * anyway. The importer still supplies one, because its file is the source of
+   * truth for the households it describes.
+   */
+  readonly displayName?: string;
   readonly greetingName: string;
   /**
    * Why `greetingName` says what it says. Defaults to `imported`, the column's
@@ -299,10 +307,21 @@ export function validateImportRows(
       );
     }
 
-    seen.set(key, invitation.displayName);
+    seen.set(key, nameOf(invitation));
   }
 
   return validated;
+}
+
+/**
+ * What to call an invitation in a message about it.
+ *
+ * `displayName` became optional when the console stopped asking for it, and an
+ * error naming "undefined" is worse than one naming the greeting. Every import
+ * row carries a display name, but the type cannot know that.
+ */
+function nameOf(invitation: NewInvitation): string {
+  return invitation.displayName?.trim() || invitation.greetingName;
 }
 
 /**
@@ -519,8 +538,31 @@ export async function createInvitation(
 ): Promise<InvitationRecord> {
   const members = input.guests.map(toDraftMember);
   const source = input.greetingNameSource ?? "imported";
+  /*
+    ONE NAME, NOT TWO.
+
+    The console used to ask for a "nombre del hogar" AND a "nombre del grupo".
+    Only the second is ever shown — every list, heading and label reads
+    `greeting_name`, and `display_name` surfaces on exactly one screen, in the
+    sentence confirming a deletion. So the form asked a non-technical operator
+    to invent a value she would never see again, with nothing on screen saying
+    so.
+
+    The column stays: it is what error messages and that sentence name. It just
+    stops being asked for, and falls back to the greeting the invitation
+    actually resolved to, so the internal label and the name on screen can no
+    longer disagree. A caller that supplies one on purpose — the importer,
+    whose file is the source of truth for the households it describes — keeps
+    it.
+  */
+  const naming = greetingNameColumns({
+    source,
+    stored: input.greetingName,
+    members,
+  });
+  const displayName = input.displayName?.trim() || naming.greeting_name;
   const { refusals } = validateInvitationDraft({
-    displayName: input.displayName,
+    displayName,
     greetingName: input.greetingName,
     greetingNameSource: source,
     members,
@@ -531,7 +573,7 @@ export async function createInvitation(
 
   if (refusals.length > 0) {
     throw new Error(
-      `Could not create invitation "${input.displayName}": ${refusalMessage(refusals)}. Nothing was written.`,
+      `Could not create invitation "${displayName}": ${refusalMessage(refusals)}. Nothing was written.`,
     );
   }
 
@@ -543,12 +585,8 @@ export async function createInvitation(
     .insert({
       slug,
       owner_sender_id: input.ownerSenderId,
-      display_name: input.displayName,
-      ...greetingNameColumns({
-        source,
-        stored: input.greetingName,
-        members,
-      }),
+      display_name: displayName,
+      ...naming,
       source_key: input.sourceKey ?? null,
     })
     .select("id")
@@ -704,7 +742,8 @@ export async function createInvitation(
 
 /** The invitation's OWN fields an operator may rewrite from the edit form. */
 export interface InvitationEdit {
-  readonly displayName: string;
+  /** Optional for the same reason as on creation: the form stopped asking. */
+  readonly displayName?: string;
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
 }
@@ -813,8 +852,16 @@ export async function updateInvitation(
   edit: InvitationEdit,
 ): Promise<void> {
   const membership = await readMembership(client, invitationId);
+  // The same fallback creation uses, for the same reason: the form no longer
+  // asks for a separate label, and the console shows the greeting everywhere.
+  const naming = greetingNameColumns({
+    source: edit.greetingNameSource,
+    stored: edit.greetingName,
+    members: membership.members,
+  });
+  const displayName = edit.displayName?.trim() || naming.greeting_name;
   const { refusals } = validateInvitationDraft({
-    displayName: edit.displayName,
+    displayName,
     greetingName: edit.greetingName,
     greetingNameSource: edit.greetingNameSource,
     members: membership.members,
@@ -829,14 +876,7 @@ export async function updateInvitation(
 
   const { error } = await client
     .from("invitations")
-    .update({
-      display_name: edit.displayName,
-      ...greetingNameColumns({
-        source: edit.greetingNameSource,
-        stored: edit.greetingName,
-        members: membership.members,
-      }),
-    })
+    .update({ display_name: displayName, ...naming })
     .eq("id", invitationId);
 
   if (error) {

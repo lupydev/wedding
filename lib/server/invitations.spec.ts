@@ -2841,6 +2841,86 @@ describe("importInvitations — the address it mints (local Supabase)", () => {
 });
 
 /**
+ * ONE NAME, NOT TWO.
+ *
+ * The console asked for a "nombre del hogar" and a "nombre del grupo". Only the
+ * second is ever shown: every list, heading and aria-label reads
+ * `greetingName`, and `displayName` surfaces on exactly one screen, in the
+ * sentence that confirms a deletion. So the form asked a non-technical operator
+ * to invent a value she will never see again, with nothing on screen to tell
+ * her that.
+ *
+ * The column stays — it is what error messages and the deletion sentence name —
+ * and simply stops being asked for. When it is not supplied it becomes the
+ * greeting the invitation resolved to, so the console's internal label and the
+ * name on screen can no longer disagree.
+ */
+describe("createInvitation — the name it falls back to", () => {
+  it("names the invitation after its resolved greeting when none is given", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const created = await createInvitation(createServerSupabaseClient(), {
+        ownerSenderId: senderId,
+        // Not supplied. The form no longer asks.
+        greetingName: "",
+        greetingNameSource: "derived",
+        guests: [
+          member(`Lucha Guzmán ${stamp}`, {
+            nickname: "Lucha",
+            isPrimary: true,
+          }),
+          member(`Teo Guzmán ${stamp}`, { nickname: "Teo" }),
+        ],
+      });
+
+      const stored = await withDb(async (db) => {
+        const r = await db.query<{
+          display_name: string;
+          greeting_name: string;
+        }>(
+          "select display_name, greeting_name from invitations where id = $1",
+          [created.id],
+        );
+        return r.rows[0];
+      });
+
+      // The two can no longer disagree, which is the whole point.
+      expect(stored.greeting_name).toBe("Lucha y Teo");
+      expect(stored.display_name).toBe("Lucha y Teo");
+    });
+  });
+
+  /**
+   * A NAME THAT IS SUPPLIED IS STILL HONOURED.
+   *
+   * The importer supplies one, and a file is the source of truth for the
+   * households it describes. This is a fallback, not a replacement.
+   */
+  it("keeps a display name that was given on purpose", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const created = await createInvitation(createServerSupabaseClient(), {
+        ownerSenderId: senderId,
+        displayName: `Hogar Explícito ${stamp}`,
+        greetingName: `Los Guzmán ${stamp}`,
+        greetingNameSource: "custom",
+        guests: [member(`Ana Guzmán ${stamp}`, { isPrimary: true })],
+      });
+
+      const stored = await withDb(async (db) => {
+        const r = await db.query<{ display_name: string }>(
+          "select display_name from invitations where id = $1",
+          [created.id],
+        );
+        return r.rows[0].display_name;
+      });
+
+      expect(stored).toBe(`Hogar Explícito ${stamp}`);
+    });
+  });
+});
+
+/**
  * SENDING TO ONE PERSON, WITHOUT BUILDING A HOUSEHOLD FIRST.
  *
  * The couple: "se le debe de poder mediante un botón o algo enviar la
