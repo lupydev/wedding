@@ -507,3 +507,60 @@ test.describe("what the couple reported", () => {
     await expect(created.getByText("(Segui)")).toBeVisible();
   });
 });
+
+/**
+ * ONE PRESS, ONE PERSON, NO HOUSEHOLD TO BUILD FIRST.
+ *
+ * "Se le debe de poder mediante un botón o algo enviar la invitación individual
+ * si se quiere al invitado sin necesidad de pertenecer a una invitación, estas
+ * son para grupos familiares de 2 o más personas."
+ */
+test.describe("inviting a guest on their own", () => {
+  let alone: string;
+
+  test.beforeAll(() => {
+    alone = `Prima Sola ${run}`;
+  });
+
+  test("mints their invitation and lands on the dispatch screen", async () => {
+    await page.goto("/console/guests");
+    await page
+      .locator("form.guest-directory__new")
+      .getByLabel("Nombre completo")
+      .fill(alone);
+    await page
+      .locator("form.guest-directory__new")
+      .getByLabel("Teléfono")
+      .fill("300 555 7006");
+    await page.getByRole("button", { name: "Agregar invitado" }).click();
+    await expect(rowFor(alone)).toBeVisible();
+
+    await rowFor(alone)
+      .getByRole("button", { name: `Invitar a ${alone} sola` })
+      .click();
+
+    // Straight to the send screen: there is nothing left to decide, because
+    // the only member is necessarily the recipient.
+    await expect(page).toHaveURL(/\/console\/dispatch\/[0-9a-f-]{36}$/);
+  });
+
+  /**
+   * AND THE DIRECTORY AGREES: she is now in her own invitation, which is a
+   * household like any other — the couple asked for two CRUDs, not three.
+   */
+  test("shows her inside the invitation that was just made for her", async () => {
+    await page.goto("/console/guests");
+
+    await expect(rowFor(alone)).toContainText(alone);
+    await expect(rowFor(alone)).not.toContainText(/Sin invitación/i);
+    // The offer is gone, because she is no longer in nobody's household.
+    await expect(
+      rowFor(alone).getByRole("button", { name: `Invitar a ${alone} sola` }),
+    ).toHaveCount(0);
+    // What she has instead is the ordinary send, because she IS the recipient.
+    await expect(rowFor(alone)).toContainText(/Recibe el mensaje/i);
+    await expect(
+      rowFor(alone).getByRole("link", { name: /Enviar/ }),
+    ).toBeVisible();
+  });
+});

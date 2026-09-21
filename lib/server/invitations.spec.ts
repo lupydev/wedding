@@ -13,6 +13,7 @@ import {
   addMember,
   chooseRecipient,
   createInvitation,
+  createSoloInvitation,
   deleteInvitation,
   editMember,
   removeMember,
@@ -2835,6 +2836,156 @@ describe("importInvitations — the address it mints (local Supabase)", () => {
       ]);
 
       expect(imported.slug).toMatch(/^[a-z2-7]{16}$/);
+    });
+  });
+});
+
+/**
+ * SENDING TO ONE PERSON, WITHOUT BUILDING A HOUSEHOLD FIRST.
+ *
+ * The couple: "se le debe de poder mediante un botón o algo enviar la
+ * invitación individual si se quiere al invitado sin necesidad de pertenecer a
+ * una invitación, estas son para grupos familiares de 2 o más personas."
+ *
+ * An invitation is still the thing that gets sent — it carries the address, the
+ * phone gate and the audit trail — so this mints a ONE-PERSON one rather than
+ * inventing a second kind of send with its own copy of those guards. What goes
+ * away is the part that was busywork: nobody has to assemble a household to
+ * write to a cousin who is coming alone.
+ */
+describe("createSoloInvitation — one guest, their own invitation", () => {
+  it("mints an invitation addressed to that person, at their own name", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+      const fullName = `Marta Sola ${stamp}`;
+
+      const guestId = await withDb(async (db) => {
+        const r = await db.query<{ id: string }>(
+          `insert into invitation_guests (invitation_id, full_name, nickname, phone_e164)
+           values (null, $1, 'Tita', '+573002250001') returning id`,
+          [fullName],
+        );
+        return r.rows[0].id;
+      });
+
+      const created = await createSoloInvitation(client, senderId, guestId);
+
+      const stored = await withDb(async (db) => {
+        const r = await db.query<{
+          slug: string;
+          greeting_name: string;
+          members: number;
+          recipient: string | null;
+        }>(
+          `select i.slug, i.greeting_name,
+                  count(g.id)::int as members,
+                  max(case when g.id = i.dispatch_recipient_guest_id then g.full_name end) as recipient
+             from invitations i join invitation_guests g on g.invitation_id = i.id
+            where i.id = $1 group by i.slug, i.greeting_name`,
+          [created.id],
+        );
+        return r.rows[0];
+      });
+
+      // THE ADDRESS IS THEIR FULL NAME, which is the couple's own rule: "el
+      // slug sea el nombre del grupo familiar y el de la persona individual el
+      // nombre completo".
+      expect(stored.slug).toBe(`marta-sola-${stamp}`);
+      // The GREETING is derived, so it speaks the nickname — the address and
+      // the salutation answer different questions and need not match.
+      expect(stored.greeting_name).toBe("Tita");
+      // Moved, not copied: one member, and it is them.
+      expect(stored.members).toBe(1);
+      expect(stored.recipient).toBe(fullName);
+    });
+  });
+
+  /**
+   * IT IS SENDABLE THE MOMENT IT EXISTS.
+   *
+   * The whole point is one press. An invitation arriving with no recipient
+   * chosen would land the operator on a dispatch screen that refuses, which is
+   * the defect this project already fixed once for the create form.
+   */
+  it("leaves nothing for the operator to finish before sending", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+
+      const guestId = await withDb(async (db) => {
+        const r = await db.query<{ id: string }>(
+          `insert into invitation_guests (invitation_id, full_name, phone_e164)
+           values (null, $1, '+573002250002') returning id`,
+          [`Solo Listo ${stamp}`],
+        );
+        return r.rows[0].id;
+      });
+
+      const created = await createSoloInvitation(client, senderId, guestId);
+      const record = await findInvitationMembership(client, created.id);
+
+      expect(record?.dispatchRecipientGuestId).toBe(guestId);
+    });
+  });
+
+  /**
+   * AND IT REFUSES SOMEBODY WHO IS ALREADY IN A HOUSEHOLD.
+   *
+   * Not defensive padding: the button is only offered on a free guest, but the
+   * page it is offered from can go stale while the other operator places that
+   * person. Minting a second invitation for them would leave one household
+   * short a member and two links in circulation for one person.
+   */
+  it("refuses a guest who already belongs to an invitation", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+      const name = `Ya En Hogar ${stamp}`;
+
+      const household = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: `Familia Tomada ${stamp}`,
+        greetingName: `Familia Tomada ${stamp}`,
+        greetingNameSource: "custom",
+        guests: [
+          {
+            fullName: name,
+            phoneE164: "+573002250003",
+            isPrimary: true,
+            isChild: false,
+          },
+        ],
+      });
+      const takenId = await withDb(async (db) => {
+        const r = await db.query<{ id: string }>(
+          "select id from invitation_guests where invitation_id = $1",
+          [household.id],
+        );
+        return r.rows[0].id;
+      });
+
+      const message = await createSoloInvitation(
+        client,
+        senderId,
+        takenId,
+      ).then(
+        () => null,
+        (error: Error) => error.message,
+      );
+
+      expect(message).toMatch(/ya (pertenece|está)/i);
+
+      const invitations = await withDb(async (db) => {
+        const r = await db.query<{ n: string }>(
+          "select count(*) as n from invitation_guests where id = $1 and invitation_id = $2",
+          [takenId, household.id],
+        );
+        return r.rows[0].n;
+      });
+
+      // Untouched, and no second invitation left lying around for them.
+      expect(invitations).toBe("1");
     });
   });
 });

@@ -723,6 +723,90 @@ export interface InvitationEdit {
  * form and the Server Action call, so a refusal costs nothing and leaves the
  * stored name exactly as it was.
  */
+/**
+ * One guest, their own invitation, in one press.
+ *
+ * The couple asked for it in those terms: "enviar la invitación individual… sin
+ * necesidad de pertenecer a una invitación, estas son para grupos familiares de
+ * 2 o más personas". An invitation is still the thing that gets sent — it
+ * carries the address, the phone gate and the audit trail — so this mints a
+ * ONE-PERSON one rather than inventing a second kind of send that would need
+ * its own copy of every guard.
+ *
+ * THE ADDRESS IS THEIR FULL NAME AND THE GREETING IS THEIR NICKNAME, which is
+ * not an inconsistency: `greetingName` feeds the slug, and a `derived` source
+ * makes the STORED greeting come from the member instead. So Marta Ruiz, known
+ * as Tita, lives at `/i/marta-ruiz` and is greeted as "Tita" — the couple's own
+ * rule, "el slug sea… el de la persona individual el nombre completo".
+ *
+ * It composes `createInvitation` rather than writing rows of its own, so the
+ * refusal for a guest somebody else already took, the compensation that leaves
+ * nothing behind, and the recipient being recorded all come for free.
+ */
+export async function createSoloInvitation(
+  client: SupabaseClient,
+  ownerSenderId: string,
+  guestId: string,
+): Promise<InvitationRecord> {
+  const { data, error } = await client
+    .from("invitation_guests")
+    .select("id, full_name, nickname, phone_e164, is_child, invitation_id")
+    .eq("id", guestId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not read guest ${guestId}: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error(`Guest ${guestId} does not exist.`);
+  }
+
+  const guest = data as {
+    full_name: string;
+    nickname: string | null;
+    phone_e164: string | null;
+    is_child: boolean;
+    invitation_id: string | null;
+  };
+
+  /*
+    CHECKED HERE AND AGAIN INSIDE, AND BOTH EARN THEIR PLACE.
+
+    This one exists to give the operator a sentence they can act on. The other
+    is `placeGuestInInvitation`'s `invitation_id is null`, which travels inside
+    the UPDATE and is what actually makes a race impossible — this read could
+    go stale between the two statements, and the second one cannot.
+  */
+  if (guest.invitation_id !== null) {
+    throw new Error(
+      `${guest.full_name} ya pertenece a una invitación, así que no se le puede crear una individual. Actualizá la lista.`,
+    );
+  }
+
+  return createInvitation(client, {
+    ownerSenderId,
+    displayName: guest.full_name,
+    // Feeds the SLUG. The stored greeting is derived from the member below.
+    greetingName: guest.full_name,
+    greetingNameSource: "derived",
+    guests: [
+      {
+        fullName: guest.full_name,
+        nickname: guest.nickname,
+        phoneE164: guest.phone_e164,
+        isPrimary: true,
+        isChild: guest.is_child,
+        existingGuestId: guestId,
+      },
+    ],
+    // The only member, and therefore the only possible recipient. An invitation
+    // arriving unchosen would land the operator on a dispatch screen that
+    // refuses — the exact defect the create form already had once.
+    dispatchRecipientIndex: 0,
+  });
+}
+
 export async function updateInvitation(
   client: SupabaseClient,
   invitationId: string,

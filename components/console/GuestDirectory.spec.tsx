@@ -56,9 +56,13 @@ function renderDirectory(
     updateAction: Mock<RefusingAction>;
     deleteAction: Mock<VoidAction>;
     dispatchBlocked: boolean;
+    inviteAloneAction: Mock<VoidAction>;
   }> = {},
 ) {
   const dispatchBlocked = actions.dispatchBlocked ?? false;
+  const inviteAloneAction =
+    actions.inviteAloneAction ??
+    vi.fn<VoidAction>().mockResolvedValue(undefined);
   const createAction =
     actions.createAction ?? vi.fn<RefusingAction>().mockResolvedValue([]);
   const updateAction =
@@ -72,12 +76,13 @@ function renderDirectory(
       deleteAction={deleteAction}
       directory={buildGuestDirectory(guests)}
       dispatchBlocked={dispatchBlocked}
+      inviteAloneAction={inviteAloneAction}
       updateAction={updateAction}
       viewerSenderId={ANA}
     />,
   );
 
-  return { createAction, updateAction, deleteAction };
+  return { createAction, updateAction, deleteAction, inviteAloneAction };
 }
 
 function rowFor(fullName: string): HTMLElement {
@@ -365,5 +370,77 @@ describe("sending from a guest's row", () => {
 
     expect(row.queryByRole("link", { name: /Enviar/ })).toBeNull();
     expect(row.getByText(/Nadie elegido/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * SENDING TO SOMEBODY WHO IS IN NO HOUSEHOLD.
+ *
+ * "Se le debe de poder mediante un botón o algo enviar la invitación individual
+ * si se quiere al invitado sin necesidad de pertenecer a una invitación, estas
+ * son para grupos familiares de 2 o más personas."
+ *
+ * The press mints their one-person invitation and goes to the dispatch screen.
+ * It is the same destination the household rows reach, so there is still only
+ * one place a message is composed, gated and audited — what disappears is
+ * having to assemble a household for a cousin who is coming alone.
+ */
+describe("inviting a guest on their own", () => {
+  it("offers it to somebody who belongs to nobody", () => {
+    renderDirectory([guest()]);
+
+    expect(
+      within(rowFor("Ana Restrepo")).getByRole("button", {
+        name: /Invitar a Ana Restrepo sola/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND NOT TO SOMEBODY ALREADY IN ONE. Their household is how they are sent,
+   * and that row already carries "Enviar". Two ways to send one person is one
+   * way too many, and the second would mint a duplicate invitation.
+   */
+  it("offers nothing of the kind to somebody already in a household", () => {
+    renderDirectory([guest({ household: HOUSEHOLD })]);
+
+    expect(
+      within(rowFor("Ana Restrepo")).queryByRole("button", {
+        name: /Invitar a Ana Restrepo sola/i,
+      }),
+    ).toBeNull();
+  });
+
+  it("withdraws it while this handset carries the other account", () => {
+    renderDirectory([guest()], { dispatchBlocked: true });
+
+    expect(
+      within(rowFor("Ana Restrepo")).queryByRole("button", {
+        name: /Invitar a Ana Restrepo sola/i,
+      }),
+    ).toBeNull();
+  });
+
+  /**
+   * THE ACTION CARRIES THE ID AND THE SERVER DECIDES WHERE TO GO.
+   *
+   * A plain `<form action={…}>` with a hidden field, not a button wired to a
+   * router: the server action redirects to the dispatch screen it just created,
+   * exactly as the create page's wrapper does. Nothing about navigation lives
+   * in this component, so there is nothing here to get out of step.
+   */
+  it("sends the guest's id to the server", async () => {
+    const user = userEvent.setup();
+    const { inviteAloneAction } = renderDirectory([guest()]);
+
+    await user.click(
+      within(rowFor("Ana Restrepo")).getByRole("button", {
+        name: /Invitar a Ana Restrepo sola/i,
+      }),
+    );
+
+    expect(
+      (inviteAloneAction.mock.calls[0][0] as FormData).get("guestId"),
+    ).toBe("g1");
   });
 });

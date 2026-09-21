@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { ConsoleSkeleton } from "@/components/console/ConsoleSkeleton";
@@ -14,6 +15,7 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
 import {
   createDirectoryGuestAction,
   deleteDirectoryGuestAction,
+  inviteGuestAloneAction,
   updateDirectoryGuestAction,
 } from "../actions";
 
@@ -69,12 +71,29 @@ async function Directory({
 }) {
   const guests = await listGuestDirectory(createServerSupabaseClient());
 
+  /**
+   * Mints the one-person invitation, then LEAVES.
+   *
+   * The action answers with the dispatch path rather than redirecting itself,
+   * because a redirect is a control-flow throw and the repository should not be
+   * throwing navigation at its callers. The wrapper is where "and then go
+   * there" belongs — the same shape `invitations/new` uses after creating a
+   * household. Staying on the directory after minting an invitation would leave
+   * the operator looking at a screen that appears to have done nothing.
+   */
+  async function inviteAlone(formData: FormData) {
+    "use server";
+
+    redirect(await inviteGuestAloneAction(formData));
+  }
+
   return (
     <GuestDirectory
       createAction={createDirectoryGuestAction}
       deleteAction={deleteDirectoryGuestAction}
       directory={buildGuestDirectory(guests)}
       dispatchBlocked={dispatchBlocked}
+      inviteAloneAction={inviteAlone}
       updateAction={updateDirectoryGuestAction}
       viewerSenderId={viewerSenderId}
     />

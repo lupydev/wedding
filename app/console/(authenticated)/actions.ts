@@ -31,6 +31,7 @@ import {
   addMember,
   chooseRecipient,
   createInvitation,
+  createSoloInvitation,
   deleteInvitation,
   editMember,
   findConsoleInvitation,
@@ -770,6 +771,39 @@ export async function placeDirectoryGuestAction(
 
   A session is still required, as it is for every write in this file.
 */
+
+/**
+ * Mints a one-person invitation for a guest who belongs to nobody, and answers
+ * with where to send it.
+ *
+ * WHY IT RETURNS A PATH INSTEAD OF REDIRECTING. A `redirect()` here would throw
+ * a control-flow signal through the caller, which on this screen is a button
+ * inside a list rather than a page-level form — the caller wants to know where
+ * to go, not to be thrown out of. The directory navigates once it has the path.
+ *
+ * NOT DEVICE-GATED, though it leads to a screen that is. Nothing here records a
+ * dispatch; the gate belongs to the confirmation, and it is applied there. The
+ * button is nevertheless hidden on a mismatched handset, because walking
+ * somebody to a screen that will refuse them is not help.
+ */
+export async function inviteGuestAloneAction(
+  formData: FormData,
+): Promise<string> {
+  const operator = await requireOperator();
+
+  const created = await createSoloInvitation(
+    createServerSupabaseClient(),
+    // The SESSION's operator owns what the session creates, so this invitation
+    // lands in their own partition and they are the one who may dispatch it.
+    operator.id,
+    requiredGuestId(formData),
+  );
+
+  revalidatePath(CONSOLE_GUESTS_PATH);
+  revalidatePath(CONSOLE_ROOT_PATH);
+
+  return consoleDispatchPath(created.id);
+}
 
 /** A guest's own fields, as the directory's forms submit them. */
 function readDirectoryGuest(formData: FormData): {

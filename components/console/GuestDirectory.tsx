@@ -53,6 +53,15 @@ export interface GuestDirectoryProps {
     formData: FormData,
   ) => Promise<readonly DraftRefusal[]>;
   readonly deleteAction: (formData: FormData) => Promise<void>;
+  /**
+   * Mints a one-person invitation for a guest who belongs to nobody, and sends
+   * the operator to its dispatch screen.
+   *
+   * The couple asked for it plainly: an invitation is for a family of two or
+   * more, and writing to one person should not mean assembling a household
+   * first. The action redirects, so nothing about navigation lives here.
+   */
+  readonly inviteAloneAction: (formData: FormData) => Promise<void>;
 }
 
 export function GuestDirectory({
@@ -60,6 +69,7 @@ export function GuestDirectory({
   deleteAction,
   directory,
   dispatchBlocked,
+  inviteAloneAction,
   updateAction,
   viewerSenderId,
 }: GuestDirectoryProps) {
@@ -218,6 +228,10 @@ export function GuestDirectory({
                 <GuestRow
                   confirming={confirming === guest.id}
                   guest={guest}
+                  inviteAloneAction={inviteAloneAction}
+                  // True where it is true: she is in no household, and this
+                  // handset carries the right WhatsApp account.
+                  canInviteAlone={guest.household === null && !dispatchBlocked}
                   canSend={
                     canOfferSend(guest, { viewerSenderId, dispatchBlocked }) &&
                     guest.recipientName !== null
@@ -249,18 +263,22 @@ export function GuestDirectory({
  * is in Familia Restrepo and that Carla is in nobody's.
  */
 function GuestRow({
+  canInviteAlone,
   canSend,
   confirming,
   guest,
+  inviteAloneAction,
   onCancelDelete,
   onConfirmDelete,
   onEdit,
   onProposeDelete,
   pending,
 }: {
+  readonly canInviteAlone: boolean;
   readonly canSend: boolean;
   readonly confirming: boolean;
   readonly guest: DirectoryEntry;
+  readonly inviteAloneAction: (formData: FormData) => Promise<void>;
   readonly onCancelDelete: () => void;
   readonly onConfirmDelete: () => void;
   readonly onEdit: () => void;
@@ -372,6 +390,28 @@ function GuestRow({
                 Enviar
               </a>
             </Button>
+          )}
+
+          {/*
+            ONE PRESS FOR SOMEBODY COMING ALONE.
+
+            An invitation is a household of two or more, and writing to a
+            cousin who is coming by herself should not mean assembling one. The
+            press mints her own one-person invitation and the server redirects
+            to the same dispatch screen every household reaches — so a message
+            is still composed, gated and audited in exactly one place.
+
+            A plain form, because the action redirects. Offered only where it
+            is true: she is in no household, and this handset carries the right
+            WhatsApp account.
+          */}
+          {canInviteAlone && (
+            <form action={inviteAloneAction}>
+              <input name="guestId" type="hidden" value={guest.id} />
+              <Button disabled={pending} size="sm" type="submit">
+                Invitar a {guest.fullName} sola
+              </Button>
+            </form>
           )}
 
           {/*

@@ -70,7 +70,7 @@ the couple asked for exactly two CRUDs.
       `created_at DESC`, and the nickname visible everywhere a person is named,
       including the console's invitation rows where it is currently not even
       selected from the database.
-- [ ] **U2 — one press sends to one person.** A send affordance on a guest who
+- [x] **U2 — one press sends to one person.** A send affordance on a guest who
       belongs to no household: it mints their one-person invitation, addresses
       it to them, and lands on the dispatch screen.
 - [ ] **U3 — fewer steps and less noise in both CRUDs.** Named against the
@@ -122,4 +122,42 @@ list of forty is ambiguous by construction. The browser tests scope to
 Green: 2241 unit and component tests, 194 browser tests, typecheck, lint,
 format, build.
 
-### Next: U2 — one press sends to one person.
+### U2 — done
+
+A guest who belongs to nobody carries "Invitar a {nombre} sola". The press mints
+their one-person invitation and the server redirects to the same dispatch
+screen every household reaches — so a message is still composed, gated and
+audited in exactly one place. What disappears is assembling a household for a
+cousin who is coming by herself.
+
+**`createSoloInvitation` composes `createInvitation` rather than writing rows.**
+That is what makes it small: the refusal for a guest somebody else already
+took, the compensation that leaves nothing behind, and the recipient being
+recorded all arrive for free, already tested.
+
+**The address is their full name and the greeting is their nickname, and that
+is not an inconsistency.** `greetingName` feeds the slug; a `derived` source
+makes the STORED greeting come from the member instead. So Marta Ruiz, known as
+Tita, lives at `/i/marta-ruiz` and is greeted as "Tita" — the couple's own rule,
+"el slug… de la persona individual el nombre completo".
+
+**Checked twice, and both earn their place.** The repository reads the guest and
+refuses one who already belongs somewhere, which is what gives the operator a
+sentence they can act on. `placeGuestInInvitation`'s `invitation_id is null`
+travels inside the UPDATE and is what actually makes the race impossible — the
+first read can go stale between the two statements and the second cannot.
+
+**The recipient is recorded on creation**, because the only member is
+necessarily the only possible recipient. An invitation arriving unchosen would
+land the operator on a dispatch screen that refuses, which is the exact defect
+the create form had once.
+
+**Navigation lives in the page wrapper, not the action or the component.** The
+action answers with the dispatch path; the wrapper redirects. A repository that
+throws navigation at its callers is a repository you cannot call from anywhere
+else.
+
+Green: 2249 unit and component tests, 196 browser tests, typecheck, lint,
+format, build.
+
+### Next: U3 — fewer steps and less noise in both CRUDs.
