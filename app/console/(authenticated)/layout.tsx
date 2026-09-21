@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { CONSOLE_NEW_INVITATION_PATH } from "@/lib/domain/operator-session";
+
 import { ConsoleHeader } from "@/components/console/ConsoleHeader";
 import { ConsoleNavCurrent } from "@/components/console/ConsoleNavCurrent";
 import { ConsoleShell } from "@/components/console/ConsoleShell";
 import { DeviceMismatchNotice } from "@/components/console/DeviceMismatchNotice";
-import {
-  CONSOLE_DEVICE_PATH,
-  describeDeviceMismatch,
-} from "@/lib/domain/device-declaration";
+import { describeDeviceMismatch } from "@/lib/domain/device-declaration";
 import {
   requireDeclaredDevice,
   requireOperator,
@@ -66,7 +65,7 @@ export default async function AuthenticatedConsoleLayout({
       className="console"
       header={
         <ConsoleHeader
-          devicePath={CONSOLE_DEVICE_PATH}
+          newInvitationPath={CONSOLE_NEW_INVITATION_PATH}
           operatorDisplayName={operator.displayName}
           signOutPath="/console/auth/sign-out"
         />

@@ -198,11 +198,18 @@ export function GuestList({
   emptyMessage,
 }: GuestListProps) {
   /**
-   * The door the empty state used to deny existed.
+   * The door, for the one case where it still belongs inside the list.
    *
-   * Rendered in both branches on purpose: an operator staring at an empty list
-   * is the one who most needs it, and an operator with a full list still has to
-   * add the household that called yesterday.
+   * It used to render in BOTH branches, which produced two of them on the
+   * console home — one at the foot of the operator's own list and one at the
+   * foot of the read-only list of the other account's households, where every
+   * other control had been deliberately withdrawn. Both sat below a scrolling
+   * list, so the more invitations existed the further the way to make another
+   * one scrolled away.
+   *
+   * Creation is in the console header now, above the fold on every page. What
+   * stays here is the empty state, where the operator's eye already is and
+   * where an exit is the whole point of the screen.
    */
   const createLink = (
     <Button asChild variant="secondary">
@@ -230,8 +237,6 @@ export function GuestList({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">{createLink}</div>
-
       <ul className="guest-list flex flex-col gap-2">
         {rows.map((row) => (
           <li

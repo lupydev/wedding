@@ -79,8 +79,16 @@ export interface ConsoleNavItem {
  * reached on purpose. The compose and preview routes are per-household and need
  * an invitation id, so they are reached from a row rather than from the bar.
  *
- * Two of the five are fragments of the console root, where those sections already
- * live. They are navigation within a page, not routes of their own.
+ * THREE DESTINATIONS, AND THERE WERE FIVE.
+ *
+ * Two of them — "Revisión" and "Evento" — were FRAGMENTS of the console root,
+ * so three of the five tabs led to the same page. Worse, `isConsoleNavItemActive`
+ * hard-codes a fragment tab never to highlight, which means the bar could not
+ * show where you were whenever you were on one of them. A tab bar whose
+ * majority is one page, and which cannot say so, is not navigation.
+ *
+ * What is left is three real places: the invitations, the wedding's own facts,
+ * and which WhatsApp account this handset holds.
  */
 export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
   {
@@ -88,18 +96,6 @@ export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
     href: CONSOLE_ROOT_PATH,
     label: "Invitaciones",
     icon: "list",
-  },
-  {
-    key: "preflight",
-    href: `${CONSOLE_ROOT_PATH}#revision`,
-    label: "Revisión",
-    icon: "check",
-  },
-  {
-    key: "event",
-    href: `${CONSOLE_ROOT_PATH}#evento`,
-    label: "Evento",
-    icon: "users",
   },
   {
     key: "wedding",

@@ -1,13 +1,11 @@
 import { Suspense } from "react";
 
+import { ConsoleDashboard } from "@/components/console/ConsoleDashboard";
 import { ConsoleSkeleton } from "@/components/console/ConsoleSkeleton";
 import { DispatchPreflight } from "@/components/console/DispatchPreflight";
 import { GuestList } from "@/components/console/GuestList";
-import { ProgressSummary } from "@/components/console/ProgressSummary";
 import {
-  ALL_INVITATIONS_POPULATION,
   ownedPopulation,
-  scopedMetrics,
   summarizeConsoleList,
 } from "@/lib/domain/console-list";
 import { dispatchIsBlockedBy } from "@/lib/domain/device-declaration";
@@ -119,16 +117,23 @@ async function ConsoleLists({
     // hook. The tab bar's two in-page destinations are fragments of THIS page, so
     // they are ids on what is already here rather than routes that did not exist.
     <div className="console__main flex flex-col gap-8">
+      {/*
+        ONE DASHBOARD, OVER THE WHOLE EVENT, AND THERE WERE TWO SUMMARIES.
+
+        The page rendered `ProgressSummary` twice — ten sentences for this
+        operator's households, then ten more for every household in the event,
+        which INCLUDES the first ten. So "Confirmadas" appeared twice on one
+        screen with different denominators, and a reader had to work out which
+        number answered their question.
+
+        The couple ask two things: how many invitations went out, and how many
+        people are coming. Both are about the wedding, not about a partition of
+        it, so there is one set of figures and it covers everything.
+      */}
+      <ConsoleDashboard summary={summarizeConsoleList(everything)} />
+
       <section className="console__section flex flex-col gap-4">
         <h2>Tus invitaciones</h2>
-
-        <ProgressSummary
-          heading={`Resumen de las invitaciones de ${operatorDisplayName}`}
-          metrics={scopedMetrics(
-            summarizeConsoleList(mine),
-            ownedPopulation(operatorDisplayName),
-          )}
-        />
 
         {/* `scroll-mt` so the fragment target is not hidden under the header. */}
         <div className="scroll-mt-4" id="revision">
@@ -160,14 +165,6 @@ async function ConsoleLists({
           no ofrecen acción de envío, porque el mensaje saldría de otra cuenta
           de WhatsApp.
         </p>
-
-        <ProgressSummary
-          heading="Resumen del evento completo"
-          metrics={scopedMetrics(
-            summarizeConsoleList(everything),
-            ALL_INVITATIONS_POPULATION,
-          )}
-        />
 
         <GuestList
           rows={theirs}

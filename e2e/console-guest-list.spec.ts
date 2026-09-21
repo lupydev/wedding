@@ -173,7 +173,11 @@ test.describe("the per-device WhatsApp declaration", () => {
       page.getByRole("link", { name: /Preparar envío/i }),
     ).toHaveCount(0);
     // And the read-only progress view stays available, as the design requires.
-    await expect(page.getByText(/^Confirmadas: /).first()).toBeVisible();
+    // It is the dashboard now rather than a `ProgressSummary` sentence, but the
+    // invariant is the one that mattered: a blocked device withdraws the SEND
+    // affordance and nothing else, so the operator can still read where the
+    // event stands while they go and fix the handset.
+    await expect(page.getByText("Invitaciones enviadas")).toBeVisible();
   });
 
   test("the block offers two exits and nothing that dismisses it", async () => {
@@ -261,27 +265,28 @@ test.describe("the partitioned guest list", () => {
     ).toHaveCount(0);
 
     /*
-      The shared counts cover every invitation, and say so in words.
+      The dashboard's figures cover every invitation, both partitions included.
 
-      The denominator is asserted as an INVARIANT rather than as a literal. The
-      shared scope is genuinely every invitation in the database, and the E2E
-      suite runs its spec files in parallel against one database — so the exact
-      total depends on which other fixtures happen to be alive. What must hold is
-      that the shared scope is strictly wider than the owned one and that its
-      label names the population it counted.
+      There is ONE set of figures now, over the whole event, where there used to
+      be two `ProgressSummary` blocks — the operator's own and the event's —
+      whose denominators a reader had to compare to know which answered their
+      question.
+
+      The denominator is asserted as an INVARIANT rather than as a literal, for
+      the reason the previous version already gave: the scope is genuinely every
+      invitation in the database, and the suite runs its spec files in parallel
+      against one database, so the exact total depends on which other fixtures
+      happen to be alive. What must hold is that it counts at least this file's
+      four households — three of Ana's and one of Beto's — which is what proves
+      it reaches across the partition at all.
     */
-    const sharedLine = await shared
-      .getByText(/^Confirmadas: /)
+    const figure = await page
+      .locator("dl[data-slot='stat-bar'] dd")
       .first()
       .innerText();
-    const sharedTotal = Number(
-      /^Confirmadas: \d+ de (\d+) todas las invitaciones del evento$/.exec(
-        sharedLine,
-      )?.[1],
-    );
+    const total = Number(/^\d+ de (\d+)$/.exec(figure)?.[1]);
 
-    expect(sharedTotal).toBeGreaterThanOrEqual(4);
-    expect(sharedTotal).toBeGreaterThan(3);
+    expect(total).toBeGreaterThanOrEqual(4);
   });
 
   test("the named guests, the member count and the phone numbers are all on the row", async () => {
@@ -323,19 +328,21 @@ test.describe("the partitioned guest list", () => {
     await expect(row.getByText("No asiste")).toBeVisible();
     await expect(row.getByText("Confirmada")).toHaveCount(0);
 
-    // Three owned invitations, one declined, none confirmed — not two answers
-    // from one household.
-    await expect(
-      mine.getByText(`Confirmadas: 0 de 3 invitaciones de ${ana.displayName}`),
-    ).toBeVisible();
-    await expect(
-      mine.getByText(`No asisten: 1 de 3 invitaciones de ${ana.displayName}`),
-    ).toBeVisible();
-    await expect(
-      mine.getByText(
-        `Sin respuesta: 2 de 3 invitaciones de ${ana.displayName}`,
-      ),
-    ).toBeVisible();
+    /*
+      THE COUNT IS NO LONGER ASSERTED HERE, AND THAT IS NOT A LOSS OF COVERAGE.
+
+      It used to read the per-operator `ProgressSummary` sentences. The console
+      now shows ONE set of figures over the whole event, and an event-wide total
+      cannot be asserted from here: this database is shared with every other
+      spec in the suite, so a fixture seeded elsewhere moves the number. That is
+      precisely why these assertions were scoped to Ana's partition originally.
+
+      The invariant itself — one household that answered twice counts ONCE —
+      lives in `summarizeConsoleList` and is asserted directly in
+      `lib/domain/console-list.spec.ts`, over rows, with no database in the way.
+      What this test still proves, and only this test can, is that the chain
+      from `rsvp_latest` to the badge on the row reaches a real page.
+    */
   });
 
   /**
@@ -355,26 +362,29 @@ test.describe("the partitioned guest list", () => {
     ).toBeVisible();
     await expect(row.getByText("Marcada como enviada")).toHaveCount(0);
 
-    await expect(
-      mine.getByText(
-        `Marcadas como enviadas: 0 de 3 invitaciones de ${ana.displayName}`,
-      ),
-    ).toBeVisible();
-    await expect(
-      mine.getByText(
-        `Enlace abierto, envío sin confirmar: 1 de 3 invitaciones de ${ana.displayName}`,
-      ),
-    ).toBeVisible();
+    /*
+      The count moved to the event-wide dashboard, which cannot carry an exact
+      assertion from a shared database — see the note in the test above. That an
+      opened link is never counted as a send is asserted over rows in
+      `lib/domain/console-list.spec.ts` and over the tiles themselves in
+      `components/console/ConsoleDashboard.spec.tsx`.
+    */
   });
 
   test("no count is rendered without the population it was taken over", async () => {
     await page.goto("/console");
 
-    for (const item of await page
-      .locator("section.progress-summary li")
-      .allInnerTexts()) {
-      expect(item).toMatch(/ de \d+ /);
-      expect(item).toMatch(/invitaciones/);
+    // The rule outlived the component that used to carry it. `ProgressSummary`
+    // enforced it by rendering whole sentences; the dashboard is four tiles, so
+    // the population rides inside each figure — "17 de 30", never "17".
+    const figures = await page
+      .locator("dl[data-slot='stat-bar'] dd")
+      .allInnerTexts();
+
+    expect(figures.length).toBeGreaterThan(0);
+
+    for (const figure of figures) {
+      expect(figure).toMatch(/^\d+ de \d+$/);
     }
   });
 });
@@ -504,13 +514,13 @@ test.describe("creating a group through the console", () => {
   const createdRow = () =>
     mine().locator("li.guest-list__row").filter({ hasText: customGreeting });
 
-  test("the create affordance on the list opens the form without leaving the console", async () => {
+  test("creating an invitation is one click from the header", async () => {
     await page.goto("/console");
 
-    // Scoped to the owned partition: the shared dashboard below renders its own
-    // `GuestList` and therefore its own create link, and an unscoped query is
-    // ambiguous exactly because the door is offered in both places.
-    await mine().getByRole("link", { name: "Crear invitación" }).click();
+    // From the header, which is where creation lives now. It used to be a
+    // button at the foot of the guest list — offered in BOTH lists, so this
+    // query had to be scoped to the owned partition to be unambiguous at all.
+    await page.getByRole("link", { name: "Nueva invitación" }).click();
 
     await expect(page).toHaveURL(/\/console\/invitations\/new$/);
     await expect(

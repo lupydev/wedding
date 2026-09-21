@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ConsoleListRow } from "@/lib/domain/console-list";
+import { CONSOLE_NEW_INVITATION_PATH } from "@/lib/domain/operator-session";
 
 import { GuestList } from "./GuestList";
 
@@ -466,12 +467,33 @@ describe("GuestList — an answer the household no longer agrees with", () => {
 describe("GuestList — the console can create an invitation now", () => {
   // The importer is no longer the only door, and the empty state used to say it
   // was. An operator reading that has no reason to look for another way in.
-  it("links to the create form", () => {
-    renderList([row()]);
+  /**
+   * THE CREATE LINK STAYS IN THE EMPTY STATE AND NOWHERE ELSE IN THIS LIST.
+   *
+   * It used to render in both branches, which put two of them on the console
+   * home — one under the operator's own households and one under the read-only
+   * list of the other account's, where every other control had been withdrawn
+   * on purpose. Both sat below a scrolling list, so the more invitations
+   * existed the further the way to make another one scrolled off.
+   *
+   * Creation lives in the console header now, above the fold on every page.
+   * Here it belongs only where the list is empty: that screen's whole job is to
+   * offer the exit, and the operator's eye is already on it.
+   */
+  it("offers the create form from the empty state", () => {
+    renderList([]);
 
     expect(
       screen.getByRole("link", { name: /Crear invitación/i }),
-    ).toHaveAttribute("href", "/console/invitations/new");
+    ).toHaveAttribute("href", CONSOLE_NEW_INVITATION_PATH);
+  });
+
+  it("does not repeat it under a list that already has rows", () => {
+    renderList([row()]);
+
+    expect(
+      screen.queryByRole("link", { name: /Crear invitación/i }),
+    ).toBeNull();
   });
 
   it("points the empty state at creating one instead of at the importer", () => {
