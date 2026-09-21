@@ -342,3 +342,88 @@ test.describe("adding a directory guest to a saved invitation", () => {
     await expect(rowFor(latecomer)).toContainText(`Familia Anfitriona ${run}`);
   });
 });
+
+/**
+ * SENDING FROM A PERSON'S ROW.
+ *
+ * "En los invitados debe existir un botón de envío de la invitación en caso tal
+ * de que se quiera hacer de manera individual." It is a LINK to the dispatch
+ * screen that already exists, not a second way to send: that screen composes
+ * the message, applies the device gate and writes the audit event, and a
+ * second path would carry its own copy of those guards to keep in step.
+ */
+test.describe("the send affordance on a guest's row", () => {
+  let sendable: ConsoleInvitationSeed;
+  let recipient: string;
+  let other: string;
+
+  test.beforeAll(async () => {
+    recipient = `Destinataria Directorio ${run}`;
+    other = `Acompañante Directorio ${run}`;
+    sendable = await seedConsoleInvitation({
+      ownerSenderId: ana.senderId,
+      greetingName: `Familia Enviable ${run}`,
+      guests: [
+        { fullName: recipient, phoneE164: "+573005557004" },
+        { fullName: other, phoneE164: "+573005557005" },
+      ],
+      recipient,
+    });
+  });
+
+  test.afterAll(async () => {
+    await sendable.cleanup();
+  });
+
+  test("points the chosen member's row at the dispatch screen", async () => {
+    await page.goto("/console/guests");
+
+    await expect(rowFor(recipient)).toContainText(/Recibe el mensaje/i);
+    await expect(
+      rowFor(recipient).getByRole("link", { name: /Enviar/ }),
+    ).toHaveAttribute("href", `/console/dispatch/${sendable.invitationId}`);
+  });
+
+  /**
+   * AND THE OTHER MEMBER'S ROW SAYS WHOSE MESSAGE IT IS.
+   *
+   * The button is there — the couple asked for it on the person's row — but
+   * this list is alphabetical, so the member who actually receives the message
+   * is nowhere nearby. Naming them is what stops the button doing something
+   * other than what its row suggests.
+   */
+  test("names the real recipient on a row that is not theirs", async () => {
+    await expect(rowFor(other)).toContainText(`le llega a ${recipient}`);
+    await expect(
+      rowFor(other).getByRole("link", { name: /Enviar/ }),
+    ).toBeVisible();
+  });
+
+  test("the link actually opens that invitation's dispatch screen", async () => {
+    await rowFor(recipient)
+      .getByRole("link", { name: /Enviar/ })
+      .click();
+
+    await expect(page).toHaveURL(
+      new RegExp(`/console/dispatch/${sendable.invitationId}$`),
+    );
+  });
+
+  /**
+   * NOTHING TO SEND FOR SOMEBODY IN NO INVITATION — there is no invitation, no
+   * link and no message. The row already says "Sin invitación todavía", which
+   * is the reason and does not need repeating beside a missing button.
+   */
+  test("offers nothing for a guest who is in no invitation", async () => {
+    const loose = `Sin Envío Directorio ${run}`;
+
+    await page.goto("/console/guests");
+    await page.getByLabel("Nombre completo").fill(loose);
+    await page.getByRole("button", { name: "Agregar invitado" }).click();
+
+    await expect(rowFor(loose)).toContainText(/Sin invitación/i);
+    await expect(
+      rowFor(loose).getByRole("link", { name: /Enviar/ }),
+    ).toHaveCount(0);
+  });
+});

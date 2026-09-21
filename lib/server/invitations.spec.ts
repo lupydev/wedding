@@ -2738,6 +2738,146 @@ describe("importInvitations — the nickname reaches the row (local Supabase)", 
   });
 });
 
+/**
+ * THE IMPORTER MINTS THE SAME READABLE ADDRESSES THE CONSOLE DOES.
+ *
+ * It minted random base32 while `createInvitation` had been giving households
+ * `/i/familia-guzman-pena` since migration 0014. Two ways in, two kinds of
+ * address, and the difference visible to a guest: the families typed into the
+ * console got a link that reads like their name, and the ones loaded from a
+ * file got sixteen characters that read like a mistake.
+ *
+ * WHAT MAKES THIS SAFE TO CHANGE AT ALL is `on conflict (source_key) do
+ * nothing` in `import_invitations` (0006): a re-import leaves the stored slug
+ * untouched and reads it back, so a derived address computed on a second run
+ * is discarded rather than rotating a link already in somebody's WhatsApp.
+ */
+describe("importInvitations — the address it mints (local Supabase)", () => {
+  it("derives the address from the household's name", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const name = `Familia Importada ${stamp}`;
+
+      const [imported] = await importInvitations(createServerSupabaseClient(), [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `readable-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          rsvpDeadline: null,
+          guests: [member("Ana Importada", { isPrimary: true })],
+        },
+      ]);
+
+      expect(imported.slug).toBe(`familia-importada-${stamp}`);
+    });
+  });
+
+  /**
+   * TWO HOUSEHOLDS OF ONE NAME IN THE SAME FILE.
+   *
+   * The database cannot help here: both rows are written by a single RPC call,
+   * so neither is visible to the other's lookup. `readableSlugFor` takes the
+   * addresses already decided in THIS batch, and without threading them the
+   * second household would be handed the first one's slug — where the unique
+   * index refuses it and the whole import fails, naming a constraint rather
+   * than the two families that share a surname.
+   */
+  it("numbers a second household of the same name inside one file", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const name = `Familia Repetida ${stamp}`;
+
+      const imported = await importInvitations(createServerSupabaseClient(), [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `dup-a-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          rsvpDeadline: null,
+          guests: [member("Ana Repetida", { isPrimary: true })],
+        },
+        {
+          ownerSenderId: senderId,
+          sourceKey: `dup-b-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          rsvpDeadline: null,
+          guests: [member("Beto Repetido", { isPrimary: true })],
+        },
+      ]);
+
+      expect(imported.map((row) => row.slug)).toEqual([
+        `familia-repetida-${stamp}`,
+        `familia-repetida-${stamp}-2`,
+      ]);
+    });
+  });
+
+  /**
+   * AND A RE-IMPORT DOES NOT MOVE THE ADDRESS.
+   *
+   * This is the one that would hurt: the link is already in a family's
+   * WhatsApp. A second run computes a NEW address — the first one is taken, so
+   * the counter advances — and that computed value has to be discarded rather
+   * than written. `on conflict (source_key) do nothing` is what discards it,
+   * and this test is what keeps that clause honest.
+   */
+  it("leaves the address alone when the same file is imported again", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const name = `Familia Reimportada ${stamp}`;
+      const rows = [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `rerun-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          rsvpDeadline: null,
+          guests: [member("Ana Reimportada", { isPrimary: true })],
+        },
+      ];
+
+      const first = await importInvitations(createServerSupabaseClient(), rows);
+      const second = await importInvitations(
+        createServerSupabaseClient(),
+        rows,
+      );
+
+      expect(first[0].created).toBe(true);
+      expect(second[0].created).toBe(false);
+      expect(second[0].slug).toBe(first[0].slug);
+    });
+  });
+
+  /**
+   * A NAME NO URL CAN CARRY STILL GETS AN ADDRESS.
+   *
+   * `slugifyName` answers the empty string for a household written entirely in
+   * emoji, and the column refuses an empty slug. Falling back to a random one
+   * is uglier and works, which is the right trade for an import that would
+   * otherwise fail on one odd row and write none of the others.
+   */
+  it("falls back to a random address when the name spells nothing", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+
+      const [imported] = await importInvitations(createServerSupabaseClient(), [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `emoji-${stamp}`,
+          displayName: "💍💍",
+          greetingName: "💍💍",
+          rsvpDeadline: null,
+          guests: [member("Ana Emoji", { isPrimary: true })],
+        },
+      ]);
+
+      expect(imported.slug).toMatch(/^[a-z2-7]{16}$/);
+    });
+  });
+});
+
 describe("findInvitationMembership — what the invitation editor loads", () => {
   it("returns the nicknames and the name source the form must not invent", async () => {
     // The console list projection carries neither: it has no `nickname` column

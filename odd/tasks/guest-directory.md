@@ -272,10 +272,65 @@ copy — advice to retry, for the single case where retrying cannot help.
 Green: 2220 unit and component tests, 188 browser tests, typecheck, lint,
 format, build.
 
+### U4 — done (the importer mints readable addresses)
+
+It minted random base32 while `createInvitation` had been deriving
+`/i/familia-guzman-pena` from the household's name since migration 0014. Two
+ways in, two kinds of address, and the difference visible to the guest: the
+families typed into the console got a link that reads like their name, the ones
+loaded from a file got sixteen characters that read like a mistake.
+
+**What made it safe to change is a clause somebody wrote in 0006.**
+`import_invitations` does `on conflict (source_key) do nothing`, so a re-import
+leaves the stored slug untouched and reads it back. A second run DOES compute a
+new address — the first is taken, so the counter advances — and that value is
+discarded rather than written, which is the only reason this does not rotate a
+link already sitting in a family's WhatsApp. There is now a test that keeps
+that clause honest.
+
+**The batch is its own namespace.** Every household in a file is written by one
+RPC call, so none of them is visible to another's lookup. Two families called
+Ruiz would both have been handed "familia-ruiz" — where the unique index
+refuses the second and the whole import fails, naming a constraint instead of
+the two families that share a surname. `readableSlugFor` already took an
+`alsoTaken` set for exactly this; the importer now threads it.
+
+**Rotation stays random, and its comment was corrected** — it claimed to use
+"the same function creation uses", which stopped being true at 0014. Rotation
+is the exit for an address that has already had to change, and deriving the
+same name again would hand back a neighbour of the address being abandoned.
+
+### U5 — done (sending from a person's row)
+
+"En los invitados debe existir un botón de envío de la invitación en caso tal
+de que se quiera hacer de manera individual."
+
+**It is a LINK to the dispatch screen that already exists, not a second way to
+send.** That screen composes the message, applies the device gate and writes
+the audit event. A button here that sent directly would be a second dispatch
+path carrying its own copy of those guards, which is how one of them ends up
+missing.
+
+**Three conditions, each removing a different lie**, stated once as
+`canOfferSend` because `GuestList` already applies exactly these and two copies
+of a rule are two rules: no household means no invitation and nothing to send;
+dispatch is owner-scoped and that route answers `notFound()` to the other
+operator, so an ungated link points at a 404; and a device mismatch blocks the
+send itself.
+
+**And the row says who the message actually reaches.** This is the part that
+makes the button honest rather than merely present. A send is addressed to the
+member its invitation names, which need not be the person whose row was
+pressed — and the directory is alphabetical, so that member's own row is
+nowhere nearby. Every guest is already in hand, so `buildGuestDirectory`
+resolves the name with no extra query. A household that has chosen nobody shows
+that instead of a button leading to a refusal.
+
+Green: 2239 unit and component tests, 192 browser tests, typecheck, lint,
+format, build.
+
 ## Next
 
-- **The bulk importer still mints random slugs**, and now also writes every
-  guest straight into a household. It has no idea the directory exists.
 - **`moveMemberAction` is still dead code with tests** — a full server action
   and repository function with no UI. It is also the closest thing to "move
   somebody from one household to another", which the directory now makes a
@@ -283,3 +338,7 @@ format, build.
 - The console still shows no warning when the same PERSON is written twice
   under two names. The directory makes that visible for the first time; nobody
   has asked for the check.
+- The importer writes every guest straight into a household and knows nothing
+  about the directory. That is correct as it stands — a file is the source of
+  truth for the households it describes — but a guest already in the directory
+  under the same name will be written a second time, and nothing notices.

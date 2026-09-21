@@ -36,7 +36,13 @@ function guest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
   };
 }
 
-const HOUSEHOLD = { invitationId: "i1", greetingName: "Familia Restrepo" };
+const ANA = "sender-ana";
+const HOUSEHOLD = {
+  invitationId: "i1",
+  greetingName: "Familia Restrepo",
+  ownerSenderId: ANA,
+  recipientGuestId: "g1",
+};
 
 /** The two action shapes the component takes, so the props are really typed. */
 type RefusingAction = (formData: FormData) => Promise<readonly DraftRefusal[]>;
@@ -48,8 +54,10 @@ function renderDirectory(
     createAction: Mock<RefusingAction>;
     updateAction: Mock<RefusingAction>;
     deleteAction: Mock<VoidAction>;
+    dispatchBlocked: boolean;
   }> = {},
 ) {
+  const dispatchBlocked = actions.dispatchBlocked ?? false;
   const createAction =
     actions.createAction ?? vi.fn<RefusingAction>().mockResolvedValue([]);
   const updateAction =
@@ -62,7 +70,9 @@ function renderDirectory(
       createAction={createAction}
       deleteAction={deleteAction}
       directory={buildGuestDirectory(guests)}
+      dispatchBlocked={dispatchBlocked}
       updateAction={updateAction}
+      viewerSenderId={ANA}
     />,
   );
 
@@ -254,5 +264,105 @@ describe("GuestDirectory", () => {
         selector: ".guest-directory__confirm",
       }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * SENDING FROM A PERSON'S ROW.
+ *
+ * The couple asked for it: "en los invitados debe existir un botón de envío de
+ * la invitación en caso tal de que se quiera hacer de manera individual".
+ *
+ * It is a LINK to the existing dispatch screen, not a second way to send. That
+ * screen composes the message, applies the device gate and writes the audit
+ * event; a button here that sent directly would be a second dispatch path with
+ * its own set of guards to keep in step, which is how one of them ends up
+ * missing.
+ */
+describe("sending from a guest's row", () => {
+  it("offers a send on an owned household, pointing at the dispatch screen", () => {
+    renderDirectory([guest({ household: HOUSEHOLD })]);
+
+    const send = within(rowFor("Ana Restrepo")).getByRole("link", {
+      name: /Enviar/,
+    });
+
+    expect(send).toHaveAttribute("href", "/console/dispatch/i1");
+  });
+
+  /**
+   * NOT FOR SOMEBODY IN NO INVITATION, because there is nothing to send: no
+   * invitation, no link, no message. The row already says "Sin invitación
+   * todavía", which is the reason and does not need repeating.
+   */
+  it("offers nothing to send for a guest with no invitation", () => {
+    renderDirectory([guest()]);
+
+    expect(
+      within(rowFor("Ana Restrepo")).queryByRole("link", { name: /Enviar/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * NOT ON THE OTHER OPERATOR'S HOUSEHOLD. Administration is shared between the
+   * two of them; dispatch is not, and that route answers `notFound()` — so the
+   * link would be an affordance pointing at a 404.
+   */
+  it("offers nothing on a household the other operator owns", () => {
+    renderDirectory([
+      guest({ household: { ...HOUSEHOLD, ownerSenderId: "sender-beto" } }),
+    ]);
+
+    expect(
+      within(rowFor("Ana Restrepo")).queryByRole("link", { name: /Enviar/ }),
+    ).toBeNull();
+  });
+
+  it("withdraws it while this handset carries the other account", () => {
+    renderDirectory([guest({ household: HOUSEHOLD })], {
+      dispatchBlocked: true,
+    });
+
+    expect(
+      within(rowFor("Ana Restrepo")).queryByRole("link", { name: /Enviar/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * AND IT NEVER LETS THE OPERATOR BELIEVE THE MESSAGE GOES TO THIS PERSON.
+   *
+   * A send is addressed to the member its invitation names, which need not be
+   * the person whose row was pressed — and this list is alphabetical, so that
+   * member's own row is nowhere nearby. Saying whose it is turns a button that
+   * would quietly do something else into one that says what it does.
+   */
+  it("names who actually receives the message when it is somebody else", () => {
+    renderDirectory([
+      guest({ id: "g1", fullName: "Ana Restrepo", household: HOUSEHOLD }),
+      guest({ id: "g2", fullName: "Beto Restrepo", household: HOUSEHOLD }),
+    ]);
+
+    expect(
+      within(rowFor("Beto Restrepo")).getByText(/le llega a Ana Restrepo/i),
+    ).toBeInTheDocument();
+    expect(
+      within(rowFor("Ana Restrepo")).getByText(/Recibe el mensaje/i),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A household that has chosen nobody cannot be sent at all — the dispatch
+   * preflight already blocks it — so the row says that instead of offering a
+   * button that leads to a refusal.
+   */
+  it("says nobody has been chosen rather than offering a send", () => {
+    renderDirectory([
+      guest({ household: { ...HOUSEHOLD, recipientGuestId: null } }),
+    ]);
+
+    const row = within(rowFor("Ana Restrepo"));
+
+    expect(row.queryByRole("link", { name: /Enviar/ })).toBeNull();
+    expect(row.getByText(/Nadie elegido/i)).toBeInTheDocument();
   });
 });

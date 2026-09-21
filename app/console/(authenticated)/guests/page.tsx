@@ -3,7 +3,11 @@ import { Suspense } from "react";
 import { ConsoleSkeleton } from "@/components/console/ConsoleSkeleton";
 import { GuestDirectory } from "@/components/console/GuestDirectory";
 import { buildGuestDirectory } from "@/lib/domain/guest-directory";
-import { requireOperator } from "@/lib/server/console-session";
+import { dispatchIsBlockedBy } from "@/lib/domain/device-declaration";
+import {
+  requireDeclaredDevice,
+  requireOperator,
+} from "@/lib/server/console-session";
 import { listGuestDirectory } from "@/lib/server/guest-directory";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
@@ -36,16 +40,33 @@ import {
  * declaration check for exactly that reason, asserted in `actions.spec.ts`.
  */
 export default async function ConsoleGuestsPage() {
-  await requireOperator();
+  const operator = await requireOperator();
+  /*
+    READ, NOT ENFORCED. The declaration blocks the SEND affordance and nothing
+    else on this screen — writing a name down records no dispatch, and the
+    operator on the other handset is precisely the one who may still need to
+    fix the data the readiness panel is sending them to fix. The same split
+    `/console` makes with `dispatchIsBlockedBy`.
+  */
+  const declaration = await requireDeclaredDevice(operator.id);
 
   return (
     <Suspense fallback={<ConsoleSkeleton />}>
-      <Directory />
+      <Directory
+        dispatchBlocked={dispatchIsBlockedBy(declaration.status)}
+        viewerSenderId={operator.id}
+      />
     </Suspense>
   );
 }
 
-async function Directory() {
+async function Directory({
+  dispatchBlocked,
+  viewerSenderId,
+}: {
+  readonly dispatchBlocked: boolean;
+  readonly viewerSenderId: string;
+}) {
   const guests = await listGuestDirectory(createServerSupabaseClient());
 
   return (
@@ -53,7 +74,9 @@ async function Directory() {
       createAction={createDirectoryGuestAction}
       deleteAction={deleteDirectoryGuestAction}
       directory={buildGuestDirectory(guests)}
+      dispatchBlocked={dispatchBlocked}
       updateAction={updateDirectoryGuestAction}
+      viewerSenderId={viewerSenderId}
     />
   );
 }

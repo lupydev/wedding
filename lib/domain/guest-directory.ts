@@ -28,6 +28,14 @@ import type { DraftRefusal } from "./invitation-draft";
 export interface DirectoryHousehold {
   readonly invitationId: string;
   readonly greetingName: string;
+  /**
+   * Who may DISPATCH it. Administration is shared between the two operators;
+   * sending is not, and the dispatch route answers `notFound()` to anybody
+   * else — so a send affordance shown without this points at a 404.
+   */
+  readonly ownerSenderId: string;
+  /** The member this invitation is addressed to, or nobody yet. */
+  readonly recipientGuestId: string | null;
 }
 
 export interface DirectoryGuest {
@@ -40,12 +48,64 @@ export interface DirectoryGuest {
   readonly household: DirectoryHousehold | null;
 }
 
+/**
+ * One guest as the directory shows them — their own record plus the one thing
+ * only the whole list can answer: who actually receives their household's
+ * message.
+ */
+export interface DirectoryEntry extends DirectoryGuest {
+  /** Whether this person is the one their invitation is addressed to. */
+  readonly isRecipient: boolean;
+  /**
+   * The name of whoever receives that message, this person or another member.
+   *
+   * NULL when there is no household, when nobody has been chosen, or when the
+   * chosen member is not in the list — the last of which should not happen,
+   * since the composite foreign key ties the choice to a member of that same
+   * invitation, and answering with a name that was not found would be an
+   * invention rather than a fallback.
+   */
+  readonly recipientName: string | null;
+}
+
 export interface GuestDirectory {
   /** Everybody, in one alphabetical order. */
-  readonly guests: readonly DirectoryGuest[];
+  readonly guests: readonly DirectoryEntry[];
   readonly total: number;
   /** How many belong to no invitation yet. */
   readonly unassigned: number;
+}
+
+/** What the viewer's own session says, for deciding a send affordance. */
+export interface DirectoryViewer {
+  readonly viewerSenderId: string;
+  /** True when this handset carries the other operator's WhatsApp account. */
+  readonly dispatchBlocked: boolean;
+}
+
+/**
+ * Whether a send can honestly be offered on this person's row.
+ *
+ * THREE CONDITIONS, EACH REMOVING A DIFFERENT LIE. Without a household there is
+ * no invitation and nothing to send. Dispatch is owner-scoped — the dispatch
+ * route answers `notFound()` to the other operator — so a link shown without
+ * that check points at a 404, which is an affordance that lies. And a
+ * device-declaration mismatch blocks the send itself, which is the one thing
+ * that gate exists for.
+ *
+ * `GuestList` applies exactly these on a household's row. Stated as a function
+ * because the directory now needs the same answer about a PERSON, and two
+ * copies of a rule are two rules.
+ */
+export function canOfferSend(
+  guest: DirectoryGuest,
+  viewer: DirectoryViewer,
+): boolean {
+  return (
+    guest.household !== null &&
+    guest.household.ownerSenderId === viewer.viewerSenderId &&
+    !viewer.dispatchBlocked
+  );
 }
 
 /**
@@ -74,9 +134,31 @@ export function buildGuestDirectory(
   const ordered = [...guests].sort((left, right) =>
     byName.compare(left.fullName, right.fullName),
   );
+  /*
+    WHO RECEIVES EACH HOUSEHOLD'S MESSAGE, RESOLVED ONCE.
+
+    A send goes to the member its invitation is ADDRESSED to, and this list is
+    alphabetical rather than grouped — so the member who is the recipient sits
+    nowhere near the others in their household. Their name has to travel with
+    every row of that household, or a send button would be offered beside a
+    person the message will not reach.
+
+    Every guest is already in hand, so this costs no query.
+  */
+  const nameById = new Map(ordered.map((guest) => [guest.id, guest.fullName]));
 
   return {
-    guests: ordered,
+    guests: ordered.map((guest) => ({
+      ...guest,
+      isRecipient:
+        guest.household !== null &&
+        guest.household.recipientGuestId === guest.id,
+      recipientName:
+        guest.household?.recipientGuestId === undefined ||
+        guest.household?.recipientGuestId === null
+          ? null
+          : (nameById.get(guest.household.recipientGuestId) ?? null),
+    })),
     total: ordered.length,
     unassigned: ordered.filter(isFreeToInvite).length,
   };

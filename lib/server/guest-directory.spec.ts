@@ -39,9 +39,12 @@ function uniqueName(label: string): string {
   return `${label} ${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function seedHousehold(
-  fullName: string,
-): Promise<{ invitationId: string; guestId: string; greetingName: string }> {
+async function seedHousehold(fullName: string): Promise<{
+  invitationId: string;
+  guestId: string;
+  greetingName: string;
+  senderId: string;
+}> {
   const greetingName = uniqueName("Familia Directorio");
 
   return withDb(async (db) => {
@@ -72,6 +75,7 @@ async function seedHousehold(
       invitationId: invitation.rows[0].id,
       guestId: guest.rows[0].id,
       greetingName,
+      senderId: sender.rows[0].id,
     };
   });
 }
@@ -152,9 +156,19 @@ describe("the guest directory repository (local Supabase)", () => {
     const placed = directory.find((row) => row.fullName === placedName);
     const loose = directory.find((row) => row.fullName === looseName);
 
+    /*
+      OWNERSHIP AND THE CHOSEN RECIPIENT TRAVEL WITH THE HOUSEHOLD, and both
+      are load-bearing rather than decorative: a send affordance on this
+      person's row is offered only to the operator who OWNS the invitation —
+      the dispatch route answers `notFound()` to the other one — and it has to
+      name who the message actually reaches, which is not necessarily the
+      person whose row is being read.
+    */
     expect(placed?.household).toEqual({
       invitationId: household.invitationId,
       greetingName: household.greetingName,
+      ownerSenderId: household.senderId,
+      recipientGuestId: null,
     });
     expect(loose?.household).toBeNull();
   });

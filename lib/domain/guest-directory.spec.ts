@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type DirectoryGuest,
   buildGuestDirectory,
+  canOfferSend,
   isFreeToInvite,
   validateDirectoryGuest,
 } from "./guest-directory";
@@ -19,7 +20,12 @@ function guest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
   };
 }
 
-const HOUSEHOLD = { invitationId: "i1", greetingName: "Familia Restrepo" };
+const HOUSEHOLD = {
+  invitationId: "i1",
+  greetingName: "Familia Restrepo",
+  ownerSenderId: "ana",
+  recipientGuestId: null,
+};
 
 describe("buildGuestDirectory", () => {
   /**
@@ -134,5 +140,132 @@ describe("validateDirectoryGuest", () => {
     expect(validateDirectoryGuest({ fullName: "   " })).toEqual([
       "member_without_name",
     ]);
+  });
+});
+
+/**
+ * WHO ACTUALLY RECEIVES THE MESSAGE, RESOLVED FOR EVERY ROW.
+ *
+ * The couple asked for a send button on a person's row: "en los invitados debe
+ * existir un botón de envío de la invitación en caso tal de que se quiera hacer
+ * de manera individual". A send is per INVITATION and goes to the one member
+ * that invitation is addressed to — so a button on somebody who is not that
+ * member would send a message to a different person than the one whose row was
+ * pressed.
+ *
+ * The directory lists people alphabetically, not by household, so the member
+ * who IS the recipient is nowhere near this row. The name is therefore resolved
+ * here rather than left for the reader to find: every guest is already in hand,
+ * so this costs no query.
+ */
+describe("who receives each household's message", () => {
+  it("marks the member their own invitation is addressed to", () => {
+    const directory = buildGuestDirectory([
+      guest({
+        id: "g1",
+        fullName: "Ana Restrepo",
+        household: { ...HOUSEHOLD, recipientGuestId: "g1" },
+      }),
+    ]);
+
+    expect(directory.guests[0].isRecipient).toBe(true);
+    expect(directory.guests[0].recipientName).toBe("Ana Restrepo");
+  });
+
+  it("names the other member for somebody who is not the recipient", () => {
+    const household = { ...HOUSEHOLD, recipientGuestId: "g1" };
+    const directory = buildGuestDirectory([
+      guest({ id: "g1", fullName: "Ana Restrepo", household }),
+      guest({ id: "g2", fullName: "Beto Restrepo", household }),
+    ]);
+    const beto = directory.guests.find((row) => row.id === "g2");
+
+    expect(beto?.isRecipient).toBe(false);
+    // Ana's row is somewhere else entirely — this list is alphabetical, not
+    // grouped by household — so her name has to travel with Beto's row.
+    expect(beto?.recipientName).toBe("Ana Restrepo");
+  });
+
+  it("answers nothing when the household has chosen nobody", () => {
+    const directory = buildGuestDirectory([
+      guest({ id: "g1", household: { ...HOUSEHOLD, recipientGuestId: null } }),
+    ]);
+
+    expect(directory.guests[0].isRecipient).toBe(false);
+    expect(directory.guests[0].recipientName).toBeNull();
+  });
+
+  it("answers nothing for somebody in no household at all", () => {
+    const directory = buildGuestDirectory([guest({ id: "g1" })]);
+
+    expect(directory.guests[0].isRecipient).toBe(false);
+    expect(directory.guests[0].recipientName).toBeNull();
+  });
+
+  /**
+   * A CHOSEN MEMBER THIS LIST CANNOT SEE.
+   *
+   * It should not happen — the composite foreign key ties the choice to a
+   * member of that same invitation — but this resolves against the rows in
+   * hand, and answering with a name it could not find would be an invention.
+   */
+  it("answers nothing rather than guessing when the chosen member is absent", () => {
+    const directory = buildGuestDirectory([
+      guest({
+        id: "g2",
+        household: { ...HOUSEHOLD, recipientGuestId: "missing" },
+      }),
+    ]);
+
+    expect(directory.guests[0].recipientName).toBeNull();
+  });
+});
+
+/**
+ * WHETHER A SEND CAN BE OFFERED AT ALL.
+ *
+ * Three conditions, and each removes a different lie. Without a household
+ * there is no invitation and no link to send. Dispatch is owner-scoped — the
+ * dispatch route answers `notFound()` for anybody else — so a link shown to
+ * the other operator points at a 404. And a device-declaration mismatch blocks
+ * the send itself, which is the one thing that gate exists for.
+ *
+ * `GuestList` applies exactly these on a household's row; they are stated as a
+ * function here because the directory now needs the same answer about a person.
+ */
+describe("canOfferSend", () => {
+  const owned = { ...HOUSEHOLD, ownerSenderId: "ana" };
+
+  it("offers a send for an owned household on a matching handset", () => {
+    expect(
+      canOfferSend(guest({ household: owned }), {
+        viewerSenderId: "ana",
+        dispatchBlocked: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("offers nothing for somebody in no invitation", () => {
+    expect(
+      canOfferSend(guest(), { viewerSenderId: "ana", dispatchBlocked: false }),
+    ).toBe(false);
+  });
+
+  it("offers nothing on the other operator's household", () => {
+    expect(
+      canOfferSend(guest({ household: owned }), {
+        viewerSenderId: "beto",
+        dispatchBlocked: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("offers nothing while this handset carries the other account", () => {
+    expect(
+      canOfferSend(guest({ household: owned }), {
+        viewerSenderId: "ana",
+        dispatchBlocked: true,
+      }),
+    ).toBe(false);
   });
 });

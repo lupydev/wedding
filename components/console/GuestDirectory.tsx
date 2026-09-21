@@ -3,9 +3,11 @@
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import type {
-  DirectoryGuest,
-  GuestDirectory as Directory,
+import { consoleDispatchPath } from "@/lib/domain/dispatch-message";
+import {
+  canOfferSend,
+  type DirectoryEntry,
+  type GuestDirectory as Directory,
 } from "@/lib/domain/guest-directory";
 import type { DraftRefusal } from "@/lib/domain/invitation-draft";
 
@@ -40,6 +42,10 @@ const WRITE_FAILED_COPY =
 
 export interface GuestDirectoryProps {
   readonly directory: Directory;
+  /** The signed-in operator. A send is offered only on their own households. */
+  readonly viewerSenderId: string;
+  /** True when this handset carries the other operator's WhatsApp account. */
+  readonly dispatchBlocked: boolean;
   readonly createAction: (
     formData: FormData,
   ) => Promise<readonly DraftRefusal[]>;
@@ -53,7 +59,9 @@ export function GuestDirectory({
   createAction,
   deleteAction,
   directory,
+  dispatchBlocked,
   updateAction,
+  viewerSenderId,
 }: GuestDirectoryProps) {
   const [pending, startTransition] = useTransition();
   const [createRefusals, setCreateRefusals] = useState<readonly string[]>([]);
@@ -93,7 +101,7 @@ export function GuestDirectory({
     });
   }
 
-  function remove(guest: DirectoryGuest) {
+  function remove(guest: DirectoryEntry) {
     const formData = new FormData();
 
     formData.set("guestId", guest.id);
@@ -210,6 +218,10 @@ export function GuestDirectory({
                 <GuestRow
                   confirming={confirming === guest.id}
                   guest={guest}
+                  canSend={
+                    canOfferSend(guest, { viewerSenderId, dispatchBlocked }) &&
+                    guest.recipientName !== null
+                  }
                   onCancelDelete={() => setConfirming(null)}
                   onConfirmDelete={() => remove(guest)}
                   onEdit={() => {
@@ -237,6 +249,7 @@ export function GuestDirectory({
  * is in Familia Restrepo and that Carla is in nobody's.
  */
 function GuestRow({
+  canSend,
   confirming,
   guest,
   onCancelDelete,
@@ -245,8 +258,9 @@ function GuestRow({
   onProposeDelete,
   pending,
 }: {
+  readonly canSend: boolean;
   readonly confirming: boolean;
-  readonly guest: DirectoryGuest;
+  readonly guest: DirectoryEntry;
   readonly onCancelDelete: () => void;
   readonly onConfirmDelete: () => void;
   readonly onEdit: () => void;
@@ -279,6 +293,24 @@ function GuestRow({
           ? "Sin invitación todavía"
           : `En ${guest.household.greetingName}`}
       </p>
+
+      {/*
+        WHO THE MESSAGE ACTUALLY REACHES, SAID OUT LOUD.
+
+        A send is addressed to the member its invitation names, which need not
+        be the person whose row this is — and the list is alphabetical, so that
+        member's own row is nowhere nearby. Without this line the button beside
+        it would quietly do something other than what its row suggests.
+      */}
+      {guest.household !== null && (
+        <p className="guest-directory__recipient text-xs text-muted-foreground">
+          {guest.recipientName === null
+            ? "Nadie elegido para recibir el mensaje de esta invitación."
+            : guest.isRecipient
+              ? "Recibe el mensaje de esta invitación."
+              : `El mensaje de esta invitación le llega a ${guest.recipientName}.`}
+        </p>
+      )}
 
       {confirming ? (
         <div className="flex flex-col gap-2">
@@ -318,6 +350,30 @@ function GuestRow({
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
+          {/*
+            A LINK TO THE DISPATCH SCREEN, NOT A SECOND WAY TO SEND.
+
+            That screen composes the message, applies the device gate and
+            writes the audit event. A button here that sent directly would be a
+            second dispatch path with its own copy of those guards to keep in
+            step, which is how one of them ends up missing.
+
+            `canSend` already carries the three conditions — the person is in a
+            household, this operator owns it, and the handset agrees — plus a
+            chosen recipient, without which the send would only reach a refusal.
+          */}
+          {canSend && guest.household !== null && (
+            <Button asChild size="sm">
+              <a
+                aria-label={`Enviar la invitación de ${guest.household.greetingName}`}
+                className="guest-directory__dispatch-link"
+                href={consoleDispatchPath(guest.household.invitationId)}
+              >
+                Enviar
+              </a>
+            </Button>
+          )}
+
           {/*
             The person's name lives in `aria-label` and not on the button. A
             list of forty bare "Editar" tells two rows apart by position only;
@@ -366,7 +422,7 @@ function GuestFields({
   guest,
   idPrefix,
 }: {
-  readonly guest?: DirectoryGuest;
+  readonly guest?: DirectoryEntry;
   readonly idPrefix: string;
 }) {
   return (

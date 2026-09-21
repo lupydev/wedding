@@ -1424,8 +1424,12 @@ export interface RotateSlugOptions {
 /**
  * Gives one invitation a NEW slug — the exit for "dispatched by mistake".
  *
- * The slug is minted by `mintSlug()`, the same function creation uses, so
- * randomness stays in the adapter and the database keeps no randomness policy
+ * THE NEW SLUG IS RANDOM, AND IT IS THE ONLY PATH THAT STILL IS. Creating an
+ * invitation derives a readable address from the household's name, and since
+ * this commit so does importing one. Rotation deliberately does not: it is the
+ * exit for an address that has already had to change, and deriving the same
+ * name again would hand back a neighbour of the address being abandoned.
+ * Randomness stays in the adapter, so the database keeps no randomness policy
  * (design D2/D16). Rotation is a new ADDRESS for the same invitation: its
  * members, its greeting name, its RSVP history and its dispatch history are all
  * untouched, which is precisely why a rotated invitation is still undeletable
@@ -1524,7 +1528,19 @@ export async function importInvitations(
     return [];
   }
 
-  const payload = invitations.map((invitation) => {
+  /*
+    THE ADDRESSES DECIDED IN THIS BATCH, WHICH THE DATABASE CANNOT SEE.
+
+    Every household here is written by ONE `import_invitations` call, so none
+    of them is visible to another's lookup. Two families called Ruiz in one
+    file would therefore both be handed "familia-ruiz" — where the unique index
+    refuses the second and the whole import fails, naming a constraint instead
+    of the two families that share a surname.
+  */
+  const mintedHere = new Set<string>();
+  const payload = [];
+
+  for (const invitation of invitations) {
     const sourceKey = invitation.sourceKey?.trim();
 
     if (!sourceKey) {
@@ -1533,9 +1549,33 @@ export async function importInvitations(
       );
     }
 
-    return {
+    /*
+      READABLE, EXACTLY AS THE CONSOLE'S ARE.
+
+      This minted random base32 while `createInvitation` had been deriving
+      `/i/familia-guzman-pena` from the household's name since migration 0014.
+      Two ways in and two kinds of address, with the difference visible to the
+      guest: families typed into the console got a link that reads like their
+      name, families loaded from a file got sixteen characters that read like a
+      mistake.
+
+      SAFE ON A RE-RUN because of `on conflict (source_key) do nothing` in
+      `import_invitations` (0006). A second run computes a NEW address — the
+      first one is taken, so the counter advances — and that value is discarded
+      rather than written, leaving the link already in a family's WhatsApp
+      exactly where it was.
+    */
+    const slug = await readableSlugFor(
+      client,
+      invitation.greetingName,
+      mintedHere,
+    );
+
+    mintedHere.add(slug);
+
+    payload.push({
       source_key: sourceKey,
-      slug: mintSlug(),
+      slug,
       owner_sender_id: invitation.ownerSenderId,
       display_name: invitation.displayName,
       greeting_name: invitation.greetingName,
@@ -1550,8 +1590,8 @@ export async function importInvitations(
         is_primary: guest.isPrimary,
         is_child: guest.isChild,
       })),
-    };
-  });
+    });
+  }
 
   const { data, error } = await client.rpc("import_invitations", { payload });
 
