@@ -22,13 +22,16 @@
  * English.
  */
 
-/** The ceremony row, as this card renders it. */
-export interface CeremonyStreamDetails {
-  readonly ceremonyDate: string;
-  readonly ceremonyTime: string;
-  readonly streamMeetingId: string;
-  readonly streamPasscode: string;
-}
+import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
+
+/**
+ * The ceremony row, as this card renders it.
+ *
+ * An alias rather than a second declaration of the same four fields. The public
+ * stream page renders the identical block, so the shape is declared once in
+ * `StreamDetails` and named here for the callers that already import this name.
+ */
+export type CeremonyStreamDetails = StreamDetailsValues;
 
 /**
  * The household's answer is never final.
@@ -58,26 +61,12 @@ export function CeremonyStream({
       </p>
 
       {/*
-        The four values are rendered exactly as the row holds them, including
-        the seeded `{{...}}` placeholders. Hiding or prettifying an unfinished
-        value would turn an obviously incomplete invitation into a plausible
-        wrong one, and nobody would notice until a guest joined a call that does
-        not exist.
+        The same block the public stream page renders, so the two surfaces
+        cannot disagree about what these values are called or which order they
+        come in. It renders them verbatim, placeholders included; the reasoning
+        lives in `StreamDetails`.
       */}
-      <dl
-        className="rsvp__stream-details"
-        role="group"
-        aria-label="Detalles de la transmisión"
-      >
-        <dt>Fecha</dt>
-        <dd>{ceremony.ceremonyDate}</dd>
-        <dt>Hora</dt>
-        <dd>{ceremony.ceremonyTime}</dd>
-        <dt>ID de la reunión</dt>
-        <dd>{ceremony.streamMeetingId}</dd>
-        <dt>Clave de acceso</dt>
-        <dd>{ceremony.streamPasscode}</dd>
-      </dl>
+      <StreamDetails ceremony={ceremony} />
 
       <p className="rsvp__reconsider">{RECONSIDER_SENTENCE}</p>
       <button type="button" onClick={onReconsider}>

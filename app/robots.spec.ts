@@ -4,6 +4,7 @@ import robots, {
   CONSOLE_PATH_PREFIX,
   INVITATION_PATH_PREFIX,
   OG_IMAGE_ALLOW_PATTERN,
+  STREAM_PATH,
 } from "./robots";
 
 /**
@@ -67,5 +68,49 @@ describe("robots.txt", () => {
       true,
     );
     expect(OG_IMAGE_ALLOW_PATTERN.endsWith("/opengraph-image")).toBe(true);
+  });
+
+  /**
+   * THE STREAM PAGE CARRIES A LIVE MEETING ID AND ITS PASSCODE.
+   *
+   * It is public on purpose — it is the invitation for everyone attending over
+   * Zoom, and it has no gate — but public and INDEXED are different things. In
+   * an index those credentials are findable by somebody searching for anything
+   * at all, which is how a ceremony gets crashed by strangers.
+   *
+   * This is not security and must never be mistaken for it: any guest can
+   * forward the link, and what actually protects the call is Zoom's waiting
+   * room. The disallow only keeps it out of search results.
+   */
+  it("disallows the public stream page", () => {
+    const single = robots().rules as Exclude<
+      ReturnType<typeof robots>["rules"],
+      unknown[]
+    >;
+
+    expect(single.disallow).toContain(STREAM_PATH);
+    expect(single.allow).not.toContain(STREAM_PATH);
+  });
+
+  /**
+   * THE LANDING PAGE STAYS CRAWLABLE, AND THAT IS THE POINT OF THE SPLIT.
+   *
+   * `/` is the link the couple actually send, and the card WhatsApp renders is
+   * built by fetching it and reading its `og:` tags. A `Disallow: /` would tell
+   * every conforming crawler not to fetch it — no fetch, no card — and it would
+   * also disallow every path on the site, the stream page included, by prefix.
+   *
+   * That is exactly why the credentials live on their own path instead.
+   */
+  it("never disallows the site root", () => {
+    const single = robots().rules as Exclude<
+      ReturnType<typeof robots>["rules"],
+      unknown[]
+    >;
+    const disallow = [single.disallow ?? []].flat();
+
+    expect(disallow).not.toContain("/");
+    expect(STREAM_PATH).not.toBe("/");
+    expect(STREAM_PATH.startsWith("/")).toBe(true);
   });
 });
