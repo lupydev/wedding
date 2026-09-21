@@ -332,6 +332,10 @@ export async function createInvitationAction(
     greetingName: text(formData, "greetingName"),
     greetingNameSource:
       text(formData, "greetingNameSource") === "custom" ? "custom" : "derived",
+    // Which of the rows below receives the WhatsApp message. The form answers
+    // with a position because it has no ids to answer with — these people are
+    // written by this very call.
+    dispatchRecipientIndex: chosenPosition(formData),
     guests: members.map((member, index) => ({
       fullName: member.fullName,
       nickname: member.nickname,
@@ -344,6 +348,28 @@ export async function createInvitationAction(
   });
 
   revalidatePath(CONSOLE_ROOT_PATH);
+}
+
+/**
+ * The member position the form chose to write to, defaulting to the first.
+ *
+ * WHY THE FALLBACK IS ZERO AND NOT "NOBODY". The household's first row is its
+ * primary contact — `createInvitationAction` writes it with `isPrimary: true`
+ * by the same rule — so the absence of an answer has an obvious right answer.
+ * Every invitation created before this field existed arrived with no recipient
+ * at all, which is the thing being fixed; defaulting to nobody would keep
+ * exactly that defect for any caller that is not the form.
+ *
+ * Text where a position belongs is not an answer either, and is treated as
+ * none. An out-of-range NUMBER needs no guard: the repository looks the
+ * position up among the rows it just wrote, finds nobody, and leaves the
+ * invitation unchosen — recoverable from the edit screen.
+ */
+function chosenPosition(formData: FormData): number {
+  const raw = text(formData, "recipientIndex");
+  const position = Number.parseInt(raw, 10);
+
+  return Number.isInteger(position) && position >= 0 ? position : 0;
 }
 
 /** Rewrites the invitation's own fields. Membership has its own actions. */

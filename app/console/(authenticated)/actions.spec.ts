@@ -1007,6 +1007,81 @@ describe("the three member writes answer with the refusal instead of throwing pr
   });
 });
 
+/**
+ * THE FORM ANSWERS "WHO RECEIVES THE MESSAGE" NOW, AND ANSWERS IT WITH A
+ * POSITION.
+ *
+ * It cannot answer with an id: at the moment it is submitted none of these
+ * people exist, so there is nothing to point at. Until this existed, every
+ * invitation created in the console was born unchosen — listed under "Sin
+ * destinatario elegido" and needing somebody to reopen it and finish what they
+ * thought they had already finished.
+ *
+ * `chooseRecipientAction` below is the OTHER half, and stays: it takes a real
+ * id and is what an operator uses to change their mind afterwards.
+ */
+describe("createInvitationAction — who receives the message", () => {
+  function household(recipientIndex?: string): FormData {
+    const data = new FormData();
+
+    data.set("displayName", "Familia Restrepo");
+    data.set("greetingName", "Familia Restrepo");
+    data.set("greetingNameSource", "derived");
+
+    for (const fullName of ["Ana Restrepo", "Beto Restrepo"]) {
+      data.append("memberFullName", fullName);
+      data.append("memberNickname", "");
+      data.append("memberPhone", "3001234567");
+    }
+
+    if (recipientIndex !== undefined) {
+      data.set("recipientIndex", recipientIndex);
+    }
+
+    return data;
+  }
+
+  it("carries the chosen position through to the repository", async () => {
+    await createInvitationAction(household("1"));
+
+    expect(createInvitation.mock.calls[0][1]).toMatchObject({
+      dispatchRecipientIndex: 1,
+      guests: [
+        expect.objectContaining({ fullName: "Ana Restrepo" }),
+        expect.objectContaining({ fullName: "Beto Restrepo" }),
+      ],
+    });
+  });
+
+  /**
+   * A caller that is not the form still gets a recipient, and gets the one the
+   * household itself designates: row zero is written with `isPrimary: true`
+   * five lines away, by the same rule and for the same reason.
+   */
+  it("falls back to the household's first member when nothing was chosen", async () => {
+    await createInvitationAction(household());
+
+    expect(createInvitation.mock.calls[0][1]).toMatchObject({
+      dispatchRecipientIndex: 0,
+    });
+  });
+
+  /**
+   * Text where a position belongs is not a choice, so it is treated as none
+   * rather than silently resolving to somebody. Out-of-range numbers need no
+   * guard here: the repository looks the position up among the rows it just
+   * wrote and finds nobody, which leaves the invitation unchosen — the old
+   * state, and recoverable from the edit screen.
+   */
+  it("treats an unreadable position as no choice at all", async () => {
+    await createInvitationAction(household("segunda"));
+
+    expect(createInvitation.mock.calls[0][1]).toMatchObject({
+      dispatchRecipientIndex: 0,
+    });
+  });
+});
+
 describe("chooseRecipientAction — the member must belong to the invitation", () => {
   it("accepts a guest the invitation currently names", async () => {
     await chooseRecipientAction(

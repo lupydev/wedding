@@ -626,15 +626,33 @@ test.describe("creating a group through the console", () => {
     await expect(row.getByText(LUCIA_PHONE_STORED)).toBeVisible();
   });
 
-  test("a group nobody has been chosen for says so on its row", async () => {
-    // WRITTEN OUT, not left blank. Nothing infers a recipient — not the first
-    // member, not the only one with a number — so a row that rendered no
-    // indicator would look exactly like a row whose choice is further down, and
-    // the operator would learn the difference when the send refused.
+  /**
+   * THIS TEST ASSERTED THE OPPOSITE, AND THE OPPOSITE WAS THE DEFECT.
+   *
+   * It used to prove that a group created here arrived with nobody chosen, on
+   * the reasoning that nothing may INFER a recipient — not the first member,
+   * not the only one with a number. That reasoning still holds, and nothing
+   * infers one. What changed is that the form now ASKS, with the first member
+   * already selected and visibly so, so the answer is the operator's.
+   *
+   * The old behaviour meant every household born in the console appeared under
+   * "Sin destinatario elegido" and needed somebody to reopen it and finish what
+   * they thought they had already finished.
+   */
+  test("the group arrives with the person the form chose already recorded", async () => {
     await expect(
       createdRow().getByText("Nadie elegido para recibir el mensaje."),
-    ).toBeVisible();
-    await expect(createdRow().getByText("Recibe el mensaje")).toHaveCount(0);
+    ).toHaveCount(0);
+
+    // On Lucía's own line, and on nobody else's: she is the row the form had
+    // selected when it was submitted.
+    const line = (fullName: string) =>
+      createdRow()
+        .locator("ul.guest-list__guests > li")
+        .filter({ hasText: fullName });
+
+    await expect(line(LUCIA).getByText("Recibe el mensaje")).toBeVisible();
+    await expect(line(MATEO).getByText("Recibe el mensaje")).toHaveCount(0);
   });
 
   test("the row's edit affordance reaches the form with the stored override intact", async () => {
@@ -659,14 +677,13 @@ test.describe("creating a group through the console", () => {
     );
   });
 
-  test("choosing a member on the edit screen moves the indicator onto their row", async () => {
+  test("changing the recipient on the edit screen moves the indicator onto their row", async () => {
     const recipients = page.locator("fieldset.invitation-form__recipient");
 
-    // Nobody is preselected here either, on a household whose only stored number
-    // belongs to one member — the one an auto-pick would have taken.
-    for (const option of await recipients.getByRole("radio").all()) {
-      await expect(option).not.toBeChecked();
-    }
+    // The stored choice arrives selected, which is what an edit screen owes:
+    // Lucía was chosen at creation, and the form opens saying so rather than
+    // asking again as if nothing had been decided.
+    await expect(recipients.getByLabel(LUCIA)).toBeChecked();
 
     // WAITED FOR, NOT MERELY CLICKED. The radio is checked optimistically and
     // the Server Action is a POST to this route; navigating away before it
@@ -677,7 +694,7 @@ test.describe("creating a group through the console", () => {
         response.request().method() === "POST" &&
         response.url().includes("/console/invitations/"),
     );
-    await recipients.getByLabel(LUCIA).check();
+    await recipients.getByLabel(MATEO).check();
     await write;
 
     // Asserted on the LIST, which is server-rendered: the radio going checked is
@@ -685,10 +702,14 @@ test.describe("creating a group through the console", () => {
     // is what proves the write landed.
     await page.goto("/console");
 
-    const row = createdRow();
-    await expect(row.getByText("Recibe el mensaje")).toBeVisible();
-    await expect(
-      row.getByText("Nadie elegido para recibir el mensaje."),
-    ).toHaveCount(0);
+    const line = (fullName: string) =>
+      createdRow()
+        .locator("ul.guest-list__guests > li")
+        .filter({ hasText: fullName });
+
+    // MOVED, not merely present: the indicator has to leave the member it was
+    // on, or a write that added a second recipient would pass this test.
+    await expect(line(MATEO).getByText("Recibe el mensaje")).toBeVisible();
+    await expect(line(LUCIA).getByText("Recibe el mensaje")).toHaveCount(0);
   });
 });

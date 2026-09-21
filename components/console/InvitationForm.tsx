@@ -419,6 +419,16 @@ export function InvitationForm({
    */
   const [focusKey, setFocusKey] = useState<string | null>(null);
 
+  /**
+   * Which member receives the message, while they are still only positions.
+   *
+   * Zero rather than `null`: the first person is marked to begin with, and the
+   * marking is ON SCREEN where the operator can change it in one tap. Nothing
+   * is defaulted silently — what this replaces is an invitation saved,
+   * apparently complete, and unsendable until somebody reopened it.
+   */
+  const [recipientIndex, setRecipientIndex] = useState(0);
+
   const derivedName = derivedNameOf(rows);
   const shownName = source === "derived" ? (derivedName ?? "") : customName;
 
@@ -927,46 +937,90 @@ export function InvitationForm({
         every invitation reads the same value.
       */}
 
-      {invitation === null || memberActions === undefined ? (
-        <p
-          className="max-w-[68ch] text-sm text-muted-foreground"
-          data-testid="invitation-recipient-later"
-        >
-          A quién se le envía el mensaje se elige después de guardar: las
-          personas todavía no existen, así que no hay a quién dejar registrado.
-        </p>
-      ) : (
-        <fieldset className="invitation-form__recipient flex flex-col gap-2">
-          <legend className="text-sm font-medium">
-            ¿Quién recibe el mensaje?
-          </legend>
-          <p className="max-w-[68ch] text-xs text-muted-foreground">
-            Nadie queda elegido por defecto. Mientras no se marque a alguien, el
-            envío de esta invitación queda bloqueado.
-          </p>
+      {/*
+        AN INVITATION USED TO BE BORN BLOCKED.
 
-          {rows
-            .filter((row): row is MemberRow & { id: string } => row.id !== null)
-            .map((row) => (
+        A paragraph stood here on the create form — "A quién se le envía el
+        mensaje se elige después de guardar" — because the members have no ids
+        until they are written. True, and it meant every household created in
+        the console landed straight in "Sin destinatario elegido", and the
+        operator had to find it again and reopen it to finish something they
+        believed they had finished.
+
+        The members have POSITIONS before they have ids, and a position is all
+        the server needs: it inserts the guests and resolves the choice against
+        the rows it has just created. So the same question is asked here, and
+        the only difference is what the answer is spelled with.
+      */}
+      <fieldset className="invitation-form__recipient flex flex-col gap-2">
+        <legend className="text-sm font-medium">
+          ¿Quién recibe el mensaje?
+        </legend>
+
+        {invitation === null || memberActions === undefined ? (
+          <>
+            <p className="max-w-[68ch] text-xs text-muted-foreground">
+              El mensaje va a una sola persona de la invitación. Queda marcada
+              la primera; se puede cambiar acá mismo.
+            </p>
+
+            {rows.map((row, index) => (
               <Label
                 className="gap-2"
-                htmlFor={`recipient-${row.id}`}
-                key={row.id}
+                htmlFor={`recipient-${row.key}`}
+                key={row.key}
               >
                 <input
-                  checked={recipientId === row.id}
-                  id={`recipient-${row.id}`}
-                  name="recipientChoice"
-                  onChange={() => chooseRecipient(row)}
+                  checked={recipientIndex === index}
+                  id={`recipient-${row.key}`}
+                  /*
+                   * The POSITION, because that is all that exists yet. A guest
+                   * id here would be an invention: these people have not been
+                   * written, so there is nothing to name them by except where
+                   * they sit on this form.
+                   */
+                  name="recipientIndex"
+                  onChange={() => setRecipientIndex(index)}
                   type="radio"
-                  value={row.id}
+                  value={index}
                 />
-                {row.fullName === "" ? "Sin nombre" : row.fullName}
+                {row.fullName === "" ? `Integrante ${index + 1}` : row.fullName}
                 {row.phone.trim() === "" ? " — sin número guardado" : ""}
               </Label>
             ))}
-        </fieldset>
-      )}
+          </>
+        ) : (
+          <>
+            <p className="max-w-[68ch] text-xs text-muted-foreground">
+              Nadie queda elegido por defecto. Mientras no se marque a alguien,
+              el envío de esta invitación queda bloqueado.
+            </p>
+
+            {rows
+              .filter(
+                (row): row is MemberRow & { id: string } => row.id !== null,
+              )
+              .map((row) => (
+                <Label
+                  className="gap-2"
+                  htmlFor={`recipient-${row.id}`}
+                  key={row.id}
+                >
+                  <input
+                    checked={recipientId === row.id}
+                    id={`recipient-${row.id}`}
+                    name="recipientChoice"
+                    onChange={() => chooseRecipient(row)}
+                    type="radio"
+                    value={row.id}
+                  />
+                  {row.fullName === "" ? "Sin nombre" : row.fullName}
+                  {row.phone.trim() === "" ? " — sin número guardado" : ""}
+                </Label>
+              ))}
+          </>
+        )}
+      </fieldset>
 
       {writeError !== null && (
         <p

@@ -102,6 +102,14 @@ export interface NewInvitation {
    */
   readonly greetingNameSource?: GreetingNameSource;
   readonly rsvpDeadline?: string | null;
+  /**
+   * Who receives the message, given as a POSITION in `guests`.
+   *
+   * A position and not an id, because at the moment the console's form is
+   * submitted there are no ids: these people are written by this very call.
+   * Left out by the importer, which has no opinion about who to write to.
+   */
+  readonly dispatchRecipientIndex?: number;
   readonly guests: readonly NewInvitationGuest[];
 }
 
@@ -536,16 +544,26 @@ export async function createInvitation(
     );
   }
 
-  const { error: guestsError } = await client.from("invitation_guests").insert(
-    input.guests.map((guest) => ({
-      invitation_id: invitation.id,
-      full_name: guest.fullName,
-      nickname: guest.nickname ?? null,
-      phone_e164: guest.phoneE164,
-      is_primary: guest.isPrimary,
-      is_child: guest.isChild,
-    })),
-  );
+  /*
+    THE INSERTED ROWS COME BACK, BECAUSE A POSITION HAS TO BECOME A PERSON.
+
+    The form answers "who receives the message" with a position — it has no ids
+    to offer — and `RETURNING` hands the rows back in the order they were given,
+    which is what turns that position into the id recorded below.
+  */
+  const { data: insertedGuests, error: guestsError } = await client
+    .from("invitation_guests")
+    .insert(
+      input.guests.map((guest) => ({
+        invitation_id: invitation.id,
+        full_name: guest.fullName,
+        nickname: guest.nickname ?? null,
+        phone_e164: guest.phoneE164,
+        is_primary: guest.isPrimary,
+        is_child: guest.isChild,
+      })),
+    )
+    .select("id");
 
   if (guestsError) {
     // D21. The compensation's OWN result is captured, not discarded. A failed
@@ -570,6 +588,37 @@ export async function createInvitation(
     throw new Error(
       `Could not create guests for invitation "${input.displayName}": ${guestsError.message}`,
     );
+  }
+
+  /*
+    THE CHOICE, RESOLVED AND RECORDED.
+
+    A separate statement, because the invitation row exists before its members
+    do and there was no id to point at until the insert above returned. The
+    composite foreign key on `(id, dispatch_recipient_guest_id)` refuses anyone
+    outside this household, which is what makes resolving by position safe.
+
+    Without this every invitation born in the console arrived unchosen — listed
+    under "Sin destinatario elegido", waiting for somebody to reopen it and
+    finish what they thought they had already finished.
+
+    A failure here leaves the invitation created and unchosen: exactly that old
+    state, recoverable from the edit screen, and not worth deleting a household
+    somebody just typed in. So it is reported, not compensated.
+  */
+  const chosen = insertedGuests?.[input.dispatchRecipientIndex ?? -1];
+
+  if (chosen) {
+    const { error: recipientError } = await client
+      .from("invitations")
+      .update({ dispatch_recipient_guest_id: chosen.id })
+      .eq("id", invitation.id);
+
+    if (recipientError) {
+      throw new Error(
+        `Invitation "${input.displayName}" was created, but nobody could be recorded as the recipient: ${recipientError.message}. Choose one from the edit screen.`,
+      );
+    }
   }
 
   const created = await findInvitationBySlug(client, slug);

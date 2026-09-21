@@ -167,14 +167,48 @@ STILL RANDOM: the bulk importer (`lib/server/invitations.ts`, the
 addresses; imported ones do not, which will look inconsistent the first time
 the guest list is loaded from a file.
 
+## Done — the create form asks who receives the message
+
+It used to render a paragraph where the question belonged: "A quién se le envía
+el mensaje se elige después de guardar". The reason was real — when the form is
+submitted the members do not exist yet, so there is no id to point at. The
+consequence was that EVERY invitation created in the console was born blocked.
+It appeared in the readiness panel under "Sin destinatario elegido", and
+somebody had to find it and reopen it to finish what they thought they had
+already finished.
+
+**The answer is a POSITION, not an id.** The form has no ids to offer, so it
+answers with the row's index and the server resolves it. That took changing the
+guest insert from `.insert(...)` to `.insert(...).select("id")`: `RETURNING`
+hands the rows back in the order they were given, which is the only thing that
+turns a position into a person. A second statement then records it, because the
+invitation row exists before its members do. The composite foreign key on
+`(id, dispatch_recipient_guest_id)` refuses anyone outside the household, which
+is what makes resolving by position safe rather than merely convenient.
+
+**The first member is preselected, and nothing is inferred.** The distinction
+matters and is the one the old code was protecting: the console still infers no
+recipient anywhere — not from `is_primary`, not from ordering, not from being
+the only reachable number. What changed is that the form ASKS, with an answer
+already filled in and visibly so. An absent answer resolves to row zero, which
+is the row written with `isPrimary: true` by the same rule.
+
+A failure recording the choice is reported, not compensated: it leaves the
+invitation created and unchosen — exactly the old state, recoverable from the
+edit screen — and deleting a household somebody just typed in would be worse.
+
+**Two browser tests asserted the opposite and were rewritten, not repaired.**
+One proved a created group arrived with nobody chosen; that WAS the defect. The
+other opened the edit screen expecting no radio selected, then chose the first
+member — on a household where that member is now already chosen, so the click
+would have issued no write and the test would have hung waiting for one. It now
+asserts the stored choice arrives selected and MOVES the indicator to another
+member, which a write that merely added a second recipient would fail.
+
+Green: 2149 unit and component tests, 173 browser tests.
+
 ## Next
 
-- **The create form cannot choose who receives the message.** It renders a
-  paragraph instead — "A quién se le envía el mensaje se elige después de
-  guardar" — because the members do not exist yet when the form is submitted.
-  So every invitation is born blocked, in the readiness panel's "Sin
-  destinatario elegido", and the operator has to reopen it to finish. This is
-  the largest remaining piece of "no hay forma simple de crear".
 - **The bulk importer still mints random slugs.** Households created in the
   console get `/i/familia-guzman-pena`; imported ones get sixteen base32
   characters. The first import will look like a bug.

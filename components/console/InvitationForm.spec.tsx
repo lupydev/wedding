@@ -293,14 +293,23 @@ describe("InvitationForm's recipient choice", () => {
     expect(submitted?.get("guestId")).toBe(MICHELL);
   });
 
-  it("explains, while creating, that nobody can be chosen yet", () => {
-    // The members do not exist until the invitation is saved, so there is no id
-    // to record a choice against. A radio group rendered here would be a control
-    // whose every answer is discarded.
+  /**
+   * IT USED TO EXPLAIN THAT NOBODY COULD BE CHOSEN YET, AND NOW IT ASKS.
+   *
+   * The explanation was true — members have no ids until they are written, and
+   * a radio group answering with ids would have been a control whose every
+   * answer was discarded. What it cost was that every invitation created in the
+   * console was born in "Sin destinatario elegido", waiting for somebody to
+   * find it and reopen it.
+   *
+   * The answer is a POSITION now, which exists before an id does, and the
+   * server resolves it against the rows it has just inserted.
+   */
+  it("asks who receives the message rather than deferring it", () => {
     renderCreate();
 
-    expect(screen.queryAllByRole("radio")).toHaveLength(0);
-    expect(screen.getByTestId("invitation-recipient-later")).toBeVisible();
+    expect(screen.queryByTestId("invitation-recipient-later")).toBeNull();
+    expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
   });
 });
 
@@ -1102,6 +1111,92 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
       const names = screen.getAllByLabelText("Nombre completo");
 
       expect(names.at(-1)).toHaveFocus();
+    });
+  });
+
+  /**
+   * AN INVITATION USED TO BE BORN BLOCKED.
+   *
+   * The create form showed a paragraph where the recipient chooser belongs —
+   * "A quién se le envía el mensaje se elige después de guardar" — because the
+   * members have no ids until they are written. So every household created in
+   * the console landed straight in the readiness panel's "Sin destinatario
+   * elegido", and the operator had to find it again and reopen it to finish
+   * something they thought they had finished.
+   *
+   * The members have POSITIONS even before they have ids, and a position is
+   * all the server needs: it inserts the guests and resolves the choice
+   * against the rows it just created.
+   */
+  describe("choosing who receives the message while creating", () => {
+    it("offers the choice instead of a paragraph about later", () => {
+      renderCreate();
+
+      expect(
+        screen.getByRole("group", { name: /Quién recibe el mensaje/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("invitation-recipient-later")).toBeNull();
+    });
+
+    /**
+     * The first person is chosen to begin with, and the choice is on screen.
+     *
+     * Nothing is defaulted SILENTLY — the operator can see who is marked and
+     * change it in one tap. The alternative was the state this replaces: an
+     * invitation saved, apparently complete, and unsendable.
+     */
+    it("starts with the first person marked", () => {
+      renderCreate();
+
+      const chosen = screen.getAllByRole("radio");
+
+      expect(chosen[0]).toBeChecked();
+    });
+
+    it("follows the operator to another member", async () => {
+      const { user } = renderCreate();
+
+      await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
+      await user.click(
+        screen.getByRole("button", { name: "Agregar otra persona" }),
+      );
+      await user.type(row(2).getByLabelText("Nombre completo"), "Michell Peña");
+
+      const radios = screen.getAllByRole("radio");
+      await user.click(radios[1]);
+
+      expect(radios[1]).toBeChecked();
+      expect(radios[0]).not.toBeChecked();
+    });
+
+    /**
+     * The choice travels as a POSITION, because that is all that exists yet.
+     *
+     * A guest id would be an invention: the people on this form have not been
+     * written, so there is nothing to name them by except where they sit.
+     */
+    it("submits the position, since there is no id yet", async () => {
+      const { action, user } = renderCreate();
+
+      // `required`, so a browser refuses to submit without it and the
+      // assertion below would never be reached.
+      await user.type(
+        screen.getByLabelText("Nombre del hogar"),
+        "Familia Guzmán Peña",
+      );
+      await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
+      await user.click(
+        screen.getByRole("button", { name: "Agregar otra persona" }),
+      );
+      await user.type(row(2).getByLabelText("Nombre completo"), "Michell Peña");
+      await user.click(screen.getAllByRole("radio")[1]);
+      await user.click(
+        screen.getByRole("button", { name: "Guardar invitación" }),
+      );
+
+      const submitted = action.mock.calls[0][0] as FormData;
+
+      expect(submitted.get("recipientIndex")).toBe("1");
     });
   });
 });

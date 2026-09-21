@@ -350,6 +350,72 @@ describe("invitations repository (local Supabase)", () => {
 
     expect(orphans).toBe(0);
   });
+  /**
+   * THE CHOICE TRAVELS AS A POSITION AND ARRIVES AS A PERSON.
+   *
+   * The console's create form has no guest ids to offer — the people are
+   * written by this very call — so it answers "who receives the message" with a
+   * position. This is the half that turns it back into somebody: the guests are
+   * inserted, the rows come back, and the one at that index is recorded.
+   *
+   * Three distinct names, with the MIDDLE one chosen, so an off-by-one and an
+   * insertion order that did not match the form would both be visible rather
+   * than accidentally right.
+   */
+  it("records the member the form chose by position", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.recipient.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const name = `Familia Elegida ${Date.now().toString(36)}`;
+
+    const created = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: "Primera Persona",
+          phoneE164: "+573002220001",
+          isPrimary: true,
+          isChild: false,
+        },
+        {
+          fullName: "Segunda Persona",
+          phoneE164: "+573002220002",
+          isPrimary: false,
+          isChild: false,
+        },
+        {
+          fullName: "Tercera Persona",
+          phoneE164: "+573002220003",
+          isPrimary: false,
+          isChild: false,
+        },
+      ],
+      dispatchRecipientIndex: 1,
+    });
+
+    const chosen = await withDb(async (db) => {
+      const result = await db.query<{ full_name: string }>(
+        `select g.full_name
+         from invitations i
+         join invitation_guests g on g.id = i.dispatch_recipient_guest_id
+         where i.id = $1`,
+        [created.id],
+      );
+      return result.rows[0]?.full_name ?? null;
+    });
+
+    expect(chosen).toBe("Segunda Persona");
+  });
 
   /**
    * TWO HOUSEHOLDS OF THE SAME NAME GET DIFFERENT ADDRESSES.
