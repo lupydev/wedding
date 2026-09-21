@@ -169,10 +169,20 @@ the guest list is loaded from a file.
 
 ## Next
 
-- The five-group `DispatchPreflight`, always fully expanded, one group of which
-  its own copy says can never have contents.
-- Adding a member takes two presses and the first one writes nothing
-  ("Agregar integrante" adds a local blank row; "Guardar integrante N" saves).
-- The create form cannot choose a recipient, so every new invitation lands in
-  "Sin destinatario elegido" until somebody reopens it.
-- Delete `moveMemberAction` and the discarded `impact`, or give them UI.
+- **The create form cannot choose who receives the message.** It renders a
+  paragraph instead — "A quién se le envía el mensaje se elige después de
+  guardar" — because the members do not exist yet when the form is submitted.
+  So every invitation is born blocked, in the readiness panel's "Sin
+  destinatario elegido", and the operator has to reopen it to finish. This is
+  the largest remaining piece of "no hay forma simple de crear".
+- **The bulk importer still mints random slugs.** Households created in the
+  console get `/i/familia-guzman-pena`; imported ones get sixteen base32
+  characters. The first import will look like a bug.
+- **Dead code with tests**: `moveMemberAction` (a full server action and
+  repository function, no UI anywhere) and `removeMemberAction`'s `impact`
+  return value, computed and discarded at `edit/page.tsx`.
+- **`invitations.rsvp_deadline` is a dormant column.** Dropping it is the
+  destructive half, to be landed alone the way 0013 was.
+- Outside the console: the landing renders "¡Hoy nos casamos!" from the
+  ceremony instant onwards and never stops — in January it still says it. The
+  copy for what it should say instead is the couple's to write.
