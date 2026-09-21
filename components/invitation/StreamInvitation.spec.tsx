@@ -14,6 +14,11 @@ const CEREMONY: StreamInvitationCeremony = {
   streamPasscode: "boda2026",
 };
 
+const CALENDAR = {
+  icsHref: "/transmision/evento.ics",
+  googleHref: "https://calendar.google.com/calendar/render?action=TEMPLATE",
+};
+
 /**
  * The invitation everybody joining over Zoom receives.
  *
@@ -25,7 +30,7 @@ const CEREMONY: StreamInvitationCeremony = {
  */
 describe("StreamInvitation", () => {
   it("names the couple as its heading", () => {
-    render(<StreamInvitation ceremony={CEREMONY} />);
+    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: CEREMONY.coupleNames }),
@@ -33,7 +38,7 @@ describe("StreamInvitation", () => {
   });
 
   it("carries the four details, each beside its own label", () => {
-    render(<StreamInvitation ceremony={CEREMONY} />);
+    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
     const details = screen.getByRole("group", { name: /transmisión/i });
 
@@ -61,7 +66,7 @@ describe("StreamInvitation", () => {
    * thing they should read is that they were thought of.
    */
   it("says the ceremony is streamed and they are invited to it", () => {
-    render(<StreamInvitation ceremony={CEREMONY} />);
+    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
     expect(
       screen.getByText(/transmitir la ceremonia en vivo/i),
@@ -79,7 +84,9 @@ describe("StreamInvitation", () => {
    * would slip through review.
    */
   it("names no venue and no address", () => {
-    const { container } = render(<StreamInvitation ceremony={CEREMONY} />);
+    const { container } = render(
+      <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
+    );
 
     expect(container.textContent).not.toMatch(/dirección|calle|carrera|venue/i);
   });
@@ -96,9 +103,50 @@ describe("StreamInvitation", () => {
     render(
       <StreamInvitation
         ceremony={{ ...CEREMONY, streamPasscode: "{{ZOOM_PASSCODE}}" }}
+        calendar={CALENDAR}
       />,
     );
 
     expect(screen.getByText("{{ZOOM_PASSCODE}}")).toBeInTheDocument();
+  });
+
+  /**
+   * THE REMINDER IS THE POINT, NOT THE FILE.
+   *
+   * A stream guest has no journey to plan, which is exactly why the date slips
+   * their mind: nothing else in their week points at it. An entry they can save
+   * — with alarms inside it — is the only thing on this page that will speak up
+   * on its own.
+   */
+  describe("adding it to a calendar", () => {
+    it("offers the file, named so a calendar recognises it", () => {
+      render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+
+      const ics = screen.getByRole("link", { name: /agregar al calendario/i });
+
+      expect(ics).toHaveAttribute("href", CALENDAR.icsHref);
+    });
+
+    /**
+     * Two routes, because they fail in opposite places.
+     *
+     * The `.ics` opens natively on iOS and in Outlook and is a downloaded file
+     * to hunt for in a desktop browser; the Google link is one tap for anybody
+     * already signed in and nothing at all for anybody who is not.
+     */
+    it("also offers Google Calendar, opened away from this page", () => {
+      render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+
+      const google = screen.getByRole("link", { name: /google/i });
+
+      expect(google).toHaveAttribute("href", CALENDAR.googleHref);
+      expect(google).toHaveAttribute("target", "_blank");
+      // `noopener` or the new tab can reach back into this one through
+      // `window.opener`. `noreferrer` implies it, and is set for both reasons.
+      expect(google).toHaveAttribute(
+        "rel",
+        expect.stringContaining("noopener"),
+      );
+    });
   });
 });

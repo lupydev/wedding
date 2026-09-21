@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 
 import compromiso from "@/img/compromiso.jpg";
 
 import { MusicToggle } from "@/components/landing/MusicToggle";
 import { SaveTheDate } from "@/components/landing/SaveTheDate";
+import { StreamLink } from "@/components/landing/StreamLink";
 import { COUPLE_NAMES, formatWeddingDate } from "@/lib/domain/wedding-day";
-
-import { STREAM_PATH } from "./robots";
 
 /**
  * The public save-the-date.
@@ -243,29 +241,15 @@ export default function Home() {
             <SaveTheDate />
 
             {/*
-              The door to `/transmision`, for the guests who cannot be in the
-              room. Phrased in the infinitive rather than conjugated: the rest
-              of this product addresses households as "ustedes", and an
-              imperative plural here ("acompáñennos") reads stiff for what is
-              really a signpost.
+              The door to `/transmision`, which opens in the final week.
 
-              A `<Link>` rather than an `<a>`: Next prefetches the route on
-              hover, and that page reads the database, so the round trip has
-              already started by the time the tap lands.
+              A client component, and it has to be: `/` is static, so a decision
+              made here on the server would be frozen at build time and would
+              still say "not yet" on the morning of the wedding. `StreamLink`
+              renders the closed state on both sides and corrects itself after
+              mount, exactly as `Countdown` does with its figures.
             */}
-            <Link
-              href={STREAM_PATH}
-              className="
-                rounded-full border border-[#f6efe2]/25 bg-black/20 px-5 py-2.5
-                text-sm text-[#f6efe2]/85 backdrop-blur-sm transition-colors
-                duration-(--console-motion-fast) ease-(--ease-console-out)
-                hover:bg-black/40 hover:text-[#f6efe2]
-                focus-visible:outline-2 focus-visible:outline-offset-2
-                focus-visible:outline-[#f6efe2]
-              "
-            >
-              Cómo acompañarnos por Zoom
-            </Link>
+            <StreamLink />
           </div>
         </div>
       </div>

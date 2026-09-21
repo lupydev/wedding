@@ -32,10 +32,24 @@ export interface StreamInvitationCeremony extends StreamDetailsValues {
   readonly coupleNames: string;
 }
 
+/**
+ * Where the two "add it to my calendar" actions point.
+ *
+ * Built by the route rather than here, from one `CalendarEvent`, so the file
+ * and the Google link cannot describe different events. This component stays
+ * props-only and testable with two plain strings.
+ */
+export interface StreamInvitationCalendar {
+  readonly icsHref: string;
+  readonly googleHref: string;
+}
+
 export function StreamInvitation({
   ceremony,
+  calendar,
 }: {
   readonly ceremony: StreamInvitationCeremony;
+  readonly calendar: StreamInvitationCalendar;
 }) {
   return (
     <article className="flex w-full max-w-md flex-col items-center gap-7 text-center">
@@ -88,6 +102,56 @@ export function StreamInvitation({
         Abran Zoom, elijan <span className="whitespace-nowrap">“Unirse”</span> y
         escriban primero el ID y después la clave.
       </p>
+
+      {/*
+        THE REMINDER, WHICH IS THE ONLY THING ON THIS PAGE THAT SPEAKS UP BY
+        ITSELF.
+
+        A guest joining by stream has no journey to plan, and that is precisely
+        why the date slips: nothing else in their week points at it. Everything
+        above has to be remembered; a calendar entry with alarms inside it does
+        the remembering.
+
+        Two routes because they fail in opposite places. The `.ics` opens
+        natively on iOS and in Outlook and is a downloaded file to hunt for in a
+        desktop browser; the Google link is one tap for anybody already signed
+        in and nothing at all for anybody who is not.
+      */}
+      <div className="flex flex-col items-center gap-2">
+        <a
+          href={calendar.icsHref}
+          className="
+            rounded-full border border-[#f6efe2]/30 bg-black/25 px-5 py-2.5
+            text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
+            duration-(--console-motion-fast) ease-(--ease-console-out)
+            hover:bg-black/45
+            focus-visible:outline-2 focus-visible:outline-offset-2
+            focus-visible:outline-[#f6efe2]
+          "
+        >
+          Agregar al calendario
+        </a>
+
+        <a
+          href={calendar.googleHref}
+          target="_blank"
+          /*
+           * `noopener` first, and it is not decoration: without it the new tab
+           * can reach back into this one through `window.opener`. `noreferrer`
+           * implies it on modern browsers and is set for its own sake as well.
+           */
+          rel="noopener noreferrer"
+          className="
+            text-xs text-[#f6efe2]/65 underline underline-offset-4
+            transition-colors duration-(--console-motion-fast)
+            hover:text-[#f6efe2]
+            focus-visible:outline-2 focus-visible:outline-offset-2
+            focus-visible:outline-[#f6efe2]
+          "
+        >
+          o agregar a Google Calendar
+        </a>
+      </div>
     </article>
   );
 }

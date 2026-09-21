@@ -6,6 +6,12 @@ import { connection } from "next/server";
 import compromiso from "@/img/compromiso.jpg";
 
 import { StreamInvitation } from "@/components/invitation/StreamInvitation";
+import {
+  buildStreamCalendarEvent,
+  googleCalendarUrl,
+} from "@/lib/domain/calendar-event";
+import { STREAM_PATH } from "@/lib/domain/stream-window";
+import { WEDDING_INSTANT } from "@/lib/domain/wedding-day";
 import { getCeremony } from "@/lib/server/ceremony";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
@@ -82,6 +88,25 @@ export default async function StreamPage() {
    */
   const ceremony = await getCeremony(createServerSupabaseClient());
 
+  /*
+   * ONE event, two destinations.
+   *
+   * The Google link is derived here and the `.ics` route derives its own from
+   * the same builder and the same instant, so the file a guest saves and the
+   * entry Google creates describe the same ceremony. The start comes from
+   * `WEDDING_INSTANT` rather than from `ceremony_time`, which is free prose an
+   * operator types and cannot be parsed into an instant without guessing.
+   */
+  const calendarEvent = buildStreamCalendarEvent(
+    {
+      coupleNames: ceremony.coupleNames,
+      streamMeetingId: ceremony.streamMeetingId,
+      streamPasscode: ceremony.streamPasscode,
+    },
+    WEDDING_INSTANT,
+    new Date(),
+  );
+
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center gap-10 overflow-hidden bg-[#0d1114] px-6 py-14">
       {/*
@@ -125,6 +150,10 @@ export default async function StreamPage() {
             ceremonyTime: ceremony.ceremonyTime,
             streamMeetingId: ceremony.streamMeetingId,
             streamPasscode: ceremony.streamPasscode,
+          }}
+          calendar={{
+            icsHref: `${STREAM_PATH}/evento.ics`,
+            googleHref: googleCalendarUrl(calendarEvent),
           }}
         />
 

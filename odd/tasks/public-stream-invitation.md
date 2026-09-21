@@ -155,6 +155,61 @@ from constants in `lib/domain/wedding-day.ts` instead. The duplication recorded
 in `odd/tasks/wedding-landing.md` as bounded and theoretical is therefore live:
 two places hold this wedding's date, and they already disagree in form.
 
+### Unit C — the door opens in the final week
+
+- [x] C1. `lib/domain/stream-window.spec.ts`: closed at eight days, open at
+      exactly seven and never a millisecond earlier, open for ever after.
+- [x] C2. `lib/domain/stream-window.ts`, which now also owns `STREAM_PATH` so a
+      component need not import from `app/**`. `robots.ts` re-exports it.
+- [x] C3/C4. `components/landing/StreamLink.tsx`, and C5 wires it into `/`.
+
+The copy is the couple's: **"Acompáñanos por Zoom"**.
+
+`useSyncExternalStore`, NOT a `useEffect` that calls `setState`. The first
+attempt was the effect, and `react-hooks/set-state-in-effect` rejected it — a
+synchronous `setState` in an effect is a second render React was never asked
+for, and here it computed a value that was available during the first one. The
+hook is built for reading an external store: `getServerSnapshot` answers closed
+during prerender and hydration, `getSnapshot` answers afterwards, React
+reconciles them. It is also strictly better for the reader: no flash at all,
+where the effect had one frame.
+
+Before the window the control is a disabled `<button>` carrying its reason
+through `whyDisabled`, AND the same sentence on screen — a `title` never appears
+on a touch device, which is where this page is read. Inside the window it is a
+`<Link>` with identical words.
+
+### Unit D — the reminder
+
+- [x] D1/D2. `lib/domain/calendar-event.ts` — the `.ics` and the Google
+      Calendar URL, both derived from one `CalendarEvent`.
+- [x] D3. `app/transmision/evento.ics/route.ts`.
+- [x] D4. `StreamInvitation` gains both actions.
+
+The format has teeth, and the tests earn their keep on all of it: CRLF on every
+line (Outlook rejects bare LF outright), folding at 75 **octets** rather than
+characters because this copy is Spanish and a cut inside a multi-byte sequence
+hands the calendar invalid UTF-8, backslash escaped BEFORE comma (the other
+order escapes the escapes), and a UID derived from the instant so saving twice
+updates one entry instead of ringing twice. Two `VALARM`s — a day before and an
+hour before — because an entry with no alarm is a note nobody is reminded of,
+which is the problem this was added to solve.
+
+`TextEncoder`, not Node's byte-length helper: `lib/domain` is forbidden Node
+built-ins so a client component may import it, and the linter cannot catch that
+one because it is a global rather than an import.
+
+The start comes from `WEDDING_INSTANT`, not from `ceremony_time`. That column is
+free prose an operator types, and parsing it into an instant is a guess whose
+failure mode is an alarm ringing on the wrong day.
+
+Verified against the running server: `curl` returns `text/calendar; charset=utf-8`,
+`attachment; filename="boda.ics"`, `no-store`; the body has 25 CRLF and **zero**
+bare LF, and its longest line is exactly 75 octets. In Chromium with the clock
+fixed: at 69 days out the landing shows one disabled button whose title reads
+"El enlace se abre el 21 de noviembre de 2026" and no link; at six days out, one
+link and no button. Zero console errors in both.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`

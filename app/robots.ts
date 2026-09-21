@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+import { STREAM_PATH } from "@/lib/domain/stream-window";
+
 /**
  * The prefix every per-guest invitation lives under.
  *
@@ -47,7 +49,7 @@ export const CONSOLE_PATH_PREFIX = "/console";
  * `Disallow: /` would stop that fetch, and by prefix it would disallow every
  * other path on the site as well.
  */
-export const STREAM_PATH = "/transmision";
+export { STREAM_PATH } from "@/lib/domain/stream-window";
 
 export default function robots(): MetadataRoute.Robots {
   return {
