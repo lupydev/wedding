@@ -33,10 +33,78 @@ test.describe.configure({ mode: "serial" });
 
 const MISMATCH_NOTICE = (page: Page) => page.locator("section.device-mismatch");
 
+/**
+ * HOW MANY INVITATIONS ANA OWNS IN THIS FILE, AND WHAT EACH ONE IS.
+ *
+ * Every readiness number below is derived from this table and from the
+ * classification rules, not from a run of the panel. The order of the fixtures
+ * is the order they are seeded in `beforeAll`:
+ *
+ *   | fixture           | recipient      | their number         | log         | group                        |
+ *   | ready             | Ana Lista      | mobile               | —           | READY                        |
+ *   | nobodyChosen      | nobody         | —                    | —           | no_recipient_chosen          |
+ *   | alsoUnchosen      | nobody         | —                    | —           | no_recipient_chosen          |
+ *   | chosenHasNoPhone  | Carlos         | none on file         | —           | recipient_has_no_phone       |
+ *   | landline          | Casa Fija      | Colombian landline   | —           | recipient_phone_unreachable  |
+ *   | alreadySent       | Jorge Osorio   | mobile               | marked_sent | already_dispatched           |
+ *
+ * `recipient_not_in_household` is 0 and stays 0: the composite foreign key on
+ * `(invitation_id, dispatch_recipient_guest_id)` refuses a choice naming a
+ * non-member (design D23), so the only way to reach that group is a defect. It
+ * is rendered anyway, because a group that appeared only when it was non-empty
+ * could not be told apart from one that had stopped being computed.
+ *
+ * `alreadySent` holds a usable recipient and is still reported once, as already
+ * sent: "do not send this again" answers the operator's question, and the state
+ * of a number they are not going to use does not.
+ *
+ * These are the numbers that had to be RE-DERIVED when the classification became
+ * five recipient-shaped kinds (task 4b.15). The two phone groups used to be about
+ * the HOUSEHOLD — "nobody here has a number", "none of these numbers works" — so
+ * `chosenHasNoPhone`, whose Rosa holds a perfectly good mobile, used to count as
+ * ready. It is blocked now, and the count says so.
+ */
+const ANA_OWNED = 6;
+
+/** One household — `ready` — can go out. Everything else is blocked above. */
+const READY_COUNT = 1;
+
+/**
+ * The five groups in DISPLAY order, with the count each one must show.
+ *
+ * Display order is not classification order: the most actionable group is first
+ * and the one needing no action is last.
+ */
+const EXPECTED_GROUPS: readonly (readonly [string, number])[] = [
+  ["Sin destinatario elegido", 2],
+  ["Con destinatario sin número", 1],
+  ["Con destinatario que no recibe WhatsApp", 1],
+  ["Con destinatario que ya no pertenece", 0],
+  ["Ya enviadas", 1],
+];
+
+/**
+ * The `count` and the `total` inside one `X: 2 de 6 población` line.
+ *
+ * Every number on the panel is written with its population, so a count can only
+ * be read together with what it was taken over — which is the point of the
+ * sentence shape and the reason parsing it here is not a shortcut.
+ */
+function countedIn(line: string): readonly [number, number] {
+  const parsed = /:\s*(\d+)\s+de\s+(\d+)\s/.exec(line.trim());
+
+  if (parsed === null) {
+    throw new Error(`No "N de M" count in the rendered line: "${line}"`);
+  }
+
+  return [Number(parsed[1]), Number(parsed[2])];
+}
+
 let ana: SeededOperator;
 let beto: SeededOperator;
 let ready: ConsoleInvitationSeed;
 let nobodyChosen: ConsoleInvitationSeed;
+let alsoUnchosen: ConsoleInvitationSeed;
 let chosenHasNoPhone: ConsoleInvitationSeed;
 let landline: ConsoleInvitationSeed;
 let alreadySent: ConsoleInvitationSeed;
@@ -88,6 +156,31 @@ test.beforeAll(async ({ browser }) => {
         isPrimary: true,
       },
       { fullName: "Sara Valencia", phoneE164: "+573005552005" },
+    ],
+  });
+
+  /*
+    A SECOND HOUSEHOLD IN THE SAME GROUP, AND THAT IS ITS WHOLE JOB.
+
+    With one fixture per group every readiness count is `1`, and a panel that
+    printed the literal 1 five times would pass every one of those assertions.
+    Two here means `no_recipient_chosen` has to count rather than report a
+    constant — and it is the group worth doubling, because on the first day of
+    sending it is most of the list.
+
+    Its recipient is chosen later, through the console, by
+    "the recipient a household is waiting for" below.
+  */
+  alsoUnchosen = await seedConsoleInvitation({
+    ownerSenderId: ana.senderId,
+    greetingName: "Familia Sin Elegir Quintero",
+    guests: [
+      {
+        fullName: "Nora Quintero",
+        phoneE164: "+573005552007",
+        isPrimary: true,
+      },
+      { fullName: "Iván Quintero", phoneE164: "+573005552008" },
     ],
   });
 
@@ -154,6 +247,7 @@ test.afterAll(async () => {
   await page?.close();
   await ready?.cleanup();
   await nobodyChosen?.cleanup();
+  await alsoUnchosen?.cleanup();
   await chosenHasNoPhone?.cleanup();
   await landline?.cleanup();
   await alreadySent?.cleanup();
@@ -217,8 +311,75 @@ test.describe("the send preflight", () => {
     await page.goto("/console");
 
     await expect(page.locator("p.dispatch-preflight__ready")).toContainText(
-      `Listas para enviar: 1 de 5 invitaciones de ${ana.displayName}`,
+      `Listas para enviar: ${READY_COUNT} de ${ANA_OWNED} invitaciones de ${ana.displayName}`,
     );
+  });
+
+  /**
+   * EVERY count on the panel, re-derived from the fixtures above rather than read
+   * off the panel.
+   *
+   * `EXPECTED_GROUPS` is the classification table of this file's own fixtures,
+   * worked out from the rules and written down BEFORE the panel was consulted.
+   * A number copied back from a failing run proves only that the panel agrees
+   * with itself, which is how a reference project came to report forty-seven
+   * confirmations from seventeen answers.
+   *
+   * The ORDER is asserted too, and it is display order, not classification
+   * order: `no_recipient_chosen` first because on the first day of sending it is
+   * most of the list and choosing is the cheapest fix, `already_dispatched` last
+   * because "do not send this again" is the one finding that needs no work.
+   */
+  test("re-derives every readiness count, in the order the five groups are shown", async () => {
+    await page.goto("/console");
+
+    const headings = await page
+      .locator("section.dispatch-preflight__group h3")
+      .allInnerTexts();
+
+    expect(headings.map((heading) => heading.trim())).toEqual(
+      EXPECTED_GROUPS.map(([heading]) => heading),
+    );
+
+    const counts = await page
+      .locator("p.dispatch-preflight__count")
+      .allInnerTexts();
+
+    // Each count carries its own population, as every count in this console
+    // does: a number whose denominator is not on screen is a number nobody can
+    // check.
+    expect(counts.map((count) => count.trim())).toEqual(
+      EXPECTED_GROUPS.map(
+        ([heading, count]) =>
+          `${heading}: ${count} de ${ANA_OWNED} invitaciones de ${ana.displayName}`,
+      ),
+    );
+  });
+
+  /**
+   * The five groups and the ready list PARTITION the operator's invitations.
+   *
+   * Derived from the rendered numbers rather than from the table, so it catches
+   * the failure the table cannot: a household counted in two groups, or dropped
+   * from all of them. Classification is precedence-based — `alreadySent` holds a
+   * perfectly usable recipient and is still reported once, as already sent — and
+   * precedence is exactly where a household goes missing or gets counted twice.
+   */
+  test("every invitation lands in exactly one group, or in the ready list", async () => {
+    await page.goto("/console");
+
+    const counted = (
+      await page.locator("p.dispatch-preflight__count").allInnerTexts()
+    ).map(countedIn);
+    const [readyShown, total] = countedIn(
+      await page.locator("p.dispatch-preflight__ready").innerText(),
+    );
+
+    expect(counted).toHaveLength(5);
+    expect(counted.reduce((sum, [count]) => sum + count, 0) + readyShown).toBe(
+      total,
+    );
+    expect(total).toBe(ANA_OWNED);
   });
 
   /**
@@ -385,6 +546,126 @@ test.describe("households the console refuses to dispatch", () => {
       "/console/dispatch/99999999-9999-4999-8999-999999999999",
     );
     expect(missing?.status()).toBe(404);
+  });
+});
+
+/**
+ * The recipient choice, made the way an operator makes it.
+ *
+ * The refusal above is already asserted with the fixture's own
+ * `chooseRecipient`, which writes the column directly. That proves the READ: the
+ * compose view is deciding from the stored choice. It cannot prove the WRITE —
+ * that the console offers a way to make that choice at all, and that making it
+ * there is what unblocks the send. Between them sit two Server Actions, a
+ * revalidation and the composite foreign key, none of which a direct `update`
+ * touches.
+ *
+ * Placed after the readiness counts on purpose: this moves a household out of
+ * `no_recipient_chosen`, and the counts above are derived from the fixtures as
+ * seeded.
+ */
+test.describe("the recipient a household is waiting for", () => {
+  test("is refused until somebody is chosen, and sendable the moment they are", async () => {
+    await page.goto(dispatchUrl(alsoUnchosen));
+
+    await expect(
+      page.getByRole("heading", { name: /No se puede preparar el envío/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Abrir WhatsApp/ }),
+    ).toHaveCount(0);
+
+    await page.goto(`/console/invitations/${alsoUnchosen.invitationId}/edit`);
+
+    const recipients = page.locator("fieldset.invitation-form__recipient");
+
+    // Nobody is preselected, on a household where BOTH members hold a usable
+    // mobile: there is no "obvious" choice for the form to make, and it does not
+    // make one.
+    for (const option of await recipients.getByRole("radio").all()) {
+      await expect(option).not.toBeChecked();
+    }
+
+    // The SECOND member, not the primary one. The primary is what the removed
+    // auto-pick would have taken, so choosing anybody else is what makes the
+    // assertion below about the stored choice rather than about `is_primary`.
+    const write = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/console/invitations/"),
+    );
+    await recipients.getByLabel("Iván Quintero").check();
+    await write;
+
+    await page.goto(dispatchUrl(alsoUnchosen));
+
+    await expect(page.locator("p.dispatch-launcher__recipient")).toContainText(
+      "Iván Quintero",
+    );
+    await expect(
+      page.getByRole("button", { name: /Abrir WhatsApp/ }),
+    ).toBeVisible();
+
+    // Choosing is not sending. Nothing has been dispatched by any of this.
+    expect(await alsoUnchosen.dispatchEvents()).toHaveLength(0);
+  });
+
+  /**
+   * THE WHOLE PANEL AGAIN, RE-DERIVED FROM WHAT THIS RUN HAS DONE TO ITS OWN
+   * FIXTURES.
+   *
+   * Not "one fewer than before". Three earlier tests in this serial file moved
+   * households between groups, and a count adjusted by hand until it passed
+   * would hide any of those moves going wrong:
+   *
+   *   | fixture          | what happened to it here                | group now                   |
+   *   | ready            | opened, then marked as sent by the      | already_dispatched          |
+   *   |                  | operator                                |                             |
+   *   | nobodyChosen     | Sara chosen through the FIXTURE         | READY                       |
+   *   | alsoUnchosen     | Iván chosen through the CONSOLE, above  | READY                       |
+   *   | chosenHasNoPhone | untouched so far — Carlos still has no  | recipient_has_no_phone      |
+   *   |                  | number until the declaration-gate block |                             |
+   *   | landline         | untouched                               | recipient_phone_unreachable |
+   *   | alreadySent      | seeded with `marked_sent`               | already_dispatched          |
+   *
+   * Two ready, two already dispatched, one of each phone problem, nobody
+   * unchosen, and six in total — the same six, because nothing here creates or
+   * deletes an invitation.
+   */
+  test("leaves the readiness check re-derived, with the same total", async () => {
+    await page.goto("/console");
+
+    await expect(page.locator("p.dispatch-preflight__ready")).toContainText(
+      `Listas para enviar: 2 de ${ANA_OWNED} invitaciones de ${ana.displayName}`,
+    );
+
+    const counts = await page
+      .locator("p.dispatch-preflight__count")
+      .allInnerTexts();
+
+    expect(counts.map((count) => count.trim())).toEqual(
+      (
+        [
+          ["Sin destinatario elegido", 0],
+          ["Con destinatario sin número", 1],
+          ["Con destinatario que no recibe WhatsApp", 1],
+          ["Con destinatario que ya no pertenece", 0],
+          ["Ya enviadas", 2],
+        ] as const
+      ).map(
+        ([heading, count]) =>
+          `${heading}: ${count} de ${ANA_OWNED} invitaciones de ${ana.displayName}`,
+      ),
+    );
+
+    // The household that was just chosen for is named nowhere in the blocked
+    // groups any more, and the empty group says it is empty rather than vanishing.
+    const unchosen = page
+      .locator("section.dispatch-preflight__group")
+      .filter({ hasText: "Sin destinatario elegido" });
+
+    await expect(unchosen).not.toContainText("Familia Sin Elegir Quintero");
+    await expect(unchosen.locator(".dispatch-preflight__empty")).toBeVisible();
   });
 });
 

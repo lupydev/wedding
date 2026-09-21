@@ -153,6 +153,38 @@ estimate for that half).
 - [ ] 1b.1 RED — `supabase/tests/dispatch-recipient.spec.ts` addendum: `information_schema.columns` no longer lists `invitations.seats_allowed`.
 - [ ] 1b.2 RED — same file: rolling back `0013` recreates `seats_allowed` `not null` with the `between 1 and 12` check, backfilled from `count(*)`, clamping and logging a `NOTICE` for a synthetic 0-member and >12-member invitation (the down script's two honesty notes).
 - [ ] 1b.3 GREEN — `supabase/migrations/0013_drop_seats_allowed.sql`: the "report before destroying" `do $$ ... raise notice ...` block naming any row whose `seats_allowed` already disagreed with its member count, then `alter table invitations drop column seats_allowed;`. Matching `supabase/down/0013_drop_seats_allowed_down.sql`: recreate the column, backfill from `count(*)` clamped to `[1, 12]` with a `NOTICE` per out-of-range row, restore the `between 1 and 12` check and `NOT NULL`, and restore 0007's original `enforce_seat_cap` body verbatim (not 0012's).
+> **1b resolution (shipped in `f01f6ce`, `896b542` and `8d6f6e3`; these four
+> lines are left unticked deliberately, because each was answered differently
+> from its own text and ticking them would claim the literal proof).**
+>
+> - **1b.1 — done, elsewhere.** The assertion lives in a dedicated
+>   `supabase/tests/seats-allowed-dropped.spec.ts` rather than as an addendum to
+>   `dispatch-recipient.spec.ts`. Same substance; a file of its own is what made
+>   the `no-seats-allowed` scanner exemption arguable one entry at a time.
+> - **1b.2 — the clamp belongs to 0012, not 0013, and its test was removed.**
+>   0012's own down script already backfills from `count(*)`, clamps every
+>   out-of-range value, prints a `NOTICE` naming each, and only then restores the
+>   `between 1 and 12` check — in that order, verified by reading it. Duplicating
+>   any of that one migration earlier would print two notices per household and
+>   leave two copies to keep in step. A test for it WAS written and then deleted:
+>   0012's down script runs `update invitations` over every row, and an UPDATE
+>   revalidates each row's foreign key, so it fails on any inconsistency anywhere
+>   in a shared development database — including rows the suite never created. It
+>   turned a just-approved commit red until the database was cleaned by hand.
+> - **1b.3 — done, minus one clause.** The migration, its pre-destroy `NOTICE`
+>   and the down script all shipped and are proved. The clause asking 0013's down
+>   script to "restore 0007's original `enforce_seat_cap` body" was NOT done, and
+>   should not be: rolling back 0013 alone leaves 0012 applied, and the cap must
+>   keep reading `count(*)` while it is. Restoring 0007's body there would
+>   reinstate half of 0012's rollback inside 0013's, and 0012's down script
+>   already does it.
+> - **1b.4 — verified except the full down-and-up roll.** `npm test`, typecheck,
+>   lint, format and `npm run build` all ran green. Rolling `0012` and `0013`
+>   fully down and back up was NOT run: it takes the local database down and
+>   discards the chosen recipients, which is the operator's call and was not
+>   given. What IS proved, inside a rolled-back transaction, is that both down
+>   scripts execute against today's schema — see `seats-allowed-dropped.spec.ts`.
+
 - [ ] 1b.4 Verify: `npm test`, `0012` and `0013` rolled fully down and back up in order, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`.
 
 ## Phase 2a: Spanish naming — `spanish-list`, `guest-name`, `greeting-name`
@@ -239,22 +271,22 @@ estimate for that half).
 
 ## Phase 4b: `GuestList` recipient indicator, empty state; E2E
 
-- [ ] 4b.1 RED — `components/console/GuestList.spec.tsx` addendum: the chosen dispatch recipient is visually distinguished on its row; an invitation with NO recipient chosen shows that plainly rather than omitting the indicator silently.
-- [ ] 4b.2 GREEN — `components/console/GuestList.tsx`: render the recipient indicator per row, with an edit affordance linking to `/console/invitations/[id]/edit`.
-- [ ] 4b.3 RED — same file addendum: a "create invitation" affordance is present and reachable from the list without leaving the console.
-- [ ] 4b.4 GREEN — `components/console/GuestList.tsx`: add the create-invitation link to `/console/invitations/new`.
-- [ ] 4b.5 RED — same file addendum: the empty-state copy does NOT claim invitations are loaded exclusively through the importer, and instead points the operator at creating one from the console.
-- [ ] 4b.6 GREEN — `components/console/GuestList.tsx`: rewrite the empty-state copy.
-- [ ] 4b.7 RED — `lib/domain/console-list.spec.ts` addendum: `ConsoleSummary.contradictedAnswers` counts invitations whose stored RSVP names a since-removed member, rendered via the existing `countSentence` shape (D24).
-- [ ] 4b.8 GREEN — `lib/domain/console-list.ts`: add `contradictedAnswers: number` to `ConsoleSummary`'s accumulation.
-- [ ] 4b.9 RED — `components/console/GuestList.spec.tsx` addendum: a row whose invitation has a contradicted answer shows a visible inconsistency badge; a row whose RSVP names only current members shows none.
-- [ ] 4b.10 GREEN — `components/console/GuestList.tsx`: render the row-level inconsistency badge from `classifyMembershipChangeImpact`'s output.
-- [ ] 4b.11 RED — same file addendum: a rendered RSVP attendee list resolves each id against current members and renders an unresolved id as removed — neither crashing nor silently shortening the answer.
-- [ ] 4b.12 GREEN — wire the resolution from 4b.11 wherever `attendee_guest_ids` is rendered in the console.
-- [ ] 4b.13 RED — `e2e/console-guest-list.spec.ts` addendum: create a group through the console, watch the derived name appear as nicknames are typed, override it, add a member, and confirm the override survived; the recipient indicator and the create/edit affordances are reachable and functional.
-- [ ] 4b.14 GREEN — confirm the wiring from 3a/3b/4a satisfies 4b.13; adjust only fixtures.
-- [ ] 4b.15 RED — `e2e/console-dispatch.spec.ts` addendum: dispatch is blocked before a recipient is chosen and unblocked after; every readiness-count assertion is RE-DERIVED against the new five-kind classification — `no_recipient_chosen` first, `recipient_has_no_phone`, `recipient_phone_unreachable`, `recipient_not_in_household` (permanently empty, D23), `already_dispatched` last — do not adjust numbers until green.
-- [ ] 4b.16 GREEN — confirm 3a/3b/4a's wiring satisfies 4b.15; adjust only fixture readiness counts.
-- [ ] 4b.17 RED — new `e2e/console-invitation-lifecycle.spec.ts`: deletion is refused on a dispatched invitation and slug rotation is offered instead; rotating makes the old URL resolve to the friendly unknown-slug page and the path-scoped unlock cookie unusable there, while the new URL requires the phone gate again.
-- [ ] 4b.18 GREEN — wire the rotation UI's confirmation copy so it MUST NOT claim the cached preview card is removed or updated (slug-rotation spec).
-- [ ] 4b.19 Verify: `npm test`, `PORT=3100 npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`; confirm `tools/no-seats-allowed.spec.ts` (1a.14) is still green.
+- [x] 4b.1 RED — `components/console/GuestList.spec.tsx` addendum: the chosen dispatch recipient is visually distinguished on its row; an invitation with NO recipient chosen shows that plainly rather than omitting the indicator silently.
+- [x] 4b.2 GREEN — `components/console/GuestList.tsx`: render the recipient indicator per row, with an edit affordance linking to `/console/invitations/[id]/edit`.
+- [x] 4b.3 RED — same file addendum: a "create invitation" affordance is present and reachable from the list without leaving the console.
+- [x] 4b.4 GREEN — `components/console/GuestList.tsx`: add the create-invitation link to `/console/invitations/new`.
+- [x] 4b.5 RED — same file addendum: the empty-state copy does NOT claim invitations are loaded exclusively through the importer, and instead points the operator at creating one from the console.
+- [x] 4b.6 GREEN — `components/console/GuestList.tsx`: rewrite the empty-state copy.
+- [x] 4b.7 RED — `lib/domain/console-list.spec.ts` addendum: `ConsoleSummary.contradictedAnswers` counts invitations whose stored RSVP names a since-removed member, rendered via the existing `countSentence` shape (D24).
+- [x] 4b.8 GREEN — `lib/domain/console-list.ts`: add `contradictedAnswers: number` to `ConsoleSummary`'s accumulation.
+- [x] 4b.9 RED — `components/console/GuestList.spec.tsx` addendum: a row whose invitation has a contradicted answer shows a visible inconsistency badge; a row whose RSVP names only current members shows none.
+- [x] 4b.10 GREEN — `components/console/GuestList.tsx`: render the row-level inconsistency badge from `classifyMembershipChangeImpact`'s output.
+- [x] 4b.11 RED — same file addendum: a rendered RSVP attendee list resolves each id against current members and renders an unresolved id as removed — neither crashing nor silently shortening the answer.
+- [x] 4b.12 GREEN — wire the resolution from 4b.11 wherever `attendee_guest_ids` is rendered in the console.
+- [x] 4b.13 RED — `e2e/console-guest-list.spec.ts` addendum: create a group through the console, watch the derived name appear as nicknames are typed, override it, add a member, and confirm the override survived; the recipient indicator and the create/edit affordances are reachable and functional.
+- [x] 4b.14 GREEN — confirm the wiring from 3a/3b/4a satisfies 4b.13; adjust only fixtures.
+- [x] 4b.15 RED — `e2e/console-dispatch.spec.ts` addendum: dispatch is blocked before a recipient is chosen and unblocked after; every readiness-count assertion is RE-DERIVED against the new five-kind classification — `no_recipient_chosen` first, `recipient_has_no_phone`, `recipient_phone_unreachable`, `recipient_not_in_household` (permanently empty, D23), `already_dispatched` last — do not adjust numbers until green.
+- [x] 4b.16 GREEN — confirm 3a/3b/4a's wiring satisfies 4b.15; adjust only fixture readiness counts.
+- [x] 4b.17 RED — new `e2e/console-invitation-lifecycle.spec.ts`: deletion is refused on a dispatched invitation and slug rotation is offered instead; rotating makes the old URL resolve to the friendly unknown-slug page and the path-scoped unlock cookie unusable there, while the new URL requires the phone gate again.
+- [x] 4b.18 GREEN — wire the rotation UI's confirmation copy so it MUST NOT claim the cached preview card is removed or updated (slug-rotation spec).
+- [x] 4b.19 Verify: `npm test`, `PORT=3100 npm run e2e`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`; confirm `tools/no-seats-allowed.spec.ts` (1a.14) is still green.

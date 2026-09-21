@@ -1,7 +1,10 @@
+import { randomBytes } from "node:crypto";
+
 import { expect, test, type Page } from "@playwright/test";
 
 import {
   declareDevice,
+  deleteInvitationsOwnedBy,
   seedConsoleInvitation,
   signInAsOperator,
   type ConsoleInvitationSeed,
@@ -36,6 +39,8 @@ test.describe.configure({ mode: "serial" });
  */
 const MISMATCH_NOTICE = (page: Page) => page.locator("section.device-mismatch");
 
+/** Unique per run, so every fixture name this file invents is its own. */
+let run: string;
 let ana: SeededOperator;
 let beto: SeededOperator;
 let anaHousehold: ConsoleInvitationSeed;
@@ -45,8 +50,20 @@ let betoHousehold: ConsoleInvitationSeed;
 let page: Page;
 
 test.beforeAll(async ({ browser }) => {
-  ana = await seedOperator({ displayName: "Ana Lista" });
-  beto = await seedOperator({ displayName: "Beto Lista" });
+  /*
+    UNIQUE PER RUN, EXACTLY AS `console-dispatch.spec.ts` ALREADY IS.
+
+    The device picker labels its radios with the sender's display name and
+    `declareDevice` locates one by that label, so a leftover operator from an
+    aborted run — the emails are timestamped, the display names were not — makes
+    that label resolve to two elements. Playwright's strict mode refuses it, the
+    sign-in test fails for a reason that is not about the product, and the rest
+    of this serial file never runs. Costing sixteen tests is what a shared local
+    database does with a name a fixture assumed was its own.
+  */
+  run = randomBytes(3).toString("hex");
+  ana = await seedOperator({ displayName: `Ana Lista ${run}` });
+  beto = await seedOperator({ displayName: `Beto Lista ${run}` });
 
   anaHousehold = await seedConsoleInvitation({
     ownerSenderId: ana.senderId,
@@ -99,6 +116,13 @@ test.afterAll(async () => {
   await changedMind.cleanup();
   await opened.cleanup();
   await betoHousehold.cleanup();
+  // The invitation the CONSOLE created has no fixture handle: its id was minted
+  // on the server and the action answered with a redirect. Ownership is all this
+  // file knows about it, and leaving it behind would make `ana.cleanup()` below
+  // fail on the `owner_sender_id` foreign key — which leaves the sender alive
+  // too, and a duplicate display name is what breaks the NEXT run's sign-in.
+  await deleteInvitationsOwnedBy(ana.senderId);
+  await deleteInvitationsOwnedBy(beto.senderId);
   await ana.cleanup();
   await beto.cleanup();
 });
@@ -122,7 +146,7 @@ test.describe("the per-device WhatsApp declaration", () => {
   });
 
   test("declaring the signed-in operator's own account opens the console", async () => {
-    await declareDevice(page, "Ana Lista");
+    await declareDevice(page, ana.displayName);
 
     await expect(page).toHaveURL(/\/console$/);
     await expect(
@@ -132,14 +156,14 @@ test.describe("the per-device WhatsApp declaration", () => {
   });
 
   test("declaring the OTHER operator's account blocks dispatch with an explanation", async () => {
-    await declareDevice(page, "Beto Lista");
+    await declareDevice(page, beto.displayName);
     await page.goto("/console");
 
     const notice = MISMATCH_NOTICE(page);
     await expect(notice).toContainText(/no coincide/i);
     // Both assumptions named, so the operator can tell which one is wrong.
-    await expect(notice).toContainText("Ana Lista");
-    await expect(notice).toContainText("Beto Lista");
+    await expect(notice).toContainText(ana.displayName);
+    await expect(notice).toContainText(beto.displayName);
     // Not a silent filter: the list is still here, and it is still Ana's.
     await expect(
       page.getByRole("heading", { name: "Familia Muñóz Aristizábal" }),
@@ -182,7 +206,7 @@ test.describe("the per-device WhatsApp declaration", () => {
     }
 
     // Back to a working console for the rest of the file.
-    await declareDevice(page, "Ana Lista");
+    await declareDevice(page, ana.displayName);
     await expect(page).toHaveURL(/\/console$/);
   });
 });
@@ -211,7 +235,9 @@ test.describe("the partitioned guest list", () => {
       .locator("li.guest-list__row")
       .filter({ hasText: "Familia Muñóz Aristizábal" });
 
-    await expect(row.getByText(/Gestionas tú \(Ana Lista\)/)).toBeVisible();
+    await expect(
+      row.getByText(`Gestionas tú (${ana.displayName})`),
+    ).toBeVisible();
     await expect(
       row.getByRole("link", { name: /Preparar envío/i }),
     ).toBeVisible();
@@ -227,7 +253,9 @@ test.describe("the partitioned guest list", () => {
     await expect(
       theirRow.getByRole("heading", { name: "Familia Peña Betancur" }),
     ).toBeVisible();
-    await expect(theirRow.getByText("Gestiona Beto Lista")).toBeVisible();
+    await expect(
+      theirRow.getByText(`Gestiona ${beto.displayName}`),
+    ).toBeVisible();
     await expect(
       theirRow.getByRole("link", { name: /Preparar envío/i }),
     ).toHaveCount(0);
@@ -298,13 +326,15 @@ test.describe("the partitioned guest list", () => {
     // Three owned invitations, one declined, none confirmed — not two answers
     // from one household.
     await expect(
-      mine.getByText("Confirmadas: 0 de 3 invitaciones de Ana Lista"),
+      mine.getByText(`Confirmadas: 0 de 3 invitaciones de ${ana.displayName}`),
     ).toBeVisible();
     await expect(
-      mine.getByText("No asisten: 1 de 3 invitaciones de Ana Lista"),
+      mine.getByText(`No asisten: 1 de 3 invitaciones de ${ana.displayName}`),
     ).toBeVisible();
     await expect(
-      mine.getByText("Sin respuesta: 2 de 3 invitaciones de Ana Lista"),
+      mine.getByText(
+        `Sin respuesta: 2 de 3 invitaciones de ${ana.displayName}`,
+      ),
     ).toBeVisible();
   });
 
@@ -327,12 +357,12 @@ test.describe("the partitioned guest list", () => {
 
     await expect(
       mine.getByText(
-        "Marcadas como enviadas: 0 de 3 invitaciones de Ana Lista",
+        `Marcadas como enviadas: 0 de 3 invitaciones de ${ana.displayName}`,
       ),
     ).toBeVisible();
     await expect(
       mine.getByText(
-        "Enlace abierto, envío sin confirmar: 1 de 3 invitaciones de Ana Lista",
+        `Enlace abierto, envío sin confirmar: 1 de 3 invitaciones de ${ana.displayName}`,
       ),
     ).toBeVisible();
   });
@@ -411,5 +441,224 @@ test.describe("the console never becomes a way past the guest gate", () => {
 
       await expect(page.getByLabel(/Número de celular/)).toBeVisible();
     }
+  });
+});
+
+/**
+ * Creating a group THROUGH THE CONSOLE, which nothing else in this suite does.
+ *
+ * Every other fixture in this file is inserted straight into Postgres, because
+ * what those tests are about is what the console DISPLAYS. This block is about
+ * the write: before this capability the only way to add a household was to edit
+ * a JSON file and run `scripts/import-guests.ts`, so the form is the answer to
+ * "somebody called yesterday and they are coming".
+ *
+ * WHY THE DERIVED NAME IS WATCHED WHILE IT IS TYPED
+ *
+ * `deriveGreetingName` is imported by the form from the same specifier the
+ * Server Action imports (design D14), so the live preview and the stored value
+ * cannot drift. That claim is only worth anything if the preview is really the
+ * function: these tests type a nickname and watch the greeting follow it, then
+ * override it and watch the derivation stop being used without being forgotten.
+ *
+ * WHY THE OVERRIDE IS CHECKED AFTER A MEMBER IS ADDED
+ *
+ * Touching the field IS the decision to go custom — there is no separate toggle
+ * — and adding a member re-derives. A form that re-derived over a name a person
+ * had written would silently replace the couple's own wording, which is the
+ * failure the `greetingNameSource` column exists to prevent.
+ *
+ * It runs LAST in this serial file on purpose: it adds a fourth invitation to
+ * Ana's partition, and the count assertions above are written against three.
+ */
+test.describe("creating a group through the console", () => {
+  /** The household name shown in the panel. Never the greeting. */
+  let householdName: string;
+  /** The greeting an operator writes over the derived one. */
+  let customGreeting: string;
+
+  const LUCIA = "Lucía Restrepo Vélez";
+  const MATEO = "Mateo Restrepo Díaz";
+  const SARA = "Sara Restrepo";
+  /** Fabricated, like every number here. A real guest's must never appear. */
+  const LUCIA_PHONE_TYPED = "300 555 4001";
+  const LUCIA_PHONE_STORED = "+573005554001";
+
+  test.beforeAll(() => {
+    // Suffixed per run for the same reason the operators are: this file shares
+    // one database with every other spec and with whatever an aborted run left.
+    householdName = `Restrepo Vélez ${run}`;
+    customGreeting = `Los Restrepo de siempre ${run}`;
+  });
+
+  /** One member's own fieldset. Scoped, because every row repeats the labels. */
+  const member = (index: number) =>
+    page.locator("fieldset.invitation-form__member").nth(index);
+
+  /** What the form says the members currently derive to. */
+  const derivedLine = () => page.getByTestId("invitation-derived-name");
+
+  /** Ana's own partition, where the new household has to appear. */
+  const mine = () => page.locator("section.console__section").first();
+
+  const createdRow = () =>
+    mine().locator("li.guest-list__row").filter({ hasText: customGreeting });
+
+  test("the create affordance on the list opens the form without leaving the console", async () => {
+    await page.goto("/console");
+
+    // Scoped to the owned partition: the shared dashboard below renders its own
+    // `GuestList` and therefore its own create link, and an unscoped query is
+    // ambiguous exactly because the door is offered in both places.
+    await mine().getByRole("link", { name: "Crear invitación" }).click();
+
+    await expect(page).toHaveURL(/\/console\/invitations\/new$/);
+    await expect(
+      page.getByRole("heading", { name: "Nueva invitación" }),
+    ).toBeVisible();
+  });
+
+  test("the group name follows the nicknames as they are typed", async () => {
+    // Nothing named yet: the preview says so instead of rendering an empty name.
+    await expect(derivedLine()).toContainText("todavía sin integrantes");
+
+    await member(0).getByLabel("Nombre completo").fill(LUCIA);
+    // One member alone keeps their FULL name: addressing one person by their
+    // first name reads as clipped rather than warm.
+    await expect(derivedLine()).toContainText(`Nombre automático: ${LUCIA}`);
+
+    await member(0).getByLabel("Apodo").fill("Lucha");
+    // The nickname wins the moment it exists. This is the assertion that the
+    // preview is the domain function and not a string this component builds.
+    await expect(derivedLine()).toContainText("Nombre automático: Lucha");
+
+    await member(0).getByLabel("Teléfono").fill(LUCIA_PHONE_TYPED);
+
+    await page.getByRole("button", { name: "Agregar integrante" }).click();
+    await member(1).getByLabel("Nombre completo").fill(MATEO);
+    await member(1).getByLabel("Apodo").fill("Teo");
+
+    // Two members are addressed as a list, joined by the Spanish conjunction
+    // rule and with no Oxford comma.
+    await expect(derivedLine()).toContainText("Nombre automático: Lucha y Teo");
+    await expect(page.getByLabel("Nombre del grupo")).toHaveValue(
+      "Lucha y Teo",
+    );
+  });
+
+  test("an override survives a member added after it", async () => {
+    await page.getByLabel("Nombre del hogar").fill(householdName);
+    await page.getByLabel("Nombre del grupo").fill(customGreeting);
+
+    // Touching the field IS the decision, so the hidden source flips with it —
+    // there is no toggle to disagree with the text beside it.
+    await expect(page.getByTestId("invitation-greeting-source")).toHaveValue(
+      "custom",
+    );
+    // The derived name is still computed and still on screen. It is shown
+    // BESIDE the custom one rather than instead of it, because deciding whether
+    // a hand-written greeting "still mentions" a member is unreliable in both
+    // directions and the operator is the one who can tell.
+    await expect(derivedLine()).toContainText("Lucha y Teo");
+    await expect(derivedLine()).toContainText("escrito a mano");
+
+    await page.getByRole("button", { name: "Agregar integrante" }).click();
+    await member(2).getByLabel("Nombre completo").fill(SARA);
+    await member(2).getByLabel("Apodo").fill("Sarita");
+
+    // The derivation followed the new member; the operator's own wording did not
+    // move. Both halves matter: a form that stopped deriving would hide a stale
+    // greeting, and one that re-derived would overwrite a person's sentence.
+    await expect(derivedLine()).toContainText("Lucha, Teo y Sarita");
+    await expect(page.getByLabel("Nombre del grupo")).toHaveValue(
+      customGreeting,
+    );
+  });
+
+  test("the saved group is on the operator's own list, under the name they wrote", async () => {
+    await page.getByRole("button", { name: "Guardar invitación" }).click();
+
+    // The form does not stay on a screen that has apparently done nothing: the
+    // new invitation is on the list, which is where it now lives.
+    await expect(page).toHaveURL(/\/console$/);
+    await expect(
+      mine().getByRole("heading", { name: customGreeting }),
+    ).toBeVisible();
+
+    const row = createdRow();
+    await expect(row.getByText(LUCIA, { exact: true })).toBeVisible();
+    await expect(row.getByText(MATEO, { exact: true })).toBeVisible();
+    await expect(row.getByText(SARA, { exact: true })).toBeVisible();
+    await expect(row.getByText("3 personas")).toBeVisible();
+    // Typed with spaces and stored in E.164: the creation path normalizes through
+    // the same strict function the importer uses, rather than keeping whatever
+    // shape a phone keyboard produced.
+    await expect(row.getByText(LUCIA_PHONE_STORED)).toBeVisible();
+  });
+
+  test("a group nobody has been chosen for says so on its row", async () => {
+    // WRITTEN OUT, not left blank. Nothing infers a recipient — not the first
+    // member, not the only one with a number — so a row that rendered no
+    // indicator would look exactly like a row whose choice is further down, and
+    // the operator would learn the difference when the send refused.
+    await expect(
+      createdRow().getByText("Nadie elegido para recibir el mensaje."),
+    ).toBeVisible();
+    await expect(createdRow().getByText("Recibe el mensaje")).toHaveCount(0);
+  });
+
+  test("the row's edit affordance reaches the form with the stored override intact", async () => {
+    await createdRow()
+      .getByRole("link", { name: `Editar invitación de ${customGreeting}` })
+      .click();
+
+    await expect(page).toHaveURL(
+      /\/console\/invitations\/[0-9a-f-]{36}\/edit$/,
+    );
+    // Read back from the database, not from the client that typed it: this is
+    // the assertion that `greetingNameSource` was stored as `custom`. Were it
+    // stored as derived, this field would now read "Lucha, Teo y Sarita".
+    await expect(page.getByLabel("Nombre del grupo")).toHaveValue(
+      customGreeting,
+    );
+    await expect(page.getByLabel("Nombre del hogar")).toHaveValue(
+      householdName,
+    );
+    await expect(page.getByTestId("invitation-greeting-source")).toHaveValue(
+      "custom",
+    );
+  });
+
+  test("choosing a member on the edit screen moves the indicator onto their row", async () => {
+    const recipients = page.locator("fieldset.invitation-form__recipient");
+
+    // Nobody is preselected here either, on a household whose only stored number
+    // belongs to one member — the one an auto-pick would have taken.
+    for (const option of await recipients.getByRole("radio").all()) {
+      await expect(option).not.toBeChecked();
+    }
+
+    // WAITED FOR, NOT MERELY CLICKED. The radio is checked optimistically and
+    // the Server Action is a POST to this route; navigating away before it
+    // answers aborts the in-flight request, which looks exactly like the console
+    // ignoring the choice. Same reasoning as `declareDevice`.
+    const write = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/console/invitations/"),
+    );
+    await recipients.getByLabel(LUCIA).check();
+    await write;
+
+    // Asserted on the LIST, which is server-rendered: the radio going checked is
+    // optimistic local state, and the console re-reading the choice from the row
+    // is what proves the write landed.
+    await page.goto("/console");
+
+    const row = createdRow();
+    await expect(row.getByText("Recibe el mensaje")).toBeVisible();
+    await expect(
+      row.getByText("Nadie elegido para recibir el mensaje."),
+    ).toHaveCount(0);
   });
 });
