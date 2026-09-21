@@ -244,6 +244,34 @@ page are "Agregar a Google Calendar" and "Volver al inicio". 2083 tests green;
 typecheck, lint, format and build clean. The build no longer lists
 `/transmision/evento.ics`.
 
+### Unit F — the song plays on both pages, and across the jump between them
+
+The couple asked for the music on `/transmision`. Rendering a second
+`MusicToggle` there would have delivered the control and broken the thing it is
+for: `/` and `/transmision` navigate to each other through `<Link>`, which is a
+CLIENT-SIDE navigation, so React unmounts the page's tree and mounts the next
+one. A new `<audio>` element, the song back at zero, and the autoplay attempt
+running again — on every tap.
+
+So it moved into a layout. The installed Next states the guarantee plainly:
+"Layouts do not re-render on navigation"
+(`03-file-conventions/layout.md:240`).
+
+`app/(public)/layout.tsx`, in a route GROUP rather than the root layout.
+`(public)` changes no URL — the build still reports `○ /` — but it scopes the
+song to exactly the two public pages. In `app/layout.tsx` it would also have
+reached `/console`, where an operator is working, and `/i/[slug]`, which is a
+different surface with its own voice.
+
+PROVEN, NOT ASSUMED. The `<audio>` node was branded with a `data-` attribute on
+`/` and looked up again after following the link: `node=same-node`, so it was
+never remounted. `currentTime` went 0.04 → 2.67 with `paused === false`
+throughout, and the control still read "Pausar la música". Zero console errors.
+The clock was fixed inside the final week so the door on the landing was a live
+link and the navigation was the real one.
+
+2085 tests green; typecheck, lint, format and build clean.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`

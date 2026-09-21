@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 
 import compromiso from "@/img/compromiso.jpg";
 
-import { MusicToggle } from "@/components/landing/MusicToggle";
 import { PhotoStage } from "@/components/landing/PhotoStage";
 import { SaveTheDate } from "@/components/landing/SaveTheDate";
 import { StreamLink } from "@/components/landing/StreamLink";
@@ -24,9 +23,6 @@ import { COUPLE_NAMES, formatWeddingDate } from "@/lib/domain/wedding-day";
  * only thing this file owns is the photograph, the scrim over it, and where the
  * two blocks sit on top.
  */
-
-/** Served from `public/`, which is the only folder Next serves verbatim. */
-const SONG_SRC = "/audio/nuestra-cancion.mp3";
 
 /**
  * What a crawler and a WhatsApp preview see.
@@ -106,15 +102,6 @@ export default function Home() {
           */}
           <StreamLink />
         </div>
-      </div>
-
-      {/*
-        The song sits in the corner, clear of both bands of text and of the
-        notch. `fixed` rather than `absolute` so it stays reachable if this page
-        ever grows past one screen.
-      */}
-      <div className="fixed top-[max(1.25rem,env(safe-area-inset-top))] right-5 z-10">
-        <MusicToggle src={SONG_SRC} />
       </div>
     </PhotoStage>
   );
