@@ -150,7 +150,7 @@ test.describe("the per-device WhatsApp declaration", () => {
 
     await expect(page).toHaveURL(/\/console$/);
     await expect(
-      page.getByRole("heading", { name: "Tus invitaciones" }),
+      page.getByRole("heading", { name: "Invitaciones" }),
     ).toBeVisible();
     await expect(MISMATCH_NOTICE(page)).toHaveCount(0);
   });
@@ -216,21 +216,37 @@ test.describe("the per-device WhatsApp declaration", () => {
 });
 
 test.describe("the partitioned guest list", () => {
-  test("the default view lists the operator's own invitations", async () => {
+  /**
+   * THE LIST IS NO LONGER PARTITIONED, AND THAT IS THE POINT.
+   *
+   * There used to be two: the operator's own households, then a second list of
+   * the other account's, separated by four lines of prose explaining the split.
+   * On a console two people share, the split was communicating one thing — who
+   * manages each household — that every row already says on its own face.
+   *
+   * So this test asserts the opposite of what it used to: both partitions are
+   * here, in one list. What ownership still decides is asserted by the tests
+   * below it, and it is only what it ever decided — the send affordance, and
+   * the editing that would be refused by the server anyway.
+   */
+  test("one list holds every household in the event", async () => {
     await page.goto("/console");
-    const mine = page.locator("section.console__section").first();
+    const list = page.locator("section.console__section").first();
 
     // By heading, not by text: the greeting name also appears inside the send
     // link, so a bare text query is ambiguous.
     await expect(
-      mine.getByRole("heading", { name: "Familia Muñóz Aristizábal" }),
+      list.getByRole("heading", { name: "Familia Muñóz Aristizábal" }),
     ).toBeVisible();
     await expect(
-      mine.getByRole("heading", { name: "Familia Cambió de Idea" }),
+      list.getByRole("heading", { name: "Familia Cambió de Idea" }),
     ).toBeVisible();
     await expect(
-      mine.getByRole("heading", { name: "Familia Peña Betancur" }),
-    ).toHaveCount(0);
+      list.getByRole("heading", { name: "Familia Peña Betancur" }),
+    ).toBeVisible();
+
+    // And there is exactly one list, not two.
+    await expect(page.locator("section.console__section")).toHaveCount(1);
   });
 
   test("each owned row carries a send affordance and names its owner", async () => {
@@ -249,8 +265,7 @@ test.describe("the partitioned guest list", () => {
 
   test("the shared dashboard covers both partitions and offers no send button on the other's rows", async () => {
     await page.goto("/console");
-    const shared = page.locator("section.console__section").nth(1);
-    const theirRow = shared
+    const theirRow = page
       .locator("li.guest-list__row")
       .filter({ hasText: "Familia Peña Betancur" });
 

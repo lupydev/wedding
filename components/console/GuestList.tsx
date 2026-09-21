@@ -238,55 +238,67 @@ export function GuestList({
   return (
     <div className="flex flex-col gap-3">
       <ul className="guest-list flex flex-col gap-2">
-        {rows.map((row) => (
-          <li
-            className="guest-list__row rounded-lg border border-border bg-card px-3 py-3"
-            key={row.invitationId}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <h3 className="text-base leading-snug text-balance">
-                  {row.greetingName}
-                </h3>
+        {rows.map((row) => {
+          /*
+            ONE ANSWER, READ BY BOTH DOORS.
 
-                <p className="guest-list__owner truncate text-xs text-muted-foreground">
-                  {row.ownedByViewer
-                    ? `Gestionas tú (${row.ownerDisplayName})`
-                    : `Gestiona ${row.ownerDisplayName}`}
-                </p>
+            A household this operator does not own is read-only whatever the
+            list is: `updateGuestPhoneAction` refuses it on the server, and a
+            control that is always refused is worse than no control. The prop
+            keeps its own meaning — "this whole list may not be edited" — and
+            simply widens it.
+          */
+          const rowReadOnly = readOnly || !row.ownedByViewer;
+
+          return (
+            <li
+              className="guest-list__row rounded-lg border border-border bg-card px-3 py-3"
+              key={row.invitationId}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base leading-snug text-balance">
+                    {row.greetingName}
+                  </h3>
+
+                  <p className="guest-list__owner truncate text-xs text-muted-foreground">
+                    {row.ownedByViewer
+                      ? `Gestionas tú (${row.ownerDisplayName})`
+                      : `Gestiona ${row.ownerDisplayName}`}
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <p className="guest-list__dispatch">
+                    <StatusBadge
+                      label={dispatchLabel(row.dispatchState)}
+                      tone={dispatchStateTone(row.dispatchState)}
+                    />
+                  </p>
+
+                  <p className="guest-list__answer">
+                    <StatusBadge
+                      label={RSVP_ANSWER_LABELS[row.answer]}
+                      tone={rsvpAnswerTone(row.answer)}
+                    />
+                  </p>
+                </div>
               </div>
 
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <p className="guest-list__dispatch">
-                  <StatusBadge
-                    label={dispatchLabel(row.dispatchState)}
-                    tone={dispatchStateTone(row.dispatchState)}
-                  />
-                </p>
+              <p className="guest-list__seats mt-1 text-xs text-hint">
+                {membersSentence(row)}
+              </p>
 
-                <p className="guest-list__answer">
-                  <StatusBadge
-                    label={RSVP_ANSWER_LABELS[row.answer]}
-                    tone={rsvpAnswerTone(row.answer)}
-                  />
-                </p>
-              </div>
-            </div>
-
-            <p className="guest-list__seats mt-1 text-xs text-hint">
-              {membersSentence(row)}
-            </p>
-
-            {/*
+              {/*
               Directly under the seat sentence, because it is that number the
               answer disagrees with. An operator who reads "2 de 1 personas
               confirmadas" and finds no explanation beside it concludes the
               console is broken — and then stops trusting the counts that are
               right.
             */}
-            <AnswerMismatchNotice row={row} />
+              <AnswerMismatchNotice row={row} />
 
-            {/*
+              {/*
               WHY THE ABSENCE IS WRITTEN OUT INSTEAD OF SHOWING NOTHING.
 
               No recipient is inferred anywhere — not from `is_primary`, not from
@@ -296,63 +308,63 @@ export function GuestList({
               identical to a row whose choice is simply further down, and the
               operator learns which only when the send refuses.
             */}
-            {row.dispatchRecipientGuestId === null && (
-              <p className="guest-list__no-recipient mt-1 text-xs text-hint">
-                Nadie elegido para recibir el mensaje.
-              </p>
-            )}
+              {row.dispatchRecipientGuestId === null && (
+                <p className="guest-list__no-recipient mt-1 text-xs text-hint">
+                  Nadie elegido para recibir el mensaje.
+                </p>
+              )}
 
-            <ul className="guest-list__guests mt-2 flex flex-col gap-1 border-t border-border pt-2">
-              {row.guests.map((guest) => (
-                <li
-                  className="flex flex-wrap items-baseline gap-x-2 gap-y-1"
-                  key={guest.id}
-                >
-                  <span className="guest-list__guest-name min-w-0 truncate text-sm text-foreground">
-                    {guest.fullName}
-                  </span>
-                  {guest.isChild && (
-                    <span className="guest-list__child text-xs text-muted-foreground">
-                      {" "}
-                      (menor)
+              <ul className="guest-list__guests mt-2 flex flex-col gap-1 border-t border-border pt-2">
+                {row.guests.map((guest) => (
+                  <li
+                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1"
+                    key={guest.id}
+                  >
+                    <span className="guest-list__guest-name min-w-0 truncate text-sm text-foreground">
+                      {guest.fullName}
                     </span>
-                  )}
-                  {guest.id === row.dispatchRecipientGuestId && (
-                    <span className="guest-list__recipient text-xs text-foreground">
-                      Recibe el mensaje
-                    </span>
-                  )}
-                  <GuestPhoneField
-                    guestId={guest.id}
-                    guestName={guest.fullName}
-                    phoneE164={guest.phoneE164}
-                    lineType={guest.lineType}
-                    dispatchable={guest.dispatchable}
-                    action={updatePhoneAction}
-                    readOnly={readOnly}
-                  />
-                </li>
-              ))}
-            </ul>
+                    {guest.isChild && (
+                      <span className="guest-list__child text-xs text-muted-foreground">
+                        {" "}
+                        (menor)
+                      </span>
+                    )}
+                    {guest.id === row.dispatchRecipientGuestId && (
+                      <span className="guest-list__recipient text-xs text-foreground">
+                        Recibe el mensaje
+                      </span>
+                    )}
+                    <GuestPhoneField
+                      guestId={guest.id}
+                      guestName={guest.fullName}
+                      phoneE164={guest.phoneE164}
+                      lineType={guest.lineType}
+                      dispatchable={guest.dispatchable}
+                      action={updatePhoneAction}
+                      readOnly={rowReadOnly}
+                    />
+                  </li>
+                ))}
+              </ul>
 
-            {/*
+              {/*
             The send affordance exists only for a row this operator owns, and
             only while the device declaration agrees with the session — the one
             thing that gate is for. Editing a number stays available either way.
           */}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {row.ownedByViewer && !dispatchBlocked && (
-                <Button asChild size="lg">
-                  <a
-                    className="guest-list__dispatch-link"
-                    href={consoleDispatchPath(row.invitationId)}
-                  >
-                    Preparar envío para {row.greetingName}
-                  </a>
-                </Button>
-              )}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {row.ownedByViewer && !dispatchBlocked && (
+                  <Button asChild size="lg">
+                    <a
+                      className="guest-list__dispatch-link"
+                      href={consoleDispatchPath(row.invitationId)}
+                    >
+                      Preparar envío para {row.greetingName}
+                    </a>
+                  </Button>
+                )}
 
-              {/*
+                {/*
             The preview is a READ, so unlike the send affordance above it
             survives a device-declaration mismatch: looking at an invitation
             sends nothing from any account, and the operator on the wrong
@@ -360,18 +372,18 @@ export function GuestList({
             Owned-only, though, because the route answers `notFound()` for
             anything else and a link to a 404 is an affordance that lies.
           */}
-              {row.ownedByViewer && (
-                <Button asChild size="lg" variant="ghost">
-                  <a
-                    className="guest-list__preview-link"
-                    href={consolePreviewPath(row.invitationId)}
-                  >
-                    Ver la invitación de {row.greetingName}
-                  </a>
-                </Button>
-              )}
+                {row.ownedByViewer && (
+                  <Button asChild size="lg" variant="ghost">
+                    <a
+                      className="guest-list__preview-link"
+                      href={consolePreviewPath(row.invitationId)}
+                    >
+                      Ver la invitación de {row.greetingName}
+                    </a>
+                  </Button>
+                )}
 
-              {/*
+                {/*
                 GATED LIKE ITS NEIGHBOURS, AND NOT FOR THE SAME REASON.
 
                 The preview link above is gated because its route answers
@@ -393,25 +405,32 @@ export function GuestList({
                 pretending to be one: the route still accepts either operator,
                 by design, for anybody who navigates to it.
 
-                `readOnly` is in the condition as well as ownership, because that
-                prop's own contract is "may not edit at all". Today the only
-                caller passes it together with rows the viewer does not own, so
-                the two guards never disagree — which is exactly why leaving one
-                out would go unnoticed until they did.
+                BOTH DOORS READ ONE DERIVATION NOW, AND THAT IS WHY.
+
+                They used to be two separate conditions, and this comment said
+                the only caller passed `readOnly` together with rows the viewer
+                did not own, "so the two guards never disagree — which is
+                exactly why leaving one out would go unnoticed until they did."
+
+                The console home renders ONE list over both partitions now, so
+                they do disagree: a row the viewer does not own sits in a list
+                that is not read-only. `rowReadOnly` is the single answer both
+                read, so they cannot drift apart.
               */}
-              {row.ownedByViewer && !readOnly && (
-                <Button asChild variant="secondary">
-                  <a
-                    className="guest-list__edit-link"
-                    href={consoleInvitationEditPath(row.invitationId)}
-                  >
-                    Editar invitación de {row.greetingName}
-                  </a>
-                </Button>
-              )}
-            </div>
-          </li>
-        ))}
+                {!rowReadOnly && (
+                  <Button asChild variant="secondary">
+                    <a
+                      className="guest-list__edit-link"
+                      href={consoleInvitationEditPath(row.invitationId)}
+                    >
+                      Editar invitación de {row.greetingName}
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

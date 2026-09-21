@@ -72,13 +72,40 @@ ends (`Integrante 1` must not match `Integrante 10`); and `autoFocus` is driven
 by a state that starts `null`, so no card can match it on the first render and
 nothing steals focus when the page loads.
 
+## Done — one list
+
+"Tus invitaciones" and then "Todas las invitaciones del evento", the second a
+SUPERSET of the first, separated by four lines of prose explaining the
+partition. Every owned household was fetched, reduced and rendered twice, and
+the split communicated one thing — who manages each household — that every row
+already says on its own face ("Gestionas tú" / "Gestiona X").
+
+One query now, one list, one heading: "Invitaciones".
+
+**Ownership still decides exactly what it always decided**: the send affordance,
+because a WhatsApp message leaves from one account and not the other. What
+changed is WHERE that is decided. `GuestList` derives `rowReadOnly = readOnly ||
+!row.ownedByViewer` per ROW, and both doors — the edit link and the inline phone
+editor — read that one answer. They used to be two separate conditions, and the
+component's own comment had predicted the bug: "the only caller passes it
+together with rows the viewer does not own, so the two guards never disagree —
+which is exactly why leaving one out would go unnoticed until they did."
+Merging the lists is when they disagree, and a phone editor on a row the server
+refuses is worse than no editor.
+
+The readiness check stays scoped to the operator's own households: it exists to
+say which of THEIR invitations cannot be sent yet, and the other account's
+blockers are not theirs to clear.
+
+Three browser tests were rewritten rather than repaired. One asserted that the
+default view lists only the operator's own households — the exact premise this
+change removes — so it now asserts both partitions are present and that there
+is exactly ONE section. Two more read the old heading; the negative assertions
+among them moved off the bare string, because "Invitaciones" is now a nav label
+too and a text query would have stopped distinguishing content from chrome.
+
 ## Next
 
-- Merge the two guest lists into one. The home still renders the operator's own
-  households and then the other account's, separately, with a paragraph
-  explaining the partition. Ownership must stay where it decides something — the
-  send button, because a message leaves from one WhatsApp account — but the
-  lists and their counts should not be doubled for it.
 - The five-group `DispatchPreflight`, always fully expanded, one group of which
   its own copy says can never have contents.
 - Adding a member takes two presses and the first one writes nothing

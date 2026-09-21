@@ -514,4 +514,60 @@ describe("GuestList — the console can create an invitation now", () => {
       screen.getByRole("link", { name: /Crear invitación/i }),
     ).toBeInTheDocument();
   });
+
+  /**
+   * ONE LIST NOW CARRIES BOTH PARTITIONS, SO THE TWO GUARDS MUST AGREE PER ROW.
+   *
+   * The console home used to render two lists: the operator's own, and a second
+   * one over the other account's households passed `readOnly`. The guards for
+   * the edit link and the inline phone editor were therefore never in conflict,
+   * and `GuestList`'s own comment said so — "the only caller passes it together
+   * with rows the viewer does not own… which is exactly why leaving one out
+   * would go unnoticed until they did."
+   *
+   * Merging the lists is when they disagree. A row the viewer does not own must
+   * offer no phone editor even in a list that is not read-only, because
+   * `updateGuestPhoneAction` refuses it on the server — and a control that is
+   * always refused is worse than no control.
+   */
+  describe("a list holding both partitions", () => {
+    it("offers no phone editor on a row the viewer does not own", () => {
+      renderList([row({ ownedByViewer: false, ownerDisplayName: "Beto" })]);
+
+      expect(
+        screen.queryByRole("button", { name: /Editar el número/i }),
+      ).toBeNull();
+    });
+
+    it("still offers it on a row the viewer owns", () => {
+      renderList([row({ ownedByViewer: true })]);
+
+      // One per guest: the fixture household names two of them.
+      expect(
+        screen.getAllByRole("button", { name: /Editar el número/i }),
+      ).toHaveLength(2);
+    });
+
+    it("withdraws both doors together on a row the viewer does not own", () => {
+      renderList([row({ ownedByViewer: false, ownerDisplayName: "Beto" })]);
+
+      expect(
+        screen.queryByRole("link", { name: /Editar invitación/i }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /Editar el número/i }),
+      ).toBeNull();
+    });
+
+    it("keeps a fully read-only list read-only, even for owned rows", () => {
+      renderList([row({ ownedByViewer: true })], { readOnly: true });
+
+      expect(
+        screen.queryByRole("button", { name: /Editar el número/i }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("link", { name: /Editar invitación/i }),
+      ).toBeNull();
+    });
+  });
 });
