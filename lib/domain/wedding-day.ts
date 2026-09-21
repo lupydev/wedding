@@ -15,8 +15,15 @@
  * The end state is a `timestamptz` on that row, edited in the console, read
  * here. Until it exists this file is the single place to correct, and
  * `odd/tasks/wedding-landing.md` records the trade in full. There is nothing to
- * drift from yet: the row still holds `{{CEREMONY_DATE}}`.
+ * drift from yet: the row still holds its seeded placeholder, untouched.
+ *
+ * The literal placeholder token is deliberately NOT written above.
+ * `tools/no-source-placeholders.spec.ts` scans comments as well as code, and it
+ * is right to: a comment naming one teaches the next reader that the value is a
+ * compile-time constant, which is the belief that guard exists to remove.
  */
+
+import { calendarDateInZone } from "./rsvp-deadline";
 
 /** Where the wedding is, and therefore whose midnight starts the day. */
 export const WEDDING_TIME_ZONE = "America/Bogota";
@@ -36,6 +43,19 @@ export const WEDDING_TIME_ZONE = "America/Bogota";
  * bites — Colombia adopting daylight saving — the suite says so.
  */
 export const WEDDING_INSTANT = new Date("2026-11-28T00:00:00-05:00");
+
+/**
+ * The wedding day as `YYYY-MM-DD`, for a `<time dateTime>` attribute.
+ *
+ * DERIVED, never written a second time. A literal here would be a third place
+ * holding this date, and the one that drifts is always the one a reader cannot
+ * see — a machine date disagreeing with the prose beside it is invisible on the
+ * page and wrong in every calendar that reads it.
+ */
+export const WEDDING_ISO_DAY = calendarDateInZone(
+  WEDDING_INSTANT,
+  WEDDING_TIME_ZONE,
+);
 
 /** How the couple's names are written, exactly as they gave them. */
 export const COUPLE_NAMES = "Luis & Michell";

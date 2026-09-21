@@ -13,13 +13,13 @@ to go.
 
 ## Facts, and where each one comes from
 
-| Fact | Value | Source |
-| --- | --- | --- |
-| Couple | `Luis & Michell` | The couple, this session |
-| Day | 28 November 2026 | The couple, this session |
-| Time of day | 00:00 `America/Bogota` | ASSUMED — see below |
-| Photograph | `img/compromiso.JPG`, 737×1600 | Supplied |
-| Song | `audio/sjjm_S_132.mp3`, 4.7 MB | Supplied |
+| Fact        | Value                          | Source                   |
+| ----------- | ------------------------------ | ------------------------ |
+| Couple      | `Luis & Michell`               | The couple, this session |
+| Day         | 28 November 2026               | The couple, this session |
+| Time of day | 00:00 `America/Bogota`         | ASSUMED — see below      |
+| Photograph  | `img/compromiso.JPG`, 737×1600 | Supplied                 |
+| Song        | `audio/sjjm_S_132.mp3`, 4.7 MB | Supplied                 |
 
 **The hour is an assumption and it is marked as one.** The couple gave a DAY, not
 an instant, and a countdown needs an instant. Midnight at the start of the
@@ -58,11 +58,21 @@ a placeholder (`{{CEREMONY_DATE}}`), so there is nothing yet to drift from.
   and in that file's version history for `v16.0.0`.
 - **`objectFit` is not a prop.** Removed in v13 (same file, version history). It
   goes through `style` or a Tailwind `object-*` utility.
-- **`.JPG` in uppercase imports fine.** `nextImageLoaderRegex` in
-  `node_modules/next/dist/build/webpack-config.js` is
-  `/\.(png|jpg|jpeg|gif|webp|avif|ico|bmp|svg)$/i` — the `i` flag decides it. The
-  static import also yields `width`, `height` and a generated `blurDataURL`,
-  which is why the photograph stays in `img/` instead of moving to `public/`.
+- **`.JPG` in uppercase bundles but does NOT typecheck, and the two disagree.**
+  `nextImageLoaderRegex` in `node_modules/next/dist/build/webpack-config.js` is
+  `/\.(png|jpg|jpeg|gif|webp|avif|ico|bmp|svg)$/i`, so the bundler accepts the
+  uppercase extension. `node_modules/next/image-types/global.d.ts` declares
+  `'*.jpg'` only, and TypeScript's wildcard module matching is case-SENSITIVE,
+  so `tsc` reports TS2307 on the very same import. The file was renamed to
+  `img/compromiso.jpg` rather than papering over the gap with a `*.JPG`
+  declaration of our own. The static import also yields `width`, `height` and a
+  generated `blurDataURL`, which is why the photograph stays in `img/` instead
+  of moving to `public/`.
+- **`tools/no-source-placeholders.spec.ts` scans comments, not just code.** A
+  comment in `lib/domain/wedding-day.ts` named the seeded placeholder token
+  literally and failed the suite. The guard is right — a comment naming one
+  teaches the next reader that the value is a compile-time constant. The
+  comment now describes it without writing it.
 - **Audio cannot be statically imported.** The mp3 must be served verbatim, so it
   goes to `public/`, which is the one folder Next serves from the base URL
   (`01-app/01-getting-started/12-images.md`, "Local images").
@@ -116,25 +126,52 @@ TDD: **strict**, source = session configuration. Runner = `npm test`
 
 ### Unit B — the surface (≈ 420 lines)
 
-- [ ] B1. `components/landing/Countdown.spec.tsx`: renders the dashed skeleton
+- [x] B1. `components/landing/Countdown.spec.tsx`: renders the dashed skeleton
       before mount; renders figures after; the machine `<time>` is always
       present; the figures are `aria-hidden`. Observe RED.
-- [ ] B2. `components/landing/Countdown.tsx`. GREEN.
-- [ ] B3. `components/landing/MusicToggle.spec.tsx`: starts paused and labelled
+- [x] B2. `components/landing/Countdown.tsx`. GREEN.
+- [x] B3. `components/landing/MusicToggle.spec.tsx`: starts paused and labelled
       to play; a click plays and relabels; a rejected `play()` leaves the control
       labelled to play and throws nothing. Observe RED.
-- [ ] B4. `components/landing/MusicToggle.tsx`. GREEN.
-- [ ] B5. `app/page.spec.tsx`: the names, the date and the photograph's alt text
+- [x] B4. `components/landing/MusicToggle.tsx`. GREEN.
+- [x] B5. `components/landing/SaveTheDate.spec.tsx`: the names, the date and the photograph's alt text
       are present. Observe RED.
-- [ ] B6. `app/page.tsx` — hero composition and `metadata`. Move the song to
+- [x] B6. `app/page.tsx` — hero composition and `metadata`. Move the song to
       `public/audio/`. GREEN.
-- [ ] B7. `npm test` + `npm run typecheck` + `npm run lint` + `npm run build`.
+- [x] B7. `npm test` + `npm run typecheck` + `npm run lint` + `npm run build`.
       Commit unit B with both assets.
 
 ## Progress
 
-Unit A done: 11 unit tests green, typecheck and lint clean. Next: unit B.
+Both units done.
+
+- Unit A — commit `7a6caba`. 11 unit tests.
+- Unit B — `components/landing/{Countdown,MusicToggle,SaveTheDate}.tsx` and
+  `app/page.tsx`. 18 component tests.
+
+Verified, not assumed:
+
+- `npm test`: 2027 tests, 106 files, green.
+- `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`:
+  clean. `/` builds as `○ (Static)`, which is what makes the client-only
+  countdown necessary rather than merely tidy.
+- Driven in a real Chromium at 390×844 and 1440×900: zero console errors on
+  both, so no hydration mismatch. Countdown read 68 días, which is correct for
+  20 September 2026.
+- The song: zero `.mp3` requests before the button is pressed, `206` and
+  `paused === false` after. `preload="none"` does what it claims.
+
+Two defects were found by LOOKING at the rendered page, and neither was
+reachable from a unit test: the toggle in the bottom-right corner overlapped the
+word "segundos" at 390px, and the date line wrapped and orphaned "2026". Both
+fixed; the reasoning is in the files.
 
 ## Next step
 
-B1.
+Open question for the couple, recorded rather than decided: wire the landing to
+the `ceremony` row. `couple_names` is ALREADY a column and could be read today;
+only the countdown instant needs the new `timestamptz`. Doing it makes `/`
+dynamic instead of static and makes the page render the seeded placeholder until
+the console is filled in — which is the project's stated preference for an
+unfinished value, and a decision that belongs to the couple, not to this
+document.
