@@ -270,7 +270,16 @@ describe("invitations repository (local Supabase)", () => {
         ],
       });
 
-      expect(created.slug).toMatch(/^[a-z2-7]{16}$/);
+      /*
+        THE ADDRESS IS THE HOUSEHOLD'S OWN NAME, NOT SIXTEEN RANDOM CHARACTERS.
+
+        This asserted `/^[a-z2-7]{16}$/` until migration 0014. An invitation is
+        a link two people send over WhatsApp, and `/i/k22eth3lvkzptcco` reads as
+        a mistake. A counter may be appended when a second household shares the
+        name, and this suite shares a database, so the name is a prefix rather
+        than the whole string.
+      */
+      expect(created.slug).toMatch(/^familia-restrepo(-\d+)?$/);
 
       const found = await findInvitationBySlug(client, created.slug);
 
@@ -340,6 +349,66 @@ describe("invitations repository (local Supabase)", () => {
     });
 
     expect(orphans).toBe(0);
+  });
+
+  /**
+   * TWO HOUSEHOLDS OF THE SAME NAME GET DIFFERENT ADDRESSES.
+   *
+   * `nextFreeSlug` decides the counter and is tested over a set, with no
+   * database in the way. What only this test can prove is the query that
+   * fills that set: `readableSlugFor` asks the table which addresses in this
+   * family of names are taken, and a wrong filter there would silently hand
+   * the same address to both households — where the unique constraint would
+   * refuse the second one and creation would fail for a reason nobody could
+   * read.
+   */
+  it("numbers a second household that shares a name", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.repetida.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const name = `Familia Repetida ${Date.now().toString(36)}`;
+
+    const first = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      rsvpDeadline: null,
+      guests: [
+        {
+          fullName: "Primera Persona",
+          phoneE164: "+573001110001",
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    });
+
+    const second = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      rsvpDeadline: null,
+      guests: [
+        {
+          fullName: "Segunda Persona",
+          phoneE164: "+573001110002",
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    });
+
+    expect(second.slug).toBe(`${first.slug}-2`);
+    expect(await findInvitationBySlug(client, second.slug)).not.toBeNull();
   });
 });
 
@@ -1135,7 +1204,7 @@ function member(
 /** One call the repository made through the Supabase client. */
 interface RecordedCall {
   readonly table: string;
-  readonly operation: "from" | "select" | "insert" | "update" | "delete";
+  readonly operation: "from" | "select" | "or" | "insert" | "update" | "delete";
   readonly payload?: unknown;
 }
 
@@ -1165,6 +1234,19 @@ function makeFakeClient(script: Readonly<Record<string, FakeResult>> = {}): {
         calls.push({ table, operation: "select", payload: columns });
         // A trailing `.select()` on an insert or update is a RETURNING clause,
         // not a read: it must not steal the mutation's scripted outcome.
+        if (key === table) {
+          key = `${table}.select`;
+        }
+        return chain;
+      },
+      /*
+        `or` is how `readableSlugFor` asks which addresses in a family of names
+        are already taken. Unscripted it answers `{ data: null }`, which the
+        caller reads as "none taken" — so a fake client with no script gets the
+        plain derived address, which is what these tests want.
+      */
+      or(filter: string) {
+        calls.push({ table, operation: "or", payload: filter });
         if (key === table) {
           key = `${table}.select`;
         }

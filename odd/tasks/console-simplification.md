@@ -125,6 +125,48 @@ The phone button kept its accessible name exactly, which is why not one
 assertion moved for it. The three row actions changed theirs — "Preparar envío"
 became "Enviar la invitación de …" — and ten references followed.
 
+## Done — a readable address
+
+`/i/k22eth3lvkzptcco` became `/i/familia-guzman-pena`. It is a link two people
+send to their families over WhatsApp, and sixteen base32 characters read as a
+mistake.
+
+**This one needed a migration, and the earlier "no migration needed" was about
+something else.** An individual guest is a one-person invitation and the schema
+already allowed it; the slug is a different matter — `0001_schema.sql` pinned
+the column to `^[a-z2-7]{16}$`, so a hyphen alone was illegal. `0014` relaxes it
+to lowercase letters, digits and single hyphens, 1 to 48 characters. Nothing is
+rewritten: every stored slug is sixteen base32 characters, which the new pattern
+already accepts.
+
+**Derived once and frozen.** Nothing recomputes it on a rename. An address that
+followed the name would die the moment somebody fixed a typo, and it would die
+SILENTLY — the console shows nothing wrong, and only the guest meets "no
+encontramos esta invitación". `rotateInvitationSlug` stays random, which is what
+an address should be once it has had to change at all.
+
+**The cost, accepted after being shown.** A random slug is unguessable; a name
+is not. An unknown slug renders "we could not find this invitation" while a real
+one renders the phone gate, so anybody can now probe a name and learn WHETHER
+that family is invited. Reading the invitation still needs a member's phone
+number, which never depended on the slug.
+
+Details worth keeping: NFD normalisation before stripping marks, so "Peña"
+becomes "pena" and not "pea" — `ñ` decomposes into `n` plus a combining tilde,
+and a naive "drop everything outside a-z" deletes the whole letter. The counter
+starts at 2, fills gaps, and shortens the BASE rather than itself so a fourth
+household of one name still fits the column. A name that spells nothing a URL
+can carry falls back to a random slug.
+
+The down script names every readable slug it is about to refuse before it
+refuses — verified against the running database, which listed six and then
+raised the constraint violation rather than touching a row.
+
+STILL RANDOM: the bulk importer (`lib/server/invitations.ts`, the
+`source_key` path). Households created through the console get readable
+addresses; imported ones do not, which will look inconsistent the first time
+the guest list is loaded from a file.
+
 ## Next
 
 - The five-group `DispatchPreflight`, always fully expanded, one group of which

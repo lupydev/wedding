@@ -28,6 +28,7 @@ import {
 } from "@/lib/domain/invitation-deletion";
 import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
 import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
+import { nextFreeSlug, slugifyName } from "@/lib/domain/slug-from-name";
 import { isWellFormedUuid } from "@/lib/domain/uuid";
 import { warmOgCard } from "@/lib/server/og-warm";
 
@@ -329,6 +330,58 @@ export function mintSlug(): string {
   return encodeSlug(randomBytes(SLUG_BYTE_LENGTH));
 }
 
+/**
+ * The address a new invitation is created at, derived from its own name.
+ *
+ * `/i/familia-guzman-pena` rather than `/i/k22eth3lvkzptcco`, because that is a
+ * link two people send to their families over WhatsApp.
+ *
+ * DERIVED ONCE, HERE, AND NEVER AGAIN. Nothing recomputes it when the name is
+ * edited: an address that followed the name would die the moment somebody
+ * corrected a typo, and it would die SILENTLY — the console shows nothing
+ * wrong, and only the guest meets "no encontramos esta invitación".
+ * `rotateInvitationSlug` stays random, which is what an address should be once
+ * it has had to be changed at all.
+ *
+ * One indexed query for the names already taken, then pure arithmetic in
+ * `nextFreeSlug`. A name that spells nothing a URL can carry — emoji, say —
+ * falls back to a random slug: uglier, and working.
+ */
+export async function readableSlugFor(
+  client: SupabaseClient,
+  name: string,
+  alsoTaken: ReadonlySet<string> = new Set(),
+): Promise<string> {
+  const base = slugifyName(name);
+
+  if (base === "") {
+    return mintSlug();
+  }
+
+  /*
+   * `eq` OR `like`, because the counter is a suffix: "familia-ruiz" and
+   * "familia-ruiz-2" both belong to this family of names, and "familia-ruiza"
+   * does not. The base holds only `[a-z0-9-]`, so it carries no `like`
+   * wildcards of its own.
+   */
+  const { data, error } = await client
+    .from("invitations")
+    .select("slug")
+    .or(`slug.eq.${base},slug.like.${base}-%`);
+
+  if (error) {
+    throw new Error(`Could not read the addresses in use: ${error.message}`);
+  }
+
+  const taken = new Set<string>(alsoTaken);
+
+  for (const row of (data ?? []) as readonly { slug: string }[]) {
+    taken.add(row.slug);
+  }
+
+  return nextFreeSlug(base, taken);
+}
+
 interface InvitationRow {
   id: string;
   slug: string;
@@ -458,7 +511,8 @@ export async function createInvitation(
     );
   }
 
-  const slug = mintSlug();
+  // Derived from the household's own name, and frozen from here on.
+  const slug = await readableSlugFor(client, input.greetingName);
 
   const { data: invitation, error: invitationError } = await client
     .from("invitations")
