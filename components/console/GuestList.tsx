@@ -323,6 +323,17 @@ export function GuestList({
                     <span className="guest-list__guest-name min-w-0 truncate text-sm text-foreground">
                       {guest.fullName}
                     </span>
+                    {/*
+                      BESIDE THE NAME, NOT INSTEAD OF IT. The nickname is what
+                      the greeting says; the full name is who the person is, and
+                      a list showing only "Anita" stops being one you can check
+                      against reality.
+                    */}
+                    {guest.nickname !== null && (
+                      <span className="guest-list__guest-nickname text-xs text-muted-foreground">
+                        ({guest.nickname})
+                      </span>
+                    )}
                     {guest.isChild && (
                       <span className="guest-list__child text-xs text-muted-foreground">
                         {" "}

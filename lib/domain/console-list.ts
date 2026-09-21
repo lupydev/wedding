@@ -66,6 +66,14 @@ export function deriveRsvpAnswer(latest: LatestRsvpRef | null): RsvpAnswer {
 export interface ConsoleListGuest {
   readonly id: string;
   readonly fullName: string;
+  /**
+   * What the greeting calls this person, when it is not their full name.
+   *
+   * Carried because the couple reported it missing: it was stored and used to
+   * derive the greeting all along, and simply never reached this screen — a
+   * defect indistinguishable from the data never having been saved.
+   */
+  readonly nickname: string | null;
   readonly isChild: boolean;
   /**
    * The stored E.164 number, or `null` for a guest who has none.
@@ -412,6 +420,7 @@ export interface ConsoleInvitationInput {
   readonly guests: readonly {
     readonly id: string;
     readonly fullName: string;
+    readonly nickname: string | null;
     readonly isChild: boolean;
     readonly phoneE164: string | null;
   }[];
@@ -489,6 +498,7 @@ export function assembleConsoleRows(input: {
       guests: invitation.guests.map((guest) => ({
         id: guest.id,
         fullName: guest.fullName,
+        nickname: guest.nickname,
         isChild: guest.isChild,
         phoneE164: guest.phoneE164,
         // A guest with no phone is classified through the same function as one

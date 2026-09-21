@@ -37,7 +37,7 @@ export interface DirectoryGuestInput {
 
 /** The columns a directory row needs, plus the household it may sit in. */
 const DIRECTORY_COLUMNS =
-  "id, full_name, nickname, phone_e164, is_child, " +
+  "id, full_name, nickname, phone_e164, is_child, created_at, " +
   // `owner_sender_id` and `dispatch_recipient_guest_id` are what let a row
   // decide whether a send can honestly be offered on it, and who that send
   // would actually reach. Both are answered by `lib/domain/guest-directory.ts`.
@@ -50,6 +50,7 @@ interface DirectoryRow {
   nickname: string | null;
   phone_e164: string | null;
   is_child: boolean;
+  created_at: string;
   /**
    * PostgREST embeds a to-one relationship as an object, or NULL when the
    * foreign key is NULL — which, since 0015, is the directory's normal case.
@@ -69,6 +70,7 @@ function toDirectoryGuest(row: DirectoryRow): DirectoryGuest {
     nickname: row.nickname,
     phoneE164: row.phone_e164,
     isChild: row.is_child,
+    createdAt: row.created_at,
     household:
       row.invitations === null
         ? null

@@ -32,6 +32,7 @@ function guest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
     phoneE164: "+573001234567",
     isChild: false,
     household: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
 }

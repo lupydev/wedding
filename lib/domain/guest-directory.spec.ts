@@ -16,6 +16,7 @@ function guest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
     phoneE164: null,
     isChild: false,
     household: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -29,52 +30,61 @@ const HOUSEHOLD = {
 
 describe("buildGuestDirectory", () => {
   /**
-   * ONE ORDER, AND IT IS THE FINDABLE ONE.
+   * NEWEST FIRST, AND THE ALPHABET WAS THE WRONG ANSWER.
    *
-   * The directory is where somebody goes to look for a person by name, so it
-   * sorts by name. Putting the unassigned guests first would make it sort by
-   * something the reader cannot see in the name they are scanning for, and a
-   * list whose order is a puzzle is a list people scroll instead of read.
+   * It used to sort by name through a Spanish collator, on the reasoning that a
+   * directory is where you look somebody up. That reasoning fits a FINISHED
+   * list. It does not fit the list being built — the couple typing forty people
+   * in one sitting, where the only question between one entry and the next is
+   * "did that one land?". Its answer is at the top only if the newest is.
    *
-   * Who is still unplaced is answered by the summary count and by each row
-   * saying so, which does not cost the list its order.
+   * The couple asked for it outright: "debe estar organizada por fecha de
+   * creación DESC".
    */
-  it("lists everybody in one alphabetical order", () => {
+  it("puts the most recently added person first", () => {
     const directory = buildGuestDirectory([
-      guest({ id: "c", fullName: "Zulema Ruiz" }),
-      guest({ id: "a", fullName: "Ana Restrepo" }),
-      guest({ id: "b", fullName: "Mateo Díaz" }),
+      guest({
+        id: "old",
+        fullName: "Ana Primero",
+        createdAt: "2026-01-01T10:00:00.000Z",
+      }),
+      guest({
+        id: "new",
+        fullName: "Zulema Último",
+        createdAt: "2026-01-03T10:00:00.000Z",
+      }),
+      guest({
+        id: "mid",
+        fullName: "Mateo Medio",
+        createdAt: "2026-01-02T10:00:00.000Z",
+      }),
     ]);
 
     expect(directory.guests.map((row) => row.fullName)).toEqual([
-      "Ana Restrepo",
-      "Mateo Díaz",
-      "Zulema Ruiz",
+      "Zulema Último",
+      "Mateo Medio",
+      "Ana Primero",
     ]);
   });
 
   /**
-   * SPANISH COLLATION, NOT CODE POINTS.
+   * TWO PEOPLE ADDED IN THE SAME INSTANT STILL GET A STABLE ORDER.
    *
-   * `"Ñ" > "Z"` by code point, so a naive comparison files Muñóz after Zulema
-   * and Álvaro after Zulema too — in a guest list for a Colombian wedding,
-   * where those letters are ordinary. `localeCompare(…, "es")` files Á with A
-   * and Ñ between N and O, which is where a person looking for them will look.
+   * `created_at` defaults to `now()`, and a bulk import writes a whole file
+   * inside one statement — so identical timestamps are ordinary, not exotic.
+   * Falling back to the id keeps the list from reshuffling between two renders
+   * of the same data, which is the kind of flicker that makes a screen feel
+   * broken without ever being wrong.
    */
-  it("files accented and Spanish letters where a reader expects them", () => {
-    const directory = buildGuestDirectory([
-      guest({ id: "1", fullName: "Zulema Ruiz" }),
-      guest({ id: "2", fullName: "Ñandú Peña" }),
-      guest({ id: "3", fullName: "Álvaro Gómez" }),
-      guest({ id: "4", fullName: "Natalia Ortiz" }),
-    ]);
+  it("breaks a tie the same way every time", () => {
+    const sameInstant = "2026-01-01T10:00:00.000Z";
+    const build = () =>
+      buildGuestDirectory([
+        guest({ id: "b", fullName: "Beto", createdAt: sameInstant }),
+        guest({ id: "a", fullName: "Ana", createdAt: sameInstant }),
+      ]).guests.map((row) => row.id);
 
-    expect(directory.guests.map((row) => row.fullName)).toEqual([
-      "Álvaro Gómez",
-      "Natalia Ortiz",
-      "Ñandú Peña",
-      "Zulema Ruiz",
-    ]);
+    expect(build()).toEqual(build());
   });
 
   it("counts everybody, and how many are in no invitation", () => {

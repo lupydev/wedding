@@ -43,6 +43,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
       {
         id: "g1",
         fullName: "Ana Muñóz",
+        nickname: "Anita",
         isChild: false,
         phoneE164: "+573001234567",
         lineType: "mobile",
@@ -51,6 +52,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
       {
         id: "g2",
         fullName: "Niña Muñóz",
+        nickname: null,
         isChild: true,
         phoneE164: null,
         lineType: "not_normalizable",
@@ -388,6 +390,7 @@ describe("GuestList — an answer the household no longer agrees with", () => {
         {
           id: "g1",
           fullName: "Ana Muñóz",
+          nickname: null,
           isChild: false,
           phoneE164: "+573001234567",
           lineType: "mobile",
@@ -574,5 +577,42 @@ describe("GuestList — the console can create an invitation now", () => {
         screen.queryByRole("link", { name: /Editar la invitación/i }),
       ).toBeNull();
     });
+  });
+});
+
+/**
+ * THE NICKNAME, WHICH THIS SCREEN NEVER SHOWED.
+ *
+ * The couple reported "le puse apodo, sin embargo en la creación de la
+ * invitación no registró el apodo". It WAS registered: the member row holds it
+ * and the invitation's greeting is derived from it, both proven against the
+ * database. What was true is that `CONSOLE_GUEST_COLUMNS` never selected the
+ * column and this component never rendered it — so on the one screen they spend
+ * their time on, a nickname they had typed was invisible, which from the
+ * outside cannot be told apart from not having been saved.
+ *
+ * It is shown beside the full name rather than instead of it. The nickname is
+ * what the greeting says; the full name is who the person is, and a list that
+ * showed only "Anita" would stop being a list you can check against reality.
+ */
+describe("a member's nickname", () => {
+  it("is shown beside the name it belongs to", () => {
+    renderList([row()]);
+
+    const member = screen
+      .getByText("Ana Muñóz", { selector: ".guest-list__guest-name" })
+      .closest("li")!;
+
+    expect(within(member).getByText(/Anita/)).toBeInTheDocument();
+  });
+
+  it("shows nothing extra for a member who has none", () => {
+    renderList([row()]);
+
+    const member = screen
+      .getByText("Niña Muñóz", { selector: ".guest-list__guest-name" })
+      .closest("li")!;
+
+    expect(within(member).queryByText(/Anita/)).toBeNull();
   });
 });

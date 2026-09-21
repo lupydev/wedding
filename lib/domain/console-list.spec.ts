@@ -18,6 +18,7 @@ function guest(id: string, fullName = `Persona ${id}`): ConsoleListGuest {
   return {
     id,
     fullName,
+    nickname: null,
     isChild: false,
     phoneE164: "+573001234567",
     lineType: "mobile",
@@ -385,6 +386,7 @@ describe("assembleConsoleRows", () => {
         {
           id: "g1",
           fullName: "Ana Muñóz",
+          nickname: null,
           isChild: false,
           phoneE164: "+573001234567",
         },
@@ -452,12 +454,14 @@ describe("assembleConsoleRows", () => {
             {
               id: "g1",
               fullName: "Ana Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: "+573001234567",
             },
             {
               id: "g2",
               fullName: "Luis Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: null,
             },
@@ -583,12 +587,14 @@ describe("assembleConsoleRows", () => {
             {
               id: "g1",
               fullName: "Casa Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: "+576012345678",
             },
             {
               id: "g2",
               fullName: "Ana Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: "+573001234567",
             },
@@ -619,6 +625,7 @@ describe("assembleConsoleRows", () => {
             {
               id: "g1",
               fullName: "Niña Muñóz",
+              nickname: null,
               isChild: true,
               phoneE164: null,
             },

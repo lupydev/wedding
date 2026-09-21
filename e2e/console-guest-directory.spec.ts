@@ -427,3 +427,83 @@ test.describe("the send affordance on a guest's row", () => {
     ).toHaveCount(0);
   });
 });
+
+/**
+ * THE TWO THINGS THE COUPLE REPORTED, END TO END.
+ *
+ * "La lista de invitados está súper desorganizada, debe estar organizada por
+ * fecha de creación DESC" and "le puse apodo, sin embargo en la creación de la
+ * invitación no registró el apodo".
+ *
+ * The second was a reading failure, not a writing one — the nickname was
+ * stored and the greeting derived from it all along — which is exactly why it
+ * needs a browser test. Every layer below was already green while the one
+ * screen they use showed nothing.
+ */
+test.describe("what the couple reported", () => {
+  /*
+    SCOPED TO THE ADD FORM, and it has to be: every row can open an editor
+    carrying the same labels, so a bare `getByLabel("Apodo")` on a list of
+    forty people is ambiguous by construction.
+  */
+  const addForm = () => page.locator("form.guest-directory__new");
+
+  let first: string;
+  let second: string;
+  let household: string;
+
+  test.beforeAll(() => {
+    first = `Primera Reportada ${run}`;
+    second = `Segunda Reportada ${run}`;
+    household = `Familia Reportada ${run}`;
+  });
+
+  test("puts the person just added at the top of the list", async () => {
+    await page.goto("/console/guests");
+
+    await addForm().getByLabel("Nombre completo").fill(first);
+    await page.getByRole("button", { name: "Agregar invitado" }).click();
+    await expect(rowFor(first)).toBeVisible();
+
+    await addForm().getByLabel("Nombre completo").fill(second);
+    await addForm().getByLabel("Apodo").fill("Segui");
+    await page.getByRole("button", { name: "Agregar invitado" }).click();
+
+    // The NEWEST is row one. This is the whole point of the ordering: the
+    // couple are typing forty people in a sitting, and the only question
+    // between one entry and the next is "did that one land?".
+    await expect(
+      page.locator("li.guest-directory__row").first(),
+    ).toHaveAttribute("data-guest-name", second);
+  });
+
+  test("shows the nickname on the directory row", async () => {
+    await expect(rowFor(second)).toContainText("Segui");
+  });
+
+  /**
+   * AND ON THE INVITATIONS SCREEN, WHICH IS WHERE IT WAS INVISIBLE.
+   *
+   * `CONSOLE_GUEST_COLUMNS` never selected the column, so no amount of typing
+   * a nickname could make it appear here. That is the defect, and this is the
+   * assertion that keeps it fixed.
+   */
+  test("shows it again on the invitation built from that person", async () => {
+    await page.goto("/console/invitations/new");
+
+    await page.getByLabel("Nombre del hogar").fill(household);
+    await page.getByLabel("Nombre del grupo").fill(household);
+    await page
+      .getByRole("button", { name: `Agregar de la lista: ${second}` })
+      .click();
+    await page.getByRole("button", { name: "Guardar invitación" }).click();
+    await expect(page).toHaveURL(/\/console$/);
+
+    const created = page
+      .locator("li.guest-list__row")
+      .filter({ hasText: household });
+
+    await expect(created.getByText(second, { exact: true })).toBeVisible();
+    await expect(created.getByText("(Segui)")).toBeVisible();
+  });
+});

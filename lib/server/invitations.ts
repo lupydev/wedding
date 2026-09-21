@@ -406,6 +406,7 @@ interface InvitationRow {
   invitation_guests: {
     id: string;
     full_name: string;
+    nickname: string | null;
     phone_e164: string | null;
     phone_last8: string | null;
     is_primary: boolean;
@@ -420,7 +421,17 @@ interface InvitationRow {
 // found". Naming the constraint says which direction this read means.
 const INVITATION_SELECT =
   "id, slug, owner_sender_id, display_name, greeting_name, " +
-  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, phone_last8, is_primary, is_child)";
+  /*
+    THE NICKNAME IS IN HERE NOW, AND ITS ABSENCE WAS A REAL DEFECT.
+
+    The couple reported "le puse apodo, sin embargo en la creación de la
+    invitación no registró el apodo". It WAS registered — the member row holds
+    it and the greeting is derived from it, both proven against the database.
+    This projection simply never asked for it, so the one screen they spend
+    their time on could not show it, which from the outside is
+    indistinguishable from not having been saved.
+  */
+  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, phone_last8, is_primary, is_child)";
 
 function toRecord(row: InvitationRow): InvitationRecord {
   return {
@@ -432,6 +443,7 @@ function toRecord(row: InvitationRow): InvitationRecord {
     guests: row.invitation_guests.map((guest) => ({
       id: guest.id,
       fullName: guest.full_name,
+      nickname: guest.nickname,
       phoneE164: guest.phone_e164,
       phoneLast8: guest.phone_last8,
       isPrimary: guest.is_primary,
@@ -1733,6 +1745,7 @@ interface ConsoleInvitationRow {
   invitation_guests: {
     id: string;
     full_name: string;
+    nickname: string | null;
     phone_e164: string | null;
     is_child: boolean;
     is_primary: boolean;
@@ -1742,7 +1755,10 @@ interface ConsoleInvitationRow {
 const CONSOLE_INVITATION_SELECT =
   "id, slug, owner_sender_id, display_name, greeting_name, " +
   "dispatch_recipient_guest_id, senders(display_name), " +
-  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, is_child, is_primary)";
+  // `nickname` is here because the couple reported it missing from the console.
+  // It was stored and used to derive the greeting all along; this projection
+  // simply never asked for it.
+  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, is_child, is_primary)";
 
 export interface ConsoleListOptions {
   /** The SESSION's sender id. Never a value the browser supplied. */
@@ -1829,6 +1845,7 @@ export async function listConsoleInvitations(
       .map((guest) => ({
         id: guest.id,
         fullName: guest.full_name,
+        nickname: guest.nickname,
         isChild: guest.is_child,
         phoneE164: guest.phone_e164,
       })),

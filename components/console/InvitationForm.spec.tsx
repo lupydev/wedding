@@ -136,6 +136,7 @@ function freeGuest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
     phoneE164: "+573001112233",
     isChild: false,
     household: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -1278,6 +1279,24 @@ describe("picking somebody who is already in the directory", () => {
 
     expect(row(1).getByLabelText("Nombre completo")).toHaveValue("Ana Ruiz");
     expect(row(2).getByLabelText("Nombre completo")).toHaveValue("Tía Marta");
+  });
+
+  /**
+   * AND HER NICKNAME COMES WITH HER.
+   *
+   * The couple reported the opposite — "le puse apodo, sin embargo en la
+   * creación de la invitación no registró el apodo" — and the nickname is not
+   * cosmetic here: the group's name is DERIVED from nicknames, so a picked
+   * person arriving without hers silently renames the household.
+   */
+  it("carries the chosen person's nickname onto their card", async () => {
+    const { user } = renderCreate([freeGuest({ nickname: "Tita" })]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Apodo")).toHaveValue("Tita");
   });
 
   /**

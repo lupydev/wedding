@@ -43,6 +43,7 @@ function guest(overrides: Partial<ConsoleListGuest> = {}): ConsoleListGuest {
   return {
     id: "g1",
     fullName: "Ana Muñóz",
+    nickname: null,
     isChild: false,
     phoneE164: "+573001234567",
     lineType: "mobile",

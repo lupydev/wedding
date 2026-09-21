@@ -46,6 +46,8 @@ export interface DirectoryGuest {
   readonly isChild: boolean;
   /** The household holding them, or NULL for somebody in the directory only. */
   readonly household: DirectoryHousehold | null;
+  /** When the row was written. ISO 8601, as the database returns it. */
+  readonly createdAt: string;
 }
 
 /**
@@ -109,30 +111,30 @@ export function canOfferSend(
 }
 
 /**
- * Spanish collation, which is not the same as comparing code points.
- *
- * `"Ñ" > "Z"` and `"Á" > "Z"` by code point, so the default comparison files
- * Muñóz and Álvaro after Zulema — in a guest list for a Colombian wedding,
- * where those letters are ordinary rather than exotic. A reader looking for
- * "Peña" looks between N and O, and this is what puts it there.
- */
-const byName = new Intl.Collator("es", { sensitivity: "base" });
-
-/**
  * The whole directory, ordered and counted.
  *
- * ONE ORDER, AND IT IS THE FINDABLE ONE. This is where somebody goes to look
- * for a person by name, so it sorts by name. Floating the unassigned guests to
- * the top would order the list by something the reader cannot see in the name
- * they are scanning for, and a list whose order is a puzzle gets scrolled past
- * rather than read. Who is still unplaced is answered by `unassigned` and by
- * each row saying so, neither of which costs the list its order.
+ * NEWEST FIRST, AND THE ALPHABET WAS THE WRONG ANSWER.
+ *
+ * This used to sort by name through a Spanish collator, reasoning that a
+ * directory is where somebody is looked up. That is true of a FINISHED list and
+ * false of the one being built: the couple type forty people in one sitting,
+ * and between one entry and the next the only question is "did that one land?"
+ * — whose answer is on screen only if the newest row is at the top. They asked
+ * for it in those terms: "organizada por fecha de creación DESC".
+ *
+ * THE ID BREAKS A TIE, and the tie is ordinary rather than exotic: `created_at`
+ * defaults to `now()`, and an import writes a whole file inside one statement,
+ * so identical timestamps are normal. Without a tiebreak the list can reshuffle
+ * between two renders of the same data — the kind of flicker that makes a
+ * screen feel broken without ever being wrong.
  */
 export function buildGuestDirectory(
   guests: readonly DirectoryGuest[],
 ): GuestDirectory {
-  const ordered = [...guests].sort((left, right) =>
-    byName.compare(left.fullName, right.fullName),
+  const ordered = [...guests].sort(
+    (left, right) =>
+      right.createdAt.localeCompare(left.createdAt) ||
+      right.id.localeCompare(left.id),
   );
   /*
     WHO RECEIVES EACH HOUSEHOLD'S MESSAGE, RESOLVED ONCE.
