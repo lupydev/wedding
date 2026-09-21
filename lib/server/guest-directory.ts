@@ -93,6 +93,68 @@ export async function listGuestDirectory(
 }
 
 /**
+ * The people an invitation may still take.
+ *
+ * A filtered query rather than reading everybody and discarding most of them:
+ * migration 0015 created `invitation_guests_unassigned_idx` over exactly these
+ * rows, and this is the read it was created for.
+ *
+ * It answers the FIRST half of the couple's rule — "no se debería poder
+ * escoger en una próxima invitación" — by never offering somebody already
+ * placed. `placeGuestInInvitation` answers the second half, which is the one
+ * that survives a stale page.
+ */
+export async function listFreeGuests(
+  client: SupabaseClient,
+): Promise<readonly DirectoryGuest[]> {
+  const { data, error } = await client
+    .from("invitation_guests")
+    .select(DIRECTORY_COLUMNS)
+    .is("invitation_id", null);
+
+  if (error) {
+    throw new Error(`Could not read the free guests: ${error.message}`);
+  }
+
+  return (data as unknown as DirectoryRow[]).map(toDirectoryGuest);
+}
+
+/**
+ * Puts a guest from the directory into a household.
+ *
+ * THE GUARD IS A `WHERE`, NOT A READ FOLLOWED BY A WRITE, and that is the whole
+ * design. `invitation_id is null` travels inside the UPDATE, so two operators
+ * submitting the same person from two phones cannot both win: one statement
+ * matches a row and the other matches none. A read-then-write leaves a window
+ * between the check and the write in which the honest answer changes, and the
+ * loser silently takes somebody out of the other household.
+ *
+ * Answers `false` rather than throwing, because "somebody got there first" is
+ * news for the operator and not a fault — and a thrown message would reach them
+ * as an opaque digest anyway.
+ */
+export async function placeGuestInInvitation(
+  client: SupabaseClient,
+  guestId: string,
+  invitationId: string,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from("invitation_guests")
+    .update({ invitation_id: invitationId })
+    .eq("id", guestId)
+    .is("invitation_id", null)
+    .select("id");
+
+  if (error) {
+    throw new Error(
+      `Could not add guest ${guestId} to invitation ${invitationId}: ${error.message}`,
+    );
+  }
+
+  return (data ?? []).length === 1;
+}
+
+/**
  * Writes a person down, belonging to nobody yet.
  *
  * The refusal is RETURNED rather than thrown, the way `addMember` returns its

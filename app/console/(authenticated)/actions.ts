@@ -269,6 +269,8 @@ function readMemberRows(formData: FormData): readonly {
   readonly nickname: string | null;
   readonly phoneE164: string | null;
   readonly isChild: boolean;
+  /** Set when this row names somebody the directory already holds. */
+  readonly existingGuestId: string | null;
 }[] {
   const names = formData.getAll("memberFullName").map((value) => String(value));
 
@@ -291,12 +293,22 @@ function readMemberRows(formData: FormData): readonly {
   const nicknames = column("memberNickname");
   const phones = column("memberPhone");
   const children = column("memberIsChild");
+  /*
+    THE TWO KINDS OF MEMBER TRAVEL IN THE SAME ARRAYS.
+
+    A row either names somebody the directory already holds — an id — or a
+    person being written for the first time — the empty string. Sending the
+    picked ids as a separate list would lose the interleaved ORDER, and the
+    order is exactly what `recipientIndex` refers to.
+  */
+  const existing = column("memberExistingId");
 
   return names.map((fullName, index) => ({
     fullName: fullName.trim(),
     nickname: (nicknames[index] ?? "").trim() || null,
     phoneE164: storedPhone(phones[index] ?? ""),
     isChild: flag(children[index] ?? ""),
+    existingGuestId: (existing[index] ?? "").trim() || null,
   }));
 }
 
@@ -352,6 +364,10 @@ export async function createInvitationAction(
       // control for it, because a form that asks twice gets two answers.
       isPrimary: index === 0,
       isChild: member.isChild,
+      // An id here turns the row from an insert into a MOVE: the person exists
+      // and the directory owns their details, so the fields above are display
+      // only for that row.
+      existingGuestId: member.existingGuestId,
     })),
   });
 

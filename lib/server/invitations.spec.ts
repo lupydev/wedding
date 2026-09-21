@@ -418,6 +418,187 @@ describe("invitations repository (local Supabase)", () => {
   });
 
   /**
+   * A HOUSEHOLD BUILT PARTLY FROM PEOPLE WHO ALREADY EXISTED.
+   *
+   * Since migration 0015 a guest can be written down before any household
+   * holds them, so creating an invitation is no longer only "type these
+   * people": some of them are already in the directory, and picking one must
+   * MOVE that row rather than write a second person with the same name.
+   *
+   * The two kinds of member are distinguished by one optional field, and the
+   * ORDER of `guests` is preserved across both — which is what keeps
+   * `dispatchRecipientIndex` meaning what the form meant by it. That is
+   * asserted here by choosing the PICKED member, position 1, so an
+   * implementation that resolved the index against only the newly inserted
+   * rows would name the wrong person rather than nobody.
+   */
+  it("takes a guest who already existed instead of writing a second one", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.picked.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const stamp = Date.now().toString(36);
+    const pickedName = `Persona Del Directorio ${stamp}`;
+
+    // Already in the directory, belonging to nobody — the state 0015 created.
+    const pickedId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into invitation_guests (invitation_id, full_name, phone_e164)
+         values (null, $1, '+573002230001')
+         returning id`,
+        [pickedName],
+      );
+      return result.rows[0].id;
+    });
+
+    const name = `Familia Mixta ${stamp}`;
+    const created = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: "Persona Tecleada",
+          phoneE164: "+573002230002",
+          isPrimary: true,
+          isChild: false,
+        },
+        {
+          // The name travels for validation and display; the ID is what
+          // decides this is a move and not an insert.
+          fullName: pickedName,
+          existingGuestId: pickedId,
+          phoneE164: null,
+          isPrimary: false,
+          isChild: false,
+        },
+      ],
+      dispatchRecipientIndex: 1,
+    });
+
+    const members = await withDb(async (db) => {
+      const result = await db.query<{ id: string; full_name: string }>(
+        `select id, full_name from invitation_guests
+          where invitation_id = $1 order by full_name`,
+        [created.id],
+      );
+      return result.rows;
+    });
+
+    // TWO members, not three: the picked person was moved, not duplicated.
+    expect(members).toHaveLength(2);
+    expect(members.map((member) => member.id)).toContain(pickedId);
+
+    const chosen = await withDb(async (db) => {
+      const result = await db.query<{ full_name: string }>(
+        `select g.full_name
+         from invitations i
+         join invitation_guests g on g.id = i.dispatch_recipient_guest_id
+         where i.id = $1`,
+        [created.id],
+      );
+      return result.rows[0]?.full_name ?? null;
+    });
+
+    expect(chosen).toBe(pickedName);
+  });
+
+  /**
+   * AND IT REFUSES SOMEBODY WHO WAS TAKEN WHILE THE FORM WAS OPEN.
+   *
+   * Two operators, two phones, two renders of the same list. The picker only
+   * offers free guests, but a page that was correct when it loaded can be
+   * wrong when it is submitted — so the write refuses, and it refuses by
+   * leaving NOTHING behind: no half-built household, and the other family
+   * untouched.
+   */
+  it("creates nothing when a chosen guest already belongs to somebody else", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.taken.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const stamp = Date.now().toString(36);
+    const theirName = `Familia Primera ${stamp}`;
+
+    const theirs = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: theirName,
+      greetingName: theirName,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: `Ya Tomada ${stamp}`,
+          phoneE164: "+573002240001",
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    });
+    const takenId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        "select id from invitation_guests where invitation_id = $1",
+        [theirs.id],
+      );
+      return result.rows[0].id;
+    });
+
+    const ourName = `Familia Segunda ${stamp}`;
+    const message = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: ourName,
+      greetingName: ourName,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: `Ya Tomada ${stamp}`,
+          existingGuestId: takenId,
+          phoneE164: null,
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    }).then(
+      () => null,
+      (error: Error) => error.message,
+    );
+
+    expect(message).toMatch(/ya (está|pertenece)/i);
+
+    const after = await withDb(async (db) => {
+      const guest = await db.query<{ invitation_id: string }>(
+        "select invitation_id from invitation_guests where id = $1",
+        [takenId],
+      );
+      const leftovers = await db.query<{ id: string }>(
+        "select id from invitations where display_name = $1",
+        [ourName],
+      );
+
+      return {
+        stillTheirs: guest.rows[0].invitation_id === theirs.id,
+        leftovers: leftovers.rows.length,
+      };
+    });
+
+    expect(after.stillTheirs).toBe(true);
+    // Nothing half-built left behind for somebody to find later.
+    expect(after.leftovers).toBe(0);
+  });
+
+  /**
    * TWO HOUSEHOLDS OF THE SAME NAME GET DIFFERENT ADDRESSES.
    *
    * `nextFreeSlug` decides the counter and is tested over a set, with no

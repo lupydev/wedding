@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import type { DirectoryGuest } from "@/lib/domain/guest-directory";
 import { deriveGreetingName } from "@/lib/domain/greeting-name";
 import type { DraftRefusal } from "@/lib/domain/invitation-draft";
 
@@ -114,13 +115,26 @@ function invitation(
   };
 }
 
-function renderCreate() {
+function renderCreate(freeGuests: readonly DirectoryGuest[] = []) {
   const action = spyAction();
 
   return {
     action,
     user: userEvent.setup(),
-    ...render(<InvitationForm action={action} />),
+    ...render(<InvitationForm action={action} freeGuests={freeGuests} />),
+  };
+}
+
+/** Somebody the directory holds and no household does. */
+function freeGuest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
+  return {
+    id: "free-1",
+    fullName: "Tía Marta",
+    nickname: null,
+    phoneE164: "+573001112233",
+    isChild: false,
+    household: null,
+    ...overrides,
   };
 }
 
@@ -1198,5 +1212,140 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
 
       expect(submitted.get("recipientIndex")).toBe("1");
     });
+  });
+});
+
+/**
+ * BUILDING A HOUSEHOLD OUT OF PEOPLE WHO ALREADY EXIST.
+ *
+ * Since migration 0015 a guest can be written down in the directory before any
+ * household holds them, which is what the couple asked for: "la creación de
+ * invitaciones donde se pueda agregar un invitado". Picking one MOVES that
+ * person into this household rather than writing a second record with the same
+ * name — and the rule underneath it, "no se debería poder escoger en una
+ * próxima invitación", is why the picker is fed only free guests and why a
+ * person already added here disappears from it.
+ */
+describe("picking somebody who is already in the directory", () => {
+  it("says nothing about a directory that has nobody spare", async () => {
+    renderCreate([]);
+
+    expect(
+      screen.queryByRole("button", { name: /Agregar de la lista/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * SHE TAKES THE EMPTY CARD, SHE DOES NOT LAND UNDER IT.
+   *
+   * A new form opens with one blank member card. Appending after it would
+   * leave an empty "Integrante 1" above the person just added — which the
+   * validator then refuses for having no name, on a form where the operator
+   * did nothing wrong. Their first action was "add Tía Marta", so Tía Marta is
+   * Integrante 1.
+   */
+  it("adds the chosen person as the first member of an empty form", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Nombre completo")).toHaveValue("Tía Marta");
+    expect(screen.queryByRole("group", { name: /^Integrante 2$/ })).toBeNull();
+  });
+
+  /**
+   * AND A CARD SOMEBODY HAS TYPED INTO IS NEVER CONSUMED.
+   *
+   * The rule above exists to swallow an UNTOUCHED card. Swallowing a half-typed
+   * one would delete a person's name because the operator reached for the
+   * directory next, which is the opposite of helpful.
+   */
+  it("keeps a half-typed card and adds her after it", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Nombre completo")).toHaveValue("Ana Ruiz");
+    expect(row(2).getByLabelText("Nombre completo")).toHaveValue("Tía Marta");
+  });
+
+  /**
+   * HER DETAILS ARE NOT EDITABLE HERE, and that is not a restriction for its
+   * own sake: the directory owns them. A name corrected in two places drifts,
+   * and the screen where it is corrected for everybody is `/console/guests`.
+   */
+  it("shows her details without offering to rewrite them here", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Nombre completo")).toHaveAttribute(
+      "readonly",
+    );
+  });
+
+  /**
+   * AND SHE LEAVES THE PICKER THE MOMENT SHE IS ADDED.
+   *
+   * Offering her twice would let one form build a household containing the
+   * same person twice — which `duplicate_member_id` would refuse on submit,
+   * after the operator had done the work.
+   */
+  it("stops offering somebody this form has already taken", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /Agregar de la lista: Tía Marta/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * EVERY ROW EMITS THE ID COLUMN, EMPTY OR NOT.
+   *
+   * `readMemberRows` reads the member fields as parallel arrays and refuses a
+   * column whose length disagrees with the names — a rule it holds precisely
+   * because a short column would attach one person's value to another
+   * person's row. A picked row is the only one with an id, so the typed rows
+   * have to send an empty string rather than nothing at all.
+   */
+  it("sends one id column entry per member, so the arrays cannot slip", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.type(screen.getByLabelText("Nombre del hogar"), "Familia Ruiz");
+    await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    const form = screen.getByLabelText("Nombre del hogar").closest("form")!;
+    const sent = new FormData(form);
+
+    expect(sent.getAll("memberFullName")).toEqual(["Ana Ruiz", "Tía Marta"]);
+    expect(sent.getAll("memberExistingId")).toEqual(["", "free-1"]);
+  });
+
+  /**
+   * THE EDIT SCREEN DOES NOT OFFER THIS, and the reason is that adding a
+   * member there is already its own server action against a saved invitation —
+   * a different write with a different shape. That is U3b; until it exists,
+   * showing a picker here that did nothing would be worse than showing none.
+   */
+  it("is not offered while editing an invitation that already exists", () => {
+    renderEdit();
+
+    expect(
+      screen.queryByRole("button", { name: /Agregar de la lista/ }),
+    ).toBeNull();
   });
 });

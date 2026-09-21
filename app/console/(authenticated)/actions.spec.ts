@@ -1079,6 +1079,46 @@ describe("createInvitationAction — who receives the message", () => {
    * household itself designates: row zero is written with `isPrimary: true`
    * five lines away, by the same rule and for the same reason.
    */
+  /**
+   * A ROW THAT NAMES SOMEBODY THE DIRECTORY ALREADY HOLDS.
+   *
+   * The two kinds of member travel in the SAME parallel arrays, distinguished
+   * by one column: an id, or the empty string for a person being written for
+   * the first time. That is deliberate — a separate list of picked ids would
+   * lose the interleaved ORDER, and the order is what the recipient position
+   * refers to.
+   */
+  it("marks the rows that name somebody already in the directory", async () => {
+    const data = new FormData();
+
+    data.set("displayName", "Familia Mixta");
+    data.set("greetingName", "Familia Mixta");
+    data.set("greetingNameSource", "derived");
+
+    for (const [fullName, existingId] of [
+      ["Persona Tecleada", ""],
+      ["Persona Del Directorio", GUEST_ID],
+    ]) {
+      data.append("memberFullName", fullName);
+      data.append("memberNickname", "");
+      data.append("memberPhone", "");
+      data.append("memberExistingId", existingId);
+    }
+
+    await createInvitationAction(data);
+
+    expect(createInvitation.mock.calls[0][1].guests).toEqual([
+      expect.objectContaining({
+        fullName: "Persona Tecleada",
+        existingGuestId: null,
+      }),
+      expect.objectContaining({
+        fullName: "Persona Del Directorio",
+        existingGuestId: GUEST_ID,
+      }),
+    ]);
+  });
+
   it("falls back to the household's first member when nothing was chosen", async () => {
     await createInvitationAction(household());
 

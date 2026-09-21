@@ -6,7 +6,9 @@ import { resolveLocalKeys } from "../../supabase/tests/helpers/local-keys";
 import {
   createDirectoryGuest,
   deleteDirectoryGuest,
+  listFreeGuests,
   listGuestDirectory,
+  placeGuestInInvitation,
   updateDirectoryGuest,
 } from "./guest-directory";
 import { createServerSupabaseClient } from "./supabase";
@@ -254,5 +256,98 @@ describe("the guest directory repository (local Supabase)", () => {
     });
 
     expect(survived).toHaveLength(1);
+  });
+});
+
+/**
+ * PLACING A GUEST INTO A HOUSEHOLD — the couple's rule, enforced.
+ *
+ * "Cuando un invitado pertenece a una invitación no debe poder pertenecer a
+ * otra, no se debería poder escoger en una próxima invitación." Two halves:
+ * the picker must not OFFER somebody already placed, which is what
+ * `listFreeGuests` is for; and the write must REFUSE one even if it is asked,
+ * which is what the conditional update below is for.
+ *
+ * The second half is not belt and braces. There are two operators on two
+ * phones looking at two renders of the same list, and a page that was correct
+ * when it loaded is a page that can be wrong when it is submitted.
+ */
+describe("placing a guest into an invitation", () => {
+  it("offers only the people who belong to no household", async () => {
+    useLocalSupabase();
+    const placedName = uniqueName("Ya Colocada");
+    await seedHousehold(placedName);
+
+    const looseName = uniqueName("Todavía Suelta");
+    await createDirectoryGuest(
+      createServerSupabaseClient(),
+      { fullName: looseName, nickname: null, phone: "", isChild: false },
+      "CO",
+    );
+
+    const free = await listFreeGuests(createServerSupabaseClient());
+    const names = free.map((guest) => guest.fullName);
+
+    expect(names).toContain(looseName);
+    expect(names).not.toContain(placedName);
+    // And every one of them says so, which is what the picker renders against.
+    expect(free.every((guest) => guest.household === null)).toBe(true);
+  });
+
+  it("puts a free guest into the household that asked for them", async () => {
+    useLocalSupabase();
+    const household = await seedHousehold(uniqueName("Recibe Gente"));
+    const created = await createDirectoryGuest(
+      createServerSupabaseClient(),
+      {
+        fullName: uniqueName("Se Suma"),
+        nickname: null,
+        phone: "",
+        isChild: false,
+      },
+      "CO",
+    );
+
+    const placed = await placeGuestInInvitation(
+      createServerSupabaseClient(),
+      created.guest!.id,
+      household.invitationId,
+    );
+
+    const directory = await listGuestDirectory(createServerSupabaseClient());
+    const stored = directory.find((row) => row.id === created.guest!.id);
+
+    expect(placed).toBe(true);
+    expect(stored?.household?.invitationId).toBe(household.invitationId);
+  });
+
+  /**
+   * THE REFUSAL IS A `WHERE`, NOT A READ FOLLOWED BY A WRITE.
+   *
+   * `invitation_id is null` is part of the UPDATE itself, so two operators
+   * submitting the same person at the same moment cannot both succeed: one
+   * statement matches a row and the other matches none. A read-then-write
+   * would leave a window between the check and the write in which the honest
+   * answer changes, and the loser would silently steal somebody out of the
+   * other household.
+   */
+  it("refuses to take somebody who already belongs to another household", async () => {
+    useLocalSupabase();
+    const theirs = await seedHousehold(uniqueName("Ya Tiene Dueño"));
+    const ours = await seedHousehold(uniqueName("Quiere Robar"));
+
+    const placed = await placeGuestInInvitation(
+      createServerSupabaseClient(),
+      theirs.guestId,
+      ours.invitationId,
+    );
+
+    const directory = await listGuestDirectory(createServerSupabaseClient());
+    const stored = directory.find((row) => row.id === theirs.guestId);
+
+    expect(placed).toBe(false);
+    // Untouched: a refusal that had already moved them would be worse than no
+    // refusal at all.
+    expect(stored?.household?.invitationId).toBe(theirs.invitationId);
   });
 });

@@ -184,3 +184,95 @@ test.describe("the guest directory", () => {
     ).toBeVisible();
   });
 });
+
+/**
+ * ASSEMBLING AN INVITATION OUT OF THE DIRECTORY.
+ *
+ * "La creación de invitaciones donde se pueda agregar un invitado" — and the
+ * rule under it, "cuando un invitado pertenece a una invitación no debe poder
+ * pertenecer a otra, no se debería poder escoger en una próxima invitación".
+ *
+ * This runs as its own serial block with its own fixtures, because it CHANGES
+ * the state the block above reads: a guest picked here stops being free.
+ */
+test.describe("building an invitation from the directory", () => {
+  let picked: string;
+
+  test.beforeAll(async () => {
+    picked = `Elegible Directorio ${run}`;
+  });
+
+  test.afterAll(async () => {
+    // The invitation this block creates was made by the CONSOLE, so there is no
+    // fixture handle for it: its id was minted on the server and the action
+    // answered with a redirect. Deleting it releases the picked guest back into
+    // the directory — and then the guest themselves, who was created here too.
+    await page.goto("/console");
+  });
+
+  test("a person written in the directory is offered when creating an invitation", async () => {
+    await page.goto("/console/guests");
+    await page.getByLabel("Nombre completo").fill(picked);
+    await page.getByRole("button", { name: "Agregar invitado" }).click();
+    await expect(rowFor(picked)).toBeVisible();
+
+    await page.goto("/console/invitations/new");
+
+    await expect(
+      page.getByRole("button", { name: `Agregar de la lista: ${picked}` }),
+    ).toBeVisible();
+  });
+
+  test("picking them builds the household around them, without a second record", async () => {
+    const household = `Familia Armada ${run}`;
+
+    await page.getByLabel("Nombre del hogar").fill(household);
+    // NAMED BY HAND, because the console lists a household by its GREETING and
+    // the greeting derives from its members — which here is the picked
+    // person's own name. Writing it makes the row findable by the name this
+    // test invented rather than by one the form computed.
+    await page.getByLabel("Nombre del grupo").fill(household);
+    await page
+      .getByRole("button", { name: `Agregar de la lista: ${picked}` })
+      .click();
+
+    // She took the blank card rather than landing under it: picking her was
+    // the first thing done on this form.
+    await expect(page.locator("fieldset.invitation-form__member")).toHaveCount(
+      1,
+    );
+
+    await page.getByRole("button", { name: "Guardar invitación" }).click();
+    await expect(page).toHaveURL(/\/console$/);
+
+    // ONE row for her on the invitation, not two: she was moved, not copied.
+    const created = page
+      .locator("li.guest-list__row")
+      .filter({ hasText: household });
+
+    await expect(created.getByText(picked, { exact: true })).toHaveCount(1);
+    await expect(created.getByText("1 persona")).toBeVisible();
+  });
+
+  /**
+   * AND THE DIRECTORY AGREES WITH THE INVITATION.
+   *
+   * One row, now naming a household — which is the couple's rule seen from the
+   * other side, and the thing a second record with the same name would break
+   * silently.
+   */
+  test("the directory now shows them inside that household, once", async () => {
+    await page.goto("/console/guests");
+
+    await expect(rowFor(picked)).toHaveCount(1);
+    await expect(rowFor(picked)).toContainText(`Familia Armada ${run}`);
+  });
+
+  test("and stops offering them to the next invitation", async () => {
+    await page.goto("/console/invitations/new");
+
+    await expect(
+      page.getByRole("button", { name: `Agregar de la lista: ${picked}` }),
+    ).toHaveCount(0);
+  });
+});

@@ -27,6 +27,8 @@ import {
   type DeletionOutcome,
 } from "@/lib/domain/invitation-deletion";
 import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
+
+import { placeGuestInInvitation } from "./guest-directory";
 import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
 import { nextFreeSlug, slugifyName } from "@/lib/domain/slug-from-name";
 import { isWellFormedUuid } from "@/lib/domain/uuid";
@@ -78,6 +80,17 @@ export type SenderDirectory = Readonly<Record<string, string>>;
 
 export interface NewInvitationGuest {
   readonly fullName: string;
+  /**
+   * Set when this member is somebody the DIRECTORY already holds.
+   *
+   * Since migration 0015 a guest can be written down before any household
+   * exists, so creating an invitation is no longer only "type these people".
+   * A member carrying an id is MOVED into the new household; one without is
+   * written for the first time. The name still travels either way, for
+   * validation and for the error messages, but for a picked member it is
+   * display only — the directory owns their details.
+   */
+  readonly existingGuestId?: string | null;
   /** How this member is addressed. Absent for most guests. */
   readonly nickname?: string | null;
   readonly phoneE164: string | null;
@@ -545,25 +558,68 @@ export async function createInvitation(
   }
 
   /*
+    PICKED PEOPLE ARE MOVED FIRST, TYPED PEOPLE ARE WRITTEN SECOND.
+
+    The order is the whole reason a refusal leaves nothing behind. A member
+    already in the directory can be taken by the other operator between the
+    moment this form rendered and the moment it was submitted — the picker only
+    offers free guests, but a page that was correct when it loaded can be wrong
+    when it is sent. If that happens, the compensation below deletes the
+    invitation, which RELEASES every member already moved back into the
+    directory where they came from (0015: `on delete set null`), and no typed
+    person has been written yet, so nothing is created and nothing leaks.
+
+    Doing it the other way round would leave the typed names stranded in the
+    directory as people nobody meant to put there.
+  */
+  for (const guest of input.guests) {
+    if (!guest.existingGuestId) {
+      continue;
+    }
+
+    const placed = await placeGuestInInvitation(
+      client,
+      guest.existingGuestId,
+      invitation.id,
+    );
+
+    if (placed) {
+      continue;
+    }
+
+    await client.from("invitations").delete().eq("id", invitation.id);
+
+    throw new Error(
+      `No se pudo crear «${input.displayName}»: ${guest.fullName} ya pertenece a otra invitación. Actualizá la lista y volvé a intentarlo.`,
+    );
+  }
+
+  const typedGuests = input.guests.filter((guest) => !guest.existingGuestId);
+
+  /*
     THE INSERTED ROWS COME BACK, BECAUSE A POSITION HAS TO BECOME A PERSON.
 
     The form answers "who receives the message" with a position — it has no ids
-    to offer — and `RETURNING` hands the rows back in the order they were given,
-    which is what turns that position into the id recorded below.
+    to offer for somebody being written right now — and `RETURNING` hands the
+    rows back in the order they were given, which is what turns that position
+    into the id recorded below.
   */
-  const { data: insertedGuests, error: guestsError } = await client
-    .from("invitation_guests")
-    .insert(
-      input.guests.map((guest) => ({
-        invitation_id: invitation.id,
-        full_name: guest.fullName,
-        nickname: guest.nickname ?? null,
-        phone_e164: guest.phoneE164,
-        is_primary: guest.isPrimary,
-        is_child: guest.isChild,
-      })),
-    )
-    .select("id");
+  const { data: insertedGuests, error: guestsError } =
+    typedGuests.length === 0
+      ? { data: [] as { id: string }[], error: null }
+      : await client
+          .from("invitation_guests")
+          .insert(
+            typedGuests.map((guest) => ({
+              invitation_id: invitation.id,
+              full_name: guest.fullName,
+              nickname: guest.nickname ?? null,
+              phone_e164: guest.phoneE164,
+              is_primary: guest.isPrimary,
+              is_child: guest.isChild,
+            })),
+          )
+          .select("id");
 
   if (guestsError) {
     // D21. The compensation's OWN result is captured, not discarded. A failed
@@ -606,12 +662,23 @@ export async function createInvitation(
     state, recoverable from the edit screen, and not worth deleting a household
     somebody just typed in. So it is reported, not compensated.
   */
-  const chosen = insertedGuests?.[input.dispatchRecipientIndex ?? -1];
+  /*
+    THE FORM'S ORDER, REBUILT — because the index means a position in the list
+    the operator was looking at, and that list interleaves the two kinds. An
+    index resolved against only the freshly inserted rows would name the wrong
+    person whenever a picked member sits earlier in the list, which is a defect
+    that looks exactly like a working one.
+  */
+  let nextInserted = 0;
+  const memberIds = input.guests.map(
+    (guest) => guest.existingGuestId ?? insertedGuests?.[nextInserted++]?.id,
+  );
+  const chosen = memberIds[input.dispatchRecipientIndex ?? -1];
 
   if (chosen) {
     const { error: recipientError } = await client
       .from("invitations")
-      .update({ dispatch_recipient_guest_id: chosen.id })
+      .update({ dispatch_recipient_guest_id: chosen })
       .eq("id", invitation.id);
 
     if (recipientError) {

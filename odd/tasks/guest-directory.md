@@ -79,11 +79,14 @@ is why it is three units and not one.
       household they belong to or "sin invitación". Create, edit and delete a
       guest from there. One nav entry. This is the "no veo la lista de invitados
       por ninguna parte" half.
-- [ ] **U3 — assembling an invitation from the directory.** The create and edit
-      forms gain "elegir de la lista", offering only guests with no invitation;
-      typing a new person stays, because it is faster for a household you are
-      entering all at once. Deleting an invitation says, in words, that its
-      people go back to the directory.
+- [x] **U3a — creating an invitation from the directory.** The create form
+      gains "Agregar de la lista", offering only guests with no invitation;
+      typing a new person stays, because it is faster for a household entered
+      all at once.
+- [ ] **U3b — adding somebody from the directory to an invitation that already
+      exists.** The edit screen's "Agregar integrante" writes a new person;
+      it should also be able to take a free one. A different write against a
+      saved row, with its own action, which is why it is its own unit.
 
 ## Checks per unit
 
@@ -200,4 +203,50 @@ The confirmation says what it costs, naming the household when there is one.
 Green: 2202 unit and component tests, 181 browser tests, typecheck, lint,
 format, build.
 
-### Next: U3 — assembling an invitation from the directory.
+### U3a — done (creating from the directory)
+
+The create form offers the people the directory holds and no household does.
+Picking one MOVES that row into the new invitation instead of writing a second
+record with the same name — which is the point the couple were making: the
+database always made "one guest, one invitation" unrepresentable, and what was
+missing was a way to reuse a person rather than retype them.
+
+**The rule is held twice, and the second time is the one that matters.** The
+picker is fed `listFreeGuests`, so somebody already placed is never offered.
+And `placeGuestInInvitation` carries `invitation_id is null` INSIDE the UPDATE,
+so two operators submitting the same person from two phones cannot both win —
+one statement matches a row, the other matches none. A read-then-write would
+leave a window in which the honest answer changes, and the loser would silently
+take somebody out of the other household.
+
+**The order of operations is what makes a refusal clean.** Picked people are
+moved FIRST, typed people are written SECOND. If a move is refused, the
+compensation deletes the invitation — which releases every already-moved member
+back into the directory (0015's `on delete set null`) — and no typed person has
+been written yet. Nothing is created and nothing leaks. Done the other way
+round, the typed names would be stranded in the directory as people nobody
+meant to put there.
+
+**Both kinds of member travel in the same parallel arrays**, distinguished by
+one column that is an id or the empty string. A separate list of picked ids
+would have lost the interleaved ORDER, and the order is exactly what
+`dispatchRecipientIndex` refers to — asserted by choosing the PICKED member at
+position 1, so an implementation resolving the index against only the inserted
+rows names the wrong person rather than nobody.
+
+**A test I wrote and the implementation corrected.** I had asserted the picked
+person lands on card 2, under the blank one a new form opens with. The
+implementation consumed that blank card instead, and it was right: an empty
+"Integrante 1" above the person just added is refused by the validator on a
+form where the operator did nothing wrong. The test now asserts the consuming
+rule — and a second one asserts that a card somebody has TYPED into is never
+consumed.
+
+**Two stale sentences removed.** The create page still promised "a quién se le
+manda el mensaje se elige después de guardar", which the previous commit made
+false, and said nothing about the directory.
+
+Green: 2215 unit and component tests, 185 browser tests, typecheck, lint,
+format, build.
+
+### Next: U3b — adding a directory guest to an invitation that already exists.

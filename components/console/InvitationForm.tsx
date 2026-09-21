@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { whyDisabled } from "@/components/ui/why-disabled";
+import type { DirectoryGuest } from "@/lib/domain/guest-directory";
 import {
   deriveGreetingName,
   type GreetingNameSource,
@@ -199,6 +200,19 @@ export interface InvitationFormProps {
    */
   readonly action: InvitationFormAction;
   readonly invitation?: InvitationFormInvitation | null;
+  /**
+   * The people the directory holds and no household does.
+   *
+   * Only meaningful while CREATING. Picking one moves that person into this
+   * household instead of writing a second record with the same name — which is
+   * possible at all only since migration 0015, and is what "la creación de
+   * invitaciones donde se pueda agregar un invitado" asked for.
+   *
+   * Adding somebody to an invitation that already exists is a different write
+   * against a saved row, with its own server action, so the edit screen does
+   * not read this.
+   */
+  readonly freeGuests?: readonly DirectoryGuest[];
   /** Required to edit membership; there is none to edit while creating. */
   readonly memberActions?: InvitationMemberActions;
 }
@@ -209,6 +223,15 @@ interface MemberRow {
   readonly key: string;
   /** `null` for a row this form added that has never been written. */
   readonly id: string | null;
+  /**
+   * Set when this card names somebody the DIRECTORY already holds.
+   *
+   * Distinct from `id`, which means "already a member of THIS invitation".
+   * A picked person exists as a row and belongs to nobody, so the submission
+   * moves them rather than writing them; their details are read-only here
+   * because `/console/guests` is where they are corrected for everybody.
+   */
+  readonly existingGuestId: string | null;
   readonly fullName: string;
   readonly nickname: string;
   readonly phone: string;
@@ -225,11 +248,16 @@ interface MemberRow {
 }
 
 const NO_MEMBERS: readonly InvitationFormMember[] = [];
+/** Module scope, so the default prop is not a new array on every render. */
+const NO_FREE_GUESTS: readonly DirectoryGuest[] = [];
 
 function rowOf(member: InvitationFormMember): MemberRow {
   return {
     key: member.id,
     id: member.id,
+    // A saved member is already in this household; the directory's picker is
+    // about people who are in none.
+    existingGuestId: null,
     fullName: member.fullName,
     nickname: member.nickname ?? "",
     phone: member.phoneE164 ?? "",
@@ -238,11 +266,32 @@ function rowOf(member: InvitationFormMember): MemberRow {
   };
 }
 
+/**
+ * A card standing for somebody the directory already holds.
+ *
+ * Their details are COPIED for display and for validation, never re-saved:
+ * `existingGuestId` is what turns this card into a move rather than an insert,
+ * and `/console/guests` remains the one screen where those details change.
+ */
+function pickedRow(guest: DirectoryGuest): MemberRow {
+  return {
+    key: `picked-${guest.id}`,
+    id: null,
+    existingGuestId: guest.id,
+    fullName: guest.fullName,
+    nickname: guest.nickname ?? "",
+    phone: guest.phoneE164 ?? "",
+    isChild: guest.isChild,
+    dispatchable: guest.phoneE164 !== null,
+  };
+}
+
 /** A row nobody has typed into yet — what a new invitation starts as. */
 function blankRow(): MemberRow {
   return {
     key: `new-${globalThis.crypto.randomUUID()}`,
     id: null,
+    existingGuestId: null,
     fullName: "",
     nickname: "",
     phone: "",
@@ -313,6 +362,7 @@ function derivedNameOf(rows: readonly MemberRow[]): string | null {
 
 export function InvitationForm({
   action,
+  freeGuests = NO_FREE_GUESTS,
   invitation = null,
   memberActions,
 }: InvitationFormProps) {
@@ -439,6 +489,41 @@ export function InvitationForm({
     members: rows.map(draftMemberOf),
     dispatchRecipientGuestId: recipientId,
   });
+
+  /*
+    WHO THE PICKER MAY STILL OFFER.
+
+    Derived rather than kept in state: the answer is a function of the rows on
+    screen, and a second copy of it is a second thing that can be wrong.
+  */
+  const takenHere = new Set(
+    rows
+      .map((row) => row.existingGuestId)
+      .filter((id): id is string => id !== null),
+  );
+  const offerable = freeGuests.filter((guest) => !takenHere.has(guest.id));
+
+  function pickGuest(guest: DirectoryGuest) {
+    setRows((current) => {
+      const picked = pickedRow(guest);
+      /*
+        THE UNTOUCHED BLANK CARD IS CONSUMED, NOT PUSHED DOWN.
+
+        A new form opens with one empty card. Appending after it leaves an
+        empty "Integrante 1" above the person just added — which the validator
+        then refuses for having no name, on a form where the operator did
+        nothing wrong. A card somebody HAS typed into is never consumed.
+      */
+      const onlyBlank =
+        current.length === 1 &&
+        current[0].existingGuestId === null &&
+        current[0].id === null &&
+        current[0].fullName.trim() === "" &&
+        current[0].phone.trim() === "";
+
+      return onlyBlank ? [picked] : [...current, picked];
+    });
+  }
 
   function patchRow(key: string, patch: Partial<MemberRow>) {
     setRows((current) =>
@@ -658,6 +743,50 @@ export function InvitationForm({
       <fieldset className="invitation-form__members flex flex-col gap-4">
         <legend className="text-sm font-medium">Integrantes</legend>
 
+        {/*
+          THE PEOPLE THE DIRECTORY CAN STILL LEND, and nobody else.
+
+          Offering only free guests is the first half of the couple's rule —
+          "no se debería poder escoger en una próxima invitación". The server
+          holds the other half, because a page that was correct when it loaded
+          can be wrong when it is submitted.
+
+          Somebody already on a card here is withheld too: offering them twice
+          would let one form build a household holding the same person twice,
+          which `duplicate_member_id` refuses on submit — after the operator
+          had done the work.
+
+          Nothing is rendered when there is nobody to lend. An empty picker
+          says "this feature is broken" rather than "the directory is empty",
+          and the directory is empty for most of this wedding's life.
+        */}
+        {invitation === null && offerable.length > 0 && (
+          <div className="invitation-form__directory flex flex-col gap-2 rounded-lg border border-dashed border-input px-3 py-3">
+            <p className="text-xs text-muted-foreground">
+              Ya en la lista de invitados, sin invitación todavía:
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {offerable.map((guest) => (
+                <Button
+                  key={guest.id}
+                  onClick={() => pickGuest(guest)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {/*
+                    The person's name is IN the label rather than only in an
+                    `aria-label`, because a row of bare "Agregar" buttons is
+                    the thing this console already removed once.
+                  */}
+                  Agregar de la lista: {guest.fullName}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {rows.map((row, index) => {
           const removalRefusal = removalRefusalOf(row);
 
@@ -696,6 +825,14 @@ export function InvitationForm({
                   onChange={(event) =>
                     patchRow(row.key, { fullName: event.target.value })
                   }
+                  /*
+                    A PICKED PERSON'S DETAILS ARE SHOWN, NOT REWRITTEN HERE.
+
+                    The directory owns them, and `/console/guests` is where a
+                    correction reaches every household at once. Two places to
+                    change one name is two names.
+                  */
+                  readOnly={row.existingGuestId !== null}
                   value={row.fullName}
                 />
               </div>
@@ -709,6 +846,7 @@ export function InvitationForm({
                   onChange={(event) =>
                     patchRow(row.key, { nickname: event.target.value })
                   }
+                  readOnly={row.existingGuestId !== null}
                   value={row.nickname}
                 />
               </div>
@@ -726,6 +864,7 @@ export function InvitationForm({
                       dispatchable: event.target.value.trim() !== "",
                     })
                   }
+                  readOnly={row.existingGuestId !== null}
                   value={row.phone}
                 />
               </div>
@@ -750,6 +889,18 @@ export function InvitationForm({
                   name="memberIsChild"
                   type="hidden"
                   value={row.isChild ? "true" : "false"}
+                />
+              )}
+
+              {/* One entry per member, empty for a person being written for the
+                first time. `readMemberRows` refuses a column whose length
+                disagrees with the names — a rule it holds because a short
+                column attaches one person's value to another person's row. */}
+              {invitation === null && (
+                <input
+                  name="memberExistingId"
+                  type="hidden"
+                  value={row.existingGuestId ?? ""}
                 />
               )}
 
