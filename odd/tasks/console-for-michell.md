@@ -79,7 +79,7 @@ the couple asked for exactly two CRUDs.
       and label shows `greetingName`. So one of the two fields is a question
       about a value the operator will never see again, asked of somebody who
       has no way to know that.
-- [ ] **U3b — a guest's row says less and offers one obvious action.** It now
+- [x] **U3b — a guest's row says less and offers one obvious action.** It now
       carries a name line, a household line, a recipient line and up to three
       buttons. Times forty people, that is a wall rather than a list.
 - [ ] **U3c — the invitation form leads with picking, not typing.** The
@@ -204,4 +204,40 @@ household name has just gone, and the per-invitation deadline went in migration 
 Green: 2254 unit and component tests, 196 browser tests, typecheck, lint,
 format, build.
 
-### Next: U3b — a guest's row says less and offers one obvious action.
+### U3b — done
+
+A row carried a name line, a household line, a recipient line and three
+controls. Forty of those is a wall.
+
+**Three lines became two.** The household and who receives the message are one
+sentence now — "En Familia Restrepo · el mensaje le llega a Ana". The recipient
+note still earns its place: a send is addressed to the member its invitation
+names, which need not be the person whose row was pressed, and the list is
+ordered by when people were added, so that member's own row is nowhere nearby.
+What was wrong was giving it a paragraph of its own.
+
+**Deleting left the resting row.** It sat beside "Editar" on every one of those
+forty rows — a destructive control one mis-tap away, on a phone. It lives
+inside the editor now: the press that opens the editor is where somebody says
+they want to change this person, and it is not a press anybody makes by
+accident. It sits OUTSIDE the save form, because a destructive control inside
+one is a mis-tap from the button next to it.
+
+So a resting row offers exactly two controls, and the primary one is decided by
+the person: send, for somebody in a household that can be written to; invite
+separately, for somebody in none. The two cannot both apply — each needs the
+opposite of the other.
+
+**A defect of my own making, fixed.** The button read "Invitar a {nombre}
+sola", which is simply wrong for half a guest list. It reads "Invitar por
+separado"; the name lives in the accessible name, where it tells two rows apart
+without putting a guess about somebody's gender on screen.
+
+**One test-robustness fix.** The component spec located rows by the name span,
+which disappears when the editor opens — the same trap the browser suite hit
+earlier. Both now use the row's own `data-guest-name`.
+
+Green: 2259 unit and component tests, 196 browser tests, typecheck, lint,
+format, build.
+
+### Next: U3c — the invitation form leads with picking, not typing.

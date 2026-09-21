@@ -85,10 +85,17 @@ function renderDirectory(
   return { createAction, updateAction, deleteAction, inviteAloneAction };
 }
 
+/**
+ * One person's row, BY ATTRIBUTE AND NOT BY TEXT.
+ *
+ * Opening the editor moves the name out of the row's text content and into an
+ * input's value, so a text-based lookup loses the row at precisely the moment
+ * a test is editing it. The `<li>` carries its own identity for that reason.
+ */
 function rowFor(fullName: string): HTMLElement {
-  return screen
-    .getByText(fullName, { selector: ".guest-directory__name" })
-    .closest("li")!;
+  return document.querySelector<HTMLElement>(
+    `li.guest-directory__row[data-guest-name="${fullName}"]`,
+  )!;
 }
 
 describe("GuestDirectory", () => {
@@ -217,16 +224,21 @@ describe("GuestDirectory", () => {
    * The same rule `InvitationLifecycle` holds for a household: this console is
    * operated from a phone, and "¿seguro?" does not say who is about to
    * disappear from a list of forty.
+   *
+   * REACHED THROUGH THE EDITOR NOW. It used to sit on the resting row, which
+   * put a destructive control one mis-tap away on every one of those forty.
+   * The press that opens the editor is the one where somebody says they want
+   * to change this person, and it is not a press anybody makes by accident.
    */
   it("names the person in the confirmation before deleting them", async () => {
     const user = userEvent.setup();
     const { deleteAction } = renderDirectory([
       guest({ fullName: "Ana Restrepo" }),
     ]);
+    const opened = rowFor("Ana Restrepo");
 
-    await user.click(
-      within(rowFor("Ana Restrepo")).getByRole("button", { name: /Eliminar/ }),
-    );
+    await user.click(within(opened).getByRole("button", { name: /Editar/ }));
+    await user.click(within(opened).getByRole("button", { name: /Eliminar/ }));
 
     expect(deleteAction).not.toHaveBeenCalled();
     expect(
@@ -260,10 +272,10 @@ describe("GuestDirectory", () => {
     renderDirectory([
       guest({ fullName: "Ana Restrepo", household: HOUSEHOLD }),
     ]);
+    const opened = rowFor("Ana Restrepo");
 
-    await user.click(
-      within(rowFor("Ana Restrepo")).getByRole("button", { name: /Eliminar/ }),
-    );
+    await user.click(within(opened).getByRole("button", { name: /Editar/ }));
+    await user.click(within(opened).getByRole("button", { name: /Eliminar/ }));
 
     expect(
       within(rowFor("Ana Restrepo")).getByText(/Familia Restrepo/, {
@@ -391,7 +403,7 @@ describe("inviting a guest on their own", () => {
 
     expect(
       within(rowFor("Ana Restrepo")).getByRole("button", {
-        name: /Invitar a Ana Restrepo sola/i,
+        name: /Invitar por separado/i,
       }),
     ).toBeInTheDocument();
   });
@@ -406,7 +418,7 @@ describe("inviting a guest on their own", () => {
 
     expect(
       within(rowFor("Ana Restrepo")).queryByRole("button", {
-        name: /Invitar a Ana Restrepo sola/i,
+        name: /Invitar por separado/i,
       }),
     ).toBeNull();
   });
@@ -416,7 +428,7 @@ describe("inviting a guest on their own", () => {
 
     expect(
       within(rowFor("Ana Restrepo")).queryByRole("button", {
-        name: /Invitar a Ana Restrepo sola/i,
+        name: /Invitar por separado/i,
       }),
     ).toBeNull();
   });
@@ -435,12 +447,102 @@ describe("inviting a guest on their own", () => {
 
     await user.click(
       within(rowFor("Ana Restrepo")).getByRole("button", {
-        name: /Invitar a Ana Restrepo sola/i,
+        name: /Invitar por separado/i,
       }),
     );
 
     expect(
       (inviteAloneAction.mock.calls[0][0] as FormData).get("guestId"),
     ).toBe("g1");
+  });
+});
+
+/**
+ * A ROW THAT A PERSON CAN SCAN FORTY TIMES.
+ *
+ * It carried a name line, a household line, a recipient line and three
+ * buttons. Forty of those is a wall, not a list — and the couple's word for it
+ * was "slop", about a console their non-technical half has to run.
+ *
+ * What a row has to answer is who this is, where they are, and what to do
+ * next. Everything else is maintenance and belongs where somebody went looking
+ * for it.
+ */
+describe("how much a row says", () => {
+  it("answers where they are and who gets the message in one line", () => {
+    renderDirectory([
+      guest({ id: "g1", fullName: "Ana Restrepo", household: HOUSEHOLD }),
+      guest({ id: "g2", fullName: "Beto Restrepo", household: HOUSEHOLD }),
+    ]);
+
+    // One paragraph, not two. Beto's says both things.
+    const context = within(rowFor("Beto Restrepo")).getByTestId(
+      "guest-directory-context",
+    );
+
+    expect(context).toHaveTextContent("Familia Restrepo");
+    expect(context).toHaveTextContent(/le llega a Ana Restrepo/i);
+    expect(
+      within(rowFor("Beto Restrepo")).queryAllByTestId(
+        "guest-directory-context",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("says only where they are when they are the one being written to", () => {
+    renderDirectory([guest({ household: HOUSEHOLD })]);
+
+    expect(
+      within(rowFor("Ana Restrepo")).getByTestId("guest-directory-context"),
+    ).toHaveTextContent("Familia Restrepo · recibe el mensaje");
+  });
+
+  /**
+   * DELETING IS NOT A RESTING-STATE CONTROL.
+   *
+   * It sat on every row, one mis-tap from a person's record, on a phone. It
+   * now lives inside the editor — where somebody has already said "I want to
+   * change this person" — which is both quieter and safer, and costs one press
+   * that nobody makes forty times.
+   */
+  it("offers no delete on the row itself", () => {
+    renderDirectory([guest()]);
+
+    expect(
+      within(rowFor("Ana Restrepo")).queryByRole("button", {
+        name: /Eliminar/i,
+      }),
+    ).toBeNull();
+  });
+
+  it("offers it inside the editor, where the change was already intended", async () => {
+    const user = userEvent.setup();
+    renderDirectory([guest()]);
+    const row = rowFor("Ana Restrepo");
+
+    await user.click(within(row).getByRole("button", { name: /Editar/ }));
+
+    expect(
+      within(row).getByRole("button", { name: /Eliminar/i }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * TWO CONTROLS AT REST, AND NEVER MORE.
+   *
+   * The primary one depends on the person — send, for somebody in a household
+   * that can be written to; invite separately, for somebody in none — and the
+   * two cannot both apply, because each needs the opposite of the other.
+   */
+  it("shows at most two controls on a resting row", () => {
+    renderDirectory([guest({ household: HOUSEHOLD })]);
+
+    const controls = within(rowFor("Ana Restrepo")).getAllByRole(
+      "button",
+      {},
+    ).length;
+    const links = within(rowFor("Ana Restrepo")).getAllByRole("link").length;
+
+    expect(controls + links).toBe(2);
   });
 });

@@ -146,6 +146,9 @@ test.describe("the guest directory", () => {
   });
 
   test("asks before deleting, and names the person while asking", async () => {
+    // Through the editor: deleting left the resting row, where it was one
+    // mis-tap away on every one of forty people.
+    await rowFor(looseName).getByRole("button", { name: "Editar" }).click();
     await rowFor(looseName).getByRole("button", { name: "Eliminar" }).click();
 
     await expect(rowFor(looseName)).toContainText(looseName);
@@ -171,6 +174,7 @@ test.describe("the guest directory", () => {
    * disappearing along with them.
    */
   test("deletes a placed guest and the invitation survives it", async () => {
+    await rowFor(placedName).getByRole("button", { name: "Editar" }).click();
     await rowFor(placedName).getByRole("button", { name: "Eliminar" }).click();
     await rowFor(placedName)
       .getByRole("button", { name: `Sí, eliminar a ${placedName}` })
@@ -534,7 +538,7 @@ test.describe("inviting a guest on their own", () => {
     await expect(rowFor(alone)).toBeVisible();
 
     await rowFor(alone)
-      .getByRole("button", { name: `Invitar a ${alone} sola` })
+      .getByRole("button", { name: `Invitar por separado a ${alone}` })
       .click();
 
     // Straight to the send screen: there is nothing left to decide, because
@@ -553,7 +557,9 @@ test.describe("inviting a guest on their own", () => {
     await expect(rowFor(alone)).not.toContainText(/Sin invitación/i);
     // The offer is gone, because she is no longer in nobody's household.
     await expect(
-      rowFor(alone).getByRole("button", { name: `Invitar a ${alone} sola` }),
+      rowFor(alone).getByRole("button", {
+        name: `Invitar por separado a ${alone}`,
+      }),
     ).toHaveCount(0);
     // What she has instead is the ordinary send, because she IS the recipient.
     await expect(rowFor(alone)).toContainText(/Recibe el mensaje/i);

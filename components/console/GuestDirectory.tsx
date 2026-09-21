@@ -191,42 +191,64 @@ export function GuestDirectory({
               key={guest.id}
             >
               {editing === guest.id ? (
-                <form
-                  action={update}
-                  autoComplete="off"
-                  className="flex flex-col gap-3"
-                >
-                  <input name="guestId" type="hidden" value={guest.id} />
+                <div className="flex flex-col gap-3">
+                  <form
+                    action={update}
+                    autoComplete="off"
+                    className="flex flex-col gap-3"
+                  >
+                    <input name="guestId" type="hidden" value={guest.id} />
 
-                  <GuestFields guest={guest} idPrefix={guest.id} />
+                    <GuestFields guest={guest} idPrefix={guest.id} />
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button disabled={pending} size="sm" type="submit">
-                      Guardar
-                    </Button>
-                    <Button
-                      disabled={pending}
-                      onClick={() => {
-                        setEditing(null);
-                        setRowRefusals([]);
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button disabled={pending} size="sm" type="submit">
+                        Guardar
+                      </Button>
+                      <Button
+                        disabled={pending}
+                        onClick={() => {
+                          setEditing(null);
+                          setConfirming(null);
+                          setRowRefusals([]);
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
 
-                  {rowRefusals.map((message) => (
-                    <p className="text-sm text-destructive" key={message}>
-                      {message}
-                    </p>
-                  ))}
-                </form>
+                    {rowRefusals.map((message) => (
+                      <p className="text-sm text-destructive" key={message}>
+                        {message}
+                      </p>
+                    ))}
+                  </form>
+
+                  {/*
+                    DELETING LIVES HERE, NOT ON THE RESTING ROW.
+
+                    It used to sit beside "Editar" on every row — one mis-tap
+                    from a person's record, on a phone, forty times over. Here
+                    somebody has already said they want to change this person,
+                    which is the only moment removing them is a thing they
+                    might mean. Outside the save form, because a destructive
+                    control inside one is a mis-tap away from the button next
+                    to it.
+                  */}
+                  <GuestDeletion
+                    confirming={confirming === guest.id}
+                    guest={guest}
+                    onCancel={() => setConfirming(null)}
+                    onConfirm={() => remove(guest)}
+                    onPropose={() => setConfirming(guest.id)}
+                    pending={pending}
+                  />
+                </div>
               ) : (
                 <GuestRow
-                  confirming={confirming === guest.id}
                   guest={guest}
                   inviteAloneAction={inviteAloneAction}
                   // True where it is true: she is in no household, and this
@@ -236,13 +258,10 @@ export function GuestDirectory({
                     canOfferSend(guest, { viewerSenderId, dispatchBlocked }) &&
                     guest.recipientName !== null
                   }
-                  onCancelDelete={() => setConfirming(null)}
-                  onConfirmDelete={() => remove(guest)}
                   onEdit={() => {
                     setEditing(guest.id);
                     setRowRefusals([]);
                   }}
-                  onProposeDelete={() => setConfirming(guest.id)}
                   pending={pending}
                 />
               )}
@@ -265,24 +284,16 @@ export function GuestDirectory({
 function GuestRow({
   canInviteAlone,
   canSend,
-  confirming,
   guest,
   inviteAloneAction,
-  onCancelDelete,
-  onConfirmDelete,
   onEdit,
-  onProposeDelete,
   pending,
 }: {
   readonly canInviteAlone: boolean;
   readonly canSend: boolean;
-  readonly confirming: boolean;
   readonly guest: DirectoryEntry;
   readonly inviteAloneAction: (formData: FormData) => Promise<void>;
-  readonly onCancelDelete: () => void;
-  readonly onConfirmDelete: () => void;
   readonly onEdit: () => void;
-  readonly onProposeDelete: () => void;
   readonly pending: boolean;
 }) {
   return (
@@ -306,145 +317,195 @@ function GuestRow({
         )}
       </div>
 
-      <p className="guest-directory__household text-xs text-hint">
+      {/*
+        WHERE THEY ARE AND WHO GETS THE MESSAGE, IN ONE LINE.
+
+        These were two paragraphs. A send is addressed to the member its
+        invitation names, which need not be the person whose row this is — and
+        the list is ordered by when people were added, so that member's own row
+        is nowhere nearby. Saying it is what stops the button beside it quietly
+        doing something other than what its row suggests; saying it on a second
+        line was what made forty of these a wall.
+      */}
+      <p
+        className="guest-directory__context text-xs text-muted-foreground"
+        data-testid="guest-directory-context"
+      >
         {guest.household === null
           ? "Sin invitación todavía"
-          : `En ${guest.household.greetingName}`}
+          : `En ${guest.household.greetingName}${recipientNote(guest)}`}
       </p>
 
       {/*
-        WHO THE MESSAGE ACTUALLY REACHES, SAID OUT LOUD.
+        TWO CONTROLS AT REST, AND NEVER MORE.
 
-        A send is addressed to the member its invitation names, which need not
-        be the person whose row this is — and the list is alphabetical, so that
-        member's own row is nowhere nearby. Without this line the button beside
-        it would quietly do something other than what its row suggests.
+        The primary one depends on the person and the two cannot both apply:
+        sending needs a household, inviting separately needs the absence of
+        one. "Eliminar" used to sit here too — one mis-tap from a person's
+        record, on a phone, on every row of a list of forty. It now lives
+        inside the editor, where somebody has already said they want to change
+        this person.
       */}
-      {guest.household !== null && (
-        <p className="guest-directory__recipient text-xs text-muted-foreground">
-          {guest.recipientName === null
-            ? "Nadie elegido para recibir el mensaje de esta invitación."
-            : guest.isRecipient
-              ? "Recibe el mensaje de esta invitación."
-              : `El mensaje de esta invitación le llega a ${guest.recipientName}.`}
-        </p>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {/*
+          A LINK TO THE DISPATCH SCREEN, NOT A SECOND WAY TO SEND.
 
-      {confirming ? (
-        <div className="flex flex-col gap-2">
-          {/*
-            IT SAYS WHAT DELETING COSTS. Removing somebody from here removes
-            them from their household too — which is right, because refusing
-            would send the operator to another screen to do what they just
-            asked for — but that is not what "eliminar" looks like from a list
-            of people, so the sentence says it.
-          */}
-          <p className="guest-directory__confirm max-w-[68ch] text-sm">
-            {guest.household === null
-              ? `Se va a eliminar a ${guest.fullName} de la lista de invitados. No se puede deshacer.`
-              : `Se va a eliminar a ${guest.fullName}, que además sale de «${guest.household.greetingName}». La invitación queda en pie. No se puede deshacer.`}
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={pending}
-              onClick={onConfirmDelete}
-              size="sm"
-              type="button"
-              variant="destructive"
+          That screen composes the message, applies the device gate and writes
+          the audit event. A button here that sent directly would be a second
+          dispatch path with its own copy of those guards to keep in step,
+          which is how one of them ends up missing.
+        */}
+        {canSend && guest.household !== null && (
+          <Button asChild size="sm">
+            <a
+              aria-label={`Enviar la invitación de ${guest.household.greetingName}`}
+              className="guest-directory__dispatch-link"
+              href={consoleDispatchPath(guest.household.invitationId)}
             >
-              Sí, eliminar a {guest.fullName}
-            </Button>
+              Enviar
+            </a>
+          </Button>
+        )}
+
+        {/*
+          ONE PRESS FOR SOMEBODY COMING ALONE.
+
+          An invitation is a household of two or more, and writing to a cousin
+          who is coming by herself should not mean assembling one. The press
+          mints her own one-person invitation and the server redirects to the
+          same dispatch screen every household reaches.
+
+          THE LABEL CARRIES NO GENDER. It read "Invitar a {nombre} sola", which
+          is simply wrong for half a guest list — and a console two people run
+          should never call somebody something they are not. The name lives in
+          the accessible name, where it tells two rows apart without putting a
+          guess on screen.
+        */}
+        {canInviteAlone && (
+          <form action={inviteAloneAction}>
+            <input name="guestId" type="hidden" value={guest.id} />
             <Button
+              aria-label={`Invitar por separado a ${guest.fullName}`}
               disabled={pending}
-              onClick={onCancelDelete}
               size="sm"
-              type="button"
-              variant="ghost"
+              type="submit"
             >
-              Cancelar
+              Invitar por separado
             </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {/*
-            A LINK TO THE DISPATCH SCREEN, NOT A SECOND WAY TO SEND.
+          </form>
+        )}
 
-            That screen composes the message, applies the device gate and
-            writes the audit event. A button here that sent directly would be a
-            second dispatch path with its own copy of those guards to keep in
-            step, which is how one of them ends up missing.
-
-            `canSend` already carries the three conditions — the person is in a
-            household, this operator owns it, and the handset agrees — plus a
-            chosen recipient, without which the send would only reach a refusal.
-          */}
-          {canSend && guest.household !== null && (
-            <Button asChild size="sm">
-              <a
-                aria-label={`Enviar la invitación de ${guest.household.greetingName}`}
-                className="guest-directory__dispatch-link"
-                href={consoleDispatchPath(guest.household.invitationId)}
-              >
-                Enviar
-              </a>
-            </Button>
-          )}
-
-          {/*
-            ONE PRESS FOR SOMEBODY COMING ALONE.
-
-            An invitation is a household of two or more, and writing to a
-            cousin who is coming by herself should not mean assembling one. The
-            press mints her own one-person invitation and the server redirects
-            to the same dispatch screen every household reaches — so a message
-            is still composed, gated and audited in exactly one place.
-
-            A plain form, because the action redirects. Offered only where it
-            is true: she is in no household, and this handset carries the right
-            WhatsApp account.
-          */}
-          {canInviteAlone && (
-            <form action={inviteAloneAction}>
-              <input name="guestId" type="hidden" value={guest.id} />
-              <Button disabled={pending} size="sm" type="submit">
-                Invitar a {guest.fullName} sola
-              </Button>
-            </form>
-          )}
-
-          {/*
-            The person's name lives in `aria-label` and not on the button. A
-            list of forty bare "Editar" tells two rows apart by position only;
-            the same reasoning `GuestList` records for its own row actions, and
-            the visible word is contained in the accessible name so the two
-            can never say different things.
-          */}
-          <Button
-            aria-label={`Editar a ${guest.fullName}`}
-            disabled={pending}
-            onClick={onEdit}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Editar
-          </Button>
-          <Button
-            aria-label={`Eliminar a ${guest.fullName}`}
-            disabled={pending}
-            onClick={onProposeDelete}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            Eliminar
-          </Button>
-        </div>
-      )}
+        {/*
+          The person's name lives in `aria-label` and not on the button. A list
+          of forty bare "Editar" tells two rows apart by position only; the
+          same reasoning `GuestList` records for its own row actions, and the
+          visible word is contained in the accessible name so the two can never
+          say different things.
+        */}
+        <Button
+          aria-label={`Editar a ${guest.fullName}`}
+          disabled={pending}
+          onClick={onEdit}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Editar
+        </Button>
+      </div>
     </div>
   );
+}
+
+/**
+ * Removing a person from the wedding, offered where the intent already is.
+ *
+ * IT ASKS FIRST, AND NAMES THEM WHILE ASKING. The same rule
+ * `InvitationLifecycle` holds for a household: this console is run from a
+ * phone, and "¿seguro?" does not say who is about to disappear.
+ *
+ * IT ALSO SAYS WHAT IT COSTS. Deleting from here removes them from their
+ * household too — which is right, because refusing would send the operator to
+ * another screen to do what they just asked for — but that is not what
+ * "eliminar" looks like from a list of people, so the sentence says it.
+ */
+function GuestDeletion({
+  confirming,
+  guest,
+  onCancel,
+  onConfirm,
+  onPropose,
+  pending,
+}: {
+  readonly confirming: boolean;
+  readonly guest: DirectoryEntry;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+  readonly onPropose: () => void;
+  readonly pending: boolean;
+}) {
+  if (!confirming) {
+    return (
+      <Button
+        aria-label={`Eliminar a ${guest.fullName}`}
+        disabled={pending}
+        onClick={onPropose}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        Eliminar
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="guest-directory__confirm max-w-[68ch] text-sm">
+        {guest.household === null
+          ? `Se va a eliminar a ${guest.fullName} de la lista de invitados. No se puede deshacer.`
+          : `Se va a eliminar a ${guest.fullName}, que además sale de «${guest.household.greetingName}». La invitación queda en pie. No se puede deshacer.`}
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          disabled={pending}
+          onClick={onConfirm}
+          size="sm"
+          type="button"
+          variant="destructive"
+        >
+          Sí, eliminar a {guest.fullName}
+        </Button>
+        <Button
+          disabled={pending}
+          onClick={onCancel}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What a row adds about the message, once it has named the household.
+ *
+ * Returns the empty string where there is nothing to add — for the member who
+ * IS the recipient the household line already implies it, but saying so costs
+ * three words and removes the only remaining question the row raises.
+ */
+function recipientNote(guest: DirectoryEntry): string {
+  if (guest.recipientName === null) {
+    return " · nadie elegido para recibir el mensaje";
+  }
+
+  return guest.isRecipient
+    ? " · recibe el mensaje"
+    : ` · el mensaje le llega a ${guest.recipientName}`;
 }
 
 /**
