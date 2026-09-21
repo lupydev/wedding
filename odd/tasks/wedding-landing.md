@@ -173,6 +173,37 @@ reachable from a unit test: the toggle in the bottom-right corner overlapped the
 word "segundos" at 390px, and the date line wrapped and orphaned "2026". Both
 fixed; the reasoning is in the files.
 
+## Layout, after seeing it on a real laptop
+
+The first version was full-bleed `object-cover` at every size, and on a 1920×950
+window that is a zoom, not a photograph: 737×1600 is 0.46:1, a laptop window is
+about 2:1, and `cover` scales on the WIDTH — so 26% of the photograph's height is
+on screen and every crop position is only a choice of which three quarters to
+discard. The waterfall and the lantern were never once visible on a laptop.
+
+`object-contain` alone was worse: the whole photograph showed, marooned in a
+black page, with the heading still lying across the couple.
+
+What holds is ONE grid with two layouts. Both children sit in the same cell below
+`lg`, so the words are on the photograph — right, because there the viewport and
+the photograph are the same shape. At `lg` a second column appears and the words
+move into it; the photograph gets `aspect-[737/1600]` and becomes a framed print,
+whole, with the scrims hidden because nothing is overlapping it any more. The
+sides are filled by a 64px-wide copy of the same photograph, blurred — about two
+kilobytes, because a 64px image blurred by 64px is indistinguishable from a
+full-resolution one blurred by 64px.
+
+Verified at 390×844, 820×1180, 1024×768 and 1920×950: no horizontal overflow at
+any of them, the heading stays on one line (428px measured), zero console errors.
+
+**One defect cost the whole mobile layout and is worth remembering.** In the
+rewrite the text column and both scrims were left `position: static` while the
+photograph's `<Image fill>` is `absolute`. Painting order is not DOM order —
+every positioned element paints above every non-positioned one, whatever the
+markup says — so on a phone the page rendered the photograph and NOTHING else:
+no heading, no date, no countdown, and no error anywhere. Found by looking at a
+screenshot. All three now carry `relative`.
+
 ## Next step
 
 Open question for the couple, recorded rather than decided: wire the landing to
