@@ -61,7 +61,6 @@ export interface ImportRow {
   readonly ownerEmail: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline?: string | null;
   /**
    * Optional stable identity of this household in the source file.
    *
@@ -114,7 +113,6 @@ export interface NewInvitation {
    * nothing may overwrite it. A console draft states `derived` or `custom`.
    */
   readonly greetingNameSource?: GreetingNameSource;
-  readonly rsvpDeadline?: string | null;
   /**
    * Who receives the message, given as a POSITION in `guests`.
    *
@@ -137,7 +135,6 @@ export interface InvitationRecord {
   readonly ownerSenderId: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline?: string | null;
   readonly guests: readonly InvitationGuestRecord[];
 }
 
@@ -152,7 +149,6 @@ export interface GuestFacingInvitation {
   readonly slug: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline?: string | null;
   readonly guests: readonly GuestFacingGuest[];
 }
 
@@ -258,7 +254,6 @@ export function validateImportRow(
       row.sourceKey?.trim() || deriveSourceKey(ownerEmail, displayName),
     displayName,
     greetingName,
-    rsvpDeadline: row.rsvpDeadline?.trim() || null,
     guests,
   };
 }
@@ -325,7 +320,6 @@ export function toGuestFacingInvitation(
     slug: record.slug,
     displayName: record.displayName,
     greetingName: record.greetingName,
-    rsvpDeadline: record.rsvpDeadline,
     guests: record.guests.map((guest) => ({
       id: guest.id,
       fullName: guest.fullName,
@@ -409,7 +403,6 @@ interface InvitationRow {
   owner_sender_id: string;
   display_name: string;
   greeting_name: string;
-  rsvp_deadline: string | null;
   invitation_guests: {
     id: string;
     full_name: string;
@@ -426,7 +419,7 @@ interface InvitationRow {
 // PostgREST refuses an ambiguous embed with "more than one relationship was
 // found". Naming the constraint says which direction this read means.
 const INVITATION_SELECT =
-  "id, slug, owner_sender_id, display_name, greeting_name, rsvp_deadline, " +
+  "id, slug, owner_sender_id, display_name, greeting_name, " +
   "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, phone_last8, is_primary, is_child)";
 
 function toRecord(row: InvitationRow): InvitationRecord {
@@ -436,7 +429,6 @@ function toRecord(row: InvitationRow): InvitationRecord {
     ownerSenderId: row.owner_sender_id,
     displayName: row.display_name,
     greetingName: row.greeting_name,
-    rsvpDeadline: row.rsvp_deadline,
     guests: row.invitation_guests.map((guest) => ({
       id: guest.id,
       fullName: guest.full_name,
@@ -545,7 +537,6 @@ export async function createInvitation(
         stored: input.greetingName,
         members,
       }),
-      rsvp_deadline: input.rsvpDeadline,
       source_key: input.sourceKey ?? null,
     })
     .select("id")
@@ -704,7 +695,6 @@ export interface InvitationEdit {
   readonly displayName: string;
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
-  readonly rsvpDeadline?: string | null;
 }
 
 /**
@@ -733,7 +723,6 @@ export async function updateInvitation(
     greetingNameSource: edit.greetingNameSource,
     members: membership.members,
     dispatchRecipientGuestId: membership.dispatchRecipientGuestId,
-    rsvpDeadline: edit.rsvpDeadline,
   });
 
   if (refusals.length > 0) {
@@ -746,7 +735,6 @@ export async function updateInvitation(
     .from("invitations")
     .update({
       display_name: edit.displayName,
-      rsvp_deadline: edit.rsvpDeadline,
       ...greetingNameColumns({
         source: edit.greetingNameSource,
         stored: edit.greetingName,
@@ -814,7 +802,6 @@ export interface InvitationMembership {
   readonly greetingNameSource: GreetingNameSource;
   readonly dispatchRecipientGuestId: string | null;
   readonly displayName: string;
-  readonly rsvpDeadline: string | null;
   readonly members: readonly (InvitationDraftMember & {
     readonly id: string;
   })[];
@@ -824,7 +811,6 @@ interface MembershipRow {
   display_name: string;
   greeting_name: string;
   greeting_name_source: GreetingNameSource;
-  rsvp_deadline: string | null;
   dispatch_recipient_guest_id: string | null;
   invitation_guests: {
     id: string;
@@ -839,7 +825,7 @@ interface MembershipRow {
 const GUESTS = "invitation_guests";
 
 const MEMBERSHIP_SELECT =
-  "display_name, greeting_name, greeting_name_source, rsvp_deadline, " +
+  "display_name, greeting_name, greeting_name_source, " +
   "dispatch_recipient_guest_id, " +
   "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, is_child)";
 
@@ -891,7 +877,6 @@ export async function findInvitationMembership(
     displayName: data.display_name,
     greetingName: data.greeting_name,
     greetingNameSource: data.greeting_name_source,
-    rsvpDeadline: data.rsvp_deadline,
     dispatchRecipientGuestId: data.dispatch_recipient_guest_id,
     members: data.invitation_guests.map((guest) => ({
       id: guest.id,
@@ -951,7 +936,6 @@ function membershipRefusals(
     )
       ? membership.dispatchRecipientGuestId
       : null,
-    rsvpDeadline: membership.rsvpDeadline,
   });
 
   return refusals;
@@ -1579,7 +1563,6 @@ export async function importInvitations(
       owner_sender_id: invitation.ownerSenderId,
       display_name: invitation.displayName,
       greeting_name: invitation.greetingName,
-      rsvp_deadline: invitation.rsvpDeadline,
       guests: invitation.guests.map((guest) => ({
         full_name: guest.fullName,
         // `import_invitations` reads this key (migration 0012). Omitted from
@@ -1745,7 +1728,6 @@ interface ConsoleInvitationRow {
   owner_sender_id: string;
   display_name: string;
   greeting_name: string;
-  rsvp_deadline: string | null;
   dispatch_recipient_guest_id: string | null;
   senders: { display_name: string } | null;
   invitation_guests: {
@@ -1758,7 +1740,7 @@ interface ConsoleInvitationRow {
 }
 
 const CONSOLE_INVITATION_SELECT =
-  "id, slug, owner_sender_id, display_name, greeting_name, rsvp_deadline, " +
+  "id, slug, owner_sender_id, display_name, greeting_name, " +
   "dispatch_recipient_guest_id, senders(display_name), " +
   "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, is_child, is_primary)";
 
@@ -1829,7 +1811,6 @@ export async function listConsoleInvitations(
     slug: row.slug,
     greetingName: row.greeting_name,
     displayName: row.display_name,
-    rsvpDeadline: row.rsvp_deadline,
     ownerSenderId: row.owner_sender_id,
     // The FK is NOT NULL, so a missing name means the embed failed rather than
     // that an invitation has no owner. Saying so beats rendering "undefined".

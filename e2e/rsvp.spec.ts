@@ -397,33 +397,29 @@ test.describe("the RSVP deadline", () => {
     leave a reader to notice the gap.
   */
 
-  test("accepts an answer on the deadline day itself", async ({ page }) => {
-    // The Bogota day-end rule, end to end: the invitation stays open through
-    // the whole of the chosen day where the wedding is.
-    const today = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Bogota",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
-    const invitation = await household({ rsvpDeadline: today });
+  /*
+    AND NOW THE OTHER TWO PREMISES ARE GONE TOO, FOR THE SAME REASON.
 
-    try {
-      await unlock(page, invitation);
+    This block held two more tests: one seeding a household whose deadline was
+    TODAY, and one seeding a household with NO deadline. Migration 0016 dropped
+    `invitations.rsvp_deadline`, so neither state can be constructed any more —
+    an invitation cannot carry its own date, and it cannot lack one either. The
+    wedding has exactly one deadline and every invitation reads it.
 
-      await decline(page);
+    The Bogota end-of-day rule those tests were really about is asserted over
+    explicit instants either side of the boundary in
+    `lib/domain/rsvp-deadline.spec.ts` and `lib/server/rsvp.spec.ts`, which is
+    where a clock can actually be controlled.
 
-      await expect(streamCard(page)).toBeVisible();
-      await expect(invitation.responseHistory()).resolves.toHaveLength(1);
-    } finally {
-      await invitation.cleanup();
-    }
-  });
-
-  test("accepts an answer when the invitation has no deadline at all", async ({
+    What is left here is the one thing only a browser proves: that
+    `app/i/[slug]/page.tsx` reads that constant and takes the OPEN branch. The
+    closed branch stays unreachable from this suite — the decision is made on
+    the server, from the server's own clock, so `page.clock` reaches nothing.
+  */
+  test("accepts an answer while the wedding's deadline is still ahead", async ({
     page,
   }) => {
-    const invitation = await household({ rsvpDeadline: null });
+    const invitation = await household();
 
     try {
       await unlock(page, invitation);

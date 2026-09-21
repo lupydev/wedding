@@ -99,7 +99,6 @@ export async function seedInvitation(options: {
    */
   ownerContactPhone?: string;
   /** ISO calendar day, or omitted for an invitation that never closes. */
-  rsvpDeadline?: string | null;
   guests: readonly SeededGuest[];
 }): Promise<SeededInvitation> {
   const db = await connect();
@@ -122,16 +121,10 @@ export async function seedInvitation(options: {
     const senderId = sender.rows[0].id;
 
     const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, rsvp_deadline)
-       values ($1, $2, $3, $4, $5)
+      `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+       values ($1, $2, $3, $4)
        returning id`,
-      [
-        slug,
-        senderId,
-        displayName,
-        options.greetingName,
-        options.rsvpDeadline ?? null,
-      ],
+      [slug, senderId, displayName, options.greetingName],
     );
     const invitationId = invitation.rows[0].id;
 

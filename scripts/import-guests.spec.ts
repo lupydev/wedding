@@ -153,7 +153,6 @@ describe("buildImportAdvisory", () => {
     sourceKey: displayName,
     displayName,
     greetingName: displayName,
-    rsvpDeadline: null,
     guests: guests.map((guest) => ({
       fullName: guest.fullName,
       phoneE164: guest.phoneE164,

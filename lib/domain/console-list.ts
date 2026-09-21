@@ -100,7 +100,6 @@ export interface ConsoleListRow {
    */
   readonly memberCount: number;
   /** ISO calendar day, or `null` for an invitation that never closes. */
-  readonly rsvpDeadline: string | null;
   readonly ownerSenderId: string;
   readonly ownerDisplayName: string;
   /** True when the signed-in operator owns this invitation. */
@@ -406,7 +405,6 @@ export interface ConsoleInvitationInput {
   readonly slug: string;
   readonly greetingName: string;
   readonly displayName: string;
-  readonly rsvpDeadline: string | null;
   readonly ownerSenderId: string;
   readonly ownerDisplayName: string;
   /** The stored `dispatch_recipient_guest_id`, or `null` while unchosen. */
@@ -477,7 +475,6 @@ export function assembleConsoleRows(input: {
       greetingName: invitation.greetingName,
       displayName: invitation.displayName,
       memberCount: invitation.guests.length,
-      rsvpDeadline: invitation.rsvpDeadline,
       ownerSenderId: invitation.ownerSenderId,
       ownerDisplayName: invitation.ownerDisplayName,
       ownedByViewer: invitation.ownerSenderId === input.viewerSenderId,

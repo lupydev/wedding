@@ -20,7 +20,6 @@
  *         "ownerEmail": "ana@example.test",   // must match senders.allowlisted_email
  *         "displayName": "Familia Restrepo",
  *         "greetingName": "Familia Restrepo",
- *         "rsvpDeadline": "2026-05-01",       // optional
  *         "sourceKey": "restrepo-bogota",     // optional, see below
  *         "guests": [
  *           { "fullName": "Ana Restrepo", "phone": "3001234567", "isPrimary": true },
@@ -94,7 +93,6 @@ const importRowSchema = z.strictObject({
   ownerEmail: z.string(),
   displayName: z.string(),
   greetingName: z.string(),
-  rsvpDeadline: z.string().nullish(),
   sourceKey: z.string().optional(),
   guests: z.array(importGuestSchema),
 });

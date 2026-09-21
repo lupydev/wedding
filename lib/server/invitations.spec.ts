@@ -169,7 +169,6 @@ describe("toGuestFacingInvitation — phones never leave the server", () => {
     ownerSenderId: SENDERS["ana@example.test"],
     displayName: "Familia Restrepo",
     greetingName: "Familia Restrepo",
-    rsvpDeadline: "2026-05-01",
     guests: [
       {
         id: "44444444-4444-4444-8444-444444444444",
@@ -197,7 +196,6 @@ describe("toGuestFacingInvitation — phones never leave the server", () => {
       slug: "abcdefghijklmnop",
       greetingName: "Familia Restrepo",
       displayName: "Familia Restrepo",
-      rsvpDeadline: "2026-05-01",
       guests: [
         {
           id: "44444444-4444-4444-8444-444444444444",
@@ -253,7 +251,6 @@ describe("invitations repository (local Supabase)", () => {
         ownerSenderId: senderId,
         displayName: "Familia Restrepo",
         greetingName: "Familia Restrepo",
-        rsvpDeadline: null,
         guests: [
           {
             fullName: "Ana Restrepo",
@@ -328,7 +325,6 @@ describe("invitations repository (local Supabase)", () => {
         ownerSenderId: "99999999-9999-4999-8999-999999999999",
         displayName: "Sin Dueño",
         greetingName: "Sin Dueño",
-        rsvpDeadline: null,
         guests: [
           {
             fullName: "Guest",
@@ -627,7 +623,6 @@ describe("invitations repository (local Supabase)", () => {
       displayName: name,
       greetingName: name,
       greetingNameSource: "custom",
-      rsvpDeadline: null,
       guests: [
         {
           fullName: "Primera Persona",
@@ -643,7 +638,6 @@ describe("invitations repository (local Supabase)", () => {
       displayName: name,
       greetingName: name,
       greetingNameSource: "custom",
-      rsvpDeadline: null,
       guests: [
         {
           fullName: "Segunda Persona",
@@ -788,7 +782,6 @@ describe("importInvitations — atomic and idempotent (local Supabase)", () => {
       sourceKey,
       displayName,
       greetingName: displayName,
-      rsvpDeadline: null,
       guests: [
         {
           fullName: "Ana Restrepo",
@@ -1589,7 +1582,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
         displayName: "Luis Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1603,7 +1595,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
         displayName: "Familia Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             nickname: "Lucho",
@@ -1653,7 +1644,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
         displayName: "Familia Guzmán",
         greetingName: "Los del salón",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1688,7 +1678,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
           displayName: "Sin Nadie",
           greetingName: "Sin Nadie",
           greetingNameSource: "custom",
-          rsvpDeadline: null,
           guests: [],
         }),
       ).rejects.toThrow(/no_members/);
@@ -1715,7 +1704,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
           displayName: "Familia Anónima",
           greetingName: "Familia Anónima",
           greetingNameSource: "custom",
-          rsvpDeadline: null,
           guests: [member("   ", { isPrimary: true })],
         }),
       ).rejects.toThrow(/member_without_name/);
@@ -1765,7 +1753,6 @@ describe("createInvitation — D21, a compensation that itself fails", () => {
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1804,7 +1791,6 @@ describe("createInvitation — D21, a compensation that itself fails", () => {
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1832,7 +1818,6 @@ describe("member management — add, edit, remove (local Supabase)", () => {
       displayName: "Familia Guzmán",
       greetingName: "",
       greetingNameSource: "derived",
-      rsvpDeadline: null,
       guests: names.map((name, index) => ({
         fullName: name.fullName,
         nickname: name.nickname,
@@ -1950,7 +1935,6 @@ describe("member management — add, edit, remove (local Supabase)", () => {
         displayName: "Familia Guzmán",
         greetingName: "Los del salón",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -2134,7 +2118,6 @@ describe("moveMemberToInvitation — a permitted move (local Supabase)", () => {
         displayName: "Familia Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             nickname: "Lucho",
@@ -2149,7 +2132,6 @@ describe("moveMemberToInvitation — a permitted move (local Supabase)", () => {
         displayName: "Familia Peña",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
         ],
@@ -2217,7 +2199,6 @@ describe("chooseRecipient — the composite FK does the refusing (local Supabase
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -2230,7 +2211,6 @@ describe("chooseRecipient — the composite FK does the refusing (local Supabase
         displayName: "Familia Peña",
         greetingName: "Familia Peña",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
         ],
@@ -2269,7 +2249,6 @@ describe("deleteInvitation — refused by ANY dispatch history (local Supabase)"
       displayName: "Familia Guzmán",
       greetingName: "Familia Guzmán",
       greetingNameSource: "custom",
-      rsvpDeadline: null,
       guests: [
         member("Luis Guzmán", { phoneE164: "+573001234567", isPrimary: true }),
       ],
@@ -2381,7 +2360,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Orden",
         greetingName: "Familia Orden",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Ana Orden", { isPrimary: true }),
           member("Beto Orden"),
@@ -2422,7 +2400,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Rojas",
         greetingName: "Familia Rojas",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [member("Ana Rojas", { phoneE164: "+573001234567" })],
       });
 
@@ -2456,7 +2433,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Rojas",
         greetingName: "Familia Rojas",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [member("Ana Rojas", { phoneE164: "+573001234567" })],
       });
 
@@ -2477,7 +2453,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -2557,7 +2532,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Peña",
         greetingName: "Familia Peña",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
         ],
@@ -2602,7 +2576,6 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
       displayName: "Familia Guzmán",
       greetingName: "Familia Guzmán",
       greetingNameSource: "custom",
-      rsvpDeadline: null,
       guests: [
         member("Luis Guzmán", { nickname: "Lucho", isPrimary: true }),
         member("Ana Guzmán", { nickname: null }),
@@ -2618,10 +2591,8 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
             display_name: string;
             greeting_name: string;
             greeting_name_source: string;
-            rsvp_deadline: string | null;
           }>(
-            "select display_name, greeting_name, greeting_name_source, " +
-              "to_char(rsvp_deadline, 'YYYY-MM-DD') as rsvp_deadline " +
+            "select display_name, greeting_name, greeting_name_source " +
               "from invitations where id = $1",
             [invitationId],
           )
@@ -2629,7 +2600,7 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
     );
   }
 
-  it("stores a custom name exactly as typed, with its source and deadline", async () => {
+  it("stores a custom name exactly as typed, with its source", async () => {
     await withSenderFixture(async (senderId) => {
       const invitation = await seed(senderId);
 
@@ -2637,14 +2608,12 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
         displayName: "Familia Guzmán Peña",
         greetingName: "Los Guzmán de siempre",
         greetingNameSource: "custom",
-        rsvpDeadline: "2026-05-01",
       });
 
       const stored = await readNaming(invitation.id);
       expect(stored.display_name).toBe("Familia Guzmán Peña");
       expect(stored.greeting_name).toBe("Los Guzmán de siempre");
       expect(stored.greeting_name_source).toBe("custom");
-      expect(stored.rsvp_deadline).toBe("2026-05-01");
     });
   });
 
@@ -2658,7 +2627,6 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
         // from the copy the form round-tripped.
         greetingName: "lo que sea",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
       });
 
       const stored = await readNaming(invitation.id);
@@ -2676,7 +2644,6 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
           displayName: "Familia Guzmán",
           greetingName: "   ",
           greetingNameSource: "custom",
-          rsvpDeadline: null,
         }),
       );
 
@@ -2707,7 +2674,6 @@ describe("importInvitations — the nickname reaches the row (local Supabase)", 
           sourceKey,
           displayName: "Familia Guzmán",
           greetingName: "Familia Guzmán",
-          rsvpDeadline: null,
           guests: [
             member("Luis Guzmán", { nickname: "Lucho", isPrimary: true }),
             member("Ana Guzmán"),
@@ -2764,7 +2730,6 @@ describe("importInvitations — the address it mints (local Supabase)", () => {
           sourceKey: `readable-${stamp}`,
           displayName: name,
           greetingName: name,
-          rsvpDeadline: null,
           guests: [member("Ana Importada", { isPrimary: true })],
         },
       ]);
@@ -2794,7 +2759,6 @@ describe("importInvitations — the address it mints (local Supabase)", () => {
           sourceKey: `dup-a-${stamp}`,
           displayName: name,
           greetingName: name,
-          rsvpDeadline: null,
           guests: [member("Ana Repetida", { isPrimary: true })],
         },
         {
@@ -2802,7 +2766,6 @@ describe("importInvitations — the address it mints (local Supabase)", () => {
           sourceKey: `dup-b-${stamp}`,
           displayName: name,
           greetingName: name,
-          rsvpDeadline: null,
           guests: [member("Beto Repetido", { isPrimary: true })],
         },
       ]);
@@ -2833,7 +2796,6 @@ describe("importInvitations — the address it mints (local Supabase)", () => {
           sourceKey: `rerun-${stamp}`,
           displayName: name,
           greetingName: name,
-          rsvpDeadline: null,
           guests: [member("Ana Reimportada", { isPrimary: true })],
         },
       ];
@@ -2868,7 +2830,6 @@ describe("importInvitations — the address it mints (local Supabase)", () => {
           sourceKey: `emoji-${stamp}`,
           displayName: "💍💍",
           greetingName: "💍💍",
-          rsvpDeadline: null,
           guests: [member("Ana Emoji", { isPrimary: true })],
         },
       ]);
@@ -2892,7 +2853,6 @@ describe("findInvitationMembership — what the invitation editor loads", () => 
         displayName: "Familia Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             nickname: "Lucho",

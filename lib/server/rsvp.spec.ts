@@ -490,14 +490,13 @@ describe("submitRsvp deadline", () => {
   });
 
   /**
-   * AND A DATE STILL SITTING ON THE ROW CANNOT REACH THIS AT ALL.
+   * AND NO ROW CAN CARRY A DATE THAT REACHES THIS AT ALL.
    *
-   * `invitations.rsvp_deadline` is still a column — dropping it is a separate,
-   * destructive step, the way 0012 and 0013 split the last one — but
-   * `RsvpTarget` no longer has a field for it, so a stored date has no path
-   * into the gate. The guarantee is structural rather than behavioural, which
-   * is the stronger of the two: there is nothing to pass and therefore nothing
-   * to pass wrongly.
+   * The guarantee used to be that `RsvpTarget` had no field for one, so a
+   * stored date had no path into the gate. Migration 0016 finished the job by
+   * dropping `invitations.rsvp_deadline` outright, so the date no longer
+   * exists to be passed. Structural rather than behavioural, twice over:
+   * there is nothing to pass, and nowhere for it to have come from.
    */
   it("answers on the wedding's deadline regardless of what a row holds", async () => {
     const { store, inserted } = fakeStore();
