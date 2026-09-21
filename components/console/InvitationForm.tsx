@@ -94,6 +94,8 @@ const REFUSAL_COPY: Readonly<Record<DraftRefusal, string>> = {
     "La persona elegida para recibir el mensaje ya no pertenece a esta invitación. Hay que elegir de nuevo a quién se le envía.",
   custom_name_empty:
     "El nombre del grupo no puede quedar vacío. Si la idea era deshacer el cambio, el botón «Volver al nombre automático» lo devuelve al que sale de los integrantes.",
+  guest_already_invited:
+    "Esa persona ya quedó en otra invitación mientras esta pantalla estaba abierta. Actualizá la página para ver la lista al día.",
 };
 
 /** A fact worth showing. The save happens regardless. */
@@ -167,6 +169,13 @@ export interface InvitationMemberActions {
   readonly edit: InvitationRefusingAction;
   readonly remove: InvitationRefusingAction;
   readonly chooseRecipient: InvitationRefusingAction;
+  /**
+   * Takes somebody the directory holds into THIS invitation, immediately.
+   *
+   * Optional, because the create form has no saved invitation to place anybody
+   * into — there, a pick is a local row until the whole form is submitted.
+   */
+  readonly place?: InvitationRefusingAction;
 }
 
 /** One member as the server currently holds them. */
@@ -502,8 +511,38 @@ export function InvitationForm({
       .filter((id): id is string => id !== null),
   );
   const offerable = freeGuests.filter((guest) => !takenHere.has(guest.id));
+  /*
+    Nothing is rendered when there is nobody to lend. An empty picker reads as
+    "this feature is broken" rather than "the directory is empty", and the
+    directory is empty for most of this wedding's life. While editing it also
+    needs somewhere to send the pick, which is `memberActions.place`.
+  */
+  const picksAreOffered =
+    offerable.length > 0 &&
+    (invitation === null || memberActions?.place !== undefined);
 
   function pickGuest(guest: DirectoryGuest) {
+    /*
+      AN EXISTING INVITATION TAKES THEM IMMEDIATELY.
+
+      Creating builds a whole household in one submit, so a pick there is a
+      local row waiting for that submit. An invitation that already exists has
+      no submit button for membership — every member write on this screen is
+      its own action — so a pick held locally would simply be lost.
+    */
+    if (invitation !== null && memberActions?.place !== undefined) {
+      const fields = new FormData();
+
+      fields.set("invitationId", invitation.id);
+      fields.set("guestId", guest.id);
+
+      void runWrite(memberActions.place, fields, {
+        rowKey: `place-${guest.id}`,
+      });
+
+      return;
+    }
+
     setRows((current) => {
       const picked = pickedRow(guest);
       /*
@@ -760,7 +799,7 @@ export function InvitationForm({
           says "this feature is broken" rather than "the directory is empty",
           and the directory is empty for most of this wedding's life.
         */}
-        {invitation === null && offerable.length > 0 && (
+        {picksAreOffered && (
           <div className="invitation-form__directory flex flex-col gap-2 rounded-lg border border-dashed border-input px-3 py-3">
             <p className="text-xs text-muted-foreground">
               Ya en la lista de invitados, sin invitación todavía:
@@ -769,6 +808,7 @@ export function InvitationForm({
             <div className="flex flex-wrap gap-2">
               {offerable.map((guest) => (
                 <Button
+                  disabled={inFlight.has(`place-${guest.id}`)}
                   key={guest.id}
                   onClick={() => pickGuest(guest)}
                   size="sm"

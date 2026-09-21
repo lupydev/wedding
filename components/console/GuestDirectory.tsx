@@ -32,6 +32,7 @@ const REFUSAL_COPY: Readonly<Record<DraftRefusal, string>> = {
   recipient_not_a_member:
     "La persona elegida para recibir el mensaje ya no pertenece a esa invitación.",
   custom_name_empty: "El nombre del grupo no puede quedar vacío.",
+  guest_already_invited: "Esa persona ya pertenece a otra invitación.",
 };
 
 const WRITE_FAILED_COPY =

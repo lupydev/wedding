@@ -276,3 +276,69 @@ test.describe("building an invitation from the directory", () => {
     ).toHaveCount(0);
   });
 });
+
+/**
+ * ADDING SOMEBODY TO AN INVITATION THAT ALREADY EXISTS.
+ *
+ * The other half of "la creación de invitaciones donde se pueda agregar un
+ * invitado": a household saved last week taking one more person who is already
+ * in the directory. A different write from creating — there is no submit
+ * button for membership on the edit screen, every member change is its own
+ * action — so the placement lands on the press.
+ */
+test.describe("adding a directory guest to a saved invitation", () => {
+  let latecomer: string;
+  let host: ConsoleInvitationSeed;
+
+  test.beforeAll(async () => {
+    latecomer = `Rezagada Directorio ${run}`;
+    host = await seedConsoleInvitation({
+      ownerSenderId: ana.senderId,
+      greetingName: `Familia Anfitriona ${run}`,
+      guests: [{ fullName: `Anfitriona ${run}`, phoneE164: "+573005557003" }],
+    });
+  });
+
+  test.afterAll(async () => {
+    await host.cleanup();
+  });
+
+  test("offers the free people on the edit screen", async () => {
+    await page.goto("/console/guests");
+    await page.getByLabel("Nombre completo").fill(latecomer);
+    await page.getByRole("button", { name: "Agregar invitado" }).click();
+    await expect(rowFor(latecomer)).toBeVisible();
+
+    await page.goto(`/console/invitations/${host.invitationId}/edit`);
+
+    await expect(
+      page.getByRole("button", { name: `Agregar de la lista: ${latecomer}` }),
+    ).toBeVisible();
+  });
+
+  test("takes them on the press, with nothing left to submit", async () => {
+    await page
+      .getByRole("button", { name: `Agregar de la lista: ${latecomer}` })
+      .click();
+
+    // The member card appears because the SERVER re-rendered this page, which
+    // is what proves the write landed rather than a row having been drawn
+    // optimistically.
+    await expect(
+      page
+        .locator("fieldset.invitation-form__member")
+        .filter({ has: page.locator(`input[value="${latecomer}"]`) }),
+    ).toBeVisible();
+
+    // And they are gone from the picker, because they are no longer free.
+    await expect(
+      page.getByRole("button", { name: `Agregar de la lista: ${latecomer}` }),
+    ).toHaveCount(0);
+  });
+
+  test("the directory agrees, naming the household that took them", async () => {
+    await page.goto("/console/guests");
+
+    await expect(rowFor(latecomer)).toContainText(`Familia Anfitriona ${run}`);
+  });
+});

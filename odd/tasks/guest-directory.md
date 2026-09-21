@@ -83,7 +83,7 @@ is why it is three units and not one.
       gains "Agregar de la lista", offering only guests with no invitation;
       typing a new person stays, because it is faster for a household entered
       all at once.
-- [ ] **U3b — adding somebody from the directory to an invitation that already
+- [x] **U3b — adding somebody from the directory to an invitation that already
       exists.** The edit screen's "Agregar integrante" writes a new person;
       it should also be able to take a free one. A different write against a
       saved row, with its own action, which is why it is its own unit.
@@ -249,4 +249,37 @@ false, and said nothing about the directory.
 Green: 2215 unit and component tests, 185 browser tests, typecheck, lint,
 format, build.
 
-### Next: U3b — adding a directory guest to an invitation that already exists.
+### U3b — done (adding to a saved invitation)
+
+The edit screen offers the same picker, through a different write. Creating
+builds a whole household in one submit, so a pick there is a local row waiting
+for it; an invitation that already exists has no submit button for membership —
+every member write on that screen is its own action — so a pick held locally
+would simply be lost. It lands on the press.
+
+**The refusal needed a name, and it got one in the vocabulary that already
+existed for this.** `guest_already_invited` joins `DraftRefusal`, which is not
+a stretch of that type: "a state the model does not permit", exactly as
+`recipient_not_a_member` is. The mechanism matters more than the word — the
+form's `REFUSAL_COPY` is a total record over that union, so a code without a
+Spanish sentence is a COMPILE ERROR. That is the one thing standing between a
+refused write and an operator who sees nothing happen.
+
+It could not be a thrown message: Next replaces one with an opaque digest
+before it crosses to the browser, and the form would then show its connectivity
+copy — advice to retry, for the single case where retrying cannot help.
+
+Green: 2220 unit and component tests, 188 browser tests, typecheck, lint,
+format, build.
+
+## Next
+
+- **The bulk importer still mints random slugs**, and now also writes every
+  guest straight into a household. It has no idea the directory exists.
+- **`moveMemberAction` is still dead code with tests** — a full server action
+  and repository function with no UI. It is also the closest thing to "move
+  somebody from one household to another", which the directory now makes a
+  sensible thing to want.
+- The console still shows no warning when the same PERSON is written twice
+  under two names. The directory makes that visible for the first time; nobody
+  has asked for the check.

@@ -66,6 +66,7 @@ function memberActionSpies(): InvitationMemberActions & {
     readonly edit: ReturnType<typeof spyRefusingAction>;
     readonly remove: ReturnType<typeof spyRefusingAction>;
     readonly chooseRecipient: ReturnType<typeof spyRefusingAction>;
+    readonly place: ReturnType<typeof spyRefusingAction>;
   };
 } {
   const calls = {
@@ -73,6 +74,7 @@ function memberActionSpies(): InvitationMemberActions & {
     edit: spyRefusingAction(),
     remove: spyRefusingAction(),
     chooseRecipient: spyRefusingAction(),
+    place: spyRefusingAction(),
   };
 
   return { ...calls, calls };
@@ -138,7 +140,10 @@ function freeGuest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
   };
 }
 
-function renderEdit(overrides: Partial<InvitationFormInvitation> = {}) {
+function renderEdit(
+  overrides: Partial<InvitationFormInvitation> = {},
+  freeGuests: readonly DirectoryGuest[] = [],
+) {
   const action = spyAction();
   const memberActions = memberActionSpies();
 
@@ -149,6 +154,7 @@ function renderEdit(overrides: Partial<InvitationFormInvitation> = {}) {
     ...render(
       <InvitationForm
         action={action}
+        freeGuests={freeGuests}
         invitation={invitation(overrides)}
         memberActions={memberActions}
       />,
@@ -1336,16 +1342,48 @@ describe("picking somebody who is already in the directory", () => {
   });
 
   /**
-   * THE EDIT SCREEN DOES NOT OFFER THIS, and the reason is that adding a
-   * member there is already its own server action against a saved invitation —
-   * a different write with a different shape. That is U3b; until it exists,
-   * showing a picker here that did nothing would be worse than showing none.
+   * THE EDIT SCREEN OFFERS IT TOO, THROUGH A DIFFERENT WRITE.
+   *
+   * Creating builds a whole household in one submit, so a pick there is a
+   * local row until the form is saved. An invitation that already exists takes
+   * the person IMMEDIATELY — there is nothing to save afterwards, and a pick
+   * that sat waiting for a submit button this screen does not have would
+   * simply be lost.
    */
-  it("is not offered while editing an invitation that already exists", () => {
-    renderEdit();
+  it("writes the placement straight away while editing", async () => {
+    const { memberActions, user } = renderEdit({}, [freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(memberActions.calls.place.mock.calls).toHaveLength(1);
+
+    const sent = memberActions.calls.place.mock.calls[0][0] as FormData;
+
+    expect(sent.get("guestId")).toBe("free-1");
+    expect(sent.get("invitationId")).toBe(INVITATION_ID);
+  });
+
+  /**
+   * AND IT SAYS SO WHEN SOMEBODY GOT THERE FIRST.
+   *
+   * The refusal travels as a code in the vocabulary this form already
+   * translates, rather than as a thrown message — which Next replaces with an
+   * opaque digest, leaving the operator with the connectivity copy: advice to
+   * retry, for the one case where retrying cannot help.
+   */
+  it("explains a placement the server refused", async () => {
+    const { memberActions, user } = renderEdit({}, [freeGuest()]);
+
+    memberActions.calls.place.mockResolvedValue(["guest_already_invited"]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
 
     expect(
-      screen.queryByRole("button", { name: /Agregar de la lista/ }),
-    ).toBeNull();
+      await screen.findByText(/ya quedó en otra invitación/i),
+    ).toBeInTheDocument();
   });
 });

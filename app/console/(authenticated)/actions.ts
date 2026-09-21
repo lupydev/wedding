@@ -24,6 +24,7 @@ import { markFailed, markSent } from "@/lib/server/dispatch";
 import {
   createDirectoryGuest,
   deleteDirectoryGuest,
+  placeGuestInInvitation,
   updateDirectoryGuest,
 } from "@/lib/server/guest-directory";
 import {
@@ -715,6 +716,44 @@ export async function rotateSlugAction(formData: FormData): Promise<string> {
   revalidatePath(consoleDispatchPath(invitationId));
 
   return slug;
+}
+
+/**
+ * Takes somebody the directory holds into an invitation that already exists.
+ *
+ * The create form builds a whole household in one submit; this is the other
+ * half, and a different write — a saved invitation taking one more person who
+ * is already written down. That is why it is its own action rather than a
+ * branch inside `addMemberAction`, which writes a NEW person.
+ *
+ * THE REFUSAL IS RETURNED, NOT THROWN. `placeGuestInInvitation` answers `false`
+ * when somebody was taken first, which is news rather than a fault. Throwing
+ * would reach the browser as an opaque digest and the form would show its
+ * connectivity copy — advice to retry, for the one situation where retrying
+ * cannot help.
+ */
+export async function placeDirectoryGuestAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
+  await requireOperator();
+
+  const placed = await placeGuestInInvitation(
+    createServerSupabaseClient(),
+    requiredGuestId(formData),
+    requiredInvitationId(formData),
+  );
+
+  // A refused placement changed nothing, so there is nothing to revalidate —
+  // and revalidating would re-seed the form over whatever is being typed. The
+  // same rule `addMemberAction` follows.
+  if (!placed) {
+    return ["guest_already_invited"];
+  }
+
+  revalidatePath(CONSOLE_ROOT_PATH);
+  revalidatePath(CONSOLE_GUESTS_PATH);
+
+  return [];
 }
 
 /*

@@ -796,6 +796,7 @@ const REFUSAL_EXPLANATION: Readonly<Record<DraftRefusal, string>> = {
     "an invitation must keep at least one member, so delete the invitation itself instead",
   member_without_name: "every member needs a name",
   duplicate_member_id: "the same member is listed twice",
+  guest_already_invited: "that guest already belongs to another invitation",
   recipient_not_a_member:
     "the chosen recipient does not belong to this invitation",
   custom_name_empty: "a custom group name cannot be blank",

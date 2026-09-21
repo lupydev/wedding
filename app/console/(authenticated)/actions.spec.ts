@@ -83,11 +83,15 @@ vi.mock("@/lib/server/invitations", () => ({
 const createDirectoryGuest = vi.fn();
 const updateDirectoryGuest = vi.fn();
 const deleteDirectoryGuest = vi.fn();
+const placeGuestInInvitation = vi.fn();
 vi.mock("@/lib/server/guest-directory", () => ({
   createDirectoryGuest: (...args: unknown[]) => createDirectoryGuest(...args),
   updateDirectoryGuest: (...args: unknown[]) => updateDirectoryGuest(...args),
   deleteDirectoryGuest: (...args: unknown[]) => deleteDirectoryGuest(...args),
+  placeGuestInInvitation: (...args: unknown[]) =>
+    placeGuestInInvitation(...args),
   listGuestDirectory: vi.fn(),
+  listFreeGuests: vi.fn(),
 }));
 
 const getCurrentRsvp = vi.fn();
@@ -113,6 +117,7 @@ const {
   createInvitationAction,
   deleteDirectoryGuestAction,
   deleteInvitationAction,
+  placeDirectoryGuestAction,
   editMemberAction,
   markDispatchFailedAction,
   markDispatchSentAction,
@@ -161,6 +166,7 @@ beforeEach(() => {
   createDirectoryGuest.mockResolvedValue({ refusals: [], guest: { id: "g9" } });
   updateDirectoryGuest.mockResolvedValue([]);
   deleteDirectoryGuest.mockResolvedValue(undefined);
+  placeGuestInInvitation.mockResolvedValue(true);
   markSent.mockResolvedValue(undefined);
   markFailed.mockResolvedValue(undefined);
   updateGuestPhone.mockResolvedValue(undefined);
@@ -1384,5 +1390,80 @@ describe("the guest directory actions", () => {
       ),
     ).rejects.toThrow();
     expect(createDirectoryGuest).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ADDING SOMEBODY FROM THE DIRECTORY TO AN INVITATION THAT ALREADY EXISTS.
+ *
+ * The create form builds its household in one submit; this is the other half —
+ * an invitation that is already saved, taking one more person who is already
+ * written down. A different write against a saved row, which is why it is its
+ * own action rather than a branch inside `addMemberAction`.
+ */
+describe("placeDirectoryGuestAction", () => {
+  function placement(entries: Record<string, string>): FormData {
+    const data = new FormData();
+
+    for (const [key, value] of Object.entries(entries)) {
+      data.set(key, value);
+    }
+
+    return data;
+  }
+
+  it("moves the chosen guest into the invitation that asked for them", async () => {
+    const refusals = await placeDirectoryGuestAction(
+      placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(refusals).toEqual([]);
+    expect(placeGuestInInvitation.mock.calls[0].slice(1)).toEqual([
+      GUEST_ID,
+      INVITATION_ID,
+    ]);
+    expect(revalidatePath.mock.calls.map((call) => call[0])).toContain(
+      CONSOLE_ROOT_PATH,
+    );
+  });
+
+  /**
+   * SOMEBODY GOT THERE FIRST, AND THE OPERATOR IS TOLD SO.
+   *
+   * The repository answers `false` rather than throwing, and this hands that
+   * back as a refusal code. It cannot be a thrown message: Next replaces one
+   * with an opaque digest before it crosses to the browser, and the form would
+   * then show its connectivity copy — advice to retry, for the one situation
+   * where retrying cannot help.
+   */
+  it("answers with a refusal when the guest was taken first", async () => {
+    placeGuestInInvitation.mockResolvedValue(false);
+
+    await expect(
+      placeDirectoryGuestAction(
+        placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+      ),
+    ).resolves.toEqual(["guest_already_invited"]);
+  });
+
+  it("revalidates nothing when the placement was refused", async () => {
+    placeGuestInInvitation.mockResolvedValue(false);
+
+    await placeDirectoryGuestAction(
+      placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("refuses to act without a session", async () => {
+    requireOperator.mockRejectedValue(new Error("no session"));
+
+    await expect(
+      placeDirectoryGuestAction(
+        placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+      ),
+    ).rejects.toThrow();
+    expect(placeGuestInInvitation).not.toHaveBeenCalled();
   });
 });
