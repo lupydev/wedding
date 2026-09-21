@@ -75,7 +75,7 @@ is why it is three units and not one.
       recipient trigger does not fight the delete ordering. Down script in the
       expand-then-drop style of 0013/0014, refusing rather than corrupting if
       any released guest exists.
-- [ ] **U2 — the directory itself.** `/console/guests`: every guest, with the
+- [x] **U2 — the directory itself.** `/console/guests`: every guest, with the
       household they belong to or "sin invitación". Create, edit and delete a
       guest from there. One nav entry. This is the "no veo la lista de invitados
       por ninguna parte" half.
@@ -154,4 +154,50 @@ format, build.
 the local database but absent from `supabase_migrations.schema_migrations`;
 0015 recorded itself. Worth reconciling before anybody trusts that table.
 
-### Next: U2 — the directory itself.
+### U2 — done (`/console/guests`)
+
+The list of PEOPLE, with its own tab. Create, edit and delete a guest; each row
+says which household holds them, or that none does.
+
+**Four layers, each tested where its decisions live.**
+
+- `lib/domain/guest-directory.ts` — one alphabetical order through a Spanish
+  collator, the two counts, and the "only a name is required" rule. The
+  collator is not a detail: `"Ñ" > "Z"` by code point, so the default
+  comparison files Peña and Álvaro after Zulema, in a guest list for a
+  Colombian wedding.
+- `lib/server/guest-directory.ts` — a SEPARATE repository, not four more
+  functions in a file of nineteen hundred lines. The boundary is real: nothing
+  here takes an invitation id and nothing here moves anybody between
+  households. `invitation_id` is deliberately absent from the update, so
+  correcting a typo can never empty an invitation as a side effect.
+- `components/console/GuestDirectory.tsx` — props-only.
+- `app/console/(authenticated)/guests/page.tsx` — a thin async container.
+
+**The tab took the fifth and last seat.** `console-nav.spec.ts` asserts a
+ceiling of five, and the reason is recorded there: a sixth needs an overflow
+sheet, which is where a destination goes to be forgotten. The new test asserts
+both that the directory is present and that the bar is now full.
+
+**A claim I wrote and then had to retract.** The page comment said the
+directory was NOT behind the device gate. The browser test built to prove it
+failed: `requireDeclaredDevice` is applied by the LAYOUT, over the whole
+`(authenticated)` group. The comment now says what is true — the gate is the
+layout's, and what this screen does not do is go read-only on a mismatch, which
+is the same reasoning that already keeps the inline phone editor writable.
+
+**One component change that came out of a failing browser test and was worth
+keeping.** Opening a row's editor moves the name out of the row's text and into
+an input's value, so anything locating that row by the name it displays loses
+it at exactly the moment somebody is editing. The row now carries
+`data-guest-name`, so its identity survives the swap.
+
+**Deleting from here deletes the person, household membership included, and the
+invitation survives.** Refusing until they were removed from their household
+first would send the operator to another screen to do what they just asked for.
+The confirmation says what it costs, naming the household when there is one.
+
+Green: 2202 unit and component tests, 181 browser tests, typecheck, lint,
+format, build.
+
+### Next: U3 — assembling an invitation from the directory.

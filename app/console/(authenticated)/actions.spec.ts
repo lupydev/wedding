@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  CONSOLE_GUESTS_PATH,
+  CONSOLE_ROOT_PATH,
+} from "@/lib/domain/operator-session";
+
 /**
  * The console Server Actions — specifically, the GUARDS in front of the writes.
  *
@@ -75,6 +80,16 @@ vi.mock("@/lib/server/invitations", () => ({
   rotateInvitationSlug: (...args: unknown[]) => rotateInvitationSlug(...args),
 }));
 
+const createDirectoryGuest = vi.fn();
+const updateDirectoryGuest = vi.fn();
+const deleteDirectoryGuest = vi.fn();
+vi.mock("@/lib/server/guest-directory", () => ({
+  createDirectoryGuest: (...args: unknown[]) => createDirectoryGuest(...args),
+  updateDirectoryGuest: (...args: unknown[]) => updateDirectoryGuest(...args),
+  deleteDirectoryGuest: (...args: unknown[]) => deleteDirectoryGuest(...args),
+  listGuestDirectory: vi.fn(),
+}));
+
 const getCurrentRsvp = vi.fn();
 vi.mock("@/lib/server/rsvp", () => ({
   getCurrentRsvp: (...args: unknown[]) => getCurrentRsvp(...args),
@@ -94,7 +109,9 @@ process.env.DEFAULT_PHONE_COUNTRY = "CO";
 const {
   addMemberAction,
   chooseRecipientAction,
+  createDirectoryGuestAction,
   createInvitationAction,
+  deleteDirectoryGuestAction,
   deleteInvitationAction,
   editMemberAction,
   markDispatchFailedAction,
@@ -102,6 +119,7 @@ const {
   moveMemberAction,
   removeMemberAction,
   rotateSlugAction,
+  updateDirectoryGuestAction,
   updateGuestPhoneAction,
   updateInvitationAction,
 } = await import("./actions");
@@ -140,6 +158,9 @@ beforeEach(() => {
     greetingName: "Familia Muñóz",
   });
   findGuestInvitationOwner.mockResolvedValue(ANA.id);
+  createDirectoryGuest.mockResolvedValue({ refusals: [], guest: { id: "g9" } });
+  updateDirectoryGuest.mockResolvedValue([]);
+  deleteDirectoryGuest.mockResolvedValue(undefined);
   markSent.mockResolvedValue(undefined);
   markFailed.mockResolvedValue(undefined);
   updateGuestPhone.mockResolvedValue(undefined);
@@ -1194,5 +1215,134 @@ describe("rotateSlugAction", () => {
     await expect(rotateSlugAction(form({}))).rejects.toThrow(/no se indicó/i);
 
     expect(rotateInvitationSlug).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * THE DIRECTORY'S THREE WRITES.
+ *
+ * They are NOT owner-scoped, for the same reason the invitation writes are not
+ * (confirmed decision 4): there are two operators and they administer one
+ * wedding between them. A guest is a person at that wedding, not a possession
+ * of whoever typed them in first — there is no `owner_sender_id` on
+ * `invitation_guests` to scope by even if we wanted to.
+ *
+ * What they DO require is a session, which is proved for every action in the
+ * block above this one.
+ */
+describe("the guest directory actions", () => {
+  function guestForm(entries: Record<string, string>): FormData {
+    const data = new FormData();
+
+    for (const [key, value] of Object.entries(entries)) {
+      data.set(key, value);
+    }
+
+    return data;
+  }
+
+  it("creates a guest belonging to nobody, with the details as typed", async () => {
+    const refusals = await createDirectoryGuestAction(
+      guestForm({
+        fullName: "Nueva Persona",
+        nickname: "Nue",
+        phone: "300 555 1234",
+        isChild: "on",
+      }),
+    );
+
+    expect(refusals).toEqual([]);
+    expect(createDirectoryGuest.mock.calls[0][1]).toEqual({
+      fullName: "Nueva Persona",
+      nickname: "Nue",
+      // Handed over AS TYPED. Normalising to E.164 is the repository's job and
+      // it is the same strict function the importer uses; doing it here too
+      // would be a second place for the rule to drift.
+      phone: "300 555 1234",
+      isChild: true,
+    });
+  });
+
+  /**
+   * An unchecked checkbox submits NOTHING, which is the browser's own rule and
+   * the reason this is asserted rather than assumed: reading the field as a
+   * string and testing it for truthiness would make every adult a minor the
+   * moment somebody rewrote `flag`.
+   */
+  it("reads an unticked box as an adult rather than as a missing field", async () => {
+    await createDirectoryGuestAction(
+      guestForm({ fullName: "Persona Adulta", nickname: "", phone: "" }),
+    );
+
+    expect(createDirectoryGuest.mock.calls[0][1]).toMatchObject({
+      isChild: false,
+    });
+  });
+
+  it("hands the refusal back instead of throwing prose nobody can read", async () => {
+    createDirectoryGuest.mockResolvedValue({
+      refusals: ["member_without_name"],
+      guest: null,
+    });
+
+    await expect(
+      createDirectoryGuestAction(
+        guestForm({ fullName: "  ", nickname: "", phone: "" }),
+      ),
+    ).resolves.toEqual(["member_without_name"]);
+  });
+
+  it("rewrites a guest by id, without naming any invitation", async () => {
+    const refusals = await updateDirectoryGuestAction(
+      guestForm({
+        guestId: GUEST_ID,
+        fullName: "Nombre Corregido",
+        nickname: "",
+        phone: "3005551234",
+      }),
+    );
+
+    expect(refusals).toEqual([]);
+    expect(updateDirectoryGuest.mock.calls[0][1]).toBe(GUEST_ID);
+    expect(updateDirectoryGuest.mock.calls[0][2]).toEqual({
+      fullName: "Nombre Corregido",
+      nickname: null,
+      phone: "3005551234",
+      isChild: false,
+    });
+  });
+
+  it("deletes a guest by id", async () => {
+    await deleteDirectoryGuestAction(guestForm({ guestId: GUEST_ID }));
+
+    expect(deleteDirectoryGuest.mock.calls[0][1]).toBe(GUEST_ID);
+  });
+
+  /**
+   * DELETING A PERSON CHANGES THE INVITATIONS SCREEN TOO.
+   *
+   * They may have been a member of a household, and that household's row shows
+   * its members and its count. Revalidating only the directory would leave the
+   * other screen rendering somebody who no longer exists, which reads as the
+   * delete having silently failed.
+   */
+  it("refreshes the invitations screen as well, because a guest may be in one", async () => {
+    await deleteDirectoryGuestAction(guestForm({ guestId: GUEST_ID }));
+
+    const paths = revalidatePath.mock.calls.map((call) => call[0]);
+
+    expect(paths).toContain(CONSOLE_GUESTS_PATH);
+    expect(paths).toContain(CONSOLE_ROOT_PATH);
+  });
+
+  it("refuses to act at all without a session", async () => {
+    requireOperator.mockRejectedValue(new Error("no session"));
+
+    await expect(
+      createDirectoryGuestAction(
+        guestForm({ fullName: "Colada", nickname: "", phone: "" }),
+      ),
+    ).rejects.toThrow();
+    expect(createDirectoryGuest).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import { CONSOLE_DEVICE_PATH } from "@/lib/domain/device-declaration";
 import {
+  CONSOLE_GUESTS_PATH,
   CONSOLE_NEW_INVITATION_PATH,
   CONSOLE_ROOT_PATH,
 } from "@/lib/domain/operator-session";
@@ -91,8 +92,10 @@ export interface ConsoleNavItem {
  * show where you were whenever you were on one of them. A tab bar whose
  * majority is one page, and which cannot say so, is not navigation.
  *
- * What is left is three real places: the invitations, the wedding's own facts,
- * and which WhatsApp account this handset holds.
+ * What is left is five real places: the invitations, the way to add one, the
+ * people themselves, the wedding's own facts, and which WhatsApp account this
+ * handset holds. That is the ceiling, reached — and the ceiling is asserted, so
+ * a sixth destination has to argue with a failing test.
  */
 export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
   {
@@ -122,6 +125,26 @@ export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
     */
     label: "Agregar",
     icon: "plus",
+  },
+  {
+    /*
+      THE PEOPLE, WHICH IS NOT THE SAME LIST AS THE HOUSEHOLDS.
+
+      The couple's words were "no veo la lista de invitados por ninguna parte",
+      and they were right twice over: there was no door, and there was nothing
+      behind it either — a guest could not exist outside an invitation until
+      migration 0015. `/console` answers "which households are there"; this
+      answers "who is coming, and who is still in nobody's household".
+
+      THE FIFTH TAB, AND THEREFORE THE LAST. The ceiling above is real: a sixth
+      destination needs an overflow sheet, and that is where a destination goes
+      to be forgotten. Anything further belongs inside one of these five.
+    */
+    key: "guests",
+    href: CONSOLE_GUESTS_PATH,
+    // 9 characters against the 14 this bar allows.
+    label: "Invitados",
+    icon: "users",
   },
   {
     key: "wedding",

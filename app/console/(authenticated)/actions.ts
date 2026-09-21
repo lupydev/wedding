@@ -10,7 +10,10 @@ import {
   type MembershipChangeImpact,
 } from "@/lib/domain/invitation-draft";
 import type { DeletionOutcome } from "@/lib/domain/invitation-deletion";
-import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
+import {
+  CONSOLE_GUESTS_PATH,
+  CONSOLE_ROOT_PATH,
+} from "@/lib/domain/operator-session";
 import { normalizeForStorage } from "@/lib/domain/phone";
 import {
   readDeviceDeclaration,
@@ -18,6 +21,11 @@ import {
 } from "@/lib/server/console-session";
 import { requiredDefaultPhoneCountry } from "@/lib/server/env";
 import { markFailed, markSent } from "@/lib/server/dispatch";
+import {
+  createDirectoryGuest,
+  deleteDirectoryGuest,
+  updateDirectoryGuest,
+} from "@/lib/server/guest-directory";
 import {
   addMember,
   chooseRecipient,
@@ -691,4 +699,119 @@ export async function rotateSlugAction(formData: FormData): Promise<string> {
   revalidatePath(consoleDispatchPath(invitationId));
 
   return slug;
+}
+
+/*
+  THE DIRECTORY'S THREE WRITES.
+
+  NOT OWNER-SCOPED, and deliberately so — the same confirmed decision 4 the
+  invitation writes follow. Two people administer one wedding between them, and
+  a guest is a person at that wedding rather than a possession of whoever typed
+  them in first. There is no `owner_sender_id` on `invitation_guests` to scope
+  by even if we wanted one.
+
+  NOT DEVICE-GATED either. That gate exists to stop a dispatch being recorded
+  from the wrong handset; writing a name down sends no message.
+
+  A session is still required, as it is for every write in this file.
+*/
+
+/** A guest's own fields, as the directory's forms submit them. */
+function readDirectoryGuest(formData: FormData): {
+  readonly fullName: string;
+  readonly nickname: string | null;
+  readonly phone: string;
+  readonly isChild: boolean;
+} {
+  return {
+    fullName: text(formData, "fullName"),
+    nickname: optionalText(formData, "nickname"),
+    /*
+      AS TYPED, ON PURPOSE. Normalising to E.164 is the repository's job, using
+      the same strict function the importer and the inline editor use. Doing it
+      here as well would be a second place for that rule to live, and two places
+      is how a rule drifts.
+    */
+    phone: text(formData, "phone"),
+    /*
+      An unchecked checkbox submits NOTHING — the browser's own rule — so the
+      absence of the field is the answer "no", not a missing value to guess at.
+    */
+    isChild: flag(text(formData, "isChild")),
+  };
+}
+
+/** Writes a person down who belongs to no invitation yet. */
+export async function createDirectoryGuestAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
+  await requireOperator();
+
+  const { refusals } = await createDirectoryGuest(
+    createServerSupabaseClient(),
+    readDirectoryGuest(formData),
+    requiredDefaultPhoneCountry(),
+  );
+
+  revalidatePath(CONSOLE_GUESTS_PATH);
+
+  return refusals;
+}
+
+/**
+ * Corrects a guest's own details.
+ *
+ * No invitation is named, and none is touched: correcting a typo from the
+ * directory must never move somebody out of the household they are in.
+ */
+export async function updateDirectoryGuestAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
+  await requireOperator();
+
+  const refusals = await updateDirectoryGuest(
+    createServerSupabaseClient(),
+    requiredGuestId(formData),
+    readDirectoryGuest(formData),
+    requiredDefaultPhoneCountry(),
+  );
+
+  // Both screens: a name shown on a household's row is this same guest.
+  revalidatePath(CONSOLE_GUESTS_PATH);
+  revalidatePath(CONSOLE_ROOT_PATH);
+
+  return refusals;
+}
+
+/**
+ * Removes a person from the wedding entirely.
+ *
+ * BOTH SCREENS ARE REVALIDATED, and that is not belt and braces. The person may
+ * have been a member of a household, whose row shows its members and its count
+ * — refreshing only the directory would leave the invitations screen rendering
+ * somebody who no longer exists, which reads as the deletion having silently
+ * failed.
+ */
+export async function deleteDirectoryGuestAction(
+  formData: FormData,
+): Promise<void> {
+  await requireOperator();
+
+  await deleteDirectoryGuest(
+    createServerSupabaseClient(),
+    requiredGuestId(formData),
+  );
+
+  revalidatePath(CONSOLE_GUESTS_PATH);
+  revalidatePath(CONSOLE_ROOT_PATH);
+}
+
+function requiredGuestId(formData: FormData): string {
+  const guestId = text(formData, "guestId");
+
+  if (guestId === "") {
+    throw new Error("No se indicó sobre qué invitado se está actuando.");
+  }
+
+  return guestId;
 }

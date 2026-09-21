@@ -85,6 +85,14 @@ export function consoleInvitationEditPath(invitationId: string): string {
 export const CONSOLE_NEW_INVITATION_PATH = `${CONSOLE_ROOT_PATH}/invitations/new`;
 
 /**
+ * The directory of people, which is not the list of invitations.
+ *
+ * `/console` lists HOUSEHOLDS; this lists PEOPLE, including the ones who belong
+ * to no household yet — a state that could not exist before migration 0015.
+ */
+export const CONSOLE_GUESTS_PATH = `${CONSOLE_ROOT_PATH}/guests`;
+
+/**
  * Console routes that answer machines rather than people.
  *
  * Everything under here is a route handler, and every one of them authenticates
