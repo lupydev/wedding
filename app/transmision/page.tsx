@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { connection } from "next/server";
 
-import compromiso from "@/img/compromiso.jpg";
-
 import { StreamInvitation } from "@/components/invitation/StreamInvitation";
+import { PhotoStage } from "@/components/landing/PhotoStage";
 import {
   buildStreamCalendarEvent,
   googleCalendarUrl,
 } from "@/lib/domain/calendar-event";
-import { STREAM_PATH } from "@/lib/domain/stream-window";
 import { WEDDING_INSTANT } from "@/lib/domain/wedding-day";
 import { getCeremony } from "@/lib/server/ceremony";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
@@ -33,10 +30,17 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
  * over the ceremony while searching for something else.
  *
  * NO GATE, DELIBERATELY. The phone gate at `/i/[slug]` exists because a
- * personal invitation belongs to one household and seats have to be counted.
- * A stream has neither: there is no seat to allocate and no headcount to plan,
- * so a gate here would protect nothing and would lock out precisely the guests
+ * personal invitation belongs to one household and seats have to be counted. A
+ * stream has neither: there is no seat to allocate and no headcount to plan, so
+ * a gate here would protect nothing and would lock out precisely the guests
  * this page was built for — the ones too far away to be in the room.
+ *
+ * IT STANDS ON THE SAME STAGE AS THE LANDING. `PhotoStage` owns the dark
+ * ground, the blurred backdrop and the framed photograph, so a guest who taps
+ * through from `/` arrives somewhere that is obviously the same wedding rather
+ * than a second site. Without the mobile overlay, though: this page's content
+ * is a card of credentials and two paragraphs, which is unreadable laid over a
+ * photograph and pushed off the screen stacked below one.
  *
  * IT IS RENDERED PER REQUEST, AND SAYING SO TAKES A LINE OF CODE.
  *
@@ -89,13 +93,14 @@ export default async function StreamPage() {
   const ceremony = await getCeremony(createServerSupabaseClient());
 
   /*
-   * ONE event, two destinations.
+   * The start comes from `WEDDING_INSTANT`, not from `ceremony_time`.
    *
-   * The Google link is derived here and the `.ics` route derives its own from
-   * the same builder and the same instant, so the file a guest saves and the
-   * entry Google creates describe the same ceremony. The start comes from
-   * `WEDDING_INSTANT` rather than from `ceremony_time`, which is free prose an
-   * operator types and cannot be parsed into an instant without guessing.
+   * That column is free prose an operator types — "5:00 p. m.", or anything
+   * else — and a calendar needs an instant. Recovering one by parsing the text
+   * is a guess that fails silently on the first wording nobody anticipated, and
+   * its failure mode is a reminder that fires on the wrong day. This is the
+   * same instant the countdown uses, so the page and the calendar entry cannot
+   * disagree.
    */
   const calendarEvent = buildStreamCalendarEvent(
     {
@@ -104,39 +109,11 @@ export default async function StreamPage() {
       streamPasscode: ceremony.streamPasscode,
     },
     WEDDING_INSTANT,
-    new Date(),
   );
 
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-10 overflow-hidden bg-[#0d1114] px-6 py-14">
-      {/*
-        The same photograph as the landing, blurred, so a guest arriving from
-        `/` lands somewhere that is obviously still the same wedding. Requested
-        at 64px: it is unfocusable by construction, so a full-resolution copy
-        would buy nothing and cost megabytes.
-
-        BRIGHTENED AND SATURATED, BECAUSE DIMMED IT WAS NOTHING. The photograph
-        is a dusk shot and already close to black; blurred and dropped to 45%
-        opacity it rendered as flat black and the continuity this exists for
-        simply was not there. Lifting the exposure brings back the greens and
-        the lantern's gold as a wash, which is the thing worth keeping.
-      */}
-      <Image
-        src={compromiso}
-        alt=""
-        aria-hidden="true"
-        fill
-        preload={false}
-        sizes="64px"
-        className="scale-110 object-cover opacity-70 blur-3xl brightness-150 saturate-150"
-      />
-
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/20 to-black/65"
-      />
-
-      <div className="relative flex w-full flex-col items-center gap-10">
+    <PhotoStage>
+      <div className="relative col-start-1 row-start-1 flex min-h-dvh flex-col items-center justify-center gap-9 px-6 py-14 lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:px-4 lg:py-0">
         {/*
           `coupleNames` and the four stream values come from the row and nothing
           else. The venue and its address are on that same row and are NOT
@@ -151,19 +128,15 @@ export default async function StreamPage() {
             streamMeetingId: ceremony.streamMeetingId,
             streamPasscode: ceremony.streamPasscode,
           }}
-          calendar={{
-            icsHref: `${STREAM_PATH}/evento.ics`,
-            googleHref: googleCalendarUrl(calendarEvent),
-          }}
+          calendar={{ googleHref: googleCalendarUrl(calendarEvent) }}
         />
 
         <Link
           href="/"
           className="
-            rounded-full border border-[#f6efe2]/25 px-5 py-2 text-sm
-            text-[#f6efe2]/80 transition-colors
-            duration-(--console-motion-fast) ease-(--ease-console-out)
-            hover:bg-black/30 hover:text-[#f6efe2]
+            text-xs text-[#f6efe2]/65 underline underline-offset-4
+            transition-colors duration-(--console-motion-fast)
+            hover:text-[#f6efe2]
             focus-visible:outline-2 focus-visible:outline-offset-2
             focus-visible:outline-[#f6efe2]
           "
@@ -171,6 +144,6 @@ export default async function StreamPage() {
           Volver al inicio
         </Link>
       </div>
-    </main>
+    </PhotoStage>
   );
 }

@@ -15,7 +15,6 @@ const CEREMONY: StreamInvitationCeremony = {
 };
 
 const CALENDAR = {
-  icsHref: "/transmision/evento.ics",
   googleHref: "https://calendar.google.com/calendar/render?action=TEMPLATE",
 };
 
@@ -111,42 +110,51 @@ describe("StreamInvitation", () => {
   });
 
   /**
-   * THE REMINDER IS THE POINT, NOT THE FILE.
+   * THE REMINDER IS THE POINT, AND IT IS NOT A FILE.
    *
    * A stream guest has no journey to plan, which is exactly why the date slips
-   * their mind: nothing else in their week points at it. An entry they can save
-   * — with alarms inside it — is the only thing on this page that will speak up
-   * on its own.
+   * their mind: nothing else in their week points at it. An entry with alarms
+   * inside it is the only thing on this page that will speak up on its own.
    */
   describe("adding it to a calendar", () => {
-    it("offers the file, named so a calendar recognises it", () => {
+    it("offers Google Calendar, opened away from this page", () => {
       render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
-      const ics = screen.getByRole("link", { name: /agregar al calendario/i });
-
-      expect(ics).toHaveAttribute("href", CALENDAR.icsHref);
-    });
-
-    /**
-     * Two routes, because they fail in opposite places.
-     *
-     * The `.ics` opens natively on iOS and in Outlook and is a downloaded file
-     * to hunt for in a desktop browser; the Google link is one tap for anybody
-     * already signed in and nothing at all for anybody who is not.
-     */
-    it("also offers Google Calendar, opened away from this page", () => {
-      render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
-
-      const google = screen.getByRole("link", { name: /google/i });
+      const google = screen.getByRole("link", { name: /google calendar/i });
 
       expect(google).toHaveAttribute("href", CALENDAR.googleHref);
       expect(google).toHaveAttribute("target", "_blank");
-      // `noopener` or the new tab can reach back into this one through
+      // Without `noopener` the new tab can reach back into this one through
       // `window.opener`. `noreferrer` implies it, and is set for both reasons.
       expect(google).toHaveAttribute(
         "rel",
         expect.stringContaining("noopener"),
       );
+    });
+
+    /**
+     * NOTHING ON THIS PAGE DOWNLOADS A FILE.
+     *
+     * A `.ics` sat beside the Google link and was removed on the couple's
+     * instruction: a browser that answers a tap by dropping a file into a
+     * downloads folder has not helped anybody reading a wedding invitation on
+     * their phone.
+     *
+     * The rule is a test rather than only a diff because the obvious way to
+     * "improve" this later is to add the file back for the Apple and Outlook
+     * guests the Google link does not serve. That gap is real and so is the
+     * decision — and it belongs to the couple, not to whoever is passing
+     * through this component.
+     */
+    it("offers no file to download", () => {
+      const { container } = render(
+        <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
+      );
+
+      for (const anchor of container.querySelectorAll("a")) {
+        expect(anchor.getAttribute("href")).not.toMatch(/\.ics/);
+        expect(anchor.hasAttribute("download")).toBe(false);
+      }
     });
   });
 });

@@ -33,14 +33,12 @@ export interface StreamInvitationCeremony extends StreamDetailsValues {
 }
 
 /**
- * Where the two "add it to my calendar" actions point.
+ * Where "add it to my calendar" points.
  *
- * Built by the route rather than here, from one `CalendarEvent`, so the file
- * and the Google link cannot describe different events. This component stays
- * props-only and testable with two plain strings.
+ * Built by the route rather than here, so this component stays props-only and
+ * testable with one plain string.
  */
 export interface StreamInvitationCalendar {
-  readonly icsHref: string;
   readonly googleHref: string;
 }
 
@@ -109,49 +107,38 @@ export function StreamInvitation({
 
         A guest joining by stream has no journey to plan, and that is precisely
         why the date slips: nothing else in their week points at it. Everything
-        above has to be remembered; a calendar entry with alarms inside it does
-        the remembering.
+        above has to be remembered; a calendar entry does the remembering.
 
-        Two routes because they fail in opposite places. The `.ics` opens
-        natively on iOS and in Outlook and is a downloaded file to hunt for in a
-        desktop browser; the Google link is one tap for anybody already signed
-        in and nothing at all for anybody who is not.
+        ONE ACTION, AND IT DOWNLOADS NOTHING. A `.ics` file sat beside this and
+        was removed on the couple's instruction — answering a tap by dropping a
+        file into a downloads folder has not helped anybody reading a wedding
+        invitation on their phone.
+
+        The cost is named rather than hidden: a guest on Apple Calendar or
+        Outlook with no Google account gets no entry from this page. That was
+        the couple's call to make, and `StreamInvitation.spec.tsx` holds the
+        rule so the file cannot drift back in without one.
       */}
-      <div className="flex flex-col items-center gap-2">
-        <a
-          href={calendar.icsHref}
-          className="
-            rounded-full border border-[#f6efe2]/30 bg-black/25 px-5 py-2.5
-            text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
-            duration-(--console-motion-fast) ease-(--ease-console-out)
-            hover:bg-black/45
-            focus-visible:outline-2 focus-visible:outline-offset-2
-            focus-visible:outline-[#f6efe2]
-          "
-        >
-          Agregar al calendario
-        </a>
-
-        <a
-          href={calendar.googleHref}
-          target="_blank"
-          /*
-           * `noopener` first, and it is not decoration: without it the new tab
-           * can reach back into this one through `window.opener`. `noreferrer`
-           * implies it on modern browsers and is set for its own sake as well.
-           */
-          rel="noopener noreferrer"
-          className="
-            text-xs text-[#f6efe2]/65 underline underline-offset-4
-            transition-colors duration-(--console-motion-fast)
-            hover:text-[#f6efe2]
-            focus-visible:outline-2 focus-visible:outline-offset-2
-            focus-visible:outline-[#f6efe2]
-          "
-        >
-          o agregar a Google Calendar
-        </a>
-      </div>
+      <a
+        href={calendar.googleHref}
+        target="_blank"
+        /*
+         * `noopener` first, and it is not decoration: without it the new tab
+         * can reach back into this one through `window.opener`. `noreferrer`
+         * implies it on modern browsers and is set for its own sake as well.
+         */
+        rel="noopener noreferrer"
+        className="
+          rounded-full border border-[#f6efe2]/30 bg-black/25 px-5 py-2.5
+          text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
+          duration-(--console-motion-fast) ease-(--ease-console-out)
+          hover:bg-black/45
+          focus-visible:outline-2 focus-visible:outline-offset-2
+          focus-visible:outline-[#f6efe2]
+        "
+      >
+        Agregar a Google Calendar
+      </a>
     </article>
   );
 }

@@ -210,6 +210,40 @@ fixed: at 69 days out the landing shows one disabled button whose title reads
 "El enlace se abre el 21 de noviembre de 2026" and no link; at six days out, one
 link and no button. Zero console errors in both.
 
+### Unit E — one stage, and no downloads
+
+On the couple's instruction: the `.ics` action is gone, only Google Calendar
+remains, and `/transmision` now stands on the same layout as `/`.
+
+**The file was removed, not hidden.** `app/transmision/evento.ics/route.ts` is
+deleted, and with it `buildIcs` and its folding, escaping and alarm code — an
+endpoint nothing links to is worse than one that never existed. Git holds it.
+The cost is named rather than buried: a guest on Apple Calendar or Outlook with
+no Google account now gets no entry from this page.
+`StreamInvitation.spec.tsx` holds the rule — no `href` matching `.ics`, no
+`download` attribute on any anchor — so the obvious "improvement" of adding the
+file back cannot happen without the couple deciding it again.
+
+**`components/landing/PhotoStage.tsx`** now owns the dark ground, the blurred
+64px backdrop and the framed photograph, and both public pages render inside
+it. Copied instead of shared, the two would have diverged on the first tweak to
+either — which is precisely the seam the couple asked to remove.
+
+It takes `overlayOnMobile`. True on `/`, where the words are a heading, a date
+and four figures and the photograph IS the page. False on `/transmision`, whose
+content is a card of credentials and two paragraphs: unreadable laid over a
+photograph, and pushed off the screen stacked below one. There the photograph
+appears only at `lg`, and the blurred ground carries the continuity on a phone.
+
+Unifying the backdrop meant one set of values for both, and the brighter pair
+won — the landing's backdrop is slightly warmer than it was.
+
+Verified in Chromium at 1440×900 and 390×844: no horizontal overflow on either
+page at either size, zero console errors, and the only two links on the stream
+page are "Agregar a Google Calendar" and "Volver al inicio". 2083 tests green;
+typecheck, lint, format and build clean. The build no longer lists
+`/transmision/evento.ics`.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`
