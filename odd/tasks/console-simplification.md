@@ -104,6 +104,27 @@ is exactly ONE section. Two more read the old heading; the negative assertions
 among them moved off the bare string, because "Invitaciones" is now a nav label
 too and a text query would have stopped distinguishing content from chrome.
 
+## Done — the rows stopped being a paragraph
+
+Every button repeated the household's name, which is already the heading
+directly above it: "Preparar envío para Familia Guzmán Peña", "Ver la invitación
+de Familia Guzmán Peña", "Editar invitación de Familia Guzmán Peña". Three long
+labels read as prose, not as controls. And "Editar el número de {guest}"
+rendered once per GUEST, so a household of six carried six copies of the longest
+string on the screen.
+
+On screen now: **Enviar · Ver · Editar**, and a pencil per guest.
+
+The household's name stays in `aria-label`, and that is not decoration: it is
+what tells two rows' buttons apart. A list full of bare "Editar" is ambiguous to
+a test, to voice control and to anybody navigating by control rather than by
+eye. The visible word is CONTAINED in the accessible name and never a different
+word, so the two cannot contradict each other.
+
+The phone button kept its accessible name exactly, which is why not one
+assertion moved for it. The three row actions changed theirs — "Preparar envío"
+became "Enviar la invitación de …" — and ten references followed.
+
 ## Next
 
 - The five-group `DispatchPreflight`, always fully expanded, one group of which

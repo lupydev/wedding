@@ -355,11 +355,29 @@ export function GuestList({
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {row.ownedByViewer && !dispatchBlocked && (
                   <Button asChild size="lg">
+                    {/*
+                      SHORT ON SCREEN, WHOLE IN THE ACCESSIBLE NAME.
+
+                      Every button on a row used to repeat the household's name
+                      — "Preparar envío para Familia Guzmán Peña", "Ver la
+                      invitación de Familia Guzmán Peña", "Editar invitación de
+                      Familia Guzmán Peña" — and the name is already the heading
+                      directly above them. Three long labels per row read as a
+                      paragraph, not as controls.
+
+                      The name stays in `aria-label` because it is what keeps
+                      two rows' buttons apart: a suite full of bare "Editar"
+                      would have to guess which household each one belongs to,
+                      and so would anybody navigating by control rather than by
+                      eye. The visible word is contained IN the accessible name,
+                      never a different word, so the two never contradict.
+                    */}
                     <a
+                      aria-label={`Enviar la invitación de ${row.greetingName}`}
                       className="guest-list__dispatch-link"
                       href={consoleDispatchPath(row.invitationId)}
                     >
-                      Preparar envío para {row.greetingName}
+                      Enviar
                     </a>
                   </Button>
                 )}
@@ -375,10 +393,11 @@ export function GuestList({
                 {row.ownedByViewer && (
                   <Button asChild size="lg" variant="ghost">
                     <a
+                      aria-label={`Ver la invitación de ${row.greetingName}`}
                       className="guest-list__preview-link"
                       href={consolePreviewPath(row.invitationId)}
                     >
-                      Ver la invitación de {row.greetingName}
+                      Ver
                     </a>
                   </Button>
                 )}
@@ -420,10 +439,11 @@ export function GuestList({
                 {!rowReadOnly && (
                   <Button asChild variant="secondary">
                     <a
+                      aria-label={`Editar la invitación de ${row.greetingName}`}
                       className="guest-list__edit-link"
                       href={consoleInvitationEditPath(row.invitationId)}
                     >
-                      Editar invitación de {row.greetingName}
+                      Editar
                     </a>
                   </Button>
                 )}

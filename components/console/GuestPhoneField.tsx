@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { Pencil } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -146,14 +148,27 @@ export function GuestPhoneField({
         </span>
       )}
 
+      {/*
+        AN ICON, AND THE WHOLE SENTENCE IN THE ACCESSIBLE NAME.
+
+        This button renders once per GUEST, so a household of six put six
+        copies of "Editar el número de …" on one row — the longest thing on the
+        screen, repeated, for a control nobody uses most days.
+
+        The accessible name is UNCHANGED, deliberately: it is what tells two
+        guests' buttons apart, and leaving it alone means not one assertion in
+        the suite had to move for this.
+      */}
       {!readOnly && (
         <Button
+          aria-label={`Editar el número de ${guestName}`}
+          className="size-7"
           onClick={() => setEditing(true)}
-          size="sm"
+          size="icon"
           type="button"
           variant="ghost"
         >
-          Editar el número de {guestName}
+          <Pencil className="size-3.5" aria-hidden />
         </Button>
       )}
     </div>

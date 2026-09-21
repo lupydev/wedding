@@ -722,7 +722,7 @@ test.describe("the device declaration gate", () => {
 
     await expect(MISMATCH_NOTICE(page)).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Preparar envío/ }),
+      page.getByRole("link", { name: /Enviar la invitación/ }),
     ).toHaveCount(0);
 
     // Carlos is the member the readiness check is naming right now: he is the

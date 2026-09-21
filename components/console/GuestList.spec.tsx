@@ -102,7 +102,7 @@ describe("GuestList", () => {
     renderList([row()]);
 
     expect(
-      screen.getByRole("link", { name: /Preparar envío/i }),
+      screen.getByRole("link", { name: /Enviar la invitación/i }),
     ).toBeInTheDocument();
   });
 
@@ -115,7 +115,9 @@ describe("GuestList", () => {
       }),
     ]);
 
-    expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Enviar la invitación/i }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: /enviar/i })).toBeNull();
     expect(screen.getByText("Gestiona Beto Operador")).toBeInTheDocument();
   });
@@ -123,7 +125,9 @@ describe("GuestList", () => {
   it("withdraws the send affordance from every row while the device declaration blocks it", () => {
     renderList([row()], { dispatchBlocked: true });
 
-    expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Enviar la invitación/i }),
+    ).toBeNull();
   });
 
   /**
@@ -176,7 +180,9 @@ describe("GuestList", () => {
   it("keeps the body preview while the device declaration blocks sending", () => {
     renderList([row()], { dispatchBlocked: true });
 
-    expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Enviar la invitación/i }),
+    ).toBeNull();
     expect(
       screen.getByRole("link", { name: /Ver la invitación/i }),
     ).toBeInTheDocument();
@@ -270,7 +276,7 @@ describe("GuestList", () => {
 
     expect(container.querySelectorAll("[data-row-menu]")).toHaveLength(0);
     expect(
-      screen.getAllByRole("link", { name: /Preparar envío/i }),
+      screen.getAllByRole("link", { name: /Enviar la invitación/i }),
     ).toHaveLength(3);
   });
 });
@@ -323,7 +329,7 @@ describe("GuestList — who receives the message, and how to change it", () => {
     renderList([row({ dispatchRecipientGuestId: null })]);
 
     expect(
-      screen.getByRole("link", { name: /Editar invitación/i }),
+      screen.getByRole("link", { name: /Editar la invitación/i }),
     ).toHaveAttribute(
       "href",
       "/console/invitations/11111111-1111-4111-8111-111111111111/edit",
@@ -346,7 +352,7 @@ describe("GuestList — who receives the message, and how to change it", () => {
     ]);
 
     expect(
-      screen.queryByRole("link", { name: /Editar invitación/i }),
+      screen.queryByRole("link", { name: /Editar la invitación/i }),
     ).toBeNull();
   });
 
@@ -354,7 +360,7 @@ describe("GuestList — who receives the message, and how to change it", () => {
     renderList([row()], { readOnly: true });
 
     expect(
-      screen.queryByRole("link", { name: /Editar invitación/i }),
+      screen.queryByRole("link", { name: /Editar la invitación/i }),
     ).toBeNull();
   });
 });
@@ -552,7 +558,7 @@ describe("GuestList — the console can create an invitation now", () => {
       renderList([row({ ownedByViewer: false, ownerDisplayName: "Beto" })]);
 
       expect(
-        screen.queryByRole("link", { name: /Editar invitación/i }),
+        screen.queryByRole("link", { name: /Editar la invitación/i }),
       ).toBeNull();
       expect(
         screen.queryByRole("button", { name: /Editar el número/i }),
@@ -566,7 +572,7 @@ describe("GuestList — the console can create an invitation now", () => {
         screen.queryByRole("button", { name: /Editar el número/i }),
       ).toBeNull();
       expect(
-        screen.queryByRole("link", { name: /Editar invitación/i }),
+        screen.queryByRole("link", { name: /Editar la invitación/i }),
       ).toBeNull();
     });
   });

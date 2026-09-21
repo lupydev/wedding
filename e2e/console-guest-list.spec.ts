@@ -170,7 +170,7 @@ test.describe("the per-device WhatsApp declaration", () => {
     ).toBeVisible();
     // But nothing can be dispatched from this handset.
     await expect(
-      page.getByRole("link", { name: /Preparar envío/i }),
+      page.getByRole("link", { name: /Enviar la invitación/i }),
     ).toHaveCount(0);
     // And the read-only progress view stays available, as the design requires.
     // It is the dashboard now rather than a `ProgressSummary` sentence, but the
@@ -259,7 +259,7 @@ test.describe("the partitioned guest list", () => {
       row.getByText(`Gestionas tú (${ana.displayName})`),
     ).toBeVisible();
     await expect(
-      row.getByRole("link", { name: /Preparar envío/i }),
+      row.getByRole("link", { name: /Enviar la invitación/i }),
     ).toBeVisible();
   });
 
@@ -276,7 +276,7 @@ test.describe("the partitioned guest list", () => {
       theirRow.getByText(`Gestiona ${beto.displayName}`),
     ).toBeVisible();
     await expect(
-      theirRow.getByRole("link", { name: /Preparar envío/i }),
+      theirRow.getByRole("link", { name: /Enviar la invitación/i }),
     ).toHaveCount(0);
 
     /*
@@ -639,7 +639,7 @@ test.describe("creating a group through the console", () => {
 
   test("the row's edit affordance reaches the form with the stored override intact", async () => {
     await createdRow()
-      .getByRole("link", { name: `Editar invitación de ${customGreeting}` })
+      .getByRole("link", { name: `Editar la invitación de ${customGreeting}` })
       .click();
 
     await expect(page).toHaveURL(
