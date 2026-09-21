@@ -309,8 +309,30 @@ function blankRow(): MemberRow {
   };
 }
 
-function rowsOf(members: readonly InvitationFormMember[]): MemberRow[] {
-  return members.length === 0 ? [blankRow()] : members.map(rowOf);
+/**
+ * The cards a form starts with.
+ *
+ * THE BLANK CARD IS ONLY THERE WHEN NOTHING CAN BE PICKED.
+ *
+ * A blank card with four empty fields is the loudest instruction on the
+ * screen, and it said "type somebody in" — on a console whose guest list is
+ * built in the directory first, to an operator who mostly wants to choose
+ * people who already exist. Opening with none makes picking the default and
+ * leaves typing one press away.
+ *
+ * An empty directory still opens on a card, because picking is impossible
+ * there and a screen whose only affordance is one nobody can use is worse than
+ * the blank card ever was.
+ */
+function rowsOf(
+  members: readonly InvitationFormMember[],
+  canPick = false,
+): MemberRow[] {
+  if (members.length > 0) {
+    return members.map(rowOf);
+  }
+
+  return canPick ? [] : [blankRow()];
 }
 
 /** The row as the pure validator wants it. */
@@ -378,7 +400,7 @@ export function InvitationForm({
   const persisted = invitation?.members ?? NO_MEMBERS;
 
   const [rows, setRows] = useState<readonly MemberRow[]>(() =>
-    rowsOf(persisted),
+    rowsOf(persisted, invitation === null && freeGuests.length > 0),
   );
   const [source, setSource] = useState<GreetingNameSource>(
     invitation?.greetingNameSource ?? "derived",
@@ -473,7 +495,7 @@ export function InvitationForm({
    *
    * `null` on the first render, always, which is what keeps this from stealing
    * focus when the page loads: no card's key can match it, so `autoFocus` is
-   * false everywhere until the operator presses "Agregar otra persona".
+   * false everywhere until the operator presses "Agregar una persona nueva".
    */
   const [focusKey, setFocusKey] = useState<string | null>(null);
 
@@ -828,6 +850,20 @@ export function InvitationForm({
           </div>
         )}
 
+        {/*
+          SAYS SO, RATHER THAN LEAVING AN EMPTY BOX.
+
+          With nobody added yet the fieldset would otherwise be a legend over
+          nothing, which reads as a screen that failed to load rather than one
+          waiting for a choice.
+        */}
+        {rows.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Todavía no agregaste a nadie. Elegí de la lista de arriba, o agregá
+            una persona nueva.
+          </p>
+        )}
+
         {rows.map((row, index) => {
           const removalRefusal = removalRefusalOf(row);
 
@@ -1010,7 +1046,15 @@ export function InvitationForm({
           type="button"
           variant="secondary"
         >
-          Agregar otra persona
+          {/*
+            ONE LABEL, NOT TWO. It read "Agregar otra persona" once a card
+            existed and "una persona nueva" when none did — the same button
+            calling itself two things depending on state, which is a small
+            puzzle for the reader and an ambiguity for anything locating it.
+            "Nueva" is the word that matters either way: it distinguishes
+            typing somebody in from picking somebody who already exists.
+          */}
+          Agregar una persona nueva
         </Button>
       </fieldset>
 

@@ -82,7 +82,7 @@ the couple asked for exactly two CRUDs.
 - [x] **U3b — a guest's row says less and offers one obvious action.** It now
       carries a name line, a household line, a recipient line and up to three
       buttons. Times forty people, that is a wall rather than a list.
-- [ ] **U3c — the invitation form leads with picking, not typing.** The
+- [x] **U3c — the invitation form leads with picking, not typing.** The
       directory picker sits under the member cards, so the default path is
       re-typing somebody who already exists. "Mucho más simple poder escoger un
       invitado" means the picker comes first and typing a new person is the
@@ -240,4 +240,39 @@ earlier. Both now use the row's own `data-guest-name`.
 Green: 2259 unit and component tests, 196 browser tests, typecheck, lint,
 format, build.
 
-### Next: U3c — the invitation form leads with picking, not typing.
+### U3c — done
+
+The picker was already above the member cards. The form still OPENED with a
+blank card, and a blank card with four empty fields is the loudest instruction
+on a screen — so the default path stayed "type somebody in", on a console whose
+guest list is built in the directory first.
+
+**It opens with no card when there is anybody to pick.** Typing stays one press
+away, and it is still the only path when the directory has nobody free: a
+screen whose sole affordance is one nobody can use would be worse than the
+blank card ever was.
+
+**Two labels became one.** The add button called itself "Agregar otra persona"
+once a card existed and "una persona nueva" when none did — the same control
+naming itself two things by state, which is a small puzzle for the reader and
+an ambiguity for anything locating it. "Nueva" is the word that matters either
+way: it separates typing somebody in from picking somebody who exists.
+
+**A browser test stopped depending on state it does not own.** Whether the form
+opens with a card is decided by the DIRECTORY, which is shared with every other
+spec in a single database. The test now asks for a card when it needs one,
+which is also what the product does.
+
+Green: 2264 unit and component tests, 196 browser tests, typecheck, lint,
+format, build.
+
+## Next
+
+- `moveMemberAction` is still dead code with tests — a full server action and
+  repository function with no UI, and now the closest thing to "move somebody
+  from one household to another", which the directory makes sensible to want.
+- Nothing warns when the same PERSON is written twice under two names. The
+  directory makes that visible for the first time; nobody has asked for it.
+- The importer writes every guest straight into a household and knows nothing
+  about the directory.
+- The invitation's visual design, which the couple deferred until now.

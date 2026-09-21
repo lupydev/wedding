@@ -517,6 +517,26 @@ test.describe("creating a group through the console", () => {
   const member = (index: number) =>
     page.locator("fieldset.invitation-form__member").nth(index);
 
+  /**
+   * Opens a blank member card.
+   *
+   * The create form opens on the PICKER when the directory has anybody free,
+   * and on a blank card when it does not — and this file does not own the
+   * directory, which is shared with every other spec. So a test that needs a
+   * card asks for one.
+   */
+  const addPerson = () =>
+    page.getByRole("button", { name: "Agregar una persona nueva" }).click();
+
+  /** A member card exists to type into, however the form opened. */
+  const ensureCard = async () => {
+    if (
+      (await page.locator("fieldset.invitation-form__member").count()) === 0
+    ) {
+      await addPerson();
+    }
+  };
+
   /** What the form says the members currently derive to. */
   const derivedLine = () => page.getByTestId("invitation-derived-name");
 
@@ -549,6 +569,7 @@ test.describe("creating a group through the console", () => {
     // Nothing named yet: the preview says so instead of rendering an empty name.
     await expect(derivedLine()).toContainText("todavía sin integrantes");
 
+    await ensureCard();
     await member(0).getByLabel("Nombre completo").fill(LUCIA);
     // One member alone keeps their FULL name: addressing one person by their
     // first name reads as clipped rather than warm.
@@ -561,7 +582,7 @@ test.describe("creating a group through the console", () => {
 
     await member(0).getByLabel("Teléfono").fill(LUCIA_PHONE_TYPED);
 
-    await page.getByRole("button", { name: "Agregar otra persona" }).click();
+    await addPerson();
     await member(1).getByLabel("Nombre completo").fill(MATEO);
     await member(1).getByLabel("Apodo").fill("Teo");
 
@@ -588,7 +609,7 @@ test.describe("creating a group through the console", () => {
     await expect(derivedLine()).toContainText("Lucha y Teo");
     await expect(derivedLine()).toContainText("escrito a mano");
 
-    await page.getByRole("button", { name: "Agregar otra persona" }).click();
+    await addPerson();
     await member(2).getByLabel("Nombre completo").fill(SARA);
     await member(2).getByLabel("Apodo").fill("Sarita");
 

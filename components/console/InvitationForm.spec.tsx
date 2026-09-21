@@ -189,7 +189,7 @@ describe("InvitationForm's live derived group name", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.click(
-      screen.getByRole("button", { name: "Agregar otra persona" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
 
@@ -206,7 +206,7 @@ describe("InvitationForm's live derived group name", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.click(
-      screen.getByRole("button", { name: "Agregar otra persona" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
@@ -421,7 +421,7 @@ describe("InvitationForm's advisories, which never block the save", () => {
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
     await user.click(
-      screen.getByRole("button", { name: "Agregar otra persona" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Luis Ruiz");
     await user.type(row(2).getByLabelText("Apodo"), "Lucho");
@@ -442,7 +442,7 @@ describe("InvitationForm's advisories, which never block the save", () => {
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
     await user.click(
-      screen.getByRole("button", { name: "Agregar otra persona" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
     await user.type(row(2).getByLabelText("Apodo"), "Michu");
@@ -704,7 +704,7 @@ describe("InvitationForm — re-seeding must not eat unsaved typing", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar otra persona/i }),
+      screen.getByRole("button", { name: /Agregar una persona nueva/i }),
     );
 
     const added = row(before.members.length + 1);
@@ -815,7 +815,7 @@ describe("InvitationForm — the two writes nobody was watching", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar otra persona/i }),
+      screen.getByRole("button", { name: /Agregar una persona nueva/i }),
     );
 
     const position = before.members.length + 1;
@@ -915,7 +915,7 @@ describe("InvitationForm — a double tap is one person, not two", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar otra persona/i }),
+      screen.getByRole("button", { name: /Agregar una persona nueva/i }),
     );
 
     const position = before.members.length + 1;
@@ -1064,7 +1064,7 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
       renderEdit();
 
       expect(
-        screen.getByRole("button", { name: "Agregar otra persona" }),
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
       ).toBeInTheDocument();
       // The old wording, which claimed the press added somebody.
       expect(
@@ -1076,7 +1076,7 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
       const { user } = renderEdit();
 
       await user.click(
-        screen.getByRole("button", { name: "Agregar otra persona" }),
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
       );
 
       expect(screen.getByText(/sin guardar/i)).toBeInTheDocument();
@@ -1106,7 +1106,7 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
       const { user } = renderEdit();
 
       await user.click(
-        screen.getByRole("button", { name: "Agregar otra persona" }),
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
       );
 
       const names = screen.getAllByLabelText("Nombre completo");
@@ -1159,7 +1159,7 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
 
       await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
       await user.click(
-        screen.getByRole("button", { name: "Agregar otra persona" }),
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
       );
       await user.type(row(2).getByLabelText("Nombre completo"), "Michell Peña");
 
@@ -1183,7 +1183,7 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
       // assertion below would never be reached.
       await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
       await user.click(
-        screen.getByRole("button", { name: "Agregar otra persona" }),
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
       );
       await user.type(row(2).getByLabelText("Nombre completo"), "Michell Peña");
       await user.click(screen.getAllByRole("radio")[1]);
@@ -1248,6 +1248,11 @@ describe("picking somebody who is already in the directory", () => {
   it("keeps a half-typed card and adds her after it", async () => {
     const { user } = renderCreate([freeGuest()]);
 
+    // The card is asked for now: with people to pick, the form opens on the
+    // picker and typing is the secondary path.
+    await user.click(
+      screen.getByRole("button", { name: /Agregar una persona nueva/ }),
+    );
     await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
     await user.click(
       screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
@@ -1323,6 +1328,9 @@ describe("picking somebody who is already in the directory", () => {
   it("sends one id column entry per member, so the arrays cannot slip", async () => {
     const { user } = renderCreate([freeGuest()]);
 
+    await user.click(
+      screen.getByRole("button", { name: /Agregar una persona nueva/ }),
+    );
     await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
     await user.click(
       screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
@@ -1430,5 +1438,79 @@ describe("the household's name", () => {
 
     expect(sent.get("displayName")).toBeNull();
     expect(sent.get("greetingName")).toBe("Ana Ruiz");
+  });
+});
+
+/**
+ * THE FORM OPENS ON PICKING, NOT ON TYPING.
+ *
+ * "Mucho más simple poder escoger un invitado para la creación de una
+ * invitación." The picker was already above the member cards — but the form
+ * also opened with a blank card, and a blank card with four empty fields is
+ * the loudest instruction on the screen. So the default path stayed "type
+ * somebody in", for people who are already in the directory, on a console
+ * whose whole guest list is built there first.
+ *
+ * Nothing is removed. Typing a new person is one press away, and it is still
+ * the ONLY path when there is nobody to pick — an empty picker cannot be the
+ * primary affordance.
+ */
+describe("what the create form opens with", () => {
+  it("opens with nobody typed in when there are people to pick", () => {
+    renderCreate([freeGuest()]);
+
+    expect(screen.queryByRole("group", { name: /^Integrante 1$/ })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says so, rather than showing an empty box", () => {
+    renderCreate([freeGuest()]);
+
+    expect(
+      screen.getByText(/Todavía no agregaste a nadie/i),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AN EMPTY DIRECTORY STILL OPENS ON A CARD, because picking is impossible
+   * and a screen whose only affordance is one nobody can use is worse than the
+   * blank card ever was.
+   */
+  it("opens with a card when there is nobody to pick", () => {
+    renderCreate([]);
+
+    expect(
+      screen.getByRole("group", { name: /^Integrante 1$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("still offers a card to anybody who wants to type one", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: /Agregar una persona nueva/ }),
+    );
+
+    expect(
+      screen.getByRole("group", { name: /^Integrante 1$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("saves a household built only by picking", async () => {
+    const { action, user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Guardar invitación" }),
+    );
+
+    const sent = action.mock.calls[0][0] as FormData;
+
+    expect(sent.getAll("memberFullName")).toEqual(["Tía Marta"]);
+    expect(sent.getAll("memberExistingId")).toEqual(["free-1"]);
   });
 });
