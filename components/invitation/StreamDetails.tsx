@@ -34,8 +34,14 @@ import { useState } from "react";
  * prop type has no field for a phone number or a guest, so neither can reach it
  * by accident.
  *
- * NO PALETTE OF ITS OWN. It inherits colour from whatever surface renders it —
- * cream paper inside the invitation, a paper island on the dark stream page.
+ * NO PALETTE OF ITS OWN, AND THAT IS NOW LITERALLY TRUE.
+ *
+ * It used to SAY so while reaching for `--foreground`, `--paper-hint` and
+ * `--border`. Those are the paper palette, which is the document default, so on
+ * the invitation's cream card they were right and on the stream page's dark
+ * ground `--foreground` resolved to a near-black on near-black: the values were
+ * rendered and invisible. Everything here is `currentColor` and opacity now, so
+ * the surface decides and this cannot be wrong on either.
  *
  * Guest-facing copy is Spanish, neutral register. Identifiers and comments stay
  * English.
@@ -73,15 +79,13 @@ export function StreamDetails({
       role="group"
       aria-label="Detalles de la transmisión"
     >
-      <div className="flex items-baseline justify-center gap-2 text-sm text-[var(--paper-hint)]">
+      <div className="mb-4 flex items-baseline justify-center gap-2 text-sm opacity-70">
         <dt className="sr-only">Fecha</dt>
         <dd className="m-0">{ceremony.ceremonyDate}</dd>
         <span aria-hidden="true">·</span>
         <dt className="sr-only">Hora</dt>
         <dd className="m-0">{ceremony.ceremonyTime}</dd>
       </div>
-
-      <div className="my-5 h-px bg-[var(--border)]" />
 
       <Credential
         label="ID de la reunión"
@@ -121,8 +125,8 @@ function Credential({
   readonly copyLabel: string;
 }) {
   return (
-    <div className="mb-4 last:mb-0">
-      <dt className="text-[0.65rem] tracking-[0.18em] text-[var(--paper-hint)] uppercase">
+    <div className="mb-3 last:mb-0">
+      <dt className="text-[0.65rem] tracking-[0.18em] uppercase opacity-65">
         {label}
       </dt>
 
@@ -180,15 +184,15 @@ function CopyButton({
       aria-label={copied ? "Copiado" : label}
       className="
         flex size-9 shrink-0 items-center justify-center rounded-full
-        text-[var(--paper-hint)] transition-colors
+        opacity-65 transition-[opacity,background-color]
         duration-(--console-motion-fast) ease-(--ease-console-out)
-        hover:bg-[var(--muted)] hover:text-[var(--foreground)]
+        hover:bg-current/10 hover:opacity-100
         focus-visible:outline-2 focus-visible:outline-offset-2
-        focus-visible:outline-[var(--ring)]
+        focus-visible:outline-current
       "
     >
       {copied ? (
-        <Check className="size-4 text-[var(--paper-success)]" aria-hidden />
+        <Check className="size-4" aria-hidden />
       ) : (
         <Copy className="size-4" aria-hidden />
       )}

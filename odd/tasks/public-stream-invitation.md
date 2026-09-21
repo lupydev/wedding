@@ -375,6 +375,42 @@ fold. Desktop is untouched at 1440×900 — both changes are below `lg`. No
 horizontal overflow and zero console errors at any size. 2092 tests green;
 typecheck, lint, format and build clean.
 
+### Unit J — one layout for both pages
+
+The couple asked for `/transmision` to BE the landing: the photograph full-bleed,
+the welcome above the couple, and the joining details at the foot on the dark
+ground rather than on a cream card. The band mode from unit I is gone; both
+pages are `mobilePhoto="overlay"` with a `justify-between` column and two groups
+placed in the bands the photograph leaves empty.
+
+**The paper card was removed, and it was load-bearing for a reason that had to
+be replaced rather than dropped.** It existed because these two values are
+COPIED, not read, and cream is the better surface to transcribe from. The
+legibility now comes from the scrim beneath and the weight of the type. The
+bottom scrim grew to 38% at `from-black/90 via-black/60` for exactly that.
+
+**`StreamDetails` only claimed to have no palette.** Its comment said so while
+it reached for `--foreground`, `--paper-hint` and `--border` — the paper
+palette, which is the document default. On the cream card those were right; on
+the dark ground `--foreground` resolved to a near-black on near-black and the
+values rendered invisible. Everything is `currentColor` and opacity now, so it
+is cream here and near-black on the invitation's paper without knowing which.
+
+The separator rule went with the compaction: the block starts at y=591 instead
+of 565, which keeps it off the couple's faces.
+
+**The way back was restored after being dropped by accident.** The restructure
+lost "Volver al inicio" and lint caught the orphaned import. It matters — a
+guest reaches this page from WhatsApp as often as from the landing, so without
+it the browser's back button goes nowhere. It is a `<Link>`, not an `<a>`: a
+full page load would take the song with it, and the audio element lives in the
+route group's layout precisely so it survives navigation between these two.
+
+Verified at 390×844 and 1440×900: one screen on a phone, no horizontal overflow
+at either size, zero console errors, and the copy button still writes to a real
+clipboard from the dark surface. 2092 tests green; typecheck, lint, format and
+build clean.
+
 ## Next step
 
 For the couple: fill `ceremony_time`, `stream_meeting_id` and `stream_passcode`

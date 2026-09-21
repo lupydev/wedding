@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { connection } from "next/server";
 
 import { StreamInvitation } from "@/components/invitation/StreamInvitation";
@@ -112,21 +111,26 @@ export default async function StreamPage() {
   );
 
   return (
-    <PhotoStage mobilePhoto="band">
+    <PhotoStage mobilePhoto="overlay">
       {/*
-        ROW TWO ON A PHONE, COLUMN TWO ON A LAPTOP.
+        THE SAME COLUMN AS THE LANDING, ON PURPOSE.
 
-        In `band` mode the photograph is a strip across the top and these words
-        flow BENEATH it — `row-start-2` — rather than sharing its cell. Left in
-        row one they overlaid the strip and put the heading straight back across
-        the couple's faces, which is the whole thing this layout exists to
-        avoid.
-
-        No `min-h-dvh` here either: the strip already takes 42dvh, and forcing a
-        full viewport underneath it would push the page to nearly two screens
-        for content that needs half of one.
+        `justify-between` with two groups, one in each band the photograph
+        leaves empty: the welcome above the couple, the joining details on the
+        path below them. The couple asked for the two pages to read as one, and
+        this is the shape that does it — a guest tapping through from `/` lands
+        on the same layout with different words in it.
       */}
-      <div className="relative col-start-1 row-start-2 flex flex-col items-center gap-7 px-6 pt-8 pb-14 lg:col-start-2 lg:row-start-1 lg:px-4 lg:py-0">
+      <div
+        className="
+          relative col-start-1 row-start-1 flex min-h-dvh flex-col items-center
+          justify-between gap-8 px-6 pt-8
+          pb-[max(1.75rem,env(safe-area-inset-bottom))]
+          sm:pt-12 sm:pb-10
+          lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:justify-center lg:gap-10
+          lg:px-4 lg:py-0
+        "
+      >
         {/*
           `coupleNames` and the four stream values come from the row and nothing
           else. The venue and its address are on that same row and are NOT
@@ -143,19 +147,6 @@ export default async function StreamPage() {
           }}
           calendar={{ googleHref: googleCalendarUrl(calendarEvent) }}
         />
-
-        <Link
-          href="/"
-          className="
-            text-xs text-[#f6efe2]/65 underline underline-offset-4
-            transition-colors duration-(--console-motion-fast)
-            hover:text-[#f6efe2]
-            focus-visible:outline-2 focus-visible:outline-offset-2
-            focus-visible:outline-[#f6efe2]
-          "
-        >
-          Volver al inicio
-        </Link>
       </div>
     </PhotoStage>
   );

@@ -155,10 +155,16 @@ export function PhotoStage({
           THE SCRIMS BELONG TO THE OVERLAY LAYOUT ONLY.
 
           Where the words are on the photograph they need a ground under them.
-          The top one is the tall one now: the whole block sits up there, so it
-          reaches to 55% and fades out just above the couple, who begin at 52%
-          of the photograph and are the one thing that must not be veiled. The
-          bottom one is a short anchor for the foot of the screen.
+          Both are tall, because both bands carry words now: the announcement
+          above the couple and, on `/transmision`, the joining details below
+          them. The top reaches 55% and the bottom 38%, and they fade out
+          towards each other so the middle — where the couple are, from 52% to
+          88% — keeps the least veil of anywhere on the frame.
+
+          The bottom one is sized for the heavier of its two jobs. On the
+          landing it carries one pill and a line; on the stream invitation it
+          carries a meeting id, a passcode and a button, and cream type needs a
+          ground under all of it.
 
           It has to survive the lantern, which is the brightest thing in the
           frame at around a third of the way down. 80% at the top falling to
@@ -182,7 +188,7 @@ export function PhotoStage({
             />
             <div
               aria-hidden="true"
-              className="relative col-start-1 row-start-1 h-1/5 w-full self-end bg-gradient-to-t from-black/75 to-transparent lg:hidden"
+              className="relative col-start-1 row-start-1 h-[38%] w-full self-end bg-gradient-to-t from-black/90 via-black/60 to-transparent lg:hidden"
             />
           </>
         ) : null}
