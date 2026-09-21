@@ -21,11 +21,18 @@ to go.
 | Photograph  | `img/compromiso.JPG`, 737×1600 | Supplied                 |
 | Song        | `audio/sjjm_S_132.mp3`, 4.7 MB | Supplied                 |
 
-**The hour is an assumption and it is marked as one.** The couple gave a DAY, not
-an instant, and a countdown needs an instant. Midnight at the start of the
-wedding day in Bogotá is the reading that makes "faltan N días" say exactly what
-a reader expects it to say. It is one exported constant; correcting it later is a
-one-line change plus its guard test.
+**The hour was an assumption for exactly one commit, and is now the real one.**
+The couple gave a day; a countdown needs an instant, so midnight was used and
+marked as assumed. The ceremony begins at 5:00 p.m., and the countdown now
+reaches zero when they start walking rather than seventeen hours earlier — so on
+the morning of the 28th the page reads "0 días, 9 horas" instead of having
+expired overnight.
+
+Correcting it cost one constant, its guard test, and one unrelated assertion:
+`formatWeddingDate`'s zone test used Honolulu, which was the 27th at midnight
+Bogota and is noon on the 28th at 17:00 Bogota. It went red for a correct reason
+and moved to Kiritimati (UTC+14, already the 29th). That is a guard working, not
+a test to relax.
 
 ### Why these facts are constants here and not the `ceremony` row
 

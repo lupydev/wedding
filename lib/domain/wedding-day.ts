@@ -29,20 +29,22 @@ import { calendarDateInZone } from "./rsvp-deadline";
 export const WEDDING_TIME_ZONE = "America/Bogota";
 
 /**
- * The first moment of the wedding day.
+ * When the ceremony begins: five in the afternoon, Bogota time.
  *
- * THE COUPLE GAVE A DAY, NOT AN HOUR. Midnight is an assumption and it is
- * recorded as one, here and in the task document. It is the reading that makes
- * a "faltan N días" figure say what a reader expects it to say: N is the number
- * of sleeps left, not a number measured from a ceremony hour nobody has fixed.
- * When the hour is known, change this line and the guard in the spec.
+ * GIVEN BY THE COUPLE, NOT ASSUMED. It was midnight for one commit, marked as
+ * an assumption in both this comment and the task document, because a day had
+ * been chosen and an hour had not. It is the real hour now, and the difference
+ * is not cosmetic: the countdown reaches zero when the two of them start
+ * walking, so on the morning of the 28th it reads "0 días, 9 horas" — which is
+ * the truth a guest wants that morning — instead of having expired at midnight.
  *
  * Written with an offset rather than a zone, which is the one place this file
  * departs from `rsvp-deadline.ts`'s rule. `wedding-day.spec.ts` asserts that the
- * offset still lands on midnight in `WEDDING_TIME_ZONE`, so the day the rule
- * bites — Colombia adopting daylight saving — the suite says so.
+ * offset still lands on 17:00 in `WEDDING_TIME_ZONE`, so the day the rule
+ * bites — Colombia adopting daylight saving — the suite says so rather than the
+ * page counting to an hour that has moved.
  */
-export const WEDDING_INSTANT = new Date("2026-11-28T00:00:00-05:00");
+export const WEDDING_INSTANT = new Date("2026-11-28T17:00:00-05:00");
 
 /**
  * The wedding day as `YYYY-MM-DD`, for a `<time dateTime>` attribute.

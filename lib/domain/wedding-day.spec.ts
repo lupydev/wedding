@@ -37,14 +37,19 @@ describe("WEDDING_INSTANT", () => {
    * library this project does not have. This test is the price of that choice:
    * it asserts what the offset is SUPPOSED to mean. If Colombia ever adopts
    * daylight saving and the platform's tzdata learns about it, the offset stops
-   * landing on midnight and this test goes red — loudly, in CI, rather than
-   * silently on the page.
+   * landing on five in the afternoon and this test goes red — loudly, in CI,
+   * rather than silently on the page.
+   *
+   * The wall clock is asserted as well as the day, and that is the half that
+   * matters most now. An offset that drifted by an hour would still land on the
+   * 28th, so a test checking only the calendar day would stay green while the
+   * countdown reached zero an hour before the ceremony began.
    */
-  it("is the first moment of the wedding day where the wedding is", () => {
+  it("is the hour the ceremony begins, where the wedding is", () => {
     expect(calendarDateInZone(WEDDING_INSTANT, WEDDING_TIME_ZONE)).toBe(
       "2026-11-28",
     );
-    expect(wallClockInZone(WEDDING_INSTANT, WEDDING_TIME_ZONE)).toBe("00:00");
+    expect(wallClockInZone(WEDDING_INSTANT, WEDDING_TIME_ZONE)).toBe("17:00");
   });
 
   it("is a valid instant", () => {
@@ -60,15 +65,21 @@ describe("formatWeddingDate", () => {
   /**
    * The zone is applied, not merely accepted.
    *
-   * Midnight in Bogota is 06:00 in Madrid on the SAME calendar day, so a zone
-   * that was silently ignored would still produce "28 de noviembre" and the
-   * test would pass while proving nothing. Tokyo is far enough east that the
-   * same instant is already the 28th there at 14:00 — and Honolulu, far enough
-   * west, is still on the 27th. The 27th is what makes the assertion bite.
+   * A zone silently ignored would still produce "28 de noviembre" for almost
+   * anywhere on earth, and the test would pass while proving nothing. So the
+   * assertion needs a zone where this instant falls on a DIFFERENT calendar
+   * day, and only then does it bite.
+   *
+   * It was Honolulu while the ceremony was pencilled in at midnight: 17:00 the
+   * previous day there, so the 27th. Five in the afternoon moved the instant
+   * five hours later and Honolulu became noon on the 28th — the assertion went
+   * red for a correct reason, which is the guard doing its job. Kiritimati is
+   * UTC+14, nineteen hours ahead of Bogota, so it is already the 29th there and
+   * the test bites again.
    */
   it("renders the calendar day of the zone it is given", () => {
-    expect(formatWeddingDate(WEDDING_INSTANT, "Pacific/Honolulu")).toBe(
-      "27 de noviembre de 2026",
+    expect(formatWeddingDate(WEDDING_INSTANT, "Pacific/Kiritimati")).toBe(
+      "29 de noviembre de 2026",
     );
   });
 });
