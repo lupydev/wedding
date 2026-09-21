@@ -64,51 +64,55 @@ export default function Home() {
       <div
         className="
           relative col-start-1 row-start-1 flex min-h-dvh flex-col items-center
-          justify-start gap-6 px-6 pt-8
-          pb-[max(3rem,env(safe-area-inset-bottom))]
-          sm:gap-8 sm:pt-12 sm:pb-14
+          justify-between gap-8 px-6 pt-8
+          pb-[max(1.75rem,env(safe-area-inset-bottom))]
+          sm:pt-12 sm:pb-10
           lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:justify-center lg:gap-9
           lg:px-4 lg:py-0
         "
       >
-        <p
-          className="
-            font-script text-3xl text-[#f6efe2]/90
-            [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
-            sm:text-4xl
-          "
-        >
-          Nos casamos
-        </p>
-
         {/*
-          EVERYTHING AT THE TOP ON A PHONE, AND THE PHOTOGRAPH IS WHY.
+          TWO GROUPS, AND THE SPLIT IS WHERE THE PHOTOGRAPH IS EMPTY.
 
-          The words used to sit at the foot of the screen, with the script line
-          at the head and the whole viewport between them. That put the heading,
-          the date and four figures squarely across the couple — measured on the
-          photograph, they occupy from 52% to 88% of its height, and the block
-          had grown to reach them once the countdown gained a button and a line
-          of explanation beneath it.
+          Measured on the photograph: the couple occupy from 52% to 88% of its
+          height. Above 45% there is only sky, the waterfall and the lantern;
+          below 88% there is only the stone path. Those are the two bands that
+          can carry words, and this column puts one group in each.
 
-          Above 45% there is nobody: sky, the waterfall and the lantern. The
-          block is about 300px and a phone gives it 380 up there, so it fits
-          with room and the two of them are left completely clear. At `lg` the
-          words are in their own column and this does not apply, which is why
+          The announcement — the script line, the heading, the date and four
+          figures — goes up top, where it has 380px and needs about 260.
+
+          The door to the stream goes at the foot. It was in the top group and
+          landed squarely on the lantern, which is the brightest thing in the
+          frame: a translucent pill over a lit lamp is the one place on this
+          photograph where a control cannot be read. The path below them is
+          dark, quiet, and already carries a scrim.
+
+          At `lg` none of this applies — the words are in their own column — so
           the centring returns at that breakpoint.
         */}
-        <div className="flex flex-col items-center gap-7">
+        <div className="flex flex-col items-center gap-6">
+          <p
+            className="
+              font-script text-3xl text-[#f6efe2]/90
+              [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
+              sm:text-4xl
+            "
+          >
+            Nos casamos
+          </p>
+
           <SaveTheDate />
-
-          {/*
-            The door to `/transmision`, which opens in the final week.
-
-            A client component, and it has to be: `/` is static, so a decision
-            made here on the server would be frozen at build time and would
-            still say "not yet" on the morning of the wedding.
-          */}
-          <StreamLink />
         </div>
+
+        {/*
+          The door to `/transmision`, which opens in the final week.
+
+          A client component, and it has to be: `/` is static, so a decision
+          made here on the server would be frozen at build time and would still
+          say "not yet" on the morning of the wedding.
+        */}
+        <StreamLink />
       </div>
     </PhotoStage>
   );
