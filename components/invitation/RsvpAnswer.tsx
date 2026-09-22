@@ -76,6 +76,54 @@ const DIETARY_NOTES_MAX_LENGTH = 500;
 /** What the household has answered, as far as this page knows. */
 type Answer = "yes" | "no" | "";
 
+/*
+  THE ONE PART OF THIS PAGE THAT IS TYPED, NOT READ.
+
+  `/transmision` took its credentials OFF a cream card, and was right to: an
+  opaque island in the middle of the photograph is what broke the two pages
+  looking like one, and its content is four values to copy.
+
+  This is a radio group, a checkbox per member and a free-text field. A
+  textarea with no border on a photograph is invisible, and a bare radio on a
+  dark ground is a five-pixel target on a phone. So the form gets a surface —
+  but a DEEPENING of the same ground rather than a sheet of paper laid on it:
+  the photograph still shows through, and the controls have something to sit on.
+
+  The control language is `StreamLink`'s pill, already the guest-facing one on
+  `/` and `/transmision`. A third would have been a third wedding.
+*/
+const PANEL = `
+  rounded-2xl bg-black/25 p-5 ring-1 ring-white/10 backdrop-blur-sm
+  sm:p-6
+`;
+
+/*
+  A CHOICE, AS A FULL-WIDTH ROW.
+
+  The native input stays visible and is only sized and coloured. Hiding it
+  behind a drawn substitute means re-implementing focus, and the 27 tests in
+  this component's spec find every control by ROLE and accessible name — which
+  is exactly what a hidden input quietly costs.
+
+  `has-[:checked]:` lifts the row the moment its own input is checked, so the
+  selected answer is legible at arm's length rather than by squinting at a dot.
+*/
+const CHOICE = `
+  flex cursor-pointer items-center gap-3 rounded-xl border
+  border-[#f6efe2]/20 bg-black/20 px-4 py-3 text-sm text-[#f6efe2]/90
+  transition-colors duration-(--console-motion-fast)
+  ease-(--ease-console-out)
+  has-[:checked]:border-[#f6efe2]/60 has-[:checked]:bg-black/40
+  has-[:checked]:text-[#f6efe2]
+  has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2
+  has-[:focus-visible]:outline-[#f6efe2]
+`;
+
+/** The small, quiet labels the invitation already uses for its three facts. */
+const LEGEND = "text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase";
+
+const CONTROL = "size-4 shrink-0 accent-[#f6efe2]";
+
 export function RsvpAnswer({
   guests,
   current,
@@ -204,15 +252,24 @@ export function RsvpAnswer({
   }
 
   return (
-    <form ref={formRef} action={record} className="rsvp__form">
-      <h2>Confirmen su asistencia</h2>
+    <form
+      ref={formRef}
+      action={record}
+      className={`rsvp__form flex flex-col gap-5 ${PANEL}`}
+    >
+      <h2 className="font-display text-xl text-[#f6efe2] sm:text-2xl">
+        Confirmen su asistencia
+      </h2>
 
-      {answered === null ? null : <p className="rsvp__current">{answered}</p>}
+      {answered === null ? null : (
+        <p className="rsvp__current text-sm text-[#f6efe2]/75">{answered}</p>
+      )}
 
-      <fieldset className="rsvp__attending">
-        <legend>¿Podrán acompañarnos?</legend>
-        <label>
+      <fieldset className="rsvp__attending m-0 flex flex-col gap-2 border-0 p-0">
+        <legend className={LEGEND}>¿Podrán acompañarnos?</legend>
+        <label className={CHOICE}>
           <input
+            className={CONTROL}
             type="radio"
             name="attending"
             value="yes"
@@ -222,8 +279,9 @@ export function RsvpAnswer({
           />
           Sí, allá estaremos
         </label>
-        <label>
+        <label className={CHOICE}>
           <input
+            className={CONTROL}
             type="radio"
             name="attending"
             value="no"
@@ -235,17 +293,33 @@ export function RsvpAnswer({
         </label>
       </fieldset>
 
-      <fieldset className="rsvp__attendees" disabled={!isAttending}>
-        <legend>¿Quiénes asisten?</legend>
-        <p className="rsvp__seats">
+      {/*
+        DIMMED WHOLE WHEN IT DOES NOT APPLY.
+
+        The fieldset is already `disabled` until somebody says yes — the
+        browser stops every control inside it. Without the opacity it looked
+        live and simply refused the tap, which reads as a broken page rather
+        than as a question that is not theirs yet.
+      */}
+      <fieldset
+        className={`
+          rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0
+          transition-opacity duration-(--console-motion-fast)
+          ${isAttending ? "" : "opacity-45"}
+        `}
+        disabled={!isAttending}
+      >
+        <legend className={LEGEND}>¿Quiénes asisten?</legend>
+        <p className="rsvp__seats text-xs text-[#f6efe2]/70">
           {seatsSelectionSentence(selected.length, guests.length)}
         </p>
         {guests.map((guest) => {
           const checked = selected.includes(guest.id);
 
           return (
-            <label key={guest.id}>
+            <label className={CHOICE} key={guest.id}>
               <input
+                className={CONTROL}
                 type="checkbox"
                 name="attendee"
                 value={guest.id}
@@ -257,23 +331,68 @@ export function RsvpAnswer({
                 onChange={(event) => toggle(guest.id, event.target.checked)}
               />
               {guest.fullName}
-              {guest.isChild ? " (niño o niña)" : ""}
+              {/*
+                THE SPACE IS OUTSIDE THE SPAN, AND THAT IS NOT FUSSINESS.
+
+                Accessible-name computation TRIMS each element's text before
+                joining, so a space inside the span is discarded and a screen
+                reader announces "Sara Aguirre(niño o niña)". As a sibling text
+                node it survives. The spec asserting that the form and the
+                couple's own list read alike caught exactly this.
+              */}
+              {guest.isChild ? (
+                <>
+                  {" "}
+                  <span className="text-[#f6efe2]/60">(niño o niña)</span>
+                </>
+              ) : (
+                ""
+              )}
             </label>
           );
         })}
       </fieldset>
 
-      <label htmlFor="rsvp-dietary">
-        Restricciones alimentarias (opcional)
-      </label>
-      <textarea
-        id="rsvp-dietary"
-        name="dietaryNotes"
-        maxLength={DIETARY_NOTES_MAX_LENGTH}
-        defaultValue={current?.dietaryNotes ?? ""}
-      />
+      <div className="flex flex-col gap-2">
+        <label className={LEGEND} htmlFor="rsvp-dietary">
+          Restricciones alimentarias (opcional)
+        </label>
+        {/*
+          A FIELD THAT LOOKS LIKE A FIELD. On a photograph an unbordered
+          textarea is an invisible control: a guest cannot tell there is
+          anywhere to type.
+        */}
+        <textarea
+          className="
+            min-h-24 w-full rounded-xl border border-[#f6efe2]/20 bg-black/25
+            px-4 py-3 text-sm text-[#f6efe2] placeholder:text-[#f6efe2]/40
+            focus-visible:border-[#f6efe2]/50 focus-visible:outline-2
+            focus-visible:outline-offset-2 focus-visible:outline-[#f6efe2]
+          "
+          id="rsvp-dietary"
+          name="dietaryNotes"
+          maxLength={DIETARY_NOTES_MAX_LENGTH}
+          defaultValue={current?.dietaryNotes ?? ""}
+        />
+      </div>
 
-      <button type="submit" disabled={pending}>
+      {/*
+        FULL WIDTH, because on a phone this is the one thing the whole page
+        exists to have pressed, and it sat inline at the end of a paragraph.
+      */}
+      <button
+        className="
+          w-full rounded-full border border-[#f6efe2]/40 bg-[#f6efe2]/10 px-5
+          py-3 text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
+          duration-(--console-motion-fast) ease-(--ease-console-out)
+          hover:bg-[#f6efe2]/20
+          focus-visible:outline-2 focus-visible:outline-offset-2
+          focus-visible:outline-[#f6efe2]
+          disabled:opacity-50
+        "
+        type="submit"
+        disabled={pending}
+      >
         Enviar respuesta
       </button>
 
@@ -281,7 +400,10 @@ export function RsvpAnswer({
         // `role="alert"` so a screen reader announces the outcome; a guest who
         // cannot see the message has no other way to learn whether their answer
         // was saved.
-        <div role="alert" className="rsvp__feedback">
+        <div
+          role="alert"
+          className="rsvp__feedback flex flex-col gap-1 text-sm text-[#f6efe2]"
+        >
           {messages.map((message) => (
             <p key={message}>{message}</p>
           ))}

@@ -60,7 +60,7 @@ defect the couple reported on day one: "la imagen se ve súper grande con zoom".
 - [x] **U2 — the invitation stands on that stage.** Dark ground, framed print,
       words beside it on a laptop and beneath it on a phone — the landing's
       language, which `/` and `/transmision` already share.
-- [ ] **U3 — the parts of the invitation that are TYPED, not read.** The
+- [x] **U3 — the parts of the invitation that are TYPED, not read.** The
       announcement and the greeting can sit on a photograph. A radio group, a
       set of checkboxes and a free-text field cannot: `/transmision` moved its
       credentials off a cream card on purpose, and its content is four values
@@ -141,9 +141,51 @@ taking for any change to this stage.
 Green: 2293 unit and component tests, 203 browser tests, typecheck, lint,
 format, build.
 
-### Next: U3 — the RSVP form, which is still raw.
+### U3 — done
 
-The screenshots show it plainly: bare radios and checkboxes, labels running
-into each other, an unstyled submit. It is the one part of this page that is
-TYPED rather than read, and it is the reason U3 was named before any of this
-was written.
+**THE SURFACE, DECIDED ON ITS OWN MERITS.** `/transmision` took its credentials
+OFF a cream card and was right to — an opaque island in the middle of the
+photograph is what broke the two pages looking like one — but its content is
+four values to copy. This is a radio group, a checkbox per member and a
+free-text field. A textarea with no border on a photograph is an invisible
+control, and a bare radio on a dark ground is a five-pixel target on a phone.
+
+So the form gets a surface that is a DEEPENING of the same ground rather than a
+sheet of paper laid on it: `bg-black/25` with a hairline ring and a blur, the
+photograph still showing through.
+
+The control language is `StreamLink`'s pill, already the guest-facing one on `/`
+and `/transmision`. A third would have been a third wedding.
+
+**THE NATIVE INPUTS STAY VISIBLE**, sized and coloured rather than hidden
+behind a drawn substitute. Hiding one means re-implementing focus, and the 27
+tests in this component's spec find every control by ROLE and accessible name —
+which is exactly what a hidden input quietly costs. `has-[:checked]:` lifts the
+whole row, so the chosen answer is legible at arm's length instead of by
+squinting at a dot.
+
+**The attendee list is dimmed whole while it does not apply.** The fieldset was
+already `disabled`, so the browser refused every tap — but it LOOKED live, which
+reads as a broken page rather than as a question that is not theirs yet.
+
+**A REAL REGRESSION, CAUGHT BY A TEST, AND WORTH WRITING DOWN.** Wrapping the
+child marker in a `<span>` moved the leading space inside it — and
+accessible-name computation TRIMS each element's text before joining, so a
+screen reader announced "Sara Aguirre(niño o niña)". The spec asserting that
+the form and the couple's own list read alike failed on it. The space is a
+sibling text node now.
+
+Verified by screenshot at 390px and 1440px, because that is what caught the
+overlap in U2 and no assertion says "these controls are large enough to press".
+
+Green: 2293 unit and component tests, 203 browser tests, typecheck, lint,
+format, build.
+
+## Next
+
+- The couple have not filled the wedding's own facts, so the invitation still
+  renders `{{VENUE_NAME}}` and `{{VENUE_ADDRESS}}`. That is deliberate — the
+  placeholders are visible rather than hidden, so an unfinished invitation
+  cannot pass for a finished one — and it is theirs to do at `/console/wedding`.
+- The submit button is quiet against the photograph. Legible and unambiguous,
+  since it is the only one, but a judgement the couple may want to overrule.

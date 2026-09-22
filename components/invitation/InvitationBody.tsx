@@ -205,7 +205,10 @@ export function InvitationBody({
             >
               {guest.fullName}
               {guest.isChild ? (
-                <span className="text-[#f6efe2]/60"> (niño o niña)</span>
+                <>
+                  {" "}
+                  <span className="text-[#f6efe2]/60">(niño o niña)</span>
+                </>
               ) : (
                 ""
               )}
