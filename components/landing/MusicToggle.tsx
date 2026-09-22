@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * The song, served from `public/` — the only folder Next serves verbatim.
+ *
+ * Exported because TWO layouts mount this control now: the one over `/` and
+ * `/transmision`, and the invitation's own. A second literal is a second song
+ * the day somebody renames the file.
+ */
+export const SONG_SRC = "/audio/nuestra-cancion.mp3";
+
 import { Pause, Music } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 

@@ -28,6 +28,25 @@ import { Countdown } from "./Countdown";
 export function SaveTheDate() {
   return (
     <div className="flex flex-col items-center gap-6 text-center sm:gap-8">
+      {/*
+        THE SCRIPT LINE MOVED IN HERE, AND IT BELONGED HERE ALL ALONG.
+
+        It sat in `app/(public)/page.tsx`, above this component — which was
+        fine while the landing was the only page that made the announcement.
+        The gate now makes it too, and two halves of one block in two files is
+        how they drift: a tweak to the type on one page, and the other page's
+        announcement quietly stops matching.
+      */}
+      <p
+        className="
+          font-script text-3xl text-[#f6efe2]/90
+          [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
+          sm:text-4xl
+        "
+      >
+        Nos casamos
+      </p>
+
       <h1
         className="
           font-display text-4xl leading-[1.05] text-[#f6efe2]

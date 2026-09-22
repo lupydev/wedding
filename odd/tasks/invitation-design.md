@@ -212,6 +212,50 @@ dark page. The measure belongs to the text, so the text carries it now.
 Green: 2293 unit and component tests, 205 browser tests, typecheck, lint,
 format, build.
 
+### U5 — done (the gate carries the wedding, and the song reaches it)
+
+Three things the couple asked for after seeing the gate on a laptop.
+
+**The announcement, "como en la landing".** The gate said "we have your
+invitation, now prove who you are", and the wedding it was about lived on the
+other side of the field. It carries `SaveTheDate` now — the script line, the
+names, the date and the counter, which is what makes the date feel like
+something approaching rather than small print.
+
+That move exposed a split: "Nos casamos" lived in `app/(public)/page.tsx`,
+ABOVE the component, so the announcement was two halves in two files. Fine
+while one page made it; a drift waiting to happen once two did. The line is in
+`SaveTheDate` now and the landing imports the whole block.
+
+**One sentence instead of two.** "Tenemos lista su invitación de matrimonio."
+followed by "Para abrirla, escribe el número de celular que compartiste con
+nosotros." — two sentences saying what one says, above the only thing there is
+to do. It reads "Escribe tu número para abrir la invitación." The greeting
+still comes first, and there is a test that keeps the announcement from
+slipping above it: the ordering is a product promise, because the WhatsApp
+message said "your invitation".
+
+**The song, and a trap that cost a detour.** The obvious move was to bring
+`/i/[slug]` into the `(public)` group, which already mounts the control — a
+route group changes no URL. It changes ONE: inside a group Next renames the
+`opengraph-image` route to a hashed SEGMENT, `/i/[slug]/opengraph-image-1gh5xv`,
+and the clean path 404s. `lib/server/og-warm.ts` fetches that clean path on
+purpose — Next appends its build hash as a QUERY to the emitted `og:image`, and
+warming the unhashed path is what keeps a warm cache usable across builds.
+
+Four browser tests reported it within a minute of the move, which is the only
+reason it did not ship. The route stayed put and got its own layout; the cost
+is two mounts, and it is nothing here, because a guest arrives at the
+invitation from a message and leaves by closing the tab. There is no
+client-side navigation for an `<audio>` element to survive.
+
+**One measurement.** `max-w-md` on the gate broke "Luis & Michell" after the
+ampersand at `lg`, where the names are set at `text-6xl`. The cap is right on a
+phone and wrong in a grid column that has the room; it lifts at the breakpoint.
+
+Green: 2298 unit and component tests, 205 browser tests, typecheck, lint,
+format, build.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still

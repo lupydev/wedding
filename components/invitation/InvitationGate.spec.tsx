@@ -105,3 +105,65 @@ describe("InvitationGate", () => {
     }
   });
 });
+
+/**
+ * THE GATE CARRIES THE WEDDING, NOT ONLY THE QUESTION.
+ *
+ * The couple asked for it after seeing the two pages side by side: "valdría la
+ * pena seguir manteniendo como en la landing" — the announcement block, with
+ * the script line, their names, the date and the counter — "y el copy con el
+ * saludo + escribe tu número para abrir la invitación".
+ *
+ * It is the first screen a guest reaches from a WhatsApp message, and before
+ * this it said only "we have your invitation, now prove who you are". The
+ * wedding it is about was on the other side of the field.
+ */
+describe("what the gate says about the wedding", () => {
+  it("carries the announcement the landing opens with", () => {
+    renderGate();
+
+    expect(screen.getByText("Nos casamos")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Luis & Michell/ }),
+    ).toBeInTheDocument();
+    // The counter comes with it, which is the part that makes the date feel
+    // like something approaching rather than a line of small print.
+    expect(screen.getByTestId("save-the-date-when")).toBeInTheDocument();
+  });
+
+  /**
+   * ONE LINE ASKS FOR THE NUMBER, AND IT USED TO BE TWO.
+   *
+   * "Tenemos lista su invitación de matrimonio." followed by "Para abrirla,
+   * escribe el número de celular que compartiste con nosotros." — two sentences
+   * saying what one says, above a field that is the only thing to do on the
+   * page.
+   */
+  it("asks for the number in a single sentence", () => {
+    renderGate();
+
+    expect(
+      screen.getByText(/Escribe tu número para abrir la invitación/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Tenemos lista su invitación/)).toBeNull();
+    expect(screen.queryByText(/que compartiste con nosotros/)).toBeNull();
+  });
+
+  /**
+   * AND THE GREETING STILL COMES FIRST.
+   *
+   * The ordering is a product promise and the announcement does not displace
+   * it: the WhatsApp message said "your invitation", so the household is
+   * greeted before anything is demanded of them. The test above this one
+   * asserts the form follows the greeting; this asserts the announcement does
+   * not slip above it.
+   */
+  it("greets before it says anything about the wedding", () => {
+    renderGate();
+
+    const heading = screen.getByRole("heading", { name: /Ñoño Muñóz/ });
+    const announcement = screen.getByText("Nos casamos");
+
+    expect(heading.compareDocumentPosition(announcement) & 4).toBe(4);
+  });
+});

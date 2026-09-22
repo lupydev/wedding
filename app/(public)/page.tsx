@@ -90,19 +90,10 @@ export default function Home() {
           At `lg` none of this applies — the words are in their own column — so
           the centring returns at that breakpoint.
         */}
-        <div className="flex flex-col items-center gap-6">
-          <p
-            className="
-              font-script text-3xl text-[#f6efe2]/90
-              [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
-              sm:text-4xl
-            "
-          >
-            Nos casamos
-          </p>
-
-          <SaveTheDate />
-        </div>
+        {/* The script line used to be here, above `SaveTheDate`. It moved
+            INTO it when the gate started making the same announcement: two
+            halves of one block in two files is how they drift. */}
+        <SaveTheDate />
 
         {/*
           The door to `/transmision`, which opens in the final week.
