@@ -121,6 +121,9 @@ declined screen given the language `/transmision` already uses.
       allá estaré"; two or more keep the plural. Nothing but those two choices
       shows until one is picked, and a household of one is never asked to tick
       its own name.
+- [x] **U20 — the error screen, which nobody had ever looked at.** Black text
+      on white, crammed top-left, a bare button. On the stage now, with the
+      photograph.
 - [ ] **U19 — the declined screen in `/transmision`'s language.** "Los
       esperamos por Zoom", rather than the longer explanation it carries now.
 
@@ -940,6 +943,50 @@ It is still a correct sentence and still covered in `rsvp-copy.spec.ts`; nothing
 renders it.
 
 Green: 2317 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
+### U20 — done (the screen that shows when the invitation fails to draw)
+
+The couple, with a screenshot: "cuando algo sale mal esta es la pantalla que
+está retornando, está horrible; hay que mejorarla con el mismo estilo que
+estamos llevando en la landing y la invitación: una fotografía y un mensaje de
+error."
+
+It was black text on white, crammed into the top-left corner, with a bare
+`<button>` — the framework's default box model and nothing else. Exactly the
+defect U4 found on the gate, for exactly the same reason: a screen written for
+what it SAYS and never looked at. `error.tsx` had thorough tests for its stale-
+chunk detection and its copy, and not one line about what a guest would see.
+
+**IT TAKES THE PHOTOGRAPH, AND `InvitationUnavailable` DELIBERATELY DOES NOT.**
+That distinction is the design. The not-found page is reached by typing an
+address nobody holds, and framing the couple above "no encontramos esta
+invitación" would put their wedding on a screen a stranger reached by guessing.
+Here the reader holds a real invitation and is already past the gate: theirs did
+not go missing, it failed to draw. Showing the same picture the working page
+would have shown is the difference between "something broke" and "you are in
+the wrong place".
+
+**The reassurance stays first, and that order is the whole copy.** By the time
+this fires the RSVP write has usually already succeeded and only the screen
+died. A guest who has just confirmed and then meets a failure will assume their
+answer was lost, and answering twice is a worse outcome than the error.
+
+**"Intentar de nuevo" became a control.** It was a bare button with no surface
+at all — on the one screen whose entire purpose is to offer a second try, a
+control a guest cannot recognise is the same as no control. It wears
+`StreamLink`'s pill, already the guest-facing one everywhere else.
+
+**The photograph had to be mocked in the spec**, for the reason
+`PhotoStage.spec.tsx` records: under Vitest a static image import resolves to a
+bare string, and `next/image` throws when `placeholder="blur"` arrives without
+its data URL.
+
+Verified by screenshot at 1920 and at 390, through a throwaway route, because an
+error boundary cannot be reached from a browser test without breaking the page
+on purpose.
+
+Green: 2320 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.
 
 ## Next

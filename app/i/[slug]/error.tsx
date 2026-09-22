@@ -2,6 +2,9 @@
 
 import { useEffect } from "react";
 
+import { PhotoStage } from "@/components/landing/PhotoStage";
+import { WEDDING_PHOTO } from "@/components/landing/photos";
+
 /**
  * Error boundary for the invitation route.
  *
@@ -100,19 +103,88 @@ export default function InvitationError({
   }, [error]);
 
   return (
-    <main className="invitation-error">
-      <h1>Algo falló en la pantalla</h1>
-      <p>
-        Si ya confirmaste tu asistencia, tu respuesta quedó guardada. Esto fue
-        solo un problema al mostrar la página.
-      </p>
-      <p>
-        Puedes intentar de nuevo. Si vuelve a fallar, escríbenos por WhatsApp y
-        lo resolvemos contigo.
-      </p>
-      <button type="button" onClick={reset}>
-        Intentar de nuevo
-      </button>
-    </main>
+    /*
+      THE SAME STAGE AS THE INVITATION THAT FAILED TO DRAW.
+
+      The couple, with a screenshot: "está horrible; hay que mejorarla con el
+      mismo estilo que estamos llevando en la landing y la invitación: una
+      fotografía y un mensaje de error." It was black text on white, crammed
+      into the top-left corner — the framework's default box model and nothing
+      else. Exactly the defect the gate had, for exactly the same reason: a
+      screen written for what it SAYS and never looked at.
+
+      IT TAKES THE PHOTOGRAPH, AND `InvitationUnavailable` DELIBERATELY DOES
+      NOT. That page is reached by typing an address nobody holds, and framing
+      the couple above "no encontramos esta invitación" would put their wedding
+      on a screen a stranger reached by guessing. Here the reader holds a real
+      invitation and is already past the gate: theirs did not go missing, it
+      failed to draw. Showing them the same picture the working page would have
+      shown is the difference between "something broke" and "you are in the
+      wrong place".
+
+      `band`, as the gate and the invitation use, for the photograph's sake:
+      at 0.75:1 a phone-filling crop discards about 38% of the width and clips
+      both people.
+    */
+    <PhotoStage mobilePhoto="band" photo={WEDDING_PHOTO}>
+      <section
+        className="
+          invitation-error mx-auto flex w-full max-w-md flex-col items-center
+          gap-5 px-6 pt-8 pb-[max(1.75rem,env(safe-area-inset-bottom))]
+          text-center text-[#f6efe2]
+          sm:pt-12 sm:pb-10
+          lg:h-full lg:justify-center lg:px-4 lg:py-0
+        "
+      >
+        <h1
+          className="
+            font-display text-2xl leading-[1.1] text-balance
+            [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+            sm:text-3xl
+          "
+        >
+          Algo falló en la pantalla
+        </h1>
+
+        {/*
+          THE REASSURANCE COMES FIRST, AND THAT ORDER IS THE WHOLE COPY.
+
+          By the time this fires the RSVP write has usually already succeeded
+          and only the screen died. A guest who has just confirmed and then
+          sees a failure will assume their answer was lost, and answering
+          twice is a worse outcome than the error itself.
+        */}
+        <p className="max-w-sm text-sm text-[#f6efe2]/85 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">
+          Si ya confirmaste tu asistencia, tu respuesta quedó guardada. Esto fue
+          solo un problema al mostrar la página.
+        </p>
+
+        {/*
+          A CONTROL, NOT A WORD. "Intentar de nuevo" was a bare `<button>` with
+          no surface at all — on the one screen whose entire purpose is to offer
+          a second try, a control a guest cannot recognise is the same as no
+          control. The pill is `StreamLink`'s, which is already the guest-facing
+          one on every other page.
+        */}
+        <button
+          type="button"
+          onClick={reset}
+          className="
+            rounded-full border border-[#f6efe2]/30 bg-black/30 px-5 py-2.5
+            text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
+            duration-(--console-motion-fast) ease-(--ease-console-out)
+            hover:bg-black/50
+            focus-visible:outline-2 focus-visible:outline-offset-2
+            focus-visible:outline-[#f6efe2]
+          "
+        >
+          Intentar de nuevo
+        </button>
+
+        <p className="text-xs text-[#f6efe2]/70 [text-shadow:0_1px_10px_rgba(0,0,0,0.6)]">
+          Si vuelve a fallar, escríbenos por WhatsApp y lo resolvemos contigo.
+        </p>
+      </section>
+    </PhotoStage>
   );
 }
