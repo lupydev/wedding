@@ -68,8 +68,15 @@ export function PhotoStage({
   mobilePhoto = "band",
 }: {
   /**
-   * The words. It owns its own grid placement: `col-start-1 row-start-1` to
-   * share the cell with the photograph, `lg:col-start-2` to sit beside it.
+   * The words.
+   *
+   * IT NO LONGER OWNS ITS GRID PLACEMENT, AND THAT WAS A TRAP RATHER THAN A
+   * CONVENIENCE. Every caller wrote `col-start-1 row-start-1` because both
+   * used `overlay` — and in `band` the photograph is a strip at the top and the
+   * words belong BENEATH it, so that same class lands them on top of the
+   * picture. It did not fail loudly: it rendered, with a household's names laid
+   * across a waterfall. The stage places them now, so a caller cannot get it
+   * wrong because a caller no longer says anything about it.
    */
   readonly children: React.ReactNode;
   /** The photograph this page stands on, and what it shows. */
@@ -89,7 +96,7 @@ export function PhotoStage({
      * already filled for the instant before the image decodes. On a page this
      * dark, a white flash is the only visible failure.
      */
-    <main className="relative min-h-dvh overflow-hidden bg-[#0d1114]">
+    <main className="photo-stage relative min-h-dvh overflow-hidden bg-[#0d1114]">
       {/*
         THE BACKDROP: THE SAME PHOTOGRAPH, TINY AND BLURRED.
 
@@ -122,10 +129,12 @@ export function PhotoStage({
       />
 
       <div
-        className="
+        className={`
           relative grid min-h-dvh grid-cols-1
-          lg:mx-auto lg:max-w-6xl lg:grid-cols-2 lg:items-center lg:px-8
-        "
+          lg:mx-auto lg:max-w-6xl lg:grid-cols-2 lg:grid-rows-1
+          lg:items-center lg:px-8
+          ${overlay ? "" : "grid-rows-[auto_1fr]"}
+        `}
       >
         <figure
           className={`
@@ -229,7 +238,23 @@ export function PhotoStage({
           </>
         ) : null}
 
-        {children}
+        {/*
+          THE CELL THE WORDS LIVE IN, DECIDED HERE.
+
+          `overlay` shares the print's cell — one row, one column, two layers.
+          `band` takes the second row, under the strip. At `lg` neither applies:
+          the print is in its own column and the words are in the next one, so
+          the mobile choice stops mattering.
+        */}
+        <div
+          className={`
+            photo-stage__column relative col-start-1 lg:col-start-2
+            lg:row-start-1
+            ${overlay ? "row-start-1" : "row-start-2"}
+          `}
+        >
+          {children}
+        </div>
       </div>
     </main>
   );

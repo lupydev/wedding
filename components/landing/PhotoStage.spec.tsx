@@ -139,3 +139,65 @@ describe("PhotoStage", () => {
     );
   });
 });
+
+/**
+ * WHERE THE WORDS GO, AND WHY THE STAGE DECIDES IT.
+ *
+ * The children used to own their own grid placement, and the comment said so.
+ * That was survivable while both callers used `overlay` — and it was a trap the
+ * moment one did not: in `band` the photograph is a strip at the top and the
+ * words belong BENEATH it, but a child still writing `row-start-1` lands on top
+ * of the picture instead. Which is exactly what happened, and it did not fail
+ * loudly: it rendered, with the names of a household laid across a waterfall.
+ *
+ * So the stage places them. A caller cannot get this wrong any more because a
+ * caller no longer says anything about it.
+ */
+describe("where the stage puts the words", () => {
+  function column(): HTMLElement {
+    return document.querySelector<HTMLElement>("div.photo-stage__column")!;
+  }
+
+  it("lays them over the photograph in overlay", () => {
+    render(
+      <PhotoStage mobilePhoto="overlay" photo={ENGAGEMENT}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    // The same cell as the print: one row, one column, two layers.
+    expect(column().className).toContain("row-start-1");
+    expect(column().className).not.toContain("row-start-2");
+  });
+
+  it("puts them under the photograph in band", () => {
+    render(
+      <PhotoStage mobilePhoto="band" photo={WEDDING}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    expect(column().className).toContain("row-start-2");
+  });
+
+  /**
+   * AND BESIDE IT AT `lg`, WHICHEVER MODE IT IS.
+   *
+   * Above the breakpoint the photograph is a framed print in its own column
+   * and the words are in the second one, so the mobile choice stops applying
+   * entirely.
+   */
+  it("puts them beside it above the breakpoint, either way", () => {
+    for (const mode of ["overlay", "band"] as const) {
+      const { unmount } = render(
+        <PhotoStage mobilePhoto={mode} photo={WEDDING}>
+          <p>Las palabras</p>
+        </PhotoStage>,
+      );
+
+      expect(column().className).toContain("lg:col-start-2");
+      expect(column().className).toContain("lg:row-start-1");
+      unmount();
+    }
+  });
+});

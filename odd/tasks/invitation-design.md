@@ -57,7 +57,7 @@ defect the couple reported on day one: "la imagen se ve súper grande con zoom".
 - [x] **U1 — the stage takes a photograph instead of containing one.** The
       aspect ratio comes from the image's own dimensions rather than a literal,
       and `overlay` stops being offered to a photograph that cannot survive it.
-- [ ] **U2 — the invitation stands on that stage.** Dark ground, framed print,
+- [x] **U2 — the invitation stands on that stage.** Dark ground, framed print,
       words beside it on a laptop and beneath it on a phone — the landing's
       language, which `/` and `/transmision` already share.
 - [ ] **U3 — the parts of the invitation that are TYPED, not read.** The
@@ -107,4 +107,43 @@ job and the browser suite's.
 Green: 2290 unit and component tests, 200 browser tests, typecheck, lint,
 format, build.
 
-### Next: U2 — the invitation stands on that stage.
+### U2 — done
+
+`/i/[slug]` stands on `PhotoStage` with the wedding photograph, in `band` — the
+strip across the top, the words beneath it on a phone, beside the framed print
+on a laptop. `InvitationBody` speaks the landing's language now: cream on the
+photograph's own darkness, the script face for the couple's line, the display
+face for the salutation, the same hairline `SaveTheDate` uses.
+
+Its `.invitation__*` classes are untouched. The browser suite and the console
+preview point at `invitation__rsvp` and `section.invitation__household`, so a
+rename here is a silent failure over there.
+
+**A LATENT BUG CAME OUT THE MOMENT THIS WAS LOOKED AT.**
+
+`band` had never been used. Both existing pages pass `overlay`, and the stage's
+contract said the CHILD owns its grid placement — so every caller wrote
+`col-start-1 row-start-1`, which in `band` is the photograph's own cell. The
+first screenshot showed it: a household's names laid across the waterfall, the
+form on top of the couple. It rendered. Nothing failed.
+
+The stage places the words now, in `div.photo-stage__column`, and decides the
+cell from the mode: the print's cell in `overlay`, the second row in `band`,
+the second column at `lg` either way. A caller cannot get it wrong because a
+caller no longer says anything about it, and the three children dropped the
+placement classes they had been carrying.
+
+**Found by looking, not by testing.** Every check was green with the words on
+top of the photograph — there is no assertion that says "these two do not
+overlap". Screenshots at 390px and 1440px are what caught it, and are worth
+taking for any change to this stage.
+
+Green: 2293 unit and component tests, 203 browser tests, typecheck, lint,
+format, build.
+
+### Next: U3 — the RSVP form, which is still raw.
+
+The screenshots show it plainly: bare radios and checkboxes, labels running
+into each other, an unstyled submit. It is the one part of this page that is
+TYPED rather than read, and it is the reason U3 was named before any of this
+was written.

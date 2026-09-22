@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
 import { InvitationBody } from "@/components/invitation/InvitationBody";
+import { PhotoStage } from "@/components/landing/PhotoStage";
+import { WEDDING_PHOTO } from "@/components/landing/photos";
 import { InvitationGate } from "@/components/invitation/InvitationGate";
 import { InvitationUnavailable } from "@/components/invitation/InvitationUnavailable";
 import { RsvpAnswer } from "@/components/invitation/RsvpAnswer";
@@ -128,7 +130,24 @@ export default async function InvitationPage({ params }: RouteParams) {
     const ceremony = await loadCeremony();
 
     return (
-      <main>
+      /*
+        THE SAME STAGE AS `/` AND `/transmision`, WITH THE OTHER PHOTOGRAPH.
+
+        The couple asked for the invitation in the landing's language, and the
+        three pages are read one after another — a guest lands here from a
+        message, and may walk to the stream page from inside it — so the dark
+        ground, the blurred backdrop and the framed print have to be the same
+        object rather than three that happen to match today.
+
+        `band`, NOT `overlay`, and for two independent reasons. The wedding
+        photograph is 0.75:1: filling a phone viewport with it discards about
+        38% of the width and clips both people, who stand left and right of
+        centre. And this page carries a form — a radio group, a checkbox per
+        member and a free-text field — which is far more than can be laid over
+        a photograph, the same measurement that put the stream invitation in a
+        band before it.
+      */
+      <PhotoStage mobilePhoto="band" photo={WEDDING_PHOTO}>
         <InvitationBody
           invitation={invitation}
           wedding={ceremony}
@@ -162,7 +181,7 @@ export default async function InvitationPage({ params }: RouteParams) {
             )
           }
         />
-      </main>
+      </PhotoStage>
     );
   }
 

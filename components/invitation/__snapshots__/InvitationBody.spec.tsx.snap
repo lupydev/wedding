@@ -1,5 +1,45 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`InvitationBody > matches its approved markup 1`] = `"<article class="invitation"><p class="invitation__couple">Ana y Bruno</p><h1 class="invitation__greeting">Ñoño, Aurelia y Tomás</h1><p class="invitation__lead">Nos alegra mucho invitarlos a celebrar nuestro matrimonio.</p><dl class="invitation__details"><dt>Fecha</dt><dd>sábado 14 de noviembre de 2026</dd><dt>Lugar</dt><dd>Hacienda La Ñapa</dd><dt>Dirección</dt><dd>Calle 12 #34-56, Barrio Centro</dd></dl><section class="invitation__household"><ul><li>Ñoño Muñóz</li><li>Aurelia Muñóz</li><li>Tomás Muñóz (niño o niña)</li></ul></section><p class="invitation__deadline">Confirmen su asistencia antes del 21 de noviembre de 2026.</p></article>"`;
+exports[`InvitationBody > matches its approved markup 1`] = `
+"<article class="
+        invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
+        pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
+        sm:pt-12 sm:pb-10
+        lg:justify-center lg:px-4 lg:py-0
+      "><header class="flex flex-col items-center gap-4 text-center"><p class="
+            invitation__couple font-script text-2xl text-[#f6efe2]/90
+            [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
+            sm:text-3xl
+          ">Ana y Bruno</p><h1 class="
+            invitation__greeting font-display text-3xl leading-[1.05]
+            text-balance text-[#f6efe2]
+            [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+            sm:text-4xl
+          ">Ñoño, Aurelia y Tomás</h1><p class="
+            invitation__lead max-w-sm text-sm text-[#f6efe2]/85
+            [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
+            sm:text-base
+          ">Nos alegra mucho invitarlos a celebrar nuestro matrimonio.</p></header><dl class="invitation__details m-0 flex flex-col gap-3 text-center"><div class="flex flex-col gap-0.5"><dt class="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">Fecha</dt><dd class="m-0 text-sm text-[#f6efe2] sm:text-base">sábado 14 de noviembre de 2026</dd></div><div class="flex flex-col gap-0.5"><dt class="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">Lugar</dt><dd class="m-0 text-sm text-[#f6efe2] sm:text-base">Hacienda La Ñapa</dd></div><div class="flex flex-col gap-0.5"><dt class="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">Dirección</dt><dd class="m-0 text-sm text-[#f6efe2] sm:text-base">Calle 12 #34-56, Barrio Centro</dd></div></dl><section class="invitation__household"><span aria-hidden="true" class="mx-auto mb-5 block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><ul class="m-0 flex list-none flex-col items-center gap-1.5 p-0"><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Ñoño Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Aurelia Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Tomás Muñóz<span class="text-[#f6efe2]/60"> (niño o niña)</span></li></ul></section><p class="invitation__deadline text-center text-xs text-[#f6efe2]/70">Confirmen su asistencia antes del 21 de noviembre de 2026.</p></article>"
+`;
 
-exports[`InvitationBody's RSVP slot > renders exactly as before when the route supplies nothing 1`] = `"<article class="invitation"><p class="invitation__couple">Ana y Bruno</p><h1 class="invitation__greeting">Ñoño, Aurelia y Tomás</h1><p class="invitation__lead">Nos alegra mucho invitarlos a celebrar nuestro matrimonio.</p><dl class="invitation__details"><dt>Fecha</dt><dd>sábado 14 de noviembre de 2026</dd><dt>Lugar</dt><dd>Hacienda La Ñapa</dd><dt>Dirección</dt><dd>Calle 12 #34-56, Barrio Centro</dd></dl><section class="invitation__household"><ul><li>Ñoño Muñóz</li><li>Aurelia Muñóz</li><li>Tomás Muñóz (niño o niña)</li></ul></section><p class="invitation__deadline">Confirmen su asistencia antes del 21 de noviembre de 2026.</p></article>"`;
+exports[`InvitationBody's RSVP slot > renders exactly as before when the route supplies nothing 1`] = `
+"<article class="
+        invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
+        pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
+        sm:pt-12 sm:pb-10
+        lg:justify-center lg:px-4 lg:py-0
+      "><header class="flex flex-col items-center gap-4 text-center"><p class="
+            invitation__couple font-script text-2xl text-[#f6efe2]/90
+            [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
+            sm:text-3xl
+          ">Ana y Bruno</p><h1 class="
+            invitation__greeting font-display text-3xl leading-[1.05]
+            text-balance text-[#f6efe2]
+            [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+            sm:text-4xl
+          ">Ñoño, Aurelia y Tomás</h1><p class="
+            invitation__lead max-w-sm text-sm text-[#f6efe2]/85
+            [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
+            sm:text-base
+          ">Nos alegra mucho invitarlos a celebrar nuestro matrimonio.</p></header><dl class="invitation__details m-0 flex flex-col gap-3 text-center"><div class="flex flex-col gap-0.5"><dt class="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">Fecha</dt><dd class="m-0 text-sm text-[#f6efe2] sm:text-base">sábado 14 de noviembre de 2026</dd></div><div class="flex flex-col gap-0.5"><dt class="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">Lugar</dt><dd class="m-0 text-sm text-[#f6efe2] sm:text-base">Hacienda La Ñapa</dd></div><div class="flex flex-col gap-0.5"><dt class="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">Dirección</dt><dd class="m-0 text-sm text-[#f6efe2] sm:text-base">Calle 12 #34-56, Barrio Centro</dd></div></dl><section class="invitation__household"><span aria-hidden="true" class="mx-auto mb-5 block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><ul class="m-0 flex list-none flex-col items-center gap-1.5 p-0"><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Ñoño Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Aurelia Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Tomás Muñóz<span class="text-[#f6efe2]/60"> (niño o niña)</span></li></ul></section><p class="invitation__deadline text-center text-xs text-[#f6efe2]/70">Confirmen su asistencia antes del 21 de noviembre de 2026.</p></article>"
+`;

@@ -64,12 +64,10 @@ export default function Home() {
     <PhotoStage mobilePhoto="overlay" photo={ENGAGEMENT_PHOTO}>
       <div
         className="
-          relative col-start-1 row-start-1 flex min-h-dvh flex-col items-center
-          justify-between gap-8 px-6 pt-8
+          flex min-h-dvh flex-col items-center justify-between gap-8 px-6 pt-8
           pb-[max(1.75rem,env(safe-area-inset-bottom))]
           sm:pt-12 sm:pb-10
-          lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:justify-center lg:gap-9
-          lg:px-4 lg:py-0
+          lg:min-h-0 lg:justify-center lg:gap-9 lg:px-4 lg:py-0
         "
       >
         {/*

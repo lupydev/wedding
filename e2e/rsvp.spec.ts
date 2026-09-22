@@ -474,3 +474,68 @@ test.describe("answering without a session", () => {
     }
   });
 });
+
+/**
+ * THE INVITATION STANDS ON THE SAME STAGE AS THE LANDING.
+ *
+ * The couple: "podemos seguir manejando el mismo estilo de la landing pero
+ * utilicemos ahora la imagen de la boda dentro de img."
+ *
+ * `/` and `/transmision` already share `PhotoStage` — the dark ground, the
+ * blurred backdrop, the framed print. This is the third page to stand on it,
+ * and the first with a different photograph, which is what made the stage take
+ * one as a parameter rather than contain it.
+ */
+test.describe("the invitation's own stage", () => {
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  test("shows the wedding photograph, framed", async ({ page }) => {
+    await unlock(page, invitation);
+
+    const print = page.locator("figure.photo-stage__frame img").first();
+
+    await expect(print).toBeVisible();
+    // Through the optimizer, so the query string is what carries the file.
+    await expect(print).toHaveAttribute("src", /boda/);
+  });
+
+  /**
+   * AND THE FRAME IS SHAPED BY THE FILE, NOT BY A LITERAL.
+   *
+   * 1800×2400. A frame drawn at the engagement photograph's 737×1600 would not
+   * fail loudly — it would crop this picture to fit and look deliberate, with
+   * the two people cut off at the sides.
+   */
+  test("frames it at its own shape", async ({ page }) => {
+    await unlock(page, invitation);
+
+    await expect(page.locator("figure.photo-stage__frame")).toHaveCSS(
+      "--photo-stage-aspect",
+      "1800 / 2400",
+    );
+  });
+
+  /**
+   * THE WORDS ARE ON THE DARK GROUND, NOT ON A PAGE OF THEIR OWN.
+   *
+   * The stage paints `#0d1114` behind everything — its own comment calls a
+   * white flash "the only visible failure" on a page this dark. If the
+   * invitation rendered outside it, this would come back white.
+   */
+  test("stands on the dark ground the landing uses", async ({ page }) => {
+    await unlock(page, invitation);
+
+    await expect(page.locator("main.photo-stage")).toHaveCSS(
+      "background-color",
+      "rgb(13, 17, 20)",
+    );
+  });
+});

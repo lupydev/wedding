@@ -88,20 +88,97 @@ export function InvitationBody({
   rsvp?: React.ReactNode;
 }) {
   return (
-    <article className="invitation">
-      <p className="invitation__couple">{wedding.coupleNames}</p>
-      <h1 className="invitation__greeting">{invitation.greetingName}</h1>
-      <p className="invitation__lead">
-        Nos alegra mucho invitarlos a celebrar nuestro matrimonio.
-      </p>
+    /*
+      THE LANDING'S LANGUAGE, ON THE INVITATION.
 
-      <dl className="invitation__details">
-        <dt>Fecha</dt>
-        <dd>{wedding.ceremonyDate}</dd>
-        <dt>Lugar</dt>
-        <dd>{wedding.venueName}</dd>
-        <dt>Dirección</dt>
-        <dd>{wedding.venueAddress}</dd>
+      Cream on the photograph's own darkness, the script face for the couple's
+      line, the display face for the salutation. The three public pages are read
+      one after another, so a guest arriving here from a message and walking to
+      the stream page from inside it should not cross three visual identities.
+
+      The classes the browser suite and the console preview point at —
+      `invitation__rsvp`, `invitation__household` — are kept exactly. They are
+      how those tests tell one section from another, and a rename here is a
+      silent failure over there.
+    */
+    <article
+      className="
+        invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
+        pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
+        sm:pt-12 sm:pb-10
+        lg:justify-center lg:px-4 lg:py-0
+      "
+    >
+      <header className="flex flex-col items-center gap-4 text-center">
+        <p
+          className="
+            invitation__couple font-script text-2xl text-[#f6efe2]/90
+            [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
+            sm:text-3xl
+          "
+        >
+          {wedding.coupleNames}
+        </p>
+
+        <h1
+          className="
+            invitation__greeting font-display text-3xl leading-[1.05]
+            text-balance text-[#f6efe2]
+            [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+            sm:text-4xl
+          "
+        >
+          {invitation.greetingName}
+        </h1>
+
+        <p
+          className="
+            invitation__lead max-w-sm text-sm text-[#f6efe2]/85
+            [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
+            sm:text-base
+          "
+        >
+          Nos alegra mucho invitarlos a celebrar nuestro matrimonio.
+        </p>
+      </header>
+
+      {/*
+        THE THREE FACTS, AS A LIST AND NOT AS A PARAGRAPH.
+
+        A `dl` because that is what they are: three labels and three values.
+        The label is small and quiet and the value carries the weight, so the
+        eye lands on "28 de noviembre" rather than on the word "Fecha".
+
+        `sr-only` was considered for the labels and rejected. On the stream page
+        the two credentials are self-evident from their shape; a venue name and
+        a street address are not, and a guest scanning for where to go needs
+        the word "Dirección" as much as the address.
+      */}
+      <dl className="invitation__details m-0 flex flex-col gap-3 text-center">
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">
+            Fecha
+          </dt>
+          <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
+            {wedding.ceremonyDate}
+          </dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">
+            Lugar
+          </dt>
+          <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
+            {wedding.venueName}
+          </dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <dt className="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">
+            Dirección
+          </dt>
+          <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
+            {wedding.venueAddress}
+          </dd>
+        </div>
       </dl>
 
       {/* WHO THIS IS FOR, SAID ONCE.
@@ -111,11 +188,27 @@ export function InvitationBody({
        * so the section carried four lines all answering the same question. The
        * list is the authoritative record; the greeting is the salutation. */}
       <section className="invitation__household">
-        <ul>
+        {/*
+          A hairline above the names, borrowed from `SaveTheDate`: it separates
+          the salutation from the list of people without a heading that would
+          restate what the greeting already said.
+        */}
+        <span
+          aria-hidden="true"
+          className="mx-auto mb-5 block h-px w-16 bg-[#f6efe2]/30 sm:w-24"
+        />
+        <ul className="m-0 flex list-none flex-col items-center gap-1.5 p-0">
           {invitation.guests.map((guest) => (
-            <li key={guest.id}>
+            <li
+              className="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base"
+              key={guest.id}
+            >
               {guest.fullName}
-              {guest.isChild ? " (niño o niña)" : ""}
+              {guest.isChild ? (
+                <span className="text-[#f6efe2]/60"> (niño o niña)</span>
+              ) : (
+                ""
+              )}
             </li>
           ))}
         </ul>
@@ -139,7 +232,7 @@ export function InvitationBody({
         Both this sentence and the gate in `lib/server/rsvp.ts` derive from the
         same instant, so they cannot name different days.
       */}
-      <p className="invitation__deadline">
+      <p className="invitation__deadline text-center text-xs text-[#f6efe2]/70">
         Confirmen su asistencia antes del {RSVP_DEADLINE_TEXT}.
       </p>
     </article>
