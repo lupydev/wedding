@@ -1,6 +1,4 @@
-import Image from "next/image";
-
-import compromiso from "@/img/compromiso.jpg";
+import Image, { type StaticImageData } from "next/image";
 
 /**
  * The stage both public pages stand on: the photograph, and room beside it.
@@ -14,16 +12,27 @@ import compromiso from "@/img/compromiso.jpg";
  *
  * ONE GRID, TWO LAYOUTS, AND THE BREAKPOINT IS WHERE THE SHAPES STOP MATCHING.
  *
- * The photograph is 737×1600, or 0.46:1. A phone is 0.462:1 — the same shape to
- * three decimals — so below `lg` it fills the viewport and the words can sit on
- * top of it. A laptop is about 2:1, where that is impossible: cropped to fill,
- * three quarters of the photograph is discarded and the couple are cut at the
- * knees; contained to fit, it becomes a phone screenshot marooned in a black
- * page. So at `lg` the grid grows a second column, the photograph takes its own
- * aspect ratio and becomes a framed print, and the words move beside it.
+ * The engagement photograph is 737×1600, or 0.46:1. A phone is 0.462:1 — the
+ * same shape to three decimals — so below `lg` it fills the viewport and the
+ * words can sit on top of it. A laptop is about 2:1, where that is impossible:
+ * cropped to fill, three quarters of the photograph is discarded and the couple
+ * are cut at the knees; contained to fit, it becomes a phone screenshot marooned
+ * in a black page. So at `lg` the grid grows a second column, the photograph
+ * takes its own aspect ratio and becomes a framed print, and the words move
+ * beside it.
  *
  * Grid placement rather than two trees, so there is ONE copy of the photograph
  * and ONE copy of the words at every size.
+ *
+ * THE PHOTOGRAPH IS A PARAMETER NOW, AND ITS SHAPE COMES WITH IT.
+ *
+ * That ratio used to be a literal in a class name and the image a literal at
+ * the top of this file, which was fine while there was one photograph. The
+ * wedding photograph is 1800×2400 — 0.75:1, portrait but nothing like a phone —
+ * and a frame drawn at the wrong shape does not fail loudly: it crops the
+ * picture to fit and looks deliberate. So the ratio is read off the image, and
+ * the caller that supplies the image supplies its description too, because an
+ * `alt` describing the wrong photograph is worse than none.
  */
 /**
  * How the photograph shares a narrow screen with the words.
@@ -40,8 +49,22 @@ import compromiso from "@/img/compromiso.jpg";
  */
 export type MobilePhoto = "overlay" | "band";
 
+/** A photograph and what it shows. Both, because neither is any use alone. */
+export interface StagePhoto {
+  readonly src: StaticImageData;
+  /**
+   * What is in it, for a reader who cannot see it.
+   *
+   * Travels with the image rather than living in this component: an `alt`
+   * describing the engagement photograph on a page showing the wedding one is
+   * a confident, wrong answer, which is worse than no answer.
+   */
+  readonly alt: string;
+}
+
 export function PhotoStage({
   children,
+  photo,
   mobilePhoto = "band",
 }: {
   /**
@@ -49,6 +72,8 @@ export function PhotoStage({
    * share the cell with the photograph, `lg:col-start-2` to sit beside it.
    */
   readonly children: React.ReactNode;
+  /** The photograph this page stands on, and what it shows. */
+  readonly photo: StagePhoto;
   /** How the photograph and the words share a narrow screen. */
   readonly mobilePhoto?: MobilePhoto;
 }) {
@@ -87,7 +112,7 @@ export function PhotoStage({
         not compete with it for the connection.
       */}
       <Image
-        src={compromiso}
+        src={photo.src}
         alt=""
         aria-hidden="true"
         fill
@@ -104,16 +129,27 @@ export function PhotoStage({
       >
         <figure
           className={`
-            relative col-start-1 row-start-1 m-0 w-full
-            lg:row-start-1 lg:mx-auto lg:aspect-[737/1600] lg:h-[86dvh]
-            lg:w-auto lg:overflow-hidden lg:rounded-2xl
+            photo-stage__frame relative col-start-1 row-start-1 m-0 w-full
+            lg:row-start-1 lg:mx-auto lg:aspect-[var(--photo-stage-aspect)]
+            lg:h-[86dvh] lg:w-auto lg:overflow-hidden lg:rounded-2xl
             lg:shadow-[0_24px_80px_rgba(0,0,0,0.6)] lg:ring-1 lg:ring-white/10
             ${overlay ? "h-dvh" : "h-[38dvh]"}
           `}
+          /*
+            A CUSTOM PROPERTY, BECAUSE TAILWIND CANNOT COMPILE A RUNTIME VALUE.
+            And a property rather than a plain inline `aspect-ratio`: the frame
+            is only shaped at `lg`, since below that it is a band or the whole
+            screen, and an inline ratio would apply at every width.
+          */
+          style={
+            {
+              "--photo-stage-aspect": `${photo.src.width} / ${photo.src.height}`,
+            } as React.CSSProperties
+          }
         >
           <Image
-            src={compromiso}
-            alt="Luis y Michell abrazados en un sendero, con una cascada iluminada detrás"
+            src={photo.src}
+            alt={photo.alt}
             fill
             /*
              * `preload`, NOT `priority`. `priority` is deprecated as of Next 16

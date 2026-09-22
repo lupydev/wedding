@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import compromiso from "@/img/compromiso.jpg";
 
 import { PhotoStage } from "@/components/landing/PhotoStage";
+import { ENGAGEMENT_PHOTO } from "@/components/landing/photos";
 import { SaveTheDate } from "@/components/landing/SaveTheDate";
 import { StreamLink } from "@/components/landing/StreamLink";
 import { COUPLE_NAMES, formatWeddingDate } from "@/lib/domain/wedding-day";
@@ -60,7 +61,7 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <PhotoStage mobilePhoto="overlay">
+    <PhotoStage mobilePhoto="overlay" photo={ENGAGEMENT_PHOTO}>
       <div
         className="
           relative col-start-1 row-start-1 flex min-h-dvh flex-col items-center

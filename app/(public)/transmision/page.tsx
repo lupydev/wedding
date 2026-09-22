@@ -3,6 +3,7 @@ import { connection } from "next/server";
 
 import { StreamInvitation } from "@/components/invitation/StreamInvitation";
 import { PhotoStage } from "@/components/landing/PhotoStage";
+import { ENGAGEMENT_PHOTO } from "@/components/landing/photos";
 import {
   buildStreamCalendarEvent,
   googleCalendarUrl,
@@ -111,7 +112,7 @@ export default async function StreamPage() {
   );
 
   return (
-    <PhotoStage mobilePhoto="overlay">
+    <PhotoStage mobilePhoto="overlay" photo={ENGAGEMENT_PHOTO}>
       {/*
         THE SAME COLUMN AS THE LANDING, ON PURPOSE.
 
