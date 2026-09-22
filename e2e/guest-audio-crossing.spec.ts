@@ -36,27 +36,50 @@ test.use({
 test("crossing between the public pages by URL never drops back to the first bar", async ({
   page,
 }) => {
-  const elapsed = async (): Promise<number> =>
+  const playhead = async (): Promise<number> =>
     page.evaluate(() => document.querySelector("audio")!.currentTime);
 
-  const playingPast = async (mark: number): Promise<void> => {
+  /*
+    THE ASSERTION A RESTART CANNOT SATISFY, AND TWO EARLIER ONES THAT COULD.
+
+    The first polled for `currentTime` to pass the previous page's reading
+    inside fifteen seconds, justified by "a restart would have to play all the
+    way there again from zero, and the poll gives up first". Arithmetically
+    false: those readings are two and four seconds. It passed whether the
+    position was remembered or thrown away. The second sampled the moment
+    `paused` turned false — before the seek lands, since `preload="none"`
+    restores on `loadedmetadata` — and failed against a working product.
+
+    What a restart cannot do at ANY instant is be further along than the
+    document has been open: playback begun here has advanced at most as far as
+    the wall clock since the navigation started, so `at - open` stays at or
+    below zero forever. Polling it is therefore safe, and it tolerates the seek
+    landing whenever it lands.
+  */
+  const arriveAlreadyAhead = async (
+    path: string,
+    margin: number,
+  ): Promise<void> => {
+    const startedAt = Date.now();
+
+    await page.goto(path);
     await page.waitForLoadState("load");
-    await expect.poll(elapsed, { timeout: 15_000 }).toBeGreaterThan(mark);
+
+    await expect
+      .poll(async () => (await playhead()) - (Date.now() - startedAt) / 1000, {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(margin);
   };
 
+  // The first document has nothing to resume from: it only has to play.
   await page.goto("/");
-  await playingPast(1.5);
-  const landing = await elapsed();
+  await page.waitForLoadState("load");
+  await expect.poll(playhead, { timeout: 15_000 }).toBeGreaterThan(2);
 
-  await page.goto("/transmision");
-  /*
-    Past where the LANDING left off, which is the whole assertion. A restart
-    would have to play all the way there again from zero, and the poll gives up
-    first — so this cannot pass on a song that began afresh.
-  */
-  await playingPast(landing);
-  const stream = await elapsed();
+  // These two arrive already further along than they have existed.
+  await arriveAlreadyAhead("/transmision", 1);
+  await expect.poll(playhead, { timeout: 15_000 }).toBeGreaterThan(4);
 
-  await page.goto("/");
-  await playingPast(stream);
+  await arriveAlreadyAhead("/", 3);
 });

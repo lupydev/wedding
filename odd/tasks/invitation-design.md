@@ -704,6 +704,19 @@ browser grants a site the visitor has already played media on.
 
 A new element each time, and the song never returns to the first bar.
 
+**THE FIRST TWO VERSIONS OF THAT TEST PROVED NOTHING.** The first polled for
+`currentTime` to pass the previous page's reading inside fifteen seconds, and my
+comment claimed a restart "would have to play all the way there again from zero,
+and the poll gives up first" — arithmetically false, since those readings are
+two and four seconds. The review found it CRITICAL. The second sampled the
+instant `paused` turned false, which is before the seek lands on
+`loadedmetadata`, and failed against a working product.
+
+**What a restart cannot do at ANY instant** is be further along than the
+document has been open, so `at - open` stays at or below zero forever. Polling
+that is safe: waiting longer cannot rescue a restart. Proven by sabotage — with
+the seek replaced by a no-op the margin never rose above **-0.285**.
+
 **`e2e/guest-audio-crossing.spec.ts`, and it needs its own file.** The measurement
 is impossible in Playwright's default Chromium, which refuses autoplay — that
 refusal hides the entire question and every assertion would be about a silent
