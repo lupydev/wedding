@@ -122,8 +122,13 @@ test.describe("the song a guest hears", () => {
    *
    * What CAN survive is the position. The song remembers where it was for the
    * life of the tab, so the second document starts from there instead of from
-   * the first bar — and if the guest had deliberately paused it, it stays
-   * quiet rather than starting itself up again on the next page.
+   * the first bar.
+   *
+   * The position, and ONLY the position. This sentence used to promise that a
+   * guest who had paused would be left alone on the next page too — a record
+   * of that was tried, and it took the gesture fallback with it, so a click
+   * stopped starting the song at all. The test below it now says the
+   * opposite, deliberately.
    *
    * `page.goto` is exactly the URL bar: a real document load, not a client
    * navigation.
