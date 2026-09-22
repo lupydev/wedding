@@ -84,6 +84,9 @@ own screen after a unit shipped, which is the only reason it was found.
 - [x] **U9 — the two public pages, which had no browser test at all.** A
       duplicated announcement and words that stopped centring, both invisible
       to every existing check.
+- [x] **U10 — the song, measured instead of argued about.** Two of three
+      reported faults do not reproduce; the third is a browser permission. The
+      continuity both layouts claim is now asserted.
 
 ## Checks per unit
 
@@ -441,6 +444,61 @@ words against the print, on both pages, at the window the couple actually use.
 
 Green: 2301 unit and component tests, 213 browser tests, typecheck, lint,
 format, build. Verified by screenshot on all four guest screens at 1920×1080.
+
+### U10 — done (the song: three reports, one real finding, and none of it code)
+
+The couple: "veo que en la landing y /transmisión ya no comparten el mismo audio
+como antes y también cuando recién se abre la invitación si se hace click o algo
+no inicia la canción y supondría que tampoco esta página comparte el audio con
+la de aceptar la invitación."
+
+Three separate claims. Measured in a browser rather than reasoned about, because
+element identity across a navigation is not something a component test can see.
+What the probe reported, at 1440×900:
+
+| where                              | paused    | currentTime | same element |
+| ---------------------------------- | --------- | ----------- | ------------ |
+| landing, on arrival                | true      | 0           | —            |
+| landing, after a click on the page | **false** | 0.87        | tagged       |
+| /transmision, after a click        | false     | 1.04        | tagged       |
+| landing, after the `<Link>` back   | **false** | **2.41**    | **yes**      |
+| gate, on arrival                   | true      | 0           | —            |
+| gate, after a click on the page    | **false** | 1.26        | tagged       |
+| invitation, after the unlock       | **false** | **2.60**    | **yes**      |
+
+**The two pages DO share the song.** The same element survived the link and the
+song was 2.41s in, continuing from 1.04s. And **the gate DOES share it with the
+invitation**: the unlock is a server action inside one route, so the layout and
+its element persist — 1.26s to 2.60s, same element.
+
+**The gate's click-to-start works too**, in Chromium. Which leaves the couple's
+browser: Brave blocks autoplay per site by default, and they have already
+confirmed the BUTTON starts the song there. So Brave is allowing `play()` from a
+click that lands on the control and refusing it from a click elsewhere on the
+page. U6 recorded that exact residual, and nothing in this repository changes a
+per-site browser permission.
+
+**THE ONE REAL FINDING, AND IT IS NOT A DEFECT.** The probe reported
+`LANDING zoom link count: 0`. There is no `<Link>` from `/` to `/transmision`
+today: `StreamLink` opens in the final week, by the couple's own design. So the
+only way to reach the stream page right now is to type the URL — a full document
+load, a new element, and the song back at zero. That is what they were seeing,
+and it stops being true for guests the week of the wedding.
+
+**What the session actually gained: `e2e/guest-audio.spec.ts`.** Both layouts
+justify mounting the control by an architectural claim — "Layouts do not
+re-render on navigation", so the element persists — and nothing checked it.
+Asserting the element is PRESENT proves nothing, because a remounted one is also
+present with the song at zero. These tests tag the element and check the tag
+survived, then check `currentTime` did not fall back.
+
+**And one assertion that proved nothing, fixed before it was trusted.** The
+first version took its baseline the moment `paused` flipped, when `currentTime`
+is still 0 — so "it did not restart" compared zero to zero. The baseline now
+waits for half a second of real playback, which a reset cannot match.
+
+Green: 2302 unit and component tests, 217 browser tests, typecheck, lint,
+format, build.
 
 ## Next
 

@@ -1,0 +1,148 @@
+import { expect, test, type Page } from "@playwright/test";
+
+import { seedInvitation } from "./helpers/seed";
+
+/**
+ * The one song, and whether it actually survives the way a guest moves around.
+ *
+ * TWO LAYOUTS MOUNT THE CONTROL, AND BOTH JUSTIFY THEMSELVES BY A CLAIM NOTHING
+ * CHECKED.
+ *
+ * `app/(public)/layout.tsx` says the control lives in a layout rather than on
+ * each page because "Layouts do not re-render on navigation" — so the `<audio>`
+ * element persists, the song keeps playing, and a guest following a link does
+ * not hear it restart. `app/i/[slug]/layout.tsx` makes the same argument for
+ * the invitation.
+ *
+ * That is an architectural claim about element identity across a navigation,
+ * and a component test cannot see it: it needs a real router and a real
+ * document. Asserting the element is PRESENT proves nothing — a remounted one
+ * is also present, with the song back at zero.
+ *
+ * So these tests tag the element and check the tag is still there afterwards.
+ */
+
+/** Marks the current `<audio>` element and reports what it was already. */
+async function audioState(
+  page: Page,
+): Promise<{ paused: boolean; currentTime: number; survived: boolean }> {
+  return page.evaluate(() => {
+    const audio = document.querySelector<
+      HTMLAudioElement & { __tagged?: boolean }
+    >("audio")!;
+    const survived = audio.__tagged === true;
+    audio.__tagged = true;
+
+    return { paused: audio.paused, currentTime: audio.currentTime, survived };
+  });
+}
+
+/**
+ * Starts the song the way a guest does: by touching the page.
+ *
+ * The control's whole fallback exists for this — no browser plays audio on a
+ * page nobody has interacted with, so the first gesture anywhere is what gets
+ * asked to start it.
+ */
+async function startByTouchingThePage(page: Page): Promise<void> {
+  await page.waitForLoadState("load");
+  await page.locator("main").click({ position: { x: 20, y: 20 } });
+
+  /*
+    WAIT FOR REAL PROGRESS, NOT MERELY FOR `paused` TO FLIP.
+
+    The continuity assertions compare `currentTime` across a navigation, and a
+    song that has only just started is still at 0 — so an eager baseline makes
+    "it did not restart" compare zero to zero and prove nothing in either
+    direction. Half a second of actual playback is a baseline a reset cannot
+    match.
+  */
+  await expect
+    .poll(async () => (await audioState(page)).currentTime, { timeout: 15_000 })
+    .toBeGreaterThan(0.5);
+}
+
+test.describe("the song a guest hears", () => {
+  /**
+   * SILENT ON ARRIVAL, WHICH IS NOT A COURTESY BUT THE BROWSER'S RULE.
+   *
+   * Worth asserting anyway: the page is opened at work and beside sleeping
+   * babies, and the day this starts playing by itself is a defect even where a
+   * browser would allow it.
+   */
+  test("says nothing until the guest touches the page", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("load");
+
+    expect((await audioState(page)).paused).toBe(true);
+  });
+
+  test("starts at the first touch anywhere on the page", async ({ page }) => {
+    await page.goto("/");
+
+    // Throws if it never starts.
+    await startByTouchingThePage(page);
+  });
+
+  /**
+   * AND KEEPS PLAYING ACROSS A LINK BETWEEN THE TWO PUBLIC PAGES.
+   *
+   * `/transmision` -> `/` is the direction that has a link today: the landing's
+   * door to the stream opens only in the final week, so until then a guest
+   * cannot go the other way and nothing is being measured by pretending
+   * otherwise.
+   */
+  test("keeps playing from /transmision to the landing", async ({ page }) => {
+    await page.goto("/transmision");
+    await startByTouchingThePage(page);
+    const before = await audioState(page);
+
+    await page.getByRole("link", { name: "Volver al inicio" }).click();
+    await expect(page).toHaveURL(/localhost:\d+\/$/);
+
+    const after = await audioState(page);
+    expect(after.survived).toBe(true);
+    expect(after.paused).toBe(false);
+    // A restart lands back at 0. Anything from the baseline on is the same
+    // playback continuing, whether or not a frame elapsed in between.
+    expect(after.currentTime).toBeGreaterThanOrEqual(before.currentTime);
+  });
+
+  /**
+   * AND ACROSS THE UNLOCK, WHICH IS THE ONE THAT LOOKS LIKE A PAGE LOAD.
+   *
+   * A guest types a number and the screen becomes a different screen. It is a
+   * server action inside one route, so the layout — and the element — persists.
+   * Were it ever to become a form that navigates, the song would restart under
+   * a guest mid-verse and every other check would stay green.
+   */
+  test("keeps playing across the invitation's unlock", async ({ page }) => {
+    const invitation = await seedInvitation({
+      greetingName: "Familia Aguirre",
+      guests: [
+        { fullName: "Camila Aguirre Vélez", phoneE164: "+573005551111" },
+        { fullName: "Rodrigo Aguirre Peña" },
+      ],
+    });
+
+    try {
+      await page.goto(`/i/${invitation.slug}`);
+      await expect(page.getByLabel(/Número de celular/)).toBeVisible();
+      await startByTouchingThePage(page);
+      const before = await audioState(page);
+
+      await page.getByLabel(/Número de celular/).fill("+573005551111");
+      await page.getByRole("button", { name: "Ver la invitación" }).click();
+      await expect(page.locator(".invitation__rsvp")).toBeVisible();
+
+      const after = await audioState(page);
+      expect(after.survived).toBe(true);
+      expect(after.paused).toBe(false);
+      // A restart lands back at 0. Anything from the baseline on is the same
+      // playback continuing, whether or not a frame elapsed in between.
+      expect(after.currentTime).toBeGreaterThanOrEqual(before.currentTime);
+    } finally {
+      await invitation.cleanup();
+    }
+  });
+});
