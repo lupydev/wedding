@@ -3121,3 +3121,46 @@ describe("findInvitationMembership — what the invitation editor loads", () => 
     });
   });
 });
+
+/**
+ * THE CONSOLE MUST SURVIVE A LONG GUEST LIST.
+ *
+ * `readLatestAnswers` and `readDispatchEvents` pass EVERY invitation id into a
+ * PostgREST `in` filter, which travels in the GET query string. A uuid costs
+ * about 39 characters there, so a few hundred households push the URL past the
+ * server's limit and the read fails with "URI too long" — and because both
+ * reads sit behind the console's main screen, the whole list answers a 500
+ * rather than degrading.
+ *
+ * Found by the browser suite against a database that had accumulated 204
+ * invitations. The wedding itself will not reach that, which is exactly why
+ * this is a test and not a story: nobody would meet it until they did, and
+ * what they would meet is the console going down.
+ */
+describe("listConsoleInvitations — a list long enough to break a URL", () => {
+  it("reads back every household when there are hundreds of them", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+
+      // 300 households, which is past the threshold that broke it and still
+      // small enough to write in one statement.
+      await withDb(async (db) => {
+        await db.query(
+          `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+           select 'long-${stamp}-' || i, $1, 'Larga ' || i, 'Larga ' || i
+             from generate_series(1, 300) as i`,
+          [senderId],
+        );
+      });
+
+      const rows = await listConsoleInvitations(client, {
+        viewerSenderId: senderId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+
+      expect(rows.length).toBeGreaterThanOrEqual(300);
+    });
+  });
+});

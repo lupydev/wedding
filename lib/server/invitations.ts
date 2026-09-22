@@ -2010,22 +2010,61 @@ export async function listConsoleInvitations(
 }
 
 /** The current answers, from `rsvp_latest` and NEVER from `rsvp_responses`. */
+/**
+ * How many invitation ids may travel in one `in` filter.
+ *
+ * WHY THERE IS A LIMIT AT ALL. PostgREST puts a filter in the GET query
+ * string, and a uuid costs about 39 characters there once the comma and the
+ * quoting are counted. A few hundred households therefore push the URL past
+ * the server's own cap, and the read comes back "URI too long" — which, for
+ * two reads sitting behind the console's main screen, means the whole list
+ * answers a 500 rather than degrading.
+ *
+ * 100 keeps a batch's filter near 4 KB, comfortably inside the 8 KB most
+ * servers allow for a request line, with room for the rest of the URL. It is
+ * a number chosen to be obviously safe rather than maximal: the cost of a
+ * second round trip is nothing next to the screen going down.
+ *
+ * Found by the browser suite against a database holding 204 invitations. This
+ * wedding will not reach that — which is exactly why it needed a test rather
+ * than a note, because nobody meets this until they do.
+ */
+const IDS_PER_READ = 100;
+
+/** The ids in batches small enough for a query string. */
+function inBatches(ids: readonly string[]): readonly string[][] {
+  const batches: string[][] = [];
+
+  for (let start = 0; start < ids.length; start += IDS_PER_READ) {
+    batches.push([...ids.slice(start, start + IDS_PER_READ)]);
+  }
+
+  return batches;
+}
+
 async function readLatestAnswers(
   client: SupabaseClient,
   invitationIds: readonly string[],
 ): Promise<readonly ConsoleLatestAnswer[]> {
-  const { data, error } = await client
-    .from("rsvp_latest")
-    .select(
-      "invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at",
-    )
-    .in("invitation_id", invitationIds);
+  const batches = await Promise.all(
+    inBatches(invitationIds).map(async (batch) => {
+      const { data, error } = await client
+        .from("rsvp_latest")
+        .select(
+          "invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at",
+        )
+        .in("invitation_id", batch);
 
-  if (error) {
-    throw new Error(`Could not read the current RSVPs: ${error.message}`);
-  }
+      if (error) {
+        throw new Error(`Could not read the current RSVPs: ${error.message}`);
+      }
 
-  return (data ?? []).map((row) => ({
+      return data ?? [];
+    }),
+  );
+  const data = batches.flat();
+
+  return data.map((row) => ({
     invitationId: row.invitation_id as string,
     attending: row.attending as boolean,
     seatsConfirmed: row.seats_confirmed as number,
@@ -2052,16 +2091,22 @@ async function readDispatchEvents(
   client: SupabaseClient,
   invitationIds: readonly string[],
 ): Promise<readonly ConsoleDispatchEvent[]> {
-  const { data, error } = await client
-    .from("dispatch_events")
-    .select("invitation_id, kind, occurred_at")
-    .in("invitation_id", invitationIds);
+  const batches = await Promise.all(
+    inBatches(invitationIds).map(async (batch) => {
+      const { data, error } = await client
+        .from("dispatch_events")
+        .select("invitation_id, kind, occurred_at")
+        .in("invitation_id", batch);
 
-  if (error) {
-    throw new Error(`Could not read the dispatch log: ${error.message}`);
-  }
+      if (error) {
+        throw new Error(`Could not read the dispatch log: ${error.message}`);
+      }
 
-  return (data ?? []).map((row) => ({
+      return data ?? [];
+    }),
+  );
+
+  return batches.flat().map((row) => ({
     invitationId: row.invitation_id as string,
     kind: row.kind as ConsoleDispatchEvent["kind"],
     occurredAt: row.occurred_at as string,

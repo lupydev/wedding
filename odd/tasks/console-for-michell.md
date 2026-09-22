@@ -289,24 +289,35 @@ stated rather than inherited from the argument order they happened to use.
 Green: 2266 unit and component tests. The browser suite has three pre-existing
 failures, diagnosed below.
 
-## Found while verifying: `/console` 500s once there are enough invitations
+### U5 — done (the console stopped falling over on a long list)
 
-Not caused by this change, and worth its own unit.
-`readLatestAnswers` and `readDispatchEvents` pass EVERY invitation id into a
-PostgREST `in` filter, which travels in the GET query string. At the 204
-invitations this database has accumulated, that URL exceeds the server's limit
-and both reads fail with **"URI too long"** — so the console's main screen
-answers a 500 rather than a list.
+**Found by the browser suite, not by reading.** Five specs failed with elements
+simply absent; the page snapshot said "This page couldn't load", and the server
+log said it plainly: **`Could not read the current RSVPs: URI too long`**.
 
-The wedding itself will not reach 204 households, so this is not urgent. It is
-also not hypothetical: the failure mode is the whole console going down, with
-no partial degradation, and the threshold is a number of households rather than
-anything exotic.
+`readLatestAnswers` and `readDispatchEvents` passed EVERY invitation id into a
+PostgREST `in` filter, which travels in the GET query string. A uuid costs
+about 39 characters there, so a few hundred households push the request line
+past the server's cap. Both reads sit behind the console's main screen, so the
+whole list answered a 500 — no partial degradation, and the threshold is a
+number of households rather than anything exotic.
+
+The ids now travel 100 at a time, a batch's filter landing near 4 KB against
+the 8 KB most servers allow. The number is chosen to be obviously safe rather
+than maximal: a second round trip costs nothing next to the screen going down.
+
+**A test, not a note.** `lib/server/invitations.spec.ts` writes 300 households
+in one statement and reads them back. Nobody meets this defect until they do,
+and what they meet is the console down.
+
+The browser suite now runs against a database holding more than five hundred
+invitations, which is a harder test than the one it was passing before.
+
+Green: 2267 unit and component tests, 197 browser tests, typecheck, lint,
+format, build.
 
 ## Next
 
-- **The `in`-filter URL limit above.** The fix is small — chunk the id list, or
-  read through a POST — and it is what unblocks the browser suite.
 - `moveMemberAction` is still dead code with tests — a full server action and
   repository function with no UI, and now the closest thing to "move somebody
   from one household to another", which the directory makes sensible to want.
