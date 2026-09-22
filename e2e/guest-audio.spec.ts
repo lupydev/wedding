@@ -109,6 +109,57 @@ test.describe("the song a guest hears", () => {
   });
 
   /**
+   * THROUGH THE LANDING'S OWN DOOR, WHICH IS THE JOURNEY THE LAYOUT WAS BUILT
+   * FOR AND WHICH NOTHING HAD EVER EXERCISED.
+   *
+   * The couple, after hearing the typed-URL hop: "probé dando click en la
+   * landing y empieza a sonar la canción, pero cuando en la url ingreso a
+   * /transmision hay un pequeño corte y la canción continúa sin problema."
+   *
+   * That cut is real and unavoidable there — a typed URL is a new document, so
+   * the file is fetched and the position sought again, and the seek is audible.
+   * The `<Link>` is the path with no cut at all, because the `<audio>` element
+   * is never torn down: that is the entire reason `app/(public)/layout.tsx`
+   * exists.
+   *
+   * IT NEEDS THE CLOCK MOVED, AND THAT IS WHY IT WAS NEVER TESTED. Outside the
+   * final week `StreamLink` renders a disabled `<button>` instead of a link, so
+   * on any ordinary day there is nothing here to click. `setFixedTime` moves
+   * only `Date.now()` and `new Date()` and leaves timers running, which is
+   * exactly what the component reads — and what `46dbbac` did by hand, once,
+   * without leaving a test behind.
+   *
+   * THE ELEMENT'S IDENTITY IS THE ASSERTION, and it is the one a restart cannot
+   * fake: a remounted `<audio>` has no tag. `currentTime` is checked too, but
+   * the tag is what makes this test unable to pass on a broken page.
+   */
+  test("plays straight through the landing's own link, with no cut", async ({
+    page,
+  }) => {
+    // Inside the final week, so the door is a link. The ceremony is
+    // 2026-11-28T17:00-05:00 and the window opens seven days before it.
+    await page.clock.setFixedTime(new Date("2026-11-24T12:00:00-05:00"));
+
+    await page.goto("/");
+    await startByTouchingThePage(page);
+    const before = await audioState(page);
+
+    const door = page.getByRole("link", { name: "Acompáñanos por Zoom" });
+    await expect(door).toBeVisible();
+    await door.click();
+    await expect(page).toHaveURL(/\/transmision$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    const after = await audioState(page);
+
+    // The same element React never unmounted — the layout's whole promise.
+    expect(after.survived).toBe(true);
+    // Still playing, and not one bar back.
+    expect(after.paused).toBe(false);
+    expect(after.currentTime).toBeGreaterThanOrEqual(before.currentTime);
+  });
+
+  /**
    * AND IT PICKS THE SONG BACK UP AFTER A WHOLE NEW DOCUMENT.
    *
    * The couple, precisely: "abro la landing y pongo a sonar la canción, luego

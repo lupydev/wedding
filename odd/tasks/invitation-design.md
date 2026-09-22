@@ -101,6 +101,9 @@ own screen after a unit shipped, which is the only reason it was found.
       not the same as gapless, and was overclaimed here as "seamless" until the
       review said so. The new document still loads, fetches metadata and seeks,
       and that is audible.
+- [x] **U15 — the same song straight through the landing's own link.** No cut
+      at all where the guest follows the `<Link>`, which is the journey the
+      shared layout was built for and which no test had ever taken.
 
 ## Checks per unit
 
@@ -734,6 +737,50 @@ above into what they see; until then the first touch on each page starts the
 song, from the right second.
 
 Green: 2307 unit and component tests, 221 browser tests, typecheck, lint,
+format, build.
+
+### U15 — done (the journey the layout was built for, finally tested)
+
+The couple: "probé dando click en la landing y empieza a sonar la canción, pero
+cuando en la url ingreso a /transmision hay un pequeño corte y la canción
+continúa sin problema. ¿Podés habilitar el botón de la landing para ir a
+/transmision para ver si efectivamente el audio continúa sin ningún problema?"
+
+**Their cut is real and it is the typed URL's, not a defect.** A new document
+fetches the file and seeks to the remembered position, and the seek is audible.
+U14 already recorded that "seamless" was an overclaim.
+
+**Through the `<Link>` there is no cut at all, and now it is measured:**
+
+|                           | position | same element |
+| ------------------------- | -------- | ------------ |
+| landing, before the click | 2.72s    | —            |
+| `/transmision`, after it  | 2.94s    | **yes**      |
+
+0.22s of song across 0.22s of wall clock: the playhead advanced by exactly the
+time the navigation took. Nothing was torn down, so there was nothing to
+resume.
+
+**THIS IS THE JOURNEY `app/(public)/layout.tsx` EXISTS FOR, AND NOTHING HAD
+EVER EXERCISED IT.** Its comment rests the whole design on "Layouts do not
+re-render on navigation", `46dbbac` verified it by hand once, and no test was
+left behind — because outside the final week `StreamLink` renders a disabled
+`<button>` and there is nothing to click.
+
+`page.clock.setFixedTime` moves `Date.now()` and `new Date()` while leaving
+timers running, which is exactly what the component reads. The product is
+untouched: the door still waits for the final week.
+
+**The element's identity is the assertion**, because a remounted `<audio>` has
+no tag and a restart cannot fake one.
+
+**PROVEN BY SABOTAGE, NOT BY PASSING.** The control was moved out of the layout
+and into both pages — the precise regression the layout prevents — and the test
+went red on `survived: false`. Both files were restored and `git status`
+confirmed clean. After six tests in this feature that could not fail, a green
+run is not evidence on its own.
+
+Green: 2307 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.
 
 ## Next
