@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { consoleDispatchPath } from "@/lib/domain/dispatch-message";
+import { countsAsOperatorAssertedSend } from "@/lib/domain/dispatch-state";
 import {
   canOfferSend,
   type DirectoryEntry,
@@ -503,8 +504,32 @@ function recipientNote(guest: DirectoryEntry): string {
     return " · nadie elegido para recibir el mensaje";
   }
 
-  return guest.isRecipient
-    ? " · recibe el mensaje"
+  /*
+    PAST TENSE ONCE IT HAS ACTUALLY GONE, AND ONLY FOR THE PERSON IT REACHED.
+
+    A send reaches ONE member — the one the invitation is addressed to — so
+    "ya se le envió" on every row of a household would tell three people a
+    thing that never happened. The others learn the truth instead: it went, and
+    it went to somebody else.
+
+    `wasWrittenTo` is the domain's answer, and it counts only an operator's own
+    assertion: an opened link is evidence the link escaped, not evidence
+    anybody sent it, and a send reported as failed asserts the opposite.
+  */
+  if (guest.wasWrittenTo) {
+    return " · ya se le envió la invitación";
+  }
+
+  if (guest.isRecipient) {
+    return " · recibe el mensaje";
+  }
+
+  const sentToSomebodyElse =
+    guest.household !== null &&
+    countsAsOperatorAssertedSend(guest.household.dispatchState);
+
+  return sentToSomebodyElse
+    ? ` · la invitación se le envió a ${guest.recipientName}`
     : ` · el mensaje le llega a ${guest.recipientName}`;
 }
 

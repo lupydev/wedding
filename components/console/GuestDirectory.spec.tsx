@@ -43,6 +43,7 @@ const HOUSEHOLD = {
   greetingName: "Familia Restrepo",
   ownerSenderId: ANA,
   recipientGuestId: "g1",
+  dispatchState: "not_dispatched" as const,
 };
 
 /** The two action shapes the component takes, so the props are really typed. */
@@ -544,5 +545,76 @@ describe("how much a row says", () => {
     const links = within(rowFor("Ana Restrepo")).getAllByRole("link").length;
 
     expect(controls + links).toBe(2);
+  });
+});
+
+/**
+ * WHO HAS ACTUALLY BEEN WRITTEN TO, ON THEIR OWN ROW.
+ *
+ * The couple: "si se envía una invitación a un grupo familiar, a la persona a
+ * la que se le envía esa invitación, en invitados debería aparecer como que ya
+ * se le envió la invitación — y quizá distinguir los otros invitados que hacen
+ * parte ya de una invitación."
+ *
+ * A send reaches ONE member. So the row has four things to say, and each
+ * answers a different question: nobody has an invitation; this person will
+ * receive it; somebody else will; this person already did; somebody else
+ * already did.
+ */
+describe("what a row says about the send", () => {
+  const sent = { ...HOUSEHOLD, dispatchState: "marked_sent" as const };
+  const context = (fullName: string) =>
+    within(rowFor(fullName)).getByTestId("guest-directory-context");
+
+  it("says the invitation already went to the person who received it", () => {
+    renderDirectory([guest({ id: "g1", household: sent })]);
+
+    expect(context("Ana Restrepo")).toHaveTextContent(
+      "En Familia Restrepo · ya se le envió la invitación",
+    );
+  });
+
+  /**
+   * AND TELLS THE OTHER MEMBERS THE TRUTH, which is that it went to somebody
+   * else. Saying "ya se le envió" on all four rows of a household would tell
+   * three people a thing that never happened.
+   */
+  it("tells the other members it went to somebody else", () => {
+    renderDirectory([
+      guest({ id: "g1", fullName: "Ana Restrepo", household: sent }),
+      guest({ id: "g2", fullName: "Beto Restrepo", household: sent }),
+    ]);
+
+    expect(context("Beto Restrepo")).toHaveTextContent(
+      "En Familia Restrepo · la invitación se le envió a Ana Restrepo",
+    );
+  });
+
+  it("still speaks in the future before anything has gone out", () => {
+    renderDirectory([
+      guest({ id: "g1", fullName: "Ana Restrepo", household: HOUSEHOLD }),
+      guest({ id: "g2", fullName: "Beto Restrepo", household: HOUSEHOLD }),
+    ]);
+
+    expect(context("Ana Restrepo")).toHaveTextContent("recibe el mensaje");
+    expect(context("Beto Restrepo")).toHaveTextContent(
+      "el mensaje le llega a Ana Restrepo",
+    );
+  });
+
+  /**
+   * THE SEND AFFORDANCE SURVIVES A SEND.
+   *
+   * "Aunque se les pueda seguir enviando la invitación de manera individual."
+   * A sent invitation can be sent again — the dispatch log has a `resent` kind
+   * for exactly that — and an operator whose message did not arrive should not
+   * have to undo anything to try again.
+   */
+  it("keeps offering the send after it has gone out", () => {
+    renderDirectory([guest({ id: "g1", household: sent })]);
+
+    expect(
+      within(rowFor("Ana Restrepo")).getByRole("link", { name: /Enviar/ }),
+    ).toBeVisible();
   });
 });

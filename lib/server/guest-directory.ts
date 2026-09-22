@@ -3,6 +3,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CountryCode } from "libphonenumber-js";
 
+import {
+  deriveDispatchState,
+  type DispatchEventKind,
+  type DispatchEventRef,
+  type DispatchState,
+} from "@/lib/domain/dispatch-state";
 import type { DirectoryGuest } from "@/lib/domain/guest-directory";
 import { validateDirectoryGuest } from "@/lib/domain/guest-directory";
 import type { DraftRefusal } from "@/lib/domain/invitation-draft";
@@ -63,7 +69,83 @@ interface DirectoryRow {
   } | null;
 }
 
-function toDirectoryGuest(row: DirectoryRow): DirectoryGuest {
+/**
+ * How many invitation ids may travel in one `in` filter.
+ *
+ * The same reason and the same number as `invitations.ts`: PostgREST puts a
+ * filter in the GET query string, a uuid costs about 39 characters there, and a
+ * few hundred households push the request line past the server's cap — which
+ * surfaced once as the whole console answering a 500.
+ */
+const IDS_PER_READ = 100;
+
+/**
+ * What has happened to each invitation's message.
+ *
+ * READ AND REDUCED, NOT STORED. `invitations` holds no send state: it is
+ * derived from the append-only `dispatch_events` log by `deriveDispatchState`,
+ * newest operator assertion winning — so "marked as sent on Monday, marked as
+ * failed on Tuesday" reads as failed. A column would have been one query
+ * cheaper and a second definition of "sent" to keep in step with the log.
+ */
+async function readDispatchStates(
+  client: SupabaseClient,
+  invitationIds: readonly string[],
+): Promise<Map<string, DispatchState>> {
+  const states = new Map<string, DispatchState>();
+
+  if (invitationIds.length === 0) {
+    return states;
+  }
+
+  const batches: {
+    invitation_id: string;
+    kind: string;
+    occurred_at: string;
+  }[] = [];
+
+  for (let start = 0; start < invitationIds.length; start += IDS_PER_READ) {
+    const { data, error } = await client
+      .from("dispatch_events")
+      .select("invitation_id, kind, occurred_at")
+      .in("invitation_id", invitationIds.slice(start, start + IDS_PER_READ));
+
+    if (error) {
+      throw new Error(`Could not read the dispatch log: ${error.message}`);
+    }
+
+    batches.push(
+      ...((data ?? []) as {
+        invitation_id: string;
+        kind: string;
+        occurred_at: string;
+      }[]),
+    );
+  }
+
+  const byInvitation = new Map<string, DispatchEventRef[]>();
+
+  for (const event of batches) {
+    const bucket = byInvitation.get(event.invitation_id) ?? [];
+
+    bucket.push({
+      kind: event.kind as DispatchEventKind,
+      occurredAt: event.occurred_at,
+    });
+    byInvitation.set(event.invitation_id, bucket);
+  }
+
+  for (const [invitationId, events] of byInvitation) {
+    states.set(invitationId, deriveDispatchState(events));
+  }
+
+  return states;
+}
+
+function toDirectoryGuest(
+  row: DirectoryRow,
+  states: Map<string, DispatchState>,
+): DirectoryGuest {
   return {
     id: row.id,
     fullName: row.full_name,
@@ -79,6 +161,9 @@ function toDirectoryGuest(row: DirectoryRow): DirectoryGuest {
             greetingName: row.invitations.greeting_name,
             ownerSenderId: row.invitations.owner_sender_id,
             recipientGuestId: row.invitations.dispatch_recipient_guest_id,
+            // Absent from the log means nothing has happened to it yet, which
+            // is what `deriveDispatchState` answers for an empty list too.
+            dispatchState: states.get(row.invitations.id) ?? "not_dispatched",
           },
   };
 }
@@ -102,7 +187,16 @@ export async function listGuestDirectory(
     throw new Error(`Could not read the guest directory: ${error.message}`);
   }
 
-  return (data as unknown as DirectoryRow[]).map(toDirectoryGuest);
+  const rows = data as unknown as DirectoryRow[];
+  const states = await readDispatchStates(client, [
+    ...new Set(
+      rows
+        .map((row) => row.invitations?.id)
+        .filter((id): id is string => id !== undefined),
+    ),
+  ]);
+
+  return rows.map((row) => toDirectoryGuest(row, states));
 }
 
 /**
@@ -129,7 +223,15 @@ export async function listFreeGuests(
     throw new Error(`Could not read the free guests: ${error.message}`);
   }
 
-  return (data as unknown as DirectoryRow[]).map(toDirectoryGuest);
+  /*
+    NO DISPATCH READ HERE, and its absence is the point: every row this query
+    returns has `invitation_id is null`, so none of them belongs to an
+    invitation and none has a message to have been sent. A second query would
+    be one round trip to learn nothing.
+  */
+  return (data as unknown as DirectoryRow[]).map((row) =>
+    toDirectoryGuest(row, new Map()),
+  );
 }
 
 /**
@@ -214,7 +316,12 @@ export async function createDirectoryGuest(
 
   return {
     refusals: [],
-    guest: toDirectoryGuest(data as unknown as DirectoryRow),
+    /*
+      An empty map, and that is correct rather than lazy: this guest was
+      created a statement ago with `invitation_id: null`, so there is no
+      invitation and nothing can have been sent to them.
+    */
+    guest: toDirectoryGuest(data as unknown as DirectoryRow, new Map()),
   };
 }
 

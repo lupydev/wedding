@@ -169,6 +169,7 @@ describe("the guest directory repository (local Supabase)", () => {
       greetingName: household.greetingName,
       ownerSenderId: household.senderId,
       recipientGuestId: null,
+      dispatchState: "not_dispatched",
     });
     expect(loose?.household).toBeNull();
   });
@@ -363,5 +364,68 @@ describe("placing a guest into an invitation", () => {
     // Untouched: a refusal that had already moved them would be worse than no
     // refusal at all.
     expect(stored?.household?.invitationId).toBe(theirs.invitationId);
+  });
+});
+
+/**
+ * THE DISPATCH STATE REACHES THE DIRECTORY, AND IT IS NOT A COLUMN.
+ *
+ * `invitations` stores no send state. It is DERIVED from `dispatch_events` by
+ * `deriveDispatchState`, newest operator assertion winning — so the directory
+ * has to read those events and reduce them, exactly as the console's own list
+ * does. A column would have been cheaper and would have been a second
+ * definition of "sent" to keep in step with the append-only log.
+ */
+describe("the directory's view of a send", () => {
+  it("reports an invitation the operator marked as sent", async () => {
+    useLocalSupabase();
+    const household = await seedHousehold(uniqueName("Ya Enviada"));
+
+    await withDb(async (db) => {
+      await db.query(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind)
+         values ($1, $2, 'marked_sent')`,
+        [household.invitationId, household.senderId],
+      );
+    });
+
+    const directory = await listGuestDirectory(createServerSupabaseClient());
+    const row = directory.find((guest) => guest.id === household.guestId);
+
+    expect(row?.household?.dispatchState).toBe("marked_sent");
+  });
+
+  /**
+   * AND THE NEWEST ASSERTION WINS, which is the reduction rule and the only
+   * reason this is read rather than stored: "marked as sent on Monday, marked
+   * as failed on Tuesday" reads as failed.
+   */
+  it("reports the newest assertion when there are several", async () => {
+    useLocalSupabase();
+    const household = await seedHousehold(uniqueName("Cambió De Estado"));
+
+    await withDb(async (db) => {
+      await db.query(
+        `insert into dispatch_events (invitation_id, actor_sender_id, kind, occurred_at)
+         values ($1, $2, 'marked_sent', now() - interval '2 hours'),
+                ($1, $2, 'marked_failed', now() - interval '1 hour')`,
+        [household.invitationId, household.senderId],
+      );
+    });
+
+    const directory = await listGuestDirectory(createServerSupabaseClient());
+    const row = directory.find((guest) => guest.id === household.guestId);
+
+    expect(row?.household?.dispatchState).toBe("marked_failed");
+  });
+
+  it("reports nothing sent for an invitation with no events", async () => {
+    useLocalSupabase();
+    const household = await seedHousehold(uniqueName("Sin Enviar"));
+
+    const directory = await listGuestDirectory(createServerSupabaseClient());
+    const row = directory.find((guest) => guest.id === household.guestId);
+
+    expect(row?.household?.dispatchState).toBe("not_dispatched");
   });
 });

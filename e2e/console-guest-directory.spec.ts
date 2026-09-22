@@ -624,3 +624,76 @@ test.describe("the order the invitations list comes back in", () => {
     expect(newerAt).toBeLessThan(olderAt);
   });
 });
+
+/**
+ * WHAT THE DIRECTORY SAYS AFTER A HOUSEHOLD HAS BEEN WRITTEN TO.
+ *
+ * "Si se envía una invitación a un grupo familiar, a la persona a la que se le
+ * envía esa invitación, en invitados debería aparecer como que ya se le envió
+ * la invitación — y quizá distinguir los otros invitados que hacen parte ya de
+ * una invitación, aunque se les pueda seguir enviando la invitación de manera
+ * individual."
+ *
+ * The send state is DERIVED from an append-only log rather than stored, so
+ * only a round trip proves the directory reduces it correctly. Every decision
+ * under this is unit-tested; what a browser adds is that the two screens agree
+ * about the same event.
+ */
+test.describe("after a household has been written to", () => {
+  let chosen: string;
+  let other: string;
+  let household: ConsoleInvitationSeed;
+
+  test.beforeAll(async () => {
+    chosen = `Destinataria Enviada ${run}`;
+    other = `Acompañante Enviado ${run}`;
+    household = await seedConsoleInvitation({
+      ownerSenderId: ana.senderId,
+      greetingName: `Familia Enviada ${run}`,
+      guests: [
+        { fullName: chosen, phoneE164: "+573005557010" },
+        { fullName: other, phoneE164: "+573005557011" },
+      ],
+      recipient: chosen,
+    });
+    // The operator's own assertion that the message went out. Recorded here
+    // rather than driven through the dispatch screen, which has its own suite.
+    await household.recordEvent("marked_sent", ana.senderId);
+  });
+
+  test.afterAll(async () => {
+    await household.cleanup();
+  });
+
+  test("says so on the row of the person it reached", async () => {
+    await page.goto("/console/guests");
+
+    await expect(rowFor(chosen)).toContainText("ya se le envió la invitación");
+  });
+
+  /**
+   * AND TELLS THE OTHER MEMBER THE TRUTH. The message reached one phone;
+   * saying "ya se le envió" here would be a claim about something that never
+   * happened to this person.
+   */
+  test("tells the other member it went to somebody else", async () => {
+    await expect(rowFor(other)).toContainText(
+      `la invitación se le envió a ${chosen}`,
+    );
+    await expect(rowFor(other)).not.toContainText("ya se le envió");
+  });
+
+  /**
+   * AND BOTH CAN STILL BE SENT TO. A message that did not arrive has to be
+   * sendable again — the log has a `resent` kind for exactly that — so a send
+   * does not withdraw the affordance.
+   */
+  test("keeps the send available on both rows", async () => {
+    await expect(
+      rowFor(chosen).getByRole("link", { name: /Enviar/ }),
+    ).toBeVisible();
+    await expect(
+      rowFor(other).getByRole("link", { name: /Enviar/ }),
+    ).toBeVisible();
+  });
+});

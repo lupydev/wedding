@@ -22,6 +22,10 @@
  * Guest-facing copy is Spanish. Identifiers and comments stay English.
  */
 
+import {
+  countsAsOperatorAssertedSend,
+  type DispatchState,
+} from "./dispatch-state";
 import type { DraftRefusal } from "./invitation-draft";
 
 /** The invitation a guest belongs to, named as the console names it. */
@@ -36,6 +40,14 @@ export interface DirectoryHousehold {
   readonly ownerSenderId: string;
   /** The member this invitation is addressed to, or nobody yet. */
   readonly recipientGuestId: string | null;
+  /**
+   * What has happened to this invitation's message, derived from its events.
+   *
+   * A fact about the INVITATION, which is why the directory cannot hand it
+   * straight to every member: the message reached one phone, the one the
+   * invitation is addressed to.
+   */
+  readonly dispatchState: DispatchState;
 }
 
 export interface DirectoryGuest {
@@ -68,6 +80,21 @@ export interface DirectoryEntry extends DirectoryGuest {
    * invention rather than a fallback.
    */
   readonly recipientName: string | null;
+  /**
+   * Whether a message was actually sent to THIS person.
+   *
+   * The couple asked for it: "a la persona a la que se le envía esa invitación,
+   * en invitados debería aparecer como que ya se le envió". Both halves of the
+   * conjunction are load-bearing — `marked_sent` is a fact about the
+   * invitation, so handing it to all four members of a household would tell
+   * three of them a thing that never happened.
+   *
+   * `countsAsOperatorAssertedSend` is the only predicate allowed to answer
+   * "has been invited": an opened link is evidence the link escaped, not
+   * evidence anybody sent it, and a send reported as failed asserts the
+   * opposite.
+   */
+  readonly wasWrittenTo: boolean;
 }
 
 export interface GuestDirectory {
@@ -155,6 +182,10 @@ export function buildGuestDirectory(
       isRecipient:
         guest.household !== null &&
         guest.household.recipientGuestId === guest.id,
+      wasWrittenTo:
+        guest.household !== null &&
+        guest.household.recipientGuestId === guest.id &&
+        countsAsOperatorAssertedSend(guest.household.dispatchState),
       recipientName:
         guest.household?.recipientGuestId === undefined ||
         guest.household?.recipientGuestId === null

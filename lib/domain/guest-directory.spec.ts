@@ -26,6 +26,7 @@ const HOUSEHOLD = {
   greetingName: "Familia Restrepo",
   ownerSenderId: "ana",
   recipientGuestId: null,
+  dispatchState: "not_dispatched" as const,
 };
 
 describe("buildGuestDirectory", () => {
@@ -277,5 +278,117 @@ describe("canOfferSend", () => {
         dispatchBlocked: true,
       }),
     ).toBe(false);
+  });
+});
+
+/**
+ * WHETHER THIS PERSON HAS ACTUALLY BEEN WRITTEN TO.
+ *
+ * The couple: "si se envía una invitación a un grupo familiar, a la persona a
+ * la que se le envía esa invitación, en invitados debería aparecer como que ya
+ * se le envió la invitación — y quizá distinguir los otros invitados que hacen
+ * parte ya de una invitación."
+ *
+ * A send reaches ONE member, the one the invitation is addressed to. So a
+ * household being sent does not mean everybody in it was written to, and a
+ * directory that said so of all four members would be telling three of them a
+ * thing that never happened.
+ *
+ * Four states, and each answers a different question the operator has: nobody
+ * has an invitation yet; this person will receive it; somebody else will; this
+ * person already did; somebody else already did.
+ */
+describe("whether a guest has been written to", () => {
+  const sent = { ...HOUSEHOLD, dispatchState: "marked_sent" as const };
+
+  it("says a chosen member of a sent invitation has been written to", () => {
+    const [row] = buildGuestDirectory([
+      guest({ id: "g1", household: { ...sent, recipientGuestId: "g1" } }),
+    ]).guests;
+
+    expect(row.wasWrittenTo).toBe(true);
+  });
+
+  /**
+   * AND SAYS THE OTHER MEMBERS HAVE NOT, which is the half that matters.
+   * `marked_sent` is a fact about the INVITATION; the message reached one
+   * phone.
+   */
+  it("says the other members of that invitation have not", () => {
+    const household = { ...sent, recipientGuestId: "g1" };
+    const [ana, beto] = buildGuestDirectory([
+      guest({
+        id: "g1",
+        fullName: "Ana Restrepo",
+        household,
+        createdAt: "2026-01-02T00:00:00.000Z",
+      }),
+      guest({
+        id: "g2",
+        fullName: "Beto Restrepo",
+        household,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    ]).guests;
+
+    expect(ana.wasWrittenTo).toBe(true);
+    expect(beto.wasWrittenTo).toBe(false);
+    // Beto still learns who did get it, which is what the row already said.
+    expect(beto.recipientName).toBe("Ana Restrepo");
+  });
+
+  it("says nobody has been written to before the invitation goes out", () => {
+    const [row] = buildGuestDirectory([
+      guest({ id: "g1", household: { ...HOUSEHOLD, recipientGuestId: "g1" } }),
+    ]).guests;
+
+    expect(row.wasWrittenTo).toBe(false);
+  });
+
+  /**
+   * AN OPENED LINK IS NOT A SEND, and this is the one place that distinction
+   * could quietly rot. `countsAsOperatorAssertedSend` is described in
+   * `dispatch-state.ts` as "the ONLY predicate a 'has been invited' filter may
+   * use": a guest opening their link is evidence the link escaped, not
+   * evidence anybody sent it on purpose.
+   */
+  it("does not count an opened link as having written to them", () => {
+    const [row] = buildGuestDirectory([
+      guest({
+        id: "g1",
+        household: {
+          ...HOUSEHOLD,
+          recipientGuestId: "g1",
+          dispatchState: "link_opened",
+        },
+      }),
+    ]).guests;
+
+    expect(row.wasWrittenTo).toBe(false);
+  });
+
+  /**
+   * NOR A SEND THE OPERATOR SAID HAD FAILED. It is an assertion, and it
+   * asserts the opposite.
+   */
+  it("does not count a send the operator reported as failed", () => {
+    const [row] = buildGuestDirectory([
+      guest({
+        id: "g1",
+        household: {
+          ...HOUSEHOLD,
+          recipientGuestId: "g1",
+          dispatchState: "marked_failed",
+        },
+      }),
+    ]).guests;
+
+    expect(row.wasWrittenTo).toBe(false);
+  });
+
+  it("says nothing of the kind about somebody in no invitation", () => {
+    const [row] = buildGuestDirectory([guest({ id: "g1" })]).guests;
+
+    expect(row.wasWrittenTo).toBe(false);
   });
 });
