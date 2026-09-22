@@ -513,13 +513,19 @@ test.describe("the invitation's own stage", () => {
    * 1800×2400. A frame drawn at the engagement photograph's 737×1600 would not
    * fail loudly — it would crop this picture to fit and look deliberate, with
    * the two people cut off at the sides.
+   *
+   * A SINGLE DECIMAL, NOT `1800 / 2400`, and the difference is load-bearing.
+   * The same number caps the frame's width inside a `calc()` — `min(100%,
+   * 86dvh × ratio)` — and a fraction cannot be multiplied there. It used to be
+   * the fraction, back when the height was the given and the ratio only ever
+   * reached `aspect-ratio`.
    */
   test("frames it at its own shape", async ({ page }) => {
     await unlock(page, invitation);
 
     await expect(page.locator("figure.photo-stage__frame")).toHaveCSS(
-      "--photo-stage-aspect",
-      "1800 / 2400",
+      "--photo-stage-ratio",
+      "0.75",
     );
   });
 

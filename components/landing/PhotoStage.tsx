@@ -150,21 +150,37 @@ export function PhotoStage({
         <figure
           className={`
             photo-stage__frame relative col-start-1 row-start-1 m-0 w-full
-            lg:sticky lg:top-[7dvh] lg:row-start-1 lg:mx-auto
-            lg:aspect-[var(--photo-stage-aspect)] lg:h-[86dvh] lg:w-auto
+            lg:sticky lg:top-[7dvh] lg:row-start-1 lg:mx-auto lg:h-auto
+            lg:aspect-[var(--photo-stage-ratio)]
+            lg:w-[min(100%,calc(86dvh*var(--photo-stage-ratio)))]
             lg:overflow-hidden lg:rounded-2xl
             lg:shadow-[0_24px_80px_rgba(0,0,0,0.6)] lg:ring-1 lg:ring-white/10
             ${overlay ? "h-dvh" : "h-[38dvh]"}
           `}
           /*
-            A CUSTOM PROPERTY, BECAUSE TAILWIND CANNOT COMPILE A RUNTIME VALUE.
-            And a property rather than a plain inline `aspect-ratio`: the frame
-            is only shaped at `lg`, since below that it is a band or the whole
-            screen, and an inline ratio would apply at every width.
+            THE WIDTH IS CAPPED BY THE COLUMN, AND THE HEIGHT FOLLOWS.
+
+            It used to be the other way round — `h-[86dvh]` with the ratio
+            deriving the width — and that is a frame whose WIDTH grows with the
+            window's HEIGHT. At 0.75:1 it is 654px wide on a 760px-tall window
+            and 697px on a 1080px one, against a column that is half of
+            `max-w-6xl`: 576px. So above roughly 900px of viewport the picture
+            spilled into the second column and the words were drawn on top of
+            it. Invisible at the size it was being checked at; plain on the
+            couple's own monitor, which is where they saw it.
+
+            `min(100%, 86dvh × ratio)` takes whichever limit binds: the column
+            on a tall window, the viewport height on a short one. `aspect-ratio`
+            then gives the height, so the photograph is never squashed either
+            way.
+
+            A CUSTOM PROPERTY, BECAUSE TAILWIND CANNOT COMPILE A RUNTIME VALUE —
+            and a single decimal rather than `w / h`, because it has to work
+            inside `calc()` as well as in `aspect-ratio`.
           */
           style={
             {
-              "--photo-stage-aspect": `${photo.src.width} / ${photo.src.height}`,
+              "--photo-stage-ratio": `${photo.src.width / photo.src.height}`,
             } as React.CSSProperties
           }
         >

@@ -67,6 +67,21 @@ defect the couple reported on day one: "la imagen se ve súper grande con zoom".
       to copy rather than a form to fill. This unit decides that surface on its
       own merits and says why.
 
+The units below were not planned. Each one is something the couple saw on their
+own screen after a unit shipped, which is the only reason it was found.
+
+- [x] **U4 — the two screens I had not looked at.** The gate and the
+      invitation-not-found page were still the undesigned white default.
+- [x] **U5 — the gate carries the wedding, and the song reaches it.** The
+      landing's announcement, one sentence instead of two, and the music
+      control on `/i/[slug]`.
+- [x] **U6 — the song stopped giving up after one refusal.** A real lifecycle
+      defect in the gesture fallback.
+- [x] **U7 — the desktop layout stopped collapsing.** The print sticks beside a
+      long form instead of floating in the middle of a taller row.
+- [x] **U8 — the print stays inside its own column.** Its width was derived
+      from the window's HEIGHT, so on a tall window it spilled over the words.
+
 ## Checks per unit
 
 `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`,
@@ -325,6 +340,51 @@ The gate needed nothing: its content fits one screen at 760px tall, and with
 the cells stretched its column still centres itself.
 
 Green: 2299 unit and component tests, 206 browser tests, typecheck, lint,
+format, build.
+
+### U8 — done (the frame's width was growing with the window's HEIGHT)
+
+The couple sent one more desktop screenshot and one question: "puedes verlo tú
+también a través de Playwright, no?" Yes — and asking it is what found this,
+because the answer was to go and look at the size THEY use rather than the size
+I had been checking.
+
+**The arithmetic, which is the whole defect.** The print was `lg:h-[86dvh]` with
+`aspect-ratio` deriving its WIDTH from that height. At 0.75:1 that is 654px wide
+on a 760px-tall window and 697px on a 1080px one — against a grid column that is
+half of `max-w-6xl`, which is 576px. So a frame sized from the viewport height
+has a width no column can constrain, and above roughly 900px of viewport the
+picture spilled into the second column: the number field and the button were
+drawn ON TOP of the photograph.
+
+At 1440×760 — the size every screenshot in U2, U3, U4 and U7 was taken at — it
+fits, and nothing was wrong. That is the part worth keeping: a layout bug can be
+a function of a dimension nobody is varying.
+
+**So the width is the given now and the height follows.**
+`min(100%, 86dvh × ratio)` takes whichever limit binds — the column on a tall
+window, the viewport height on a short one — and `aspect-ratio` gives the
+height, so the photograph is never squashed either way.
+
+**The custom property changed shape with it.** `--photo-stage-aspect:
+"1800 / 2400"` became `--photo-stage-ratio: 0.75`, a single decimal, because the
+same number is now multiplied inside a `calc()` and a fraction cannot be. Three
+places named the old property and I updated two; the browser suite reported the
+third within a minute. Worth recording precisely because a renamed CSS custom
+property fails silently — an unknown `var()` resolves to nothing and the element
+simply has no width.
+
+**RED first, at three heights.** `e2e/phone-gate.spec.ts` loops 760, 1080 and
+1440 at width 1920 and asserts the print ends before the words begin, and that
+it is still wider than 300px rather than a sliver that would pass the first
+assertion trivially. It failed as `Expected: <= 961, Received: 1112.59` at 1080
+and `1344.78` at 1440.
+
+The unlocked invitation needed no second assertion: it is the same `PhotoStage`
+in the same mode, so the geometry under test is identical. It was confirmed by
+screenshot at 1920, along with the gate.
+
+Green: 2299 unit and component tests, 209 browser tests, typecheck, lint,
 format, build.
 
 ## Next

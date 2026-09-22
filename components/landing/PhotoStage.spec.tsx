@@ -88,6 +88,10 @@ describe("PhotoStage", () => {
    * `aspect-ratio` because the frame is only shaped at `lg`: below that the
    * photograph is a band or a full screen, and an inline ratio would apply at
    * every width.
+   *
+   * A SINGLE DECIMAL rather than `w / h`, because the same number caps the
+   * frame's width inside a `calc()` — `min(100%, 86dvh × ratio)` — and a
+   * fraction cannot be multiplied there.
    */
   it("takes its shape from the photograph's own dimensions", () => {
     render(
@@ -96,9 +100,7 @@ describe("PhotoStage", () => {
       </PhotoStage>,
     );
 
-    expect(frame().style.getPropertyValue("--photo-stage-aspect")).toBe(
-      "1800 / 2400",
-    );
+    expect(frame().style.getPropertyValue("--photo-stage-ratio")).toBe("0.75");
   });
 
   it("shapes itself differently for a differently shaped photograph", () => {
@@ -108,8 +110,8 @@ describe("PhotoStage", () => {
       </PhotoStage>,
     );
 
-    expect(frame().style.getPropertyValue("--photo-stage-aspect")).toBe(
-      "737 / 1600",
+    expect(frame().style.getPropertyValue("--photo-stage-ratio")).toBe(
+      String(737 / 1600),
     );
   });
 
