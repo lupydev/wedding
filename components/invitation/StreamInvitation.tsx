@@ -76,9 +76,20 @@ export function StreamInvitation({
   return (
     <>
       <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
-        <p className="font-script text-3xl text-[#f6efe2]/90 [text-shadow:0_1px_14px_rgba(0,0,0,0.6)] sm:text-4xl">
-          Nos casamos
-        </p>
+        {/*
+          THE "Nos casamos" SCRIPT LINE USED TO BE RIGHT HERE, ABOVE THE BLOCK.
+
+          It belonged to this file back when each page wrote its own. The line
+          then moved INTO `SaveTheDate`, so the gate could make the same
+          announcement without one block living as two halves in two files —
+          and the landing dropped its copy while this one was missed. This page
+          said it twice, one line directly under the other.
+
+          Nothing failed. Two components each rendered one correct line, and
+          every component test asserted its own line was present. It took the
+          couple opening the page to see it, which is why `e2e/public-pages.spec.ts`
+          now counts the announcement on both pages.
+        */}
 
         {/*
           THE LANDING'S OWN ANNOUNCEMENT, SHARED RATHER THAN REPRODUCED.

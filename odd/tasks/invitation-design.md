@@ -81,6 +81,9 @@ own screen after a unit shipped, which is the only reason it was found.
       long form instead of floating in the middle of a taller row.
 - [x] **U8 — the print stays inside its own column.** Its width was derived
       from the window's HEIGHT, so on a tall window it spilled over the words.
+- [x] **U9 — the two public pages, which had no browser test at all.** A
+      duplicated announcement and words that stopped centring, both invisible
+      to every existing check.
 
 ## Checks per unit
 
@@ -386,6 +389,58 @@ screenshot at 1920, along with the gate.
 
 Green: 2299 unit and component tests, 209 browser tests, typecheck, lint,
 format, build.
+
+### U9 — done (the two public pages, which had no browser test at all)
+
+The couple, with two screenshots: "ojo que con lo último que hiciste la landing
+y /transmisión ahora quedaron mal en la ui."
+
+**Two defects, and neither came from the change they followed.** Worth stating
+plainly rather than accepting the attribution: the width cap in U8 changed the
+engagement photograph's frame by a couple of pixels. These were U5's and U7's,
+sitting there unseen because nothing looks at these two pages.
+
+**`/transmision` said "Nos casamos" twice.** `StreamInvitation` had carried its
+own script line since before the shared block existed. In U5 that line moved
+INTO `SaveTheDate` so the gate could make the same announcement — the landing
+dropped its copy, and this one was missed. The page then rendered the line, then
+the block that also renders it.
+
+Nothing failed. Two components each rendered one correct line, and each
+component's spec asserted its own line was present. `getByText` would not have
+caught it either: it throws on multiple matches, but only for the string it is
+handed, and no test asked for this one.
+
+**The words were no longer level with the photograph.** U7 removed
+`lg:items-center` from the grid so the print could stick, and recorded that
+"both short pages still centre, because their own columns already ask to."
+That was wrong, and this is the correction: `justify-center` centres content
+inside a box that is already exactly as tall as that content. With the cells
+stretched, a column holding words shorter than the print pins them to the top
+with several hundred pixels of empty ground underneath. Measured at 1920×1080:
+the stream page's words sat 177px above where they belonged.
+
+**Fixed in the stage, not in the pages.** Each page could have carried
+`lg:h-full`, and all three callers would then need to remember it — the exact
+trap U2 already paid for, where every caller wrote its own grid placement and
+one of them was wrong. `div.photo-stage__column` centres its child at `lg` now.
+It is a no-op where the words are the taller of the two, which is the unlocked
+invitation, so that screen is unchanged.
+
+**A TEST THAT PASSED FOR THE WRONG REASON, CAUGHT BEFORE IT WAS TRUSTED.** The
+first version of the centring assertion measured `div.photo-stage__column` —
+the grid item. The cells stretch, so its box runs the full height of the row
+and its centre matches the print's centre WHATEVER happens inside it. It went
+green against the broken page. The assertion measures the column's child now.
+
+**And the real gap underneath all of it: `/` and `/transmision` had no browser
+test.** Component tests covered every string and unit tests covered the data;
+nothing covered either page assembled. Both of these defects are only visible
+there. `e2e/public-pages.spec.ts` now counts the announcement and measures the
+words against the print, on both pages, at the window the couple actually use.
+
+Green: 2301 unit and component tests, 213 browser tests, typecheck, lint,
+format, build. Verified by screenshot on all four guest screens at 1920×1080.
 
 ## Next
 

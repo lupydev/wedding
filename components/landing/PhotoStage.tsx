@@ -273,11 +273,32 @@ export function PhotoStage({
           `band` takes the second row, under the strip. At `lg` neither applies:
           the print is in its own column and the words are in the next one, so
           the mobile choice stops mattering.
+
+          AND AT `lg` IT CENTRES THEM, WHICH IS THE STAGE'S JOB AND NOT THE
+          CALLER'S.
+
+          The print sticks, so the row's cells STRETCH — that is what lets a
+          long form scroll past a stationary picture, and `lg:items-center`
+          had to come off the grid for it. On a page whose words are SHORTER
+          than the print, though, a stretched cell holding a content-sized
+          child leaves the words pinned to its top with several hundred pixels
+          of empty ground beneath them, beside a picture running the full
+          height. `justify-center` on the child cannot help: it centres content
+          inside a box that is already exactly as tall as that content.
+
+          Every caller would otherwise need `lg:h-full` and would fail
+          silently for forgetting it — three pages, three chances, and one of
+          them was already wrong in production. So the CELL centres its child,
+          exactly as this stage already decides which cell the words go in.
+
+          Harmless where the words are the taller of the two: the row is then
+          sized by them, so the cell and its child are the same height and
+          centring is a no-op.
         */}
         <div
           className={`
             photo-stage__column relative col-start-1 lg:col-start-2
-            lg:row-start-1
+            lg:row-start-1 lg:flex lg:flex-col lg:justify-center
             ${overlay ? "row-start-1" : "row-start-2"}
           `}
         >

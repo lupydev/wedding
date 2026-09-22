@@ -48,6 +48,25 @@ describe("StreamInvitation", () => {
   });
 
   /**
+   * AND IT MAKES THAT ANNOUNCEMENT ONCE.
+   *
+   * This page carried its own "Nos casamos" script line from before the shared
+   * block existed. When the line moved INTO `SaveTheDate` — so the gate could
+   * make the same announcement without two halves in two files — the landing
+   * dropped its copy and this one was missed. The page then said it twice, one
+   * line under the other, and every check stayed green: two components each
+   * rendering one correct line.
+   *
+   * `getByText` would not have caught it either. It throws on multiple matches,
+   * but only for the string it is given, and no test asked for this one.
+   */
+  it("makes it once, not twice", () => {
+    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+
+    expect(screen.getAllByText("Nos casamos")).toHaveLength(1);
+  });
+
+  /**
    * INCLUDING THE COUNTDOWN.
    *
    * The couple asked for this page to open exactly as the landing does. The
