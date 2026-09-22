@@ -265,10 +265,17 @@ test.describe("declining and the ceremony stream", () => {
 
     const card = streamCard(page);
 
-    await expect(card).toContainText(ceremony.ceremonyDate);
-    await expect(card).toContainText(ceremony.ceremonyTime);
+    /*
+      THE TWO CREDENTIALS, AND DELIBERATELY NOT THE DAY OR THE HOUR.
+
+      The card sits inside the invitation, under an announcement that names the
+      day and counts down to it and a details list that states it again. The
+      same reasoning `/transmision` already applied to its own copy of this
+      block: a third statement is noise, not reassurance.
+    */
     await expect(card).toContainText(ceremony.streamMeetingId);
     await expect(card).toContainText(ceremony.streamPasscode);
+    await expect(card).not.toContainText(ceremony.ceremonyTime);
 
     // Not a form beside the card, and not a disabled copy of it. No form.
     await expect(page.locator("form.rsvp__form")).toHaveCount(0);

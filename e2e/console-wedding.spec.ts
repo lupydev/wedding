@@ -286,7 +286,22 @@ test.describe("saving an edit", () => {
 
       await expect(card).toContainText(EDITED.streamMeetingId);
       await expect(card).toContainText(EDITED.streamPasscode);
-      await expect(card).toContainText(EDITED.ceremonyTime);
+
+      /*
+        `ceremonyTime` IS NO LONGER ASSERTED HERE, AND THAT IS A REAL LOSS
+        RATHER THAN A TIDY-UP.
+
+        This card stopped stating the day and the hour when it was rewritten in
+        the invitation's own voice: it sits under an announcement that names the
+        day and counts down to it, so a third statement was noise. But the
+        invitation's details list names Fecha, Lugar and Dirección and no hour —
+        which means the `ceremony_time` an operator can edit is now rendered on
+        no guest-facing surface at all.
+
+        The two credentials still prove what this test is for: an edit made in
+        the console reaches the guest. The missing hour is recorded in
+        `odd/tasks/invitation-design.md` and belongs to the couple to decide.
+      */
     } finally {
       await guest.close();
     }

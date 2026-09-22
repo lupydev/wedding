@@ -260,7 +260,13 @@ export function RsvpAnswer({
   }
 
   if (showStream) {
-    return <CeremonyStream ceremony={ceremony} onReconsider={reconsider} />;
+    return (
+      <CeremonyStream
+        ceremony={ceremony}
+        memberCount={guests.length}
+        onReconsider={reconsider}
+      />
+    );
   }
 
   return (

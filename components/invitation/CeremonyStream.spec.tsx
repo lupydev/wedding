@@ -25,14 +25,20 @@ const CEREMONY: CeremonyStreamDetails = {
   streamPasscode: "boda2026",
 };
 
-function renderCard(onReconsider = vi.fn()) {
-  render(<CeremonyStream ceremony={CEREMONY} onReconsider={onReconsider} />);
+function renderCard(onReconsider = vi.fn(), memberCount = 2) {
+  render(
+    <CeremonyStream
+      ceremony={CEREMONY}
+      memberCount={memberCount}
+      onReconsider={onReconsider}
+    />,
+  );
 
   return onReconsider;
 }
 
 describe("CeremonyStream", () => {
-  it("shows all four stream details, each beside its own label", () => {
+  it("shows the two credentials, each beside its own label", () => {
     renderCard();
 
     const details = screen.getByRole("group", { name: /transmisión/i });
@@ -47,8 +53,6 @@ describe("CeremonyStream", () => {
         term.nextElementSibling?.textContent,
       ]),
     ).toEqual([
-      ["Fecha", CEREMONY.ceremonyDate],
-      ["Hora", CEREMONY.ceremonyTime],
       ["ID de la reunión", CEREMONY.streamMeetingId],
       ["Clave de acceso", CEREMONY.streamPasscode],
     ]);
@@ -66,6 +70,7 @@ describe("CeremonyStream", () => {
           streamMeetingId: "{{ZOOM_MEETING_ID}}",
           streamPasscode: "{{ZOOM_PASSCODE}}",
         }}
+        memberCount={2}
         onReconsider={vi.fn()}
       />,
     );
@@ -100,5 +105,63 @@ describe("CeremonyStream", () => {
     const onReconsider = renderCard();
 
     expect(onReconsider).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * THE WORDS A HOUSEHOLD READS AFTER SAYING THEY CANNOT COME.
+ *
+ * The couple: "en caso de no poder asistir entonces se les muestra la
+ * información de Zoom con un mejor copy como 'los esperamos por Zoom', similar
+ * a lo que aparece en /transmision."
+ *
+ * It said "Los acompañamos por transmisión" over two lines explaining what a
+ * stream is. `/transmision` had already been rewritten to one sentence — "La
+ * ceremonia se va a transmitir a través de Zoom. Te esperamos." — and this card
+ * is the same offer, made to a household that has just declined.
+ */
+describe("the words on the card", () => {
+  it("invites the household to the stream in one line", () => {
+    renderCard();
+
+    expect(
+      screen.getByRole("heading", { name: "Los esperamos por Zoom" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/La ceremonia se va a transmitir en vivo/),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND IN THE NUMBER THEY ANSWERED IN.
+   *
+   * The form above asks one person "¿Podrás acompañarnos?" since U18. A card
+   * that then says "pueden acompañarnos" to that same person is the product
+   * changing voice between one screen and the next.
+   */
+  it("speaks to one person in the singular", () => {
+    renderCard(vi.fn(), 1);
+
+    expect(screen.getByText(/puedas acompañarnos/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Si cambias de opinión, puedes volver a responder cuando quieras.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * THE DAY AND THE HOUR ARE NOT STATED A THIRD TIME.
+   *
+   * This card sits inside the invitation, below an announcement that names the
+   * day and counts down to it and a details list that states it again. The
+   * same reasoning `/transmision` already applied to its own copy of this
+   * block.
+   */
+  it("leaves the day and the hour to the page around it", () => {
+    renderCard();
+
+    expect(screen.queryByText(CEREMONY.ceremonyDate)).not.toBeInTheDocument();
+    expect(screen.queryByText(CEREMONY.ceremonyTime)).not.toBeInTheDocument();
   });
 });

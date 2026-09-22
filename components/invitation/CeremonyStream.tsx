@@ -42,22 +42,45 @@ export type CeremonyStreamDetails = StreamDetailsValues;
  * append-only, so correcting one writes a new row and the couple still sees
  * that the household changed its mind.
  */
-const RECONSIDER_SENTENCE =
-  "Si cambian de opinión, pueden volver a responder cuando quieran.";
+function reconsiderSentence(memberCount: number): string {
+  return memberCount === 1
+    ? "Si cambias de opinión, puedes volver a responder cuando quieras."
+    : "Si cambian de opinión, pueden volver a responder cuando quieran.";
+}
+
+/**
+ * The invitation to the stream, in the number the household answered in.
+ *
+ * The couple asked for "un mejor copy como 'los esperamos por Zoom', similar a
+ * lo que aparece en /transmision". That page had already been cut to one
+ * sentence — "La ceremonia se va a transmitir a través de Zoom. Te esperamos."
+ * — and this is the same offer, made to somebody who has just said they cannot
+ * be in the room. "Gracias por contarnos" stays: it is the only line that
+ * acknowledges the answer they just gave.
+ */
+function welcome(memberCount: number): string {
+  return memberCount === 1
+    ? "Gracias por contarnos. La ceremonia se va a transmitir en vivo, así que puedas acompañarnos desde donde estés."
+    : "Gracias por contarnos. La ceremonia se va a transmitir en vivo, así que puedan acompañarnos desde donde estén.";
+}
 
 export function CeremonyStream({
   ceremony,
+  memberCount,
   onReconsider,
 }: {
   readonly ceremony: CeremonyStreamDetails;
+  /** How many people this invitation names, which decides the number. */
+  readonly memberCount: number;
   readonly onReconsider: () => void;
 }) {
   return (
-    <div className="rsvp__stream">
-      <h2>Los acompañamos por transmisión</h2>
-      <p>
-        Gracias por contarnos. Vamos a transmitir la ceremonia en vivo por Zoom,
-        así que pueden acompañarnos desde donde estén.
+    <div className="rsvp__stream flex flex-col items-center gap-4 text-center">
+      <h2 className="font-display text-xl text-[#f6efe2] sm:text-2xl">
+        Los esperamos por Zoom
+      </h2>
+      <p className="max-w-sm text-sm text-[#f6efe2]/85">
+        {welcome(memberCount)}
       </p>
 
       {/*
@@ -66,10 +89,34 @@ export function CeremonyStream({
         come in. It renders them verbatim, placeholders included; the reasoning
         lives in `StreamDetails`.
       */}
-      <StreamDetails ceremony={ceremony} />
+      {/*
+        NEITHER THE DAY NOR THE HOUR, FOR THE REASON `/transmision` ALREADY
+        GAVE. This card sits inside the invitation, below an announcement that
+        names the day and counts down to it and a details list that states it
+        again. A third statement is not reassurance, it is noise.
+      */}
+      <StreamDetails
+        ceremony={ceremony}
+        className="w-full max-w-sm text-left"
+        showDate={false}
+        showTime={false}
+      />
 
-      <p className="rsvp__reconsider">{RECONSIDER_SENTENCE}</p>
-      <button type="button" onClick={onReconsider}>
+      <p className="rsvp__reconsider text-xs text-[#f6efe2]/70">
+        {reconsiderSentence(memberCount)}
+      </p>
+      <button
+        type="button"
+        onClick={onReconsider}
+        className="
+          rounded-full border border-[#f6efe2]/30 bg-black/30 px-5 py-2.5
+          text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
+          duration-(--console-motion-fast) ease-(--ease-console-out)
+          hover:bg-black/50
+          focus-visible:outline-2 focus-visible:outline-offset-2
+          focus-visible:outline-[#f6efe2]
+        "
+      >
         Volver a responder
       </button>
     </div>

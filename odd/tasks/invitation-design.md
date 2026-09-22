@@ -124,7 +124,7 @@ declined screen given the language `/transmision` already uses.
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
-- [ ] **U19 — the declined screen in `/transmision`'s language.** "Los
+- [x] **U19 — the declined screen in `/transmision`'s language.** "Los
       esperamos por Zoom", rather than the longer explanation it carries now.
 
 ## Checks per unit
@@ -987,6 +987,44 @@ error boundary cannot be reached from a browser test without breaking the page
 on purpose.
 
 Green: 2320 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
+### U19 — done (the screen a household reads after declining)
+
+The couple: "en caso de no poder asistir entonces se les muestra la información
+de Zoom con un mejor copy como 'los esperamos por Zoom', similar a lo que
+aparece en /transmision."
+
+It said "Los acompañamos por transmisión" over two lines explaining what a
+stream is, with no styling of its own — an `h2` and a bare `<button>` inheriting
+whatever the page gave them. `/transmision` had already been cut to one
+sentence; this card is the same offer, made to somebody who has just said they
+cannot be in the room.
+
+**"Gracias por contarnos" stays.** It is the only line that acknowledges the
+answer they just gave, and a screen that jumps straight to credentials reads as
+though nobody noticed.
+
+**AND IT SPEAKS IN THE NUMBER THEY ANSWERED IN.** U18 made the form ask one
+person "¿Podrás acompañarnos?"; a card that then said "pueden acompañarnos" to
+that same person is the product changing voice between one screen and the next.
+`memberCount` comes from the guest list `RsvpAnswer` already holds.
+
+**The day and the hour are gone from it**, for the reason `/transmision` gave
+for its own copy: the announcement above names the day and counts down to it,
+and the details list states it again.
+
+**WHICH EXPOSED SOMETHING THE COUPLE SHOULD DECIDE, NOT ME.** This card was the
+LAST guest-facing surface rendering `ceremony_time`. The invitation's details
+list names Fecha, Lugar and Dirección and no hour, and `/transmision` set
+`showTime={false}` long ago. So the hour an operator can edit at
+`/console/wedding` is now rendered nowhere a guest can see it. The countdown
+carries the instant, and the calendar button on `/transmision` carries the
+precise time — but the typed prose reaches no one. Flagged rather than fixed:
+adding an "Hora" row to the invitation's details list is one line, and whether
+it belongs there is theirs to say.
+
+Green: 2323 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.
 
 ## Next
