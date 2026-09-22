@@ -96,7 +96,11 @@ own screen after a unit shipped, which is the only reason it was found.
       Found by the review's refuter, not by me.
 - [x] **U14 — crossing the two public pages by URL.** No recent change broke
       it: the landing's door has been a disabled button since before the shared
-      layout existed. Proven seamless where the browser permits autoplay.
+      layout existed. Where the browser permits autoplay, the song is proven to
+      resume from the remembered second rather than the first bar — which is
+      not the same as gapless, and was overclaimed here as "seamless" until the
+      review said so. The new document still loads, fetches metadata and seeks,
+      and that is audible.
 
 ## Checks per unit
 
