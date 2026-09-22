@@ -160,6 +160,50 @@ test.describe("the song a guest hears", () => {
   });
 
   /**
+   * A TOUCH ALWAYS STARTS THE SONG, WHATEVER HAPPENED ON THE PAGE BEFORE.
+   *
+   * The couple: "al dar click o interactuar con la landing no inicia la música
+   * y lo mismo con /transmision."
+   *
+   * Remembering the song's place brought a second idea with it — that a guest
+   * who had pressed pause should not be asked again on the next page — and that
+   * idea is what broke this. The load-time attempt returned early in that case,
+   * and the gesture listeners are registered INSIDE that attempt's refusal
+   * path, so returning early meant they were never registered at all. A click
+   * on the page then did nothing, for the life of the tab.
+   *
+   * Worse, `playing: false` was written from the `pause` EVENT, which a browser
+   * fires for its own reasons — tearing a document down among them. So a guest
+   * who never pressed anything could still end up in that state.
+   *
+   * The fallback is unconditional now. Whatever else is remembered, touching
+   * the page starts the song.
+   */
+  test("starts on a touch even after the song was paused earlier", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await startByTouchingThePage(page);
+
+    // The guest stops it, deliberately, with the control.
+    await page.getByRole("button", { name: /Pausar la música/ }).click();
+    await expect
+      .poll(async () => (await audioState(page)).paused, { timeout: 10_000 })
+      .toBe(true);
+
+    // A new document, exactly as typing the next URL gives them.
+    await page.goto("/transmision");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.waitForLoadState("load");
+
+    await page.locator("main").click({ position: { x: 20, y: 20 } });
+
+    await expect
+      .poll(async () => (await audioState(page)).paused, { timeout: 10_000 })
+      .toBe(false);
+  });
+
+  /**
    * AND ACROSS THE UNLOCK, WHICH IS THE ONE THAT LOOKS LIKE A PAGE LOAD.
    *
    * A guest types a number and the screen becomes a different screen. It is a

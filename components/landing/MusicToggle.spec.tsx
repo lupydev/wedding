@@ -307,25 +307,37 @@ describe("what it remembers between documents", () => {
   });
 
   /**
-   * AND IT DOES NOT START ITSELF AGAIN WHERE THE GUEST SAID NO.
+   * AND A TOUCH STILL STARTS IT, WHATEVER HAPPENED ON THE PAGE BEFORE.
    *
-   * Pressing pause is an instruction, and a new page is not a fresh chance to
-   * overrule it. The button is still there, and it resumes from the remembered
-   * place rather than from the top.
+   * This test replaces one that asserted the opposite, and the swap is the
+   * whole lesson. The record briefly carried whether the song was playing, so
+   * that a guest who pressed pause would not be asked again on the next page —
+   * a considerate-sounding idea that cost the couple the control's actual job:
+   * "al dar click o interactuar con la landing no inicia la música y lo mismo
+   * con /transmision."
+   *
+   * The load-time attempt returned early in that case, and `startWaiting()` is
+   * reached only inside that attempt's refusal path — so the early return
+   * never registered the gesture listeners at all. A click did nothing, for
+   * the life of the tab.
+   *
+   * The flag also came from the `pause` EVENT, which a browser fires for its
+   * own reasons, so a guest who pressed nothing could land there too.
    */
-  it("stays quiet when the guest had stopped it", async () => {
+  it("still starts on a touch when an older record mentions a pause", async () => {
+    // Exactly what a tab from the previous version left behind.
     window.sessionStorage.setItem(
       KEY,
       JSON.stringify({ at: 42, playing: false }),
     );
-    const { playSpy } = stubMedia("allows");
+    const { playSpy } = stubMedia("refuses-until-gesture");
 
     render(<MusicToggle src={SRC} />);
 
-    // Nothing on load, and nothing when the guest touches the page either.
-    await waitFor(() => expect(playSpy).not.toHaveBeenCalled());
+    await waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
     touchSomething();
-    await waitFor(() => expect(playSpy).not.toHaveBeenCalled());
+
+    await waitFor(() => expect(playSpy).toHaveBeenCalledTimes(2));
   });
 
   /**

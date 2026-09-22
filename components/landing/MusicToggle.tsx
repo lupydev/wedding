@@ -77,17 +77,34 @@ const GESTURES = ["pointerdown", "keydown"] as const;
 const RESUME_KEY = "wedding:song";
 
 interface Resume {
-  /** Seconds into the song. */
+  /** Seconds into the song. Nothing else — see below. */
   readonly at: number;
-  /**
-   * Whether it was playing when the last document went away.
-   *
-   * The record is only ever written once the song has actually played, so
-   * `false` here means the guest PRESSED PAUSE. That is an instruction, and
-   * the next page is not a fresh chance to overrule it.
-   */
-  readonly playing: boolean;
 }
+
+/*
+  IT USED TO CARRY WHETHER THE SONG WAS PLAYING, AND THAT WAS A DEFECT WITH A
+  PLAUSIBLE STORY ATTACHED.
+
+  The idea was that a guest who pressed pause should not be asked again on the
+  next page. It cost the couple the thing the control is actually for: "al dar
+  click o interactuar con la landing no inicia la música y lo mismo con
+  /transmision."
+
+  Two mistakes, and the second is the one that matters.
+
+  The load-time attempt returned early when the flag said paused — and the
+  gesture listeners are registered INSIDE that attempt's refusal path, so
+  returning early never registered them. A click on the page then did nothing
+  at all, for the life of the tab, with no way back but finding the button.
+
+  And the flag was written from the `pause` EVENT, which a browser fires for
+  its own reasons — tearing a document down among them. So a guest who never
+  pressed anything could land in that state anyway.
+
+  The feature was never asked for. The position was. Rather than make the flag
+  correct, it is gone: every page behaves exactly as it did before any of this,
+  only starting at the right second.
+*/
 
 /**
  * The remembered place, or nothing.
@@ -112,7 +129,7 @@ function readResume(): Resume | null {
       return null;
     }
 
-    const { at, playing } = parsed as Partial<Resume>;
+    const { at } = parsed as Partial<Resume>;
 
     // Anything malformed is treated as no record rather than trusted: this
     // value is fed to `currentTime`, where a NaN throws.
@@ -120,7 +137,8 @@ function readResume(): Resume | null {
       return null;
     }
 
-    return typeof playing === "boolean" ? { at, playing } : null;
+    // A record written by an older tab carries an extra field. Ignored.
+    return { at };
   } catch {
     return null;
   }
@@ -198,7 +216,7 @@ export function MusicToggle({ src }: { readonly src: string }) {
 
     const remember = () => {
       noted = audio.currentTime;
-      writeResume({ at: audio.currentTime, playing: !audio.paused });
+      writeResume({ at: audio.currentTime });
     };
 
     const rememberIfMoved = () => {
@@ -209,10 +227,6 @@ export function MusicToggle({ src }: { readonly src: string }) {
 
     audio.addEventListener("loadedmetadata", restore);
     audio.addEventListener("timeupdate", rememberIfMoved);
-    // Pressing the button is the one that has to be recorded exactly: it is
-    // how `playing: false` — the guest's own instruction — comes to be there.
-    audio.addEventListener("pause", remember);
-    audio.addEventListener("play", remember);
     window.addEventListener("pagehide", remember);
 
     const stopWaiting = () => {
@@ -278,18 +292,13 @@ export function MusicToggle({ src }: { readonly src: string }) {
 
     const askOnce = () => {
       /*
-        A GUEST WHO PRESSED PAUSE IS NOT ASKED AGAIN ON THE NEXT PAGE.
+        UNCONDITIONAL, AND IT HAS TO STAY THAT WAY.
 
-        The record only exists once the song has played, so `playing: false`
-        means they stopped it deliberately. Starting it again on the following
-        document is overruling them, and it is the behaviour that makes a site
-        feel like it is arguing. The button stays where it is, and it resumes
-        from the remembered place rather than from the top.
+        This briefly returned early for a guest whose record said they had
+        paused — and `startWaiting()` lives inside the refusal path below, so
+        the early return took the whole gesture fallback with it and a click on
+        the page stopped doing anything at all. See the note on `Resume`.
       */
-      if (resume !== null && !resume.playing) {
-        return;
-      }
-
       void attempt().then((started) => {
         if (started || !live) {
           return;
@@ -323,8 +332,6 @@ export function MusicToggle({ src }: { readonly src: string }) {
       window.removeEventListener("pagehide", remember);
       audio.removeEventListener("loadedmetadata", restore);
       audio.removeEventListener("timeupdate", rememberIfMoved);
-      audio.removeEventListener("pause", remember);
-      audio.removeEventListener("play", remember);
     };
   }, []);
 

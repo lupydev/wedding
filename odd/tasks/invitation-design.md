@@ -88,8 +88,9 @@ own screen after a unit shipped, which is the only reason it was found.
       reported faults do not reproduce; the third is a browser permission. The
       continuity both layouts claim is now asserted.
 - [x] **U11 — the song keeps its place across a whole new document.** A typed
-      URL destroys the element, so the position crosses instead — and a guest
-      who pressed pause is no longer asked again on the next page.
+      URL destroys the element, so the position crosses instead.
+- [x] **U12 — click-to-play, which U11 had killed.** The pause-memory that
+      came along uninvited took the gesture fallback with it. Deleted.
 
 ## Checks per unit
 
@@ -567,6 +568,50 @@ allowing `play()` from a click that lands on the control and refusing it from a
 click elsewhere on the page. Nothing in this repository changes a per-site
 browser permission. With this unit, pressing that button now resumes from where
 the song was rather than from the top.
+
+### U12 — done (I broke click-to-play in U11, and took the cleverness back out)
+
+The couple, one commit later: "al dar click o interactuar con la landing no
+inicia la música y lo mismo con /transmision."
+
+**Mine, from U11, and not a subtle break.** Remembering the song's place brought
+a second idea along that nobody asked for: a guest who pressed pause should not
+be asked again on the next page. So `askOnce` returned early when the record
+said paused.
+
+`startWaiting()` — the whole gesture fallback — is reached only INSIDE that
+attempt's refusal path. Returning early never registered the listeners at all.
+A click on the page then did nothing whatsoever, for the life of the tab, with
+no way back but finding the button.
+
+**And the flag could be set without anybody pressing anything.** It was written
+from the `pause` EVENT, which a browser fires for its own reasons — tearing a
+document down among them. A guest who only ever navigated could land in the
+dead state.
+
+**The fix is a deletion.** The flag is gone and the record carries the position
+alone. Not "make the flag correct" — track only a real press of the button,
+keep the fallback registered whatever it says — because the feature was never
+requested and the position was. Every page now behaves exactly as it did before
+U11, only starting at the right second.
+
+`readResume` ignores an unknown extra field, so a tab still holding the old
+`{at, playing: false}` record recovers on its next page rather than staying
+dead until it is closed. There is a test for exactly that record.
+
+**A TEST ASSERTED THE DEFECT AND PASSED.** `MusicToggle.spec.tsx` had "stays
+quiet when the guest had stopped it", written in U11 alongside the code. It was
+green the whole time the couple could not start the music. A test written from
+the same idea as the code cannot disagree with it — the U11 checks were four
+green tests describing a broken product. It is inverted now: "still starts on a
+touch when an older record mentions a pause."
+
+The browser test is the couple's own path — play, press pause, go to the next
+page, click — and it failed by timing out for ten seconds with `paused` stuck
+at `true`.
+
+Green: 2306 unit and component tests, 219 browser tests, typecheck, lint,
+format, build.
 
 ## Next
 
