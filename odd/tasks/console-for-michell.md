@@ -266,8 +266,47 @@ which is also what the product does.
 Green: 2264 unit and component tests, 196 browser tests, typecheck, lint,
 format, build.
 
+### U4 — done (the invitations list is newest-first too)
+
+The couple: "las invitaciones también deben estar filtradas por created_at DESC
+para que sea mucho más fácil identificar las nuevas creadas de las más viejas."
+
+The query ordered by `display_name` — alphabetical by group name, which since
+U3a is the greeting. A fine order for a finished list and the wrong one for a
+list being built, exactly as it was for the directory.
+
+**Decided in the domain, not the query.** `assembleConsoleRows` sorts newest
+first with the invitation id as a tiebreak, and `.order("display_name")` is
+gone from the read. The rule is now unit-testable without a database and
+stated once for both lists — two opinions about an order is how two lists that
+should agree drift apart. The members inside a household are still ordered by
+the query, because their position is a stable fact about that household.
+
+**Three existing tests read results BY POSITION** over two fixtures created at
+the same instant. They now date their fixtures, so the order they rely on is
+stated rather than inherited from the argument order they happened to use.
+
+Green: 2266 unit and component tests. The browser suite has three pre-existing
+failures, diagnosed below.
+
+## Found while verifying: `/console` 500s once there are enough invitations
+
+Not caused by this change, and worth its own unit.
+`readLatestAnswers` and `readDispatchEvents` pass EVERY invitation id into a
+PostgREST `in` filter, which travels in the GET query string. At the 204
+invitations this database has accumulated, that URL exceeds the server's limit
+and both reads fail with **"URI too long"** — so the console's main screen
+answers a 500 rather than a list.
+
+The wedding itself will not reach 204 households, so this is not urgent. It is
+also not hypothetical: the failure mode is the whole console going down, with
+no partial degradation, and the threshold is a number of households rather than
+anything exotic.
+
 ## Next
 
+- **The `in`-filter URL limit above.** The fix is small — chunk the id list, or
+  read through a POST — and it is what unblocks the browser suite.
 - `moveMemberAction` is still dead code with tests — a full server action and
   repository function with no UI, and now the closest thing to "move somebody
   from one household to another", which the directory makes sensible to want.

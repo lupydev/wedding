@@ -568,3 +568,59 @@ test.describe("inviting a guest on their own", () => {
     ).toBeVisible();
   });
 });
+
+/**
+ * THE INVITATIONS LIST IS NEWEST-FIRST TOO.
+ *
+ * "Las invitaciones también deben estar filtradas por created_at DESC para que
+ * sea mucho más fácil identificar las nuevas creadas de las más viejas."
+ *
+ * The same reasoning as the directory, and now the same rule: alphabetical is
+ * an order for a finished list, and this one is being built.
+ */
+test.describe("the order the invitations list comes back in", () => {
+  test("puts the household just created above the one before it", async () => {
+    const older = `Familia Anterior ${run}`;
+    const newer = `Familia Posterior ${run}`;
+
+    for (const name of [older, newer]) {
+      await page.goto("/console/invitations/new");
+      await page
+        .getByRole("button", { name: "Agregar una persona nueva" })
+        .click();
+      await page
+        .locator("fieldset.invitation-form__member")
+        .first()
+        .getByLabel("Nombre completo")
+        .fill(`Titular de ${name}`);
+      await page.getByLabel("Nombre del grupo").fill(name);
+      await page.getByRole("button", { name: "Guardar invitación" }).click();
+      await expect(page).toHaveURL(/\/console$/);
+    }
+
+    /*
+      POSITIONS, NOT PRESENCE. Both rows exist either way — what this asserts
+      is that the newer one comes FIRST, which is the whole request. The list
+      is shared with every other spec's fixtures, so the two are compared
+      against each other rather than against a fixed index.
+    */
+    const rows = page.locator("li.guest-list__row");
+
+    /*
+      WAITED FOR, NOT READ ONCE. The list arrives behind a Suspense boundary,
+      and `allTextContents()` is a single shot with no auto-retry — so reading
+      it the moment the URL changes can catch the skeleton. Both rows are
+      asserted visible first, which is the wait.
+    */
+    await expect(rows.filter({ hasText: newer })).toBeVisible();
+    await expect(rows.filter({ hasText: older })).toBeVisible();
+
+    const headings = await rows.locator("h3").allTextContents();
+    const newerAt = headings.findIndex((text) => text.includes(newer));
+    const olderAt = headings.findIndex((text) => text.includes(older));
+
+    expect(newerAt).toBeGreaterThanOrEqual(0);
+    expect(olderAt).toBeGreaterThanOrEqual(0);
+    expect(newerAt).toBeLessThan(olderAt);
+  });
+});

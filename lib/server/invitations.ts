@@ -1865,6 +1865,7 @@ interface ConsoleInvitationRow {
   display_name: string;
   greeting_name: string;
   dispatch_recipient_guest_id: string | null;
+  created_at: string;
   senders: { display_name: string } | null;
   invitation_guests: {
     id: string;
@@ -1877,7 +1878,7 @@ interface ConsoleInvitationRow {
 }
 
 const CONSOLE_INVITATION_SELECT =
-  "id, slug, owner_sender_id, display_name, greeting_name, " +
+  "id, slug, owner_sender_id, display_name, greeting_name, created_at, " +
   "dispatch_recipient_guest_id, senders(display_name), " +
   // `nickname` is here because the couple reported it missing from the console.
   // It was stored and used to derive the greeting all along; this projection
@@ -1927,10 +1928,21 @@ export async function listConsoleInvitations(
   let query = client
     .from("invitations")
     .select(CONSOLE_INVITATION_SELECT)
+    /*
+      THE MEMBERS ARE ORDERED HERE; THE HOUSEHOLDS ARE NOT.
+
+      A member's position inside a household is a stable fact about that
+      household — primary first, then by when they were added — and the
+      database is the cheapest place to settle it.
+
+      The order of the HOUSEHOLDS themselves used to be `display_name` here.
+      It is now `assembleConsoleRows`' business, newest first, stated once in
+      the domain alongside the directory's identical rule. Two opinions about
+      an order is how two lists that should agree drift apart.
+    */
     .order("is_primary", { referencedTable: GUESTS, ascending: false })
     .order("created_at", { referencedTable: GUESTS, ascending: true })
-    .order("id", { referencedTable: GUESTS, ascending: true })
-    .order("display_name");
+    .order("id", { referencedTable: GUESTS, ascending: true });
 
   if (options.ownedOnly) {
     query = query.eq("owner_sender_id", options.viewerSenderId);
@@ -1959,6 +1971,7 @@ export async function listConsoleInvitations(
     // an operator chooses, which is what makes the preflight's
     // `no_recipient_chosen` group mean something on day one.
     dispatchRecipientGuestId: row.dispatch_recipient_guest_id,
+    createdAt: row.created_at,
     guests: [...row.invitation_guests]
       .sort((left, right) => {
         if (left.is_primary !== right.is_primary) {
