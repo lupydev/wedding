@@ -94,6 +94,9 @@ own screen after a unit shipped, which is the only reason it was found.
 - [x] **U13 — walking through a page erased the song's place.** `pagehide`
       wrote a zero over a real position on any page the guest never touched.
       Found by the review's refuter, not by me.
+- [x] **U14 — crossing the two public pages by URL.** No recent change broke
+      it: the landing's door has been a disabled button since before the shared
+      layout existed. Proven seamless where the browser permits autoplay.
 
 ## Checks per unit
 
@@ -654,6 +657,66 @@ the song on the second page — removed the condition the defect needs. A test
 whose own setup precludes the failure is not a test of that behaviour.
 
 Green: 2306 unit and component tests, 220 browser tests, typecheck, lint,
+format, build.
+
+### U14 — done (crossing between the two public pages, and what the history says)
+
+The couple: "no se trata de clickear en transmision, la idea es que si estoy en
+/transmision o en / al poner la canción pueda moverme libremente entre las dos
+sin que la canción se pare, sino que sea fluido. Esto estaba ocurriendo hasta
+hace unos momentos donde pedí que el audio también se incorporara en la
+invitación… podés ver el historial y deducir cuál fue el cambio que tiró esto."
+
+**The history says no change tired it, and it names the reason.**
+
+`8fc7c14` — the commit that put the song on the invitation — changed exactly one
+line of `app/(public)/layout.tsx`: the import, so `SONG_SRC` could be shared. The
+mount is identical. The rest of that diff is the comment explaining why
+`/i/[slug]` could not join the group.
+
+The real answer is in `components/landing/StreamLink.tsx`. Outside the final week
+the landing's door to the stream is a **disabled `<button>`**, not a link:
+
+    if (open) { return <Link href={STREAM_PATH}>…</Link>; }
+    …
+    <button type="button" {...whyDisabled(…)} className={`${PILL} cursor-not-allowed`}>
+
+That was decided in `04f75c7` at 20:47 on 20 September — **thirty-eight minutes
+before** `46dbbac` created the shared layout at 21:25. So the guarantee that
+layout rests on, "Layouts do not re-render on navigation", has NEVER applied in
+the `/` → `/transmision` direction: there has never been a link to take.
+`46dbbac`'s own proof note records having to fix the clock inside the final week
+to exercise it. The other direction, `/transmision` → `/`, has a live link and
+works; it is asserted in `guest-audio.spec.ts`.
+
+**So the crossing is a typed URL, which is a new document, which no browser
+keeps a sound alive across.** What makes it fluid is the position from U11 plus
+a browser willing to start the song without being asked again — which is what a
+browser grants a site the visitor has already played media on.
+
+**Measured, and it is seamless.** Three documents, one continuous song:
+
+| step                  | state   | at    |
+| --------------------- | ------- | ----- |
+| landing, arriving     | playing | 2.26s |
+| `/transmision`, typed | playing | 4.33s |
+| back to `/`, typed    | playing | 6.23s |
+
+A new element each time, and the song never returns to the first bar.
+
+**`e2e/guest-audio-crossing.spec.ts`, and it needs its own file.** The measurement
+is impossible in Playwright's default Chromium, which refuses autoplay — that
+refusal hides the entire question and every assertion would be about a silent
+page. `launchOptions` cannot be scoped to a `describe`, and the rest of the audio
+suite needs the opposite setting: "says nothing until the guest touches the page"
+is only meaningful in a browser that refuses.
+
+**What is left is a browser permission, not code.** The couple's Brave blocks
+autoplay per site. Allowing it for the site is what turns the measured behaviour
+above into what they see; until then the first touch on each page starts the
+song, from the right second.
+
+Green: 2307 unit and component tests, 221 browser tests, typecheck, lint,
 format, build.
 
 ## Next
