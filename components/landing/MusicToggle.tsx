@@ -94,10 +94,36 @@ export function MusicToggle({ src }: { readonly src: string }) {
         () => false,
       );
 
+    const startWaiting = () => {
+      for (const gesture of GESTURES) {
+        document.addEventListener(gesture, onGesture, { capture: true });
+      }
+    };
+
+    /*
+      IT KEEPS LISTENING UNTIL A GESTURE ACTUALLY MAKES A SOUND.
+
+      This used to register with `once: true` and remove both listeners at the
+      TOP of the handler — before the attempt's answer was known. So a first
+      gesture whose `play()` was refused took the fallback with it, and the
+      visitor could tap all day for nothing. The couple reported exactly that:
+      "al dar click o interactuar con la página no se activa el audio".
+
+      And a refusal on that first gesture is not exotic. `preload="none"` means
+      the file is not loaded when the tap arrives, and a stricter autoplay
+      shield than Chrome's — Brave blocks by default — can decline a
+      programmatic `play()` even inside a gesture handler.
+
+      So the listeners come off only once the song is playing. Each attempt
+      still costs nothing when refused: `play()` on a `preload="none"` element
+      opens no connection it does not need.
+    */
     function onGesture() {
-      // Whichever gesture arrived first, neither is wanted again.
-      stopWaiting();
-      void attempt();
+      void attempt().then((started) => {
+        if (started) {
+          stopWaiting();
+        }
+      });
     }
 
     const askOnce = () => {
@@ -108,12 +134,7 @@ export function MusicToggle({ src }: { readonly src: string }) {
 
         // Refused, which is the ordinary answer on a page nobody has touched.
         // Wait for the visitor to touch anything at all.
-        for (const gesture of GESTURES) {
-          document.addEventListener(gesture, onGesture, {
-            capture: true,
-            once: true,
-          });
-        }
+        startWaiting();
       });
     };
 

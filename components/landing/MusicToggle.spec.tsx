@@ -7,7 +7,7 @@ import { MusicToggle } from "./MusicToggle";
 const SRC = "/audio/nuestra-cancion.mp3";
 
 /** What the browser does when asked to make noise. */
-type Policy = "allows" | "refuses" | "refuses-until-gesture";
+type Policy = "allows" | "refuses" | "refuses-until-gesture" | "refuses-twice";
 
 /**
  * jsdom ships no media stack at all.
@@ -29,7 +29,16 @@ function stubMedia(policy: Policy) {
 
     const blocked =
       policy === "refuses" ||
-      (policy === "refuses-until-gesture" && calls === 1);
+      (policy === "refuses-until-gesture" && calls === 1) ||
+      /*
+        A BROWSER THAT REFUSES THE FIRST GESTURE TOO.
+
+        Not hypothetical: `preload="none"` means the file is not loaded when the
+        first tap arrives, and a browser with a stricter autoplay shield than
+        Chrome's — Brave blocks it by default — can decline that first
+        programmatic `play()` even inside a gesture handler.
+      */
+      (policy === "refuses-twice" && calls <= 2);
 
     return blocked
       ? Promise.reject(new DOMException("blocked", "NotAllowedError"))
@@ -140,7 +149,40 @@ describe("MusicToggle", () => {
       );
     });
 
-    it("asks only once, however many times the page is touched", async () => {
+    /**
+     * IT KEEPS WAITING UNTIL A GESTURE ACTUALLY MAKES A SOUND.
+     *
+     * The listeners were registered with `once: true` AND removed by the
+     * handler before the attempt's answer was known — so a first gesture whose
+     * `play()` was refused took the fallback with it, and the visitor could
+     * tap all day for nothing. That is exactly what the couple reported: "al
+     * dar click o interactuar con la página no se activa el audio".
+     *
+     * A refusal is not rare on this page. `preload="none"` means the file is
+     * not loaded when the first tap arrives, and a stricter autoplay shield
+     * than Chrome's — Brave blocks by default — can decline a programmatic
+     * `play()` even inside a gesture handler.
+     */
+    it("keeps listening when the first gesture is refused as well", async () => {
+      const { playSpy } = stubMedia("refuses-twice");
+
+      render(<MusicToggle src={SRC} />);
+      await waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
+
+      // Refused: the autoplay attempt, then this gesture.
+      touchSomething();
+      await waitFor(() => expect(playSpy).toHaveBeenCalledTimes(2));
+      expect(toggle()).toHaveAccessibleName("Poner la música");
+
+      // The third attempt is allowed, and the fallback was still there to make
+      // it.
+      touchSomething();
+      await waitFor(() =>
+        expect(toggle()).toHaveAccessibleName("Pausar la música"),
+      );
+    });
+
+    it("stops asking once a gesture has started the song", async () => {
       const { playSpy } = stubMedia("refuses-until-gesture");
 
       render(<MusicToggle src={SRC} />);

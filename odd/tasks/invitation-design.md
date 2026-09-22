@@ -256,6 +256,40 @@ phone and wrong in a grid column that has the room; it lifts at the breakpoint.
 Green: 2298 unit and component tests, 205 browser tests, typecheck, lint,
 format, build.
 
+### U6 — done (the song stopped giving up after one refusal)
+
+The couple, on the gate: "al dar click o interactuar con la página no se activa
+el audio."
+
+**A real defect, and it was one line of lifecycle.** The gesture listeners were
+registered with `once: true` AND removed at the TOP of the handler — before the
+attempt's answer was known. So a first gesture whose `play()` was refused took
+the fallback away with it, and the visitor could tap all day for nothing.
+
+A refusal on that first gesture is not exotic. `preload="none"` means the file
+is not loaded when the tap arrives, and a stricter autoplay shield than
+Chrome's — Brave blocks by default, and Brave is what the couple use — can
+decline a programmatic `play()` even inside a gesture handler.
+
+The listeners now come off only once the song is actually playing. Each refused
+attempt costs nothing: `play()` on a `preload="none"` element opens no
+connection it does not need.
+
+**Proven twice.** A component test with a stub that refuses the autoplay
+attempt AND the first gesture, asserting the second gesture still starts it —
+which failed before the change. And a browser probe against the real page:
+silent on arrival, playing after a click on the body, pausing and resuming from
+the button.
+
+**What this may not fix, stated plainly.** If Brave refuses the `play()` behind
+the button itself, no code here can help: that is a per-site autoplay
+permission. Pressing the music control is what tells the two apart, because a
+click landing directly on the control is the strongest gesture a browser
+recognises.
+
+Green: 2299 unit and component tests, 205 browser tests, typecheck, lint,
+format, build.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
