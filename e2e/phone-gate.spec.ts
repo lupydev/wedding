@@ -707,3 +707,57 @@ test.describe("an unknown slug compared with a wrong phone", () => {
     );
   });
 });
+
+/**
+ * THE GATE IS THE FIRST THING EVERY GUEST SEES, AND IT WAS UNDESIGNED.
+ *
+ * The couple sent a screenshot of it: black text on white, crammed at the top
+ * left, a bare field and a bare button — while the invitation one tap behind it
+ * stands on a photograph. The gate and the invitation are read a second apart,
+ * so they cannot be two different weddings.
+ *
+ * `band` here too, and for the photograph's sake rather than the word count's:
+ * the wedding photograph is 0.75:1, so a phone-filling crop discards about 38%
+ * of the width and clips both people. The gate's words would have fitted over
+ * it; the picture would not have survived it.
+ */
+test.describe("the gate's own surface", () => {
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  test("stands on the same stage as the invitation behind it", async ({
+    page,
+  }) => {
+    await page.goto(`/i/${invitation.slug}`);
+
+    await expect(page.locator("main.photo-stage")).toHaveCSS(
+      "background-color",
+      "rgb(13, 17, 20)",
+    );
+    await expect(
+      page.locator("figure.photo-stage__frame img").first(),
+    ).toHaveAttribute("src", /boda/);
+  });
+
+  /**
+   * AND THE FIELD LOOKS LIKE A FIELD.
+   *
+   * An unbordered input on a photograph is an invisible control, which on this
+   * screen means a guest who cannot tell there is anywhere to type — with
+   * nothing else on the page to try.
+   */
+  test("gives the number field a visible edge", async ({ page }) => {
+    await page.goto(`/i/${invitation.slug}`);
+
+    const field = page.getByLabel(/Número de celular/);
+
+    await expect(field).toHaveCSS("border-top-width", "1px");
+  });
+});

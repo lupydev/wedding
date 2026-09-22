@@ -197,7 +197,19 @@ export default async function InvitationPage({ params }: RouteParams) {
   }
 
   return (
-    <main>
+    /*
+      THE GATE STANDS ON THE SAME STAGE, AND IT HAS TO.
+
+      It is the FIRST thing every guest sees and the invitation is one tap
+      behind it — read a second apart. Undesigned it was black text on white
+      while the page behind it stood on a photograph, which reads as two
+      different weddings.
+
+      `band` here too, for the photograph's sake rather than the word count's:
+      the gate's few lines would have fitted over the picture, but at 0.75:1 a
+      phone-filling crop discards about 38% of the width and clips both people.
+    */
+    <PhotoStage mobilePhoto="band" photo={WEDDING_PHOTO}>
       <InvitationGate
         greetingName={invitation.greetingName}
         recoveryHref={buildGateRecoveryLink(
@@ -209,6 +221,6 @@ export default async function InvitationPage({ params }: RouteParams) {
             client cannot aim the unlock at a different household. */}
         <GateForm action={unlockAction.bind(null, slug)} />
       </InvitationGate>
-    </main>
+    </PhotoStage>
   );
 }

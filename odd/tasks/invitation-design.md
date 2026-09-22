@@ -181,6 +181,37 @@ overlap in U2 and no assertion says "these controls are large enough to press".
 Green: 2293 unit and component tests, 203 browser tests, typecheck, lint,
 format, build.
 
+### U4 — done (the two screens I had not looked at)
+
+The couple sent a screenshot of the GATE: black text on white, crammed at the
+top left, a bare field and a bare button — while the invitation one tap behind
+it stood on a photograph. Both were shipped in the same hour, and I had only
+looked at one of them.
+
+The gate stands on the same stage now, in `band` for the photograph's sake
+rather than the word count's: its few lines would have fitted over the picture,
+but at 0.75:1 a phone-filling crop discards about 38% of the width and clips
+both people.
+
+**The field has a visible edge**, asserted rather than eyeballed. An unbordered
+input on a photograph is an invisible control, and on THIS screen a guest who
+cannot tell there is anywhere to type has nothing else to try. The label stays
+visible rather than becoming a placeholder, which disappears the moment
+somebody types — on the one field this page has, that is exactly when they want
+to check they are answering the right question.
+
+**And the dead end, which nobody had asked about.** `/i/<a slug nobody holds>`
+was the same undesigned white page. It gets the dark ground but NOT the
+photograph: framing the couple above "no encontramos esta invitación" would put
+their wedding on a screen reached by typing a wrong address.
+
+**A bug found by screenshotting it.** `max-w-md` sat on the `main`, which capped
+the BACKGROUND as well as the words and left cream bars down both sides of a
+dark page. The measure belongs to the text, so the text carries it now.
+
+Green: 2293 unit and component tests, 205 browser tests, typecheck, lint,
+format, build.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
