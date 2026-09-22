@@ -104,6 +104,9 @@ own screen after a unit shipped, which is the only reason it was found.
 - [x] **U15 — the same song straight through the landing's own link.** No cut
       at all where the guest follows the `<Link>`, which is the journey the
       shared layout was built for and which no test had ever taken.
+- [x] **U16 — the unlock, held to the same bar.** Opening the invitation with
+      the phone number is measured fluid, by the wall clock rather than by a
+      comparison that had gone toothless.
 
 ## Checks per unit
 
@@ -779,6 +782,43 @@ and into both pages — the precise regression the layout prevents — and the t
 went red on `survived: false`. Both files were restored and `git status`
 confirmed clean. After six tests in this feature that could not fail, a green
 run is not evidence on its own.
+
+Green: 2307 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
+### U16 — done (the unlock, held to the same bar as the link)
+
+The couple: "ahora vamos a hacer algo similar para la página de la invitación, y
+cuando lo abren ingresando el número de celular el audio tiene que ser fluido."
+
+**It already was, and now that is proven rather than assumed.** Measured across
+the unlock: the playhead advanced 0.34s while 0.34s of wall clock passed, so the
+silence was **-0.00s**. `unlockAction` ends in `redirect()` inside a server
+action, which the router handles — the layout is never torn down and there is
+nothing to resume.
+
+**THE OLD TEST COULD NOT HAVE CAUGHT A REGRESSION, AND ITS COMMENT SAID WHY
+WITHOUT NOTICING.** It asserted `currentTime >= before` and explained "a restart
+lands back at 0". That stopped being true at U11: the position is remembered
+now, so a REMOUNTED element also comes back near where it was. The comparison
+had quietly become decoration. Only the element's tag discriminates.
+
+**And "did not restart" is not "fluid" anyway.** Playback is realtime, so the
+playhead cannot outrun the wall clock; if it advanced by AS MUCH as the wall
+clock, nothing was missed. Any pause, re-fetch or seek shows up as wall clock
+the song did not account for. That invariant is the test now.
+
+**PROVEN BY SABOTAGE, TWICE, BECAUSE ONE ASSERTION WAS HIDING THE OTHER.** The
+control was moved out of `app/i/[slug]/layout.tsx` into both branches of the
+page under different wrapper element types, so React tears the subtree down —
+the regression the layout exists to prevent. The identity check went red. Then
+it was run again with the identity check stood down, to find out whether the
+silence invariant earns its place: it does. **0.81s of real silence** against a
+0.25s threshold, which is what a fresh `preload="none"` element costs before it
+can sound at all. Every file restored and `git status` confirmed clean.
+
+**The landing's link test was raised to the same bar**, having carried the same
+now-toothless `currentTime` comparison.
 
 Green: 2307 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.

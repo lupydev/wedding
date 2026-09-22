@@ -142,21 +142,29 @@ test.describe("the song a guest hears", () => {
 
     await page.goto("/");
     await startByTouchingThePage(page);
-    const before = await audioState(page);
 
     const door = page.getByRole("link", { name: "Acompáñanos por Zoom" });
     await expect(door).toBeVisible();
+
+    const before = await audioState(page);
+    const startedAt = Date.now();
+
     await door.click();
     await expect(page).toHaveURL(/\/transmision$/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
+    const wallClock = (Date.now() - startedAt) / 1000;
     const after = await audioState(page);
 
     // The same element React never unmounted — the layout's whole promise.
     expect(after.survived).toBe(true);
-    // Still playing, and not one bar back.
     expect(after.paused).toBe(false);
-    expect(after.currentTime).toBeGreaterThanOrEqual(before.currentTime);
+
+    // And never silent: see the unlock test below for why the wall clock is
+    // what proves that, and what a torn-down element costs instead.
+    expect(wallClock - (after.currentTime - before.currentTime)).toBeLessThan(
+      0.25,
+    );
   });
 
   /**
@@ -310,7 +318,9 @@ test.describe("the song a guest hears", () => {
    * Were it ever to become a form that navigates, the song would restart under
    * a guest mid-verse and every other check would stay green.
    */
-  test("keeps playing across the invitation's unlock", async ({ page }) => {
+  test("plays straight through the invitation's unlock, with no cut", async ({
+    page,
+  }) => {
     const invitation = await seedInvitation({
       greetingName: "Familia Aguirre",
       guests: [
@@ -323,18 +333,40 @@ test.describe("the song a guest hears", () => {
       await page.goto(`/i/${invitation.slug}`);
       await expect(page.getByLabel(/Número de celular/)).toBeVisible();
       await startByTouchingThePage(page);
-      const before = await audioState(page);
 
+      // Typed before the stopwatch starts: filling the field is the guest's
+      // own time, and only the transition is being measured.
       await page.getByLabel(/Número de celular/).fill("+573005551111");
+      const before = await audioState(page);
+      const startedAt = Date.now();
+
       await page.getByRole("button", { name: "Ver la invitación" }).click();
       await expect(page.locator(".invitation__rsvp")).toBeVisible();
 
+      const wallClock = (Date.now() - startedAt) / 1000;
       const after = await audioState(page);
+
+      // The same element React never unmounted. THIS is the assertion that
+      // discriminates, and the reason the `currentTime` comparison alone no
+      // longer would: since the position is remembered, a REMOUNTED element
+      // also comes back near where it was. Only the tag tells the difference.
       expect(after.survived).toBe(true);
       expect(after.paused).toBe(false);
-      // A restart lands back at 0. Anything from the baseline on is the same
-      // playback continuing, whether or not a frame elapsed in between.
-      expect(after.currentTime).toBeGreaterThanOrEqual(before.currentTime);
+
+      /*
+        AND IT WAS NEVER SILENT, WHICH IS WHAT "FLUID" MEANS.
+
+        Playback is realtime, so the playhead cannot advance further than the
+        wall clock. If it advanced by AS MUCH as the wall clock, nothing was
+        missed — no pause, no re-fetch, no seek. Any gap shows up as wall clock
+        the song did not account for.
+
+        A quarter of a second of slack for the round trip that reads the
+        element. A torn-down element costs far more: a fresh `<audio>` with
+        `preload="none"` has to fetch before it can sound at all.
+      */
+      const silence = wallClock - (after.currentTime - before.currentTime);
+      expect(silence).toBeLessThan(0.25);
     } finally {
       await invitation.cleanup();
     }
