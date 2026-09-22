@@ -168,9 +168,31 @@ export async function seedInvitation(options: {
       cleanup: async () => {
         const cleaner = await connect();
         try {
-          // User triggers are suspended for this session only: the child tables
-          // are append-only by trigger and would refuse their own teardown.
+          /*
+            User triggers are suspended for this session only: the child tables
+            are append-only by trigger and would refuse their own teardown.
+
+            AND THAT SUSPENDS THE FOREIGN KEYS TOO, which is the part that is
+            easy to miss. `session_replication_role = replica` disables EVERY
+            trigger, and referential integrity is implemented as triggers — so
+            nothing cascades while this block runs, and every child row this
+            teardown does not name by hand survives its parent.
+
+            It showed up as 547 `gate_attempts` rows pointing at invitations
+            that no longer existed, on a database where the cascade itself was
+            proven to work. Stale throttle records are not harmless: the gate
+            counts recent attempts per invitation and per IP, so leftovers can
+            rate-limit a real unlock.
+          */
           await cleaner.query("set session_replication_role = replica");
+          await cleaner.query(
+            "delete from gate_attempts where invitation_id = $1",
+            [invitationId],
+          );
+          await cleaner.query(
+            "delete from dispatch_events where invitation_id = $1",
+            [invitationId],
+          );
           await cleaner.query(
             "delete from rsvp_responses where invitation_id = $1",
             [invitationId],
