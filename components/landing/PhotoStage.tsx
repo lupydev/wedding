@@ -96,7 +96,17 @@ export function PhotoStage({
      * already filled for the instant before the image decodes. On a page this
      * dark, a white flash is the only visible failure.
      */
-    <main className="photo-stage relative min-h-dvh overflow-hidden bg-[#0d1114]">
+    /*
+      NO `overflow-hidden` HERE ANY MORE, AND ITS REMOVAL IS LOAD-BEARING.
+
+      It was on this element to clip the backdrop, which is scaled past the
+      edges on purpose. But an `overflow` ancestor makes a descendant
+      `position: sticky` stick to a container that does not scroll — which is
+      to say, to nothing. The framed print sticks at `lg` so it stays with the
+      reader down a long form, so the clip moved onto the backdrop: the only
+      thing that ever needed it.
+    */
+    <main className="photo-stage relative min-h-dvh bg-[#0d1114]">
       {/*
         THE BACKDROP: THE SAME PHOTOGRAPH, TINY AND BLURRED.
 
@@ -118,29 +128,31 @@ export function PhotoStage({
         `preload={false}`: the sharp photograph is the LCP element and this must
         not compete with it for the connection.
       */}
-      <Image
-        src={photo.src}
-        alt=""
-        aria-hidden="true"
-        fill
-        preload={false}
-        sizes="64px"
-        className="scale-110 object-cover opacity-60 blur-3xl brightness-125 saturate-150"
-      />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <Image
+          src={photo.src}
+          alt=""
+          aria-hidden="true"
+          fill
+          preload={false}
+          sizes="64px"
+          className="scale-110 object-cover opacity-60 blur-3xl brightness-125 saturate-150"
+        />
+      </div>
 
       <div
         className={`
           relative grid min-h-dvh grid-cols-1
-          lg:mx-auto lg:max-w-6xl lg:grid-cols-2 lg:grid-rows-1
-          lg:items-center lg:px-8
+          lg:mx-auto lg:max-w-6xl lg:grid-cols-2 lg:grid-rows-1 lg:px-8
           ${overlay ? "" : "grid-rows-[auto_1fr]"}
         `}
       >
         <figure
           className={`
             photo-stage__frame relative col-start-1 row-start-1 m-0 w-full
-            lg:row-start-1 lg:mx-auto lg:aspect-[var(--photo-stage-aspect)]
-            lg:h-[86dvh] lg:w-auto lg:overflow-hidden lg:rounded-2xl
+            lg:sticky lg:top-[7dvh] lg:row-start-1 lg:mx-auto
+            lg:aspect-[var(--photo-stage-aspect)] lg:h-[86dvh] lg:w-auto
+            lg:overflow-hidden lg:rounded-2xl
             lg:shadow-[0_24px_80px_rgba(0,0,0,0.6)] lg:ring-1 lg:ring-white/10
             ${overlay ? "h-dvh" : "h-[38dvh]"}
           `}

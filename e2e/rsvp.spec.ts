@@ -539,3 +539,60 @@ test.describe("the invitation's own stage", () => {
     );
   });
 });
+
+/**
+ * ON A LAPTOP THE PHOTOGRAPH STAYS WITH THE READER.
+ *
+ * The couple: "hay que organizar el ui para que no colapsen y se vea feo en
+ * desktop en ambas pantallas de la invitación."
+ *
+ * What was ugly was measurable. On a 760px-tall window the invitation is about
+ * 1190px long, and the grid centred a 86dvh print inside that taller row — so
+ * the picture floated in the middle with roughly 270px of black above and
+ * below it, and on arrival a guest saw the top of the words and only the top
+ * third of the photograph. The two people in it were below the fold on the one
+ * page that is about them.
+ *
+ * The print sticks now. It cannot simply be `position: sticky`: the stage's
+ * `main` carried `overflow-hidden` to clip the scaled backdrop, and an
+ * `overflow` ancestor makes a sticky element stick to a container that does not
+ * scroll — which is to say, to nothing. The clip moved onto the backdrop, which
+ * is the only thing that ever needed it.
+ */
+test.describe("the invitation on a laptop", () => {
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  test("keeps the photograph in view while the form is read", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 760 });
+    await unlock(page, invitation);
+
+    const print = page.locator("figure.photo-stage__frame");
+    const viewport = page.viewportSize()!;
+
+    // Down to the submit button, which is the far end of the form.
+    await page
+      .getByRole("button", { name: "Enviar respuesta" })
+      .scrollIntoViewIfNeeded();
+
+    const box = await print.boundingBox();
+
+    expect(box).not.toBeNull();
+    // Still on screen: its top is above the fold and its bottom below the top.
+    expect(box!.y).toBeLessThan(viewport.height);
+    expect(box!.y + box!.height).toBeGreaterThan(0);
+    // And most of it is visible, not a sliver.
+    const visible =
+      Math.min(box!.y + box!.height, viewport.height) - Math.max(box!.y, 0);
+    expect(visible).toBeGreaterThan(viewport.height * 0.7);
+  });
+});

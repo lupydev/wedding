@@ -5,7 +5,7 @@ exports[`InvitationBody > matches its approved markup 1`] = `
         invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
         sm:pt-12 sm:pb-10
-        lg:justify-center lg:px-4 lg:py-0
+        lg:justify-center lg:px-4 lg:py-[7dvh]
       "><header class="flex flex-col items-center gap-4 text-center"><p class="
             invitation__couple font-script text-2xl text-[#f6efe2]/90
             [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
@@ -27,7 +27,7 @@ exports[`InvitationBody's RSVP slot > renders exactly as before when the route s
         invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
         sm:pt-12 sm:pb-10
-        lg:justify-center lg:px-4 lg:py-0
+        lg:justify-center lg:px-4 lg:py-[7dvh]
       "><header class="flex flex-col items-center gap-4 text-center"><p class="
             invitation__couple font-script text-2xl text-[#f6efe2]/90
             [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]

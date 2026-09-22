@@ -290,6 +290,43 @@ recognises.
 Green: 2299 unit and component tests, 205 browser tests, typecheck, lint,
 format, build.
 
+### U7 — done (the desktop layout stopped collapsing)
+
+The couple: "hay que organizar el ui para que no colapsen y se vea feo en
+desktop en ambas pantallas de la invitación."
+
+**What was ugly was measurable.** On a 1440×760 window the unlocked invitation
+is about 1190px long. The grid centred an 86dvh print inside that taller row,
+so the picture floated in the middle with roughly 270px of black above and
+below it — and on arrival a guest saw the top of the words and the top third of
+the photograph. The two people in it were below the fold, on the one page that
+is about them.
+
+**The print sticks now**, so it stays with the reader all the way down the
+form. Proven by a browser test that scrolls to the submit button and asserts
+more than 70% of the frame is still on screen.
+
+**It could not simply be `position: sticky`.** The stage's `main` carried
+`overflow-hidden` to clip the backdrop, which is scaled past the edges on
+purpose — and an `overflow` ancestor makes a sticky element stick to a
+container that does not scroll, which is to say to nothing. The clip moved onto
+the backdrop, the only thing that ever needed it. Worth knowing, because the
+class would have looked applied and done nothing.
+
+`lg:items-center` went with it: the cells stretch, so the row's height comes
+from the words and the sticky print sits inside a cell as tall as they are.
+Both short pages still centre, because their own columns already ask to.
+
+**One number used twice.** The print sticks at `top-[7dvh]` and the words now
+carry `lg:py-[7dvh]`, so the couple's line is level with the top of the picture
+instead of against the browser chrome.
+
+The gate needed nothing: its content fits one screen at 760px tall, and with
+the cells stretched its column still centres itself.
+
+Green: 2299 unit and component tests, 206 browser tests, typecheck, lint,
+format, build.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still

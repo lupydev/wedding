@@ -100,13 +100,18 @@ export function InvitationBody({
       `invitation__rsvp`, `invitation__household` — are kept exactly. They are
       how those tests tell one section from another, and a rename here is a
       silent failure over there.
+
+      `lg:py-[7dvh]` MATCHES THE PRINT'S OWN OFFSET. The framed photograph
+      sticks at `top-[7dvh]`, so the same measure here puts the couple's line
+      level with the top of the picture instead of against the browser chrome.
+      One number, used twice, rather than two that drift.
     */
     <article
       className="
         invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
         sm:pt-12 sm:pb-10
-        lg:justify-center lg:px-4 lg:py-0
+        lg:justify-center lg:px-4 lg:py-[7dvh]
       "
     >
       <header className="flex flex-col items-center gap-4 text-center">
