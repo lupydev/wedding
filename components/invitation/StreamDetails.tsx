@@ -59,6 +59,7 @@ export function StreamDetails({
   ceremony,
   className,
   showDate = true,
+  showTime = true,
 }: {
   readonly ceremony: StreamDetailsValues;
   /** The host surface's own spacing. Never its colours. */
@@ -72,11 +73,22 @@ export function StreamDetails({
    * de 2026" and "28-11-2026" — which reads as a defect however good each
    * reason is.
    *
-   * The HOUR is never dropped: nothing above it says the hour, and a guest
-   * joining a call needs one. The invitation behind the phone gate keeps both,
-   * because it has no announcement above it.
+   * The invitation behind the phone gate keeps both, because it has no
+   * announcement above it.
    */
   readonly showDate?: boolean;
+  /**
+   * Whether to print the hour.
+   *
+   * DROPPED WHERE A COUNTER ALREADY LANDS ON IT. `/transmision` runs a
+   * countdown to the ceremony instant, so printing "5:00 p. m." underneath is
+   * the same fact stated twice — and the add-to-calendar button beside it
+   * carries the precise time for anybody who wants to keep it.
+   *
+   * The couple asked for this in those terms: "hay que eliminar la hora ya que
+   * el contador llega hasta el día 28 de noviembre a las 5:00pm".
+   */
+  readonly showTime?: boolean;
 }) {
   return (
     /*
@@ -94,17 +106,31 @@ export function StreamDetails({
       role="group"
       aria-label="Detalles de la transmisión"
     >
-      <div className="mb-4 flex items-baseline justify-center gap-2 text-sm opacity-70">
-        {showDate ? (
-          <>
-            <dt className="sr-only">Fecha</dt>
-            <dd className="m-0">{ceremony.ceremonyDate}</dd>
-            <span aria-hidden="true">·</span>
-          </>
-        ) : null}
-        <dt className="sr-only">Hora</dt>
-        <dd className="m-0">{ceremony.ceremonyTime}</dd>
-      </div>
+      {/*
+        THE LINE ITSELF GOES WHEN IT WOULD BE EMPTY.
+
+        `/transmision` drops both: the announcement above names the day in
+        prose, and the countdown lands on the hour. Rendering the container
+        anyway would leave a gap above the credentials that nobody put there on
+        purpose.
+      */}
+      {(showDate || showTime) && (
+        <div className="mb-4 flex items-baseline justify-center gap-2 text-sm opacity-70">
+          {showDate ? (
+            <>
+              <dt className="sr-only">Fecha</dt>
+              <dd className="m-0">{ceremony.ceremonyDate}</dd>
+            </>
+          ) : null}
+          {showDate && showTime ? <span aria-hidden="true">·</span> : null}
+          {showTime ? (
+            <>
+              <dt className="sr-only">Hora</dt>
+              <dd className="m-0">{ceremony.ceremonyTime}</dd>
+            </>
+          ) : null}
+        </div>
+      )}
 
       <Credential
         label="ID de la reunión"

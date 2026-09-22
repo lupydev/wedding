@@ -180,15 +180,45 @@ describe("StreamDetails", () => {
    * needs one. The invitation behind the phone gate keeps both: it has no
    * announcement above it.
    */
-  describe("when the date is already stated above", () => {
-    it("keeps the hour and drops the day", () => {
+  describe("when the moment is already stated above", () => {
+    it("drops the day when the page has already said it", () => {
       render(<StreamDetails ceremony={CEREMONY} showDate={false} />);
+
+      expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
+      expect(screen.getByText(CEREMONY.ceremonyTime)).toBeInTheDocument();
+    });
+
+    /**
+     * AND THE HOUR, WHERE A COUNTDOWN ALREADY LANDS ON IT.
+     *
+     * The couple: "hay que eliminar la hora ya que el contador llega hasta el
+     * día 28 de noviembre a las 5:00pm". On a page whose counter runs to that
+     * exact instant, printing the hour underneath is the same fact twice — and
+     * the add-to-calendar button beside it carries the precise time for
+     * anybody who wants to keep it.
+     */
+    it("drops the hour when a counter above already lands on it", () => {
+      render(<StreamDetails ceremony={CEREMONY} showTime={false} />);
+
+      expect(screen.queryByText(CEREMONY.ceremonyTime)).toBeNull();
+      expect(screen.getByText(CEREMONY.ceremonyDate)).toBeInTheDocument();
+    });
+
+    /**
+     * WITH NEITHER, THE ROW ITSELF GOES.
+     *
+     * An empty line above the credentials is a gap nobody put there on
+     * purpose, and it is exactly what `/transmision` would render: it already
+     * drops the day, and now drops the hour too.
+     */
+    it("renders no line at all when it would be empty", () => {
+      render(
+        <StreamDetails ceremony={CEREMONY} showDate={false} showTime={false} />,
+      );
 
       const terms = screen.getAllByRole("term").map((term) => term.textContent);
 
-      expect(terms).toEqual(["Hora", "ID de la reunión", "Clave de acceso"]);
-      expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
-      expect(screen.getByText(CEREMONY.ceremonyTime)).toBeInTheDocument();
+      expect(terms).toEqual(["ID de la reunión", "Clave de acceso"]);
     });
 
     it("still shows both by default", () => {

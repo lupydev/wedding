@@ -85,7 +85,6 @@ describe("StreamInvitation", () => {
           term.nextElementSibling?.textContent,
         ]),
     ).toEqual([
-      ["Hora", CEREMONY.ceremonyTime],
       ["ID de la reunión", CEREMONY.streamMeetingId],
       ["Clave de acceso", CEREMONY.streamPasscode],
     ]);
@@ -101,23 +100,6 @@ describe("StreamInvitation", () => {
     render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
     expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
-  });
-
-  /**
-   * IT MUST SAY IT IS AN INVITATION BEFORE IT SAYS ANYTHING PRACTICAL.
-   *
-   * A page that opens with a date and a meeting id reads as a calendar entry.
-   * The guests who land here are the ones who cannot be in the room, and the
-   * first thing they should read is that they were thought of — so the warmth
-   * comes first and the streaming fact second.
-   */
-  it("welcomes the reader before it explains anything", () => {
-    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
-
-    expect(screen.getByText(/te esperamos/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/transmitir la ceremonia en vivo/i),
-    ).toBeInTheDocument();
   });
 
   /**
@@ -242,5 +224,45 @@ describe("StreamInvitation", () => {
         expect(anchor.hasAttribute("download")).toBe(false);
       }
     });
+  });
+});
+
+/**
+ * WHAT THE PAGE SAYS, AND WHAT IT STOPS SAYING TWICE.
+ *
+ * The couple rewrote the lead themselves — "La ceremonia se va a transmitir a
+ * través de Zoom. Te esperamos." — and asked for the hour below to go, because
+ * the counter on this same page runs to that exact instant.
+ *
+ * THE ORDER IS REVERSED FROM WHAT WAS HERE, ON PURPOSE. A test used to assert
+ * that the warmth came FIRST and the practical fact second, reasoning that a
+ * page opening with a date and a meeting id reads as a calendar entry. The
+ * couple wrote it the other way round, and they are right about their own
+ * wedding: the sentence now answers the question the reader arrived with —
+ * how do I attend? — and then says they are expected. That test is gone rather
+ * than repaired, because its reasoning no longer describes the page.
+ */
+describe("the stream page's own words", () => {
+  it("says how the ceremony arrives, then says they are expected", () => {
+    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
+
+    expect(
+      screen.getByText(/La ceremonia se va a transmitir a través de Zoom/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Te esperamos/i)).toBeInTheDocument();
+  });
+
+  /**
+   * NEITHER THE DAY NOR THE HOUR IS REPEATED UNDERNEATH.
+   *
+   * The day is above in prose, from the domain; the hour is where the counter
+   * lands, and the add-to-calendar button carries the precise time for anybody
+   * who wants to keep it.
+   */
+  it("states neither the day nor the hour a second time", () => {
+    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
+
+    expect(screen.queryByText(CEREMONY.ceremonyTime)).toBeNull();
+    expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
   });
 });

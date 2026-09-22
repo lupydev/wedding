@@ -107,8 +107,7 @@ export function StreamInvitation({
           one person at a time, so it speaks to one person.
         */}
         <p className="max-w-sm text-sm text-[#f6efe2]/85 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">
-          Te esperamos. Vamos a transmitir la ceremonia en vivo para que puedas
-          acompañarnos desde donde estés.
+          La ceremonia se va a transmitir a través de Zoom. Te esperamos.
         </p>
       </div>
 
@@ -129,8 +128,16 @@ export function StreamInvitation({
         <StreamDetails
           ceremony={ceremony}
           className="block w-full text-left"
-          /* The announcement above already names the day, in prose. */
+          /*
+            NEITHER THE DAY NOR THE HOUR IS REPEATED HERE.
+
+            The announcement above names the day in prose, and the countdown
+            beside it runs to the ceremony instant — so the hour is already on
+            screen, ticking. The add-to-calendar button carries the precise
+            time for anybody who wants to keep it.
+          */
           showDate={false}
+          showTime={false}
         />
 
         {/*
