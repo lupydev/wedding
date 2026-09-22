@@ -214,7 +214,28 @@ export function MusicToggle({ src }: { readonly src: string }) {
     */
     let noted = 0;
 
+    /*
+      NOTHING IS WRITTEN UNTIL THERE IS SOMETHING TO WRITE, AND THE GUARD IS
+      NOT A PRECAUTION.
+
+      `pagehide` fires for EVERY document that mounts this control, including
+      one a guest merely passes through. On such a page the song never started,
+      `preload="none"` means the file was never fetched, and `currentTime` is
+      therefore 0. Unguarded, passing through stores a zero OVER a real
+      position — and because `restore` treats `at <= 0` as nothing to restore,
+      the place is then gone rather than merely stale.
+
+      That is an ordinary path, not a corner: a browser that refuses the
+      load-time attempt leaves every untouched page sitting at 0, and the
+      couple's browser refuses it. A browser that autoplays hides the whole
+      thing, which is why the typed-URL test above never caught it — it starts
+      the song in the second document every time.
+    */
     const remember = () => {
+      if (!(audio.currentTime > 0)) {
+        return;
+      }
+
       noted = audio.currentTime;
       writeResume({ at: audio.currentTime });
     };

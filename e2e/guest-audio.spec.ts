@@ -204,6 +204,49 @@ test.describe("the song a guest hears", () => {
   });
 
   /**
+   * AND A PAGE THE GUEST NEVER TOUCHED DOES NOT WIPE THE PLACE.
+   *
+   * The position is written on `pagehide`, which fires for EVERY document that
+   * mounts the control — including one a guest merely passes through. On such
+   * a page the song never started, `preload="none"` means the file was never
+   * fetched, and `currentTime` is therefore 0. Writing that stores a zero over
+   * a real position; and since the read side treats `at <= 0` as nothing to
+   * restore, the place is not merely stale afterwards, it is gone.
+   *
+   * This is exactly a guest whose browser refuses the load-time attempt —
+   * which is the couple's — landing on the second page and moving on without
+   * tapping. A browser that DOES autoplay hides it completely, which is why
+   * the existing typed-URL test never saw this: it plays the song in the
+   * second document every time.
+   */
+  test("does not wipe the place on a page the guest passed through", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await startByTouchingThePage(page);
+    await expect
+      .poll(async () => (await audioState(page)).currentTime, {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(2);
+    const before = await audioState(page);
+
+    // Straight through, touching nothing: the song never starts here.
+    await page.goto("/transmision");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.waitForLoadState("load");
+    expect((await audioState(page)).paused).toBe(true);
+
+    // And on somewhere the guest does settle, the place is still there.
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await startByTouchingThePage(page);
+
+    const after = await audioState(page);
+    expect(after.currentTime).toBeGreaterThan(before.currentTime - 1);
+  });
+
+  /**
    * AND ACROSS THE UNLOCK, WHICH IS THE ONE THAT LOOKS LIKE A PAGE LOAD.
    *
    * A guest types a number and the screen becomes a different screen. It is a

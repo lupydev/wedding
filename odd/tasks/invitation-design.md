@@ -91,6 +91,9 @@ own screen after a unit shipped, which is the only reason it was found.
       URL destroys the element, so the position crosses instead.
 - [x] **U12 — click-to-play, which U11 had killed.** The pause-memory that
       came along uninvited took the gesture fallback with it. Deleted.
+- [x] **U13 — walking through a page erased the song's place.** `pagehide`
+      wrote a zero over a real position on any page the guest never touched.
+      Found by the review's refuter, not by me.
 
 ## Checks per unit
 
@@ -611,6 +614,46 @@ page, click — and it failed by timing out for ten seconds with `paused` stuck
 at `true`.
 
 Green: 2306 unit and component tests, 219 browser tests, typecheck, lint,
+format, build.
+
+### U13 — done (a page the guest walks through was erasing the song's place)
+
+Found by the native review's refuter, rated CRITICAL, and it was right. Every
+check I had was green.
+
+**The defect.** The position is written on `pagehide`, which fires for EVERY
+document that mounts the control — including one a guest merely passes through.
+On such a page the song never started, `preload="none"` means the file was never
+fetched, so `currentTime` is 0. Unguarded, walking through stored a zero OVER a
+real position; and because `restore` treats `at <= 0` as nothing to restore, the
+place was then GONE rather than merely stale.
+
+The read side had that guard. The write side had no counterpart.
+
+**And it is an ordinary path, not a corner.** A browser that refuses the
+load-time attempt leaves every untouched page sitting at 0 — and the couple's
+browser refuses it. Their own route, landing → `/transmision` → somewhere else,
+destroys the record every time.
+
+**Why my tests could not see it.** The typed-URL test starts the song in the
+SECOND document, every time. A browser that autoplays hides the whole defect,
+and the test's own steps guarantee autoplay. The new test is the difference:
+pass through the middle page touching nothing.
+
+Measured before the fix: 2.31s on the landing, then 1.20s after the round trip —
+which is not a resume at all, it is fresh playback from zero.
+
+**The fix is four lines.** `remember` returns unless `currentTime > 0`.
+
+**THE THIRD TEST-SHAPED FAILURE IN THIS FEATURE, AND THE SECOND FOUND BY
+SOMEBODY ELSE.** U9's centring assertion measured the stretched grid cell rather
+than its child. U12's spec asserted the defect as though it were the
+requirement. This one is subtler and worth naming precisely: the test covered
+the right journey and still could not fail, because a step inside it — playing
+the song on the second page — removed the condition the defect needs. A test
+whose own setup precludes the failure is not a test of that behaviour.
+
+Green: 2306 unit and component tests, 220 browser tests, typecheck, lint,
 format, build.
 
 ## Next
