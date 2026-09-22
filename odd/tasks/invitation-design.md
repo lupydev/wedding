@@ -87,6 +87,9 @@ own screen after a unit shipped, which is the only reason it was found.
 - [x] **U10 — the song, measured instead of argued about.** Two of three
       reported faults do not reproduce; the third is a browser permission. The
       continuity both layouts claim is now asserted.
+- [x] **U11 — the song keeps its place across a whole new document.** A typed
+      URL destroys the element, so the position crosses instead — and a guest
+      who pressed pause is no longer asked again on the next page.
 
 ## Checks per unit
 
@@ -499,6 +502,71 @@ waits for half a second of real playback, which a reset cannot match.
 
 Green: 2302 unit and component tests, 217 browser tests, typecheck, lint,
 format, build.
+
+### U11 — done (the song keeps its place across a whole new document)
+
+The couple, with the exact steps: "abro la landing y pongo a sonar la canción,
+luego por url agrego /transmision y se pausa la canción y arranca desde el
+inicio. Antes de hacer los últimos cambios esto no sucedía."
+
+**The second sentence is checkable, so it was checked.** The last three commits
+— `d1416c2`, `16141d4`, `7730d25` — touch `PhotoStage`, `StreamInvitation`,
+four spec files, `.gitignore` and this document. The last change to
+`MusicToggle.tsx` or to either layout was `49a4684`, which is older than all
+three. The audio behaved identically before them.
+
+**And the first sentence is real, unavoidable, and worth fixing anyway.** Typing
+a URL is not a navigation the router handles: it tears the document down and
+builds another, and every element dies with it. Both layouts justify mounting
+the control by "Layouts do not re-render on navigation" — which is about
+`<Link>` and cannot reach this case. No browser API keeps a sound playing across
+a document load, so there is nothing here to repair.
+
+What can cross is the POSITION. It does now.
+
+**`sessionStorage`, and the choice is the product.** The record is scoped to one
+tab and dies when it closes, so a guest returning tomorrow hears the song from
+the beginning. In `localStorage` it would open four minutes in, forever, and
+nothing on the page would explain why.
+
+**Restored on `loadedmetadata`, which is the only moment that works.**
+`preload="none"` leaves the file untouched until something asks for it, and
+`currentTime` cannot be set on an element that does not yet know its duration.
+That event also fires BEFORE playback begins, so the seek lands without a bar of
+the opening leaking out first. Guarded on `duration`, because a stale position
+past the end of a replaced file throws.
+
+**Written on `pagehide` and, as a backstop, once a second of playback.**
+`pagehide` is the event that fires when the URL bar tears the document down and
+it records the exact instant — but a note kept only there is lost to a crash, a
+killed tab, or a browser that backgrounds the page and never fires it.
+
+**AND THE PAUSE BUTTON BECAME AN INSTRUCTION THAT SURVIVES THE PAGE.** The
+record is only written once the song has played, so `playing: false` means the
+guest stopped it deliberately. The load-time attempt is now skipped in that
+case. Before this the control asked again on every document — a site that
+argues with the person reading it.
+
+**Storage that throws rather than returning null.** In a private window, or with
+site data blocked, reading `window.sessionStorage` raises. Unguarded that is an
+exception inside an effect on every guest-facing page, for the least important
+thing on any of them. Both accessors are guarded and there is a test that
+replaces the getter with one that throws.
+
+**One test failed in its own teardown and the product was innocent.** The new
+`afterEach` cleared `sessionStorage` while that throwing getter was still
+installed. `vi.restoreAllMocks()` runs first now. Worth recording because the
+failure pointed at the component.
+
+Green: 2306 unit and component tests, 218 browser tests, typecheck, lint,
+format, build.
+
+**What is still out of reach, stated plainly.** The couple's own browser blocks
+autoplay per site, and they have confirmed the BUTTON works there. So Brave is
+allowing `play()` from a click that lands on the control and refusing it from a
+click elsewhere on the page. Nothing in this repository changes a per-site
+browser permission. With this unit, pressing that button now resumes from where
+the song was rather than from the top.
 
 ## Next
 

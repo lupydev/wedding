@@ -109,6 +109,57 @@ test.describe("the song a guest hears", () => {
   });
 
   /**
+   * AND IT PICKS THE SONG BACK UP AFTER A WHOLE NEW DOCUMENT.
+   *
+   * The couple, precisely: "abro la landing y pongo a sonar la canción, luego
+   * por url agrego /transmision y se pausa la canción y arranca desde el
+   * inicio."
+   *
+   * Typing a URL is not a navigation the router handles — it tears the document
+   * down and builds another. Every element dies with it, the `<audio>`
+   * included, and no browser API keeps a sound playing across that. The layout
+   * argument above is about `<Link>`, and it cannot reach this case.
+   *
+   * What CAN survive is the position. The song remembers where it was for the
+   * life of the tab, so the second document starts from there instead of from
+   * the first bar — and if the guest had deliberately paused it, it stays
+   * quiet rather than starting itself up again on the next page.
+   *
+   * `page.goto` is exactly the URL bar: a real document load, not a client
+   * navigation.
+   */
+  test("picks the song back up after a typed-URL navigation", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await startByTouchingThePage(page);
+
+    // Far enough in that a restart cannot be mistaken for a resume.
+    await expect
+      .poll(async () => (await audioState(page)).currentTime, {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(2);
+    const before = await audioState(page);
+
+    await page.goto("/transmision");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    // A brand new element, necessarily — this is a new document.
+    const arrival = await audioState(page);
+    expect(arrival.survived).toBe(false);
+
+    // The guest touches the page, as they must on any document nobody has
+    // interacted with yet.
+    await startByTouchingThePage(page);
+
+    const after = await audioState(page);
+    expect(after.paused).toBe(false);
+    // Near where it left off, not back at the beginning.
+    expect(after.currentTime).toBeGreaterThan(before.currentTime - 1);
+  });
+
+  /**
    * AND ACROSS THE UNLOCK, WHICH IS THE ONE THAT LOOKS LIKE A PAGE LOAD.
    *
    * A guest types a number and the screen becomes a different screen. It is a

@@ -52,6 +52,89 @@ const PAUSE_LABEL = "Pausar la música";
 /** Gestures that count as "the visitor has touched the page". */
 const GESTURES = ["pointerdown", "keydown"] as const;
 
+/**
+ * WHERE THE SONG'S PLACE IS KEPT, AND WHY IT HAS TO BE KEPT ANYWHERE AT ALL.
+ *
+ * Both layouts mount this control rather than each page, so the `<audio>`
+ * element survives a `<Link>` and the song plays straight through. That
+ * argument is about the ROUTER, and it cannot reach a typed URL: that tears
+ * the document down and builds another, and every element dies with it. No
+ * browser API keeps a sound playing across a document load.
+ *
+ * The couple found the gap by using the site the way they build it: "abro la
+ * landing y pongo a sonar la canción, luego por url agrego /transmision y se
+ * pausa la canción y arranca desde el inicio."
+ *
+ * So the position crosses instead of the element. The second document starts
+ * where the first stopped.
+ *
+ * `sessionStorage` RATHER THAN `localStorage`, AND THE DIFFERENCE IS THE
+ * PRODUCT. This is scoped to one tab and dies when it closes, which is what a
+ * guest wants: coming back tomorrow, the song starts at the beginning. In
+ * `localStorage` it would open four minutes in, forever, and nothing on the
+ * page would explain why.
+ */
+const RESUME_KEY = "wedding:song";
+
+interface Resume {
+  /** Seconds into the song. */
+  readonly at: number;
+  /**
+   * Whether it was playing when the last document went away.
+   *
+   * The record is only ever written once the song has actually played, so
+   * `false` here means the guest PRESSED PAUSE. That is an instruction, and
+   * the next page is not a fresh chance to overrule it.
+   */
+  readonly playing: boolean;
+}
+
+/**
+ * The remembered place, or nothing.
+ *
+ * Every access is guarded, and not out of caution: in a private window, or
+ * with site data blocked, reading `window.sessionStorage` THROWS rather than
+ * returning null. Unguarded that is an exception inside an effect on every
+ * guest-facing page — and the song is the least important thing on any of
+ * them. A browser that will not store this simply starts from the top.
+ */
+function readResume(): Resume | null {
+  try {
+    const raw = window.sessionStorage.getItem(RESUME_KEY);
+
+    if (raw === null) {
+      return null;
+    }
+
+    const parsed: unknown = JSON.parse(raw);
+
+    if (typeof parsed !== "object" || parsed === null) {
+      return null;
+    }
+
+    const { at, playing } = parsed as Partial<Resume>;
+
+    // Anything malformed is treated as no record rather than trusted: this
+    // value is fed to `currentTime`, where a NaN throws.
+    if (typeof at !== "number" || !Number.isFinite(at) || at < 0) {
+      return null;
+    }
+
+    return typeof playing === "boolean" ? { at, playing } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeResume(resume: Resume): void {
+  try {
+    window.sessionStorage.setItem(RESUME_KEY, JSON.stringify(resume));
+  } catch {
+    // See `readResume`. Losing the place is not worth an error on a page whose
+    // job is an invitation.
+  }
+}
+
 export function MusicToggle({ src }: { readonly src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -64,6 +147,73 @@ export function MusicToggle({ src }: { readonly src: string }) {
     }
 
     let live = true;
+
+    /*
+      THE PLACE THE PREVIOUS DOCUMENT LEFT OFF, READ ONCE.
+
+      Read here rather than on each use so the whole effect reasons about one
+      answer. A record written by THIS document after it starts playing must
+      not change what this document decided to do on arrival.
+    */
+    const resume = readResume();
+
+    /*
+      PUT THE SONG BACK WHERE IT WAS, BEFORE THE FIRST SAMPLE IS HEARD.
+
+      `loadedmetadata` is the right moment and the only one that works:
+      `preload="none"` means the file is untouched until something asks for it,
+      and `currentTime` cannot be set on an element that does not yet know its
+      own duration. The event also fires BEFORE playback begins, so the seek
+      lands without a bar of the opening leaking out first.
+
+      Guarded on `duration` because the song can be replaced: a stale position
+      past the end of a shorter file throws.
+    */
+    const restore = () => {
+      if (resume === null || resume.at <= 0) {
+        return;
+      }
+
+      if (Number.isFinite(audio.duration) && resume.at >= audio.duration) {
+        return;
+      }
+
+      audio.currentTime = resume.at;
+    };
+
+    /*
+      AND WRITE IT DOWN AS THE SONG RUNS.
+
+      `pagehide` is the event that actually matters — it fires when a typed URL
+      tears this document down, and it records the exact instant. But a note
+      kept only there is lost to a crash, a killed tab, or a browser that
+      backgrounds the page and never fires it, so playback keeps one as it
+      goes.
+
+      `timeupdate` fires about four times a second. Once a second is enough to
+      be worth resuming from and cheap enough not to matter; the comparison
+      also catches the song looping back to the beginning.
+    */
+    let noted = 0;
+
+    const remember = () => {
+      noted = audio.currentTime;
+      writeResume({ at: audio.currentTime, playing: !audio.paused });
+    };
+
+    const rememberIfMoved = () => {
+      if (Math.abs(audio.currentTime - noted) >= 1) {
+        remember();
+      }
+    };
+
+    audio.addEventListener("loadedmetadata", restore);
+    audio.addEventListener("timeupdate", rememberIfMoved);
+    // Pressing the button is the one that has to be recorded exactly: it is
+    // how `playing: false` — the guest's own instruction — comes to be there.
+    audio.addEventListener("pause", remember);
+    audio.addEventListener("play", remember);
+    window.addEventListener("pagehide", remember);
 
     const stopWaiting = () => {
       for (const gesture of GESTURES) {
@@ -127,6 +277,19 @@ export function MusicToggle({ src }: { readonly src: string }) {
     }
 
     const askOnce = () => {
+      /*
+        A GUEST WHO PRESSED PAUSE IS NOT ASKED AGAIN ON THE NEXT PAGE.
+
+        The record only exists once the song has played, so `playing: false`
+        means they stopped it deliberately. Starting it again on the following
+        document is overruling them, and it is the behaviour that makes a site
+        feel like it is arguing. The button stays where it is, and it resumes
+        from the remembered place rather than from the top.
+      */
+      if (resume !== null && !resume.playing) {
+        return;
+      }
+
       void attempt().then((started) => {
         if (started || !live) {
           return;
@@ -157,6 +320,11 @@ export function MusicToggle({ src }: { readonly src: string }) {
       live = false;
       stopWaiting();
       window.removeEventListener("load", askOnce);
+      window.removeEventListener("pagehide", remember);
+      audio.removeEventListener("loadedmetadata", restore);
+      audio.removeEventListener("timeupdate", rememberIfMoved);
+      audio.removeEventListener("pause", remember);
+      audio.removeEventListener("play", remember);
     };
   }, []);
 

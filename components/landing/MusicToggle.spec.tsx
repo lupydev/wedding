@@ -257,3 +257,115 @@ describe("MusicToggle", () => {
     });
   });
 });
+
+/**
+ * WHAT THE SONG REMEMBERS BETWEEN ONE DOCUMENT AND THE NEXT.
+ *
+ * The couple: "abro la landing y pongo a sonar la canción, luego por url agrego
+ * /transmision y se pausa la canción y arranca desde el inicio."
+ *
+ * Typing a URL tears the document down and builds another — the `<audio>`
+ * element dies with it and no browser keeps a sound playing across that. The
+ * layouts' "the element survives a navigation" argument is about `<Link>` and
+ * cannot reach this case.
+ *
+ * What can cross is the position. These tests are about the two halves of that:
+ * putting the song back where it was, and honouring a guest who had stopped it.
+ */
+describe("what it remembers between documents", () => {
+  const KEY = "wedding:song";
+
+  afterEach(() => {
+    // Restored FIRST. One test below replaces the `sessionStorage` getter with
+    // one that throws — the way a private window behaves — and reaching for it
+    // here while that is still in place fails the test in its teardown, with
+    // the product code innocent.
+    vi.restoreAllMocks();
+    window.sessionStorage.clear();
+  });
+
+  /** Drives the event a real browser fires once it knows the file's duration. */
+  function metadataArrives(container: HTMLElement, duration: number): void {
+    const audio = container.querySelector("audio")!;
+    vi.spyOn(audio, "duration", "get").mockReturnValue(duration);
+    fireEvent.loadedMetadata(audio);
+  }
+
+  it("starts where the previous page left off", async () => {
+    window.sessionStorage.setItem(
+      KEY,
+      JSON.stringify({ at: 42, playing: true }),
+    );
+    const { playSpy } = stubMedia("allows");
+
+    const { container } = render(<MusicToggle src={SRC} />);
+    await waitFor(() => expect(playSpy).toHaveBeenCalled());
+
+    metadataArrives(container, 180);
+
+    expect(container.querySelector("audio")!.currentTime).toBe(42);
+  });
+
+  /**
+   * AND IT DOES NOT START ITSELF AGAIN WHERE THE GUEST SAID NO.
+   *
+   * Pressing pause is an instruction, and a new page is not a fresh chance to
+   * overrule it. The button is still there, and it resumes from the remembered
+   * place rather than from the top.
+   */
+  it("stays quiet when the guest had stopped it", async () => {
+    window.sessionStorage.setItem(
+      KEY,
+      JSON.stringify({ at: 42, playing: false }),
+    );
+    const { playSpy } = stubMedia("allows");
+
+    render(<MusicToggle src={SRC} />);
+
+    // Nothing on load, and nothing when the guest touches the page either.
+    await waitFor(() => expect(playSpy).not.toHaveBeenCalled());
+    touchSomething();
+    await waitFor(() => expect(playSpy).not.toHaveBeenCalled());
+  });
+
+  /**
+   * IT WRITES THE PLACE DOWN AS THE SONG RUNS.
+   *
+   * `pagehide` is the event that matters — it is what fires when a URL-bar
+   * navigation tears the document down — but a record only kept there is lost
+   * to a crash or a killed tab, so playback keeps one as it goes.
+   */
+  it("keeps a note of where the song has reached", async () => {
+    const { playSpy } = stubMedia("allows");
+
+    const { container } = render(<MusicToggle src={SRC} />);
+    await waitFor(() => expect(playSpy).toHaveBeenCalled());
+
+    const audio = container.querySelector("audio")!;
+    audio.currentTime = 12;
+    fireEvent.timeUpdate(audio);
+
+    expect(JSON.parse(window.sessionStorage.getItem(KEY)!)).toMatchObject({
+      at: 12,
+    });
+  });
+
+  /**
+   * AND A BROWSER THAT REFUSES TO STORE ANYTHING IS NOT A BROKEN PAGE.
+   *
+   * Private windows and blocked site data make `sessionStorage` throw on
+   * access, not return null. Unguarded, that is an exception inside an effect
+   * on every guest-facing page, and the song is the least important thing on
+   * any of them.
+   */
+  it("plays normally when storage is unavailable", async () => {
+    vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    const { playSpy } = stubMedia("allows");
+
+    render(<MusicToggle src={SRC} />);
+
+    await waitFor(() => expect(playSpy).toHaveBeenCalled());
+  });
+});
