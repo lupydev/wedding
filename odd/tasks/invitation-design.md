@@ -116,7 +116,7 @@ declined screen given the language `/transmision` already uses.
       with the greeting, "Nos casamos", the names, the day and the counter; the
       invitation behind it dropped all but the names. "Quisiera que en esta
       última página se conserve."
-- [ ] **U18 — the RSVP asks one question at a time, in the household's own
+- [x] **U18 — the RSVP asks one question at a time, in the household's own
       number.** One person is asked "¿Podrás acompañarnos?" and answers "Sí,
       allá estaré"; two or more keep the plural. Nothing but those two choices
       shows until one is picked, and a household of one is never asked to tick
@@ -890,6 +890,56 @@ expect; they failed identically with my changes stashed, and passed on a cleared
 database. Clear before trusting a run that follows an abort.
 
 Green: 2308 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
+### U18 — done (one question at a time, in the reader's own number)
+
+The couple: two buttons worded for one person or for several; the list of who
+is coming only "una vez den click en lo afirmativo"; and a household of one
+never asked to tick its own name.
+
+**EVERY LINE WAS PLURAL, BECAUSE AN INVITATION WAS ASSUMED TO BE A HOUSEHOLD.**
+A guest invited alone was made to answer "Sí, allá estaremos" on the one page in
+the product addressed to them by name. `rsvpChoiceCopy(memberCount)` now returns
+the question and both answers, in the domain beside the other two sentences a
+count already decides — `seatsSelectionSentence` and `currentRsvpSentence` —
+where all three can be read against each other without a DOM.
+
+Zero reads as a household on purpose. An invitation with no members is refused
+long before that function, so the branch is unreachable; written as `<= 1` a
+count that somehow arrived as zero would address a group in the singular, and
+the cost of being wrong the other way is nothing.
+
+**THE REST OF THE FORM IS REMOVED, NOT DISABLED.** It used to be on screen from
+the first paint with the attendee list `disabled` and dimmed. The browser
+honoured that and a reader did not: it looked like a control refusing to work
+rather than a question that was not theirs yet. And removal makes `declineNow`'s
+own note about payload timing stronger rather than obsolete — a fieldset that is
+not mounted cannot contribute a name at all.
+
+**A SOLO INVITATION STILL NAMES ITS SEAT, AND THAT IS NOT OPTIONAL.**
+`seats_confirmed` is derived from the attendees and must EQUAL their count
+(migration 0007), so a solo acceptance submitting no name would record an
+accepted answer holding zero seats — a household the couple would cook for
+nobody. A hidden input carries it, and the payload is byte for byte the one a
+single ticked box produced. There is a test for exactly that.
+
+**SEVEN EXISTING TESTS FAILED AND NONE WAS DELETED.** Each asserted something
+that genuinely changed, so each was updated to assert the same intent through
+the new flow — the attendee list after the affirmative, the child marker on a
+household rather than on a solo fixture, the refused decline leaving the
+QUESTION on screen rather than a submit button that now belongs to the other
+branch. One was replaced outright: "keeps the attendee list disabled until the
+household says yes" asserted the weaker version of what "shows nothing else
+until the question is answered" now asserts, and a comment stands where it was.
+
+**One branch is now unreachable and is recorded rather than removed.**
+`seatsSelectionSentence`'s "Ya seleccionaron a la única persona." can only be
+produced by a one-member list, and a one-member invitation no longer has a list.
+It is still a correct sentence and still covered in `rsvp-copy.spec.ts`; nothing
+renders it.
+
+Green: 2317 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.
 
 ## Next

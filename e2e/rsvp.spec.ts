@@ -77,7 +77,7 @@ function submit(page: Page) {
  * test that relies on the behaviour fails together.
  */
 function decline(page: Page) {
-  return page.getByRole("radio", { name: /No podremos acompañarlos/ }).check();
+  return page.getByRole("radio", { name: /No podemos acompañarlos/ }).check();
 }
 
 function accept(page: Page) {
@@ -187,7 +187,7 @@ test.describe("answering the invitation", () => {
 
     // Nothing preselected: a mis-tap must not be one tap from repeating itself.
     await expect(
-      page.getByRole("radio", { name: /No podremos acompañarlos/ }),
+      page.getByRole("radio", { name: /No podemos acompañarlos/ }),
     ).not.toBeChecked();
 
     await accept(page);
@@ -584,6 +584,15 @@ test.describe("the invitation on a laptop", () => {
 
     const print = page.locator("figure.photo-stage__frame");
     const viewport = page.viewportSize()!;
+
+    /*
+      ACCEPTED FIRST, WHICH IS ALSO THE FORM AT ITS LONGEST.
+
+      The question opens the rest of the form now, so the submit button does
+      not exist until somebody answers it — and this test wants the far end of
+      the longest version, which is the one with the attendee list on screen.
+    */
+    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
 
     // Down to the submit button, which is the far end of the form.
     await page

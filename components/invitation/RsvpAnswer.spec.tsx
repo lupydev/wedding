@@ -79,7 +79,7 @@ function renderForm(
 }
 
 function declineRadio() {
-  return screen.getByRole("radio", { name: /No podremos acompañarlos/ });
+  return screen.getByRole("radio", { name: /No podemos acompañarlos/ });
 }
 
 function acceptRadio() {
@@ -117,12 +117,15 @@ describe("RsvpAnswer attendance choice", () => {
       screen.getByRole("radio", { name: /Sí, allá estaremos/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: /No podremos acompañarlos/ }),
+      screen.getByRole("radio", { name: /No podemos acompañarlos/ }),
     ).toBeInTheDocument();
   });
 
-  it("offers one checkbox per named guest, and nothing more", () => {
+  it("offers one checkbox per named guest, and nothing more", async () => {
     renderForm();
+    // The list opens only on the affirmative now, so every assertion about it
+    // starts by answering the question it belongs to.
+    await userEvent.click(acceptRadio());
 
     const boxes = attendeeBoxes();
 
@@ -134,25 +137,28 @@ describe("RsvpAnswer attendance choice", () => {
     }
   });
 
-  it("marks a child so the couple's own list reads the same as the form", () => {
+  it("marks a child so the couple's own list reads the same as the form", async () => {
+    // TWO members, not one: a solo invitation is never shown the list at all,
+    // so a one-guest fixture would be asserting about a control that no longer
+    // exists rather than about how a child is marked.
     renderForm({
-      guests: [{ id: GUESTS[0].id, fullName: "Sara Aguirre", isChild: true }],
+      guests: [
+        GUESTS[0],
+        { id: GUESTS[1].id, fullName: "Sara Aguirre", isChild: true },
+      ],
     });
+    await userEvent.click(acceptRadio());
 
     expect(
       screen.getByRole("checkbox", { name: /Sara Aguirre \(niño o niña\)/ }),
     ).toBeInTheDocument();
   });
 
-  it("keeps the attendee list disabled until the household says yes", () => {
-    renderForm();
+  // The test that stood here asserted the attendee list was DISABLED before
+  // the household answered. It is not rendered at all now — see "shows nothing
+  // else until the question is answered", which asserts the stronger thing.
 
-    for (const box of attendeeBoxes()) {
-      expect(box).toBeDisabled();
-    }
-  });
-
-  it("enables the attendee list the moment they say yes", async () => {
+  it("opens the attendee list the moment they say yes", async () => {
     const user = userEvent.setup();
     renderForm();
 
@@ -200,14 +206,18 @@ describe("RsvpAnswer seat cap", () => {
 
   it("says everyone is selected instead of silently freezing the controls", async () => {
     const user = userEvent.setup();
-    renderForm({ guests: [GUESTS[0]] });
+    // TWO members. This used to use one, and a solo invitation no longer has
+    // a list to freeze — which also means `seatsSelectionSentence`'s "la única
+    // persona" branch can no longer be reached from this form. It is still a
+    // correct sentence and still covered in `rsvp-copy.spec.ts`; nothing here
+    // renders it any more.
+    renderForm({ guests: [GUESTS[0], GUESTS[1]] });
 
-    await user.click(screen.getByRole("radio", { name: /Sí, allá estaremos/ }));
+    await user.click(acceptRadio());
     await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
+    await user.click(screen.getByRole("checkbox", { name: "Rodrigo Aguirre" }));
 
-    expect(
-      screen.getByText("Ya seleccionaron a la única persona."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Ya seleccionaron las 2.")).toBeInTheDocument();
   });
 
   it("offers no way to type a seat count or ask for more seats", () => {
@@ -297,8 +307,9 @@ describe("RsvpAnswer submission", () => {
     expect(action.mock.calls[0][1].get("dietaryNotes")).toBe("");
   });
 
-  it("bounds the dietary field at the length the database accepts", () => {
+  it("bounds the dietary field at the length the database accepts", async () => {
     renderForm();
+    await userEvent.click(acceptRadio());
 
     expect(screen.getByLabelText(/Restricciones alimentarias/)).toHaveAttribute(
       "maxLength",
@@ -487,7 +498,10 @@ describe("RsvpAnswer declining", () => {
       ),
     );
     expect(screen.queryByText(CEREMONY.streamPasscode)).toBeNull();
-    expect(submitButton()).toBeInTheDocument();
+    // The QUESTION is what must still be here. The submit button belongs to
+    // the affirmative branch, and this household has just said no.
+    expect(acceptRadio()).toBeInTheDocument();
+    expect(declineRadio()).toBeInTheDocument();
   });
 
   it("hands the form back, with nothing preselected, when they reconsider", async () => {
@@ -501,9 +515,13 @@ describe("RsvpAnswer declining", () => {
       screen.getByRole("button", { name: /Volver a responder/ }),
     );
 
-    expect(submitButton()).toBeInTheDocument();
+    // The question, with neither answer chosen — which is also why the rest
+    // of the form is not here: nothing has been answered yet.
     expect(declineRadio()).not.toBeChecked();
     expect(acceptRadio()).not.toBeChecked();
+    expect(
+      screen.queryByRole("button", { name: /Enviar respuesta/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("records an acceptance after reconsidering, and stays on the form", async () => {
@@ -545,5 +563,124 @@ describe("RsvpAnswer declining", () => {
 
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(streamCard()).toBeInTheDocument());
+  });
+});
+
+/**
+ * THE QUESTION IS ASKED ONE STEP AT A TIME, IN THE READER'S OWN NUMBER.
+ *
+ * The couple, reading the unlocked invitation: two buttons, worded for one
+ * person or for several; the list of who is coming only AFTER the affirmative,
+ * and never at all when there is only one person to tick.
+ *
+ * Before this the whole form was on screen at once — the choice, a dimmed list
+ * of names, a dietary field and a submit — so a guest invited alone was shown a
+ * checkbox asking whether they themselves were attending, under a question
+ * addressed to a household they were not part of.
+ */
+describe("what the form asks, and when", () => {
+  const SOLO: readonly RsvpAnswerGuest[] = [GUESTS[0]];
+
+  it("asks a household in the plural", () => {
+    renderForm();
+
+    expect(
+      screen.getByRole("radio", { name: "Sí, allá estaremos" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: "No podemos acompañarlos" }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks one person in the singular", () => {
+    renderForm({ guests: SOLO });
+
+    expect(
+      screen.getByRole("radio", { name: "Sí, allá estaré" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: "No puedo acompañarlos" }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * NOTHING BUT THE TWO CHOICES UNTIL ONE IS PICKED.
+   *
+   * The attendee list used to be rendered `disabled` and dimmed, which the
+   * browser honoured and a reader did not: it looked like a control that
+   * refused to work. A question that is not theirs yet should not be on the
+   * screen yet.
+   */
+  it("shows nothing else until the question is answered", () => {
+    renderForm();
+
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(
+      screen.queryByLabelText(/Restricciones alimentarias/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Enviar respuesta" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the rest of the form once a household accepts", async () => {
+    renderForm();
+
+    await userEvent.click(
+      screen.getByRole("radio", { name: "Sí, allá estaremos" }),
+    );
+
+    expect(screen.getAllByRole("checkbox")).toHaveLength(GUESTS.length);
+    expect(
+      screen.getByLabelText(/Restricciones alimentarias/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Enviar respuesta" }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND NEVER ASKS ONE PERSON TO TICK THEIR OWN NAME.
+   *
+   * There is no choice to make: the only person who could attend has just said
+   * they are attending. A checkbox here is a question with one answer, and the
+   * guest still has to find it and press it before the form will submit.
+   */
+  it("asks one person only what is left to ask", async () => {
+    renderForm({ guests: SOLO });
+
+    await userEvent.click(
+      screen.getByRole("radio", { name: "Sí, allá estaré" }),
+    );
+
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.queryByText(/Quiénes asisten/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/Restricciones alimentarias/),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * THE SEAT IS STILL NAMED IN THE PAYLOAD, WHICH IS NOT OPTIONAL.
+   *
+   * `seats_confirmed` is derived from the attendee names and must EQUAL their
+   * count (migration 0007). A solo invitation that submitted no name would
+   * record an accepted answer holding zero seats — a household the couple
+   * would cook for nobody.
+   */
+  it("names the one guest in the payload even though nothing was ticked", async () => {
+    const action = renderForm({ guests: SOLO });
+
+    await userEvent.click(
+      screen.getByRole("radio", { name: "Sí, allá estaré" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Enviar respuesta" }),
+    );
+
+    await waitFor(() => expect(action).toHaveBeenCalled());
+
+    const formData = action.mock.calls[0]![1];
+    expect(formData.getAll("attendee")).toEqual([SOLO[0]!.id]);
   });
 });

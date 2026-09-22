@@ -154,3 +154,41 @@ export function currentRsvpSentence(
     ? "Tu respuesta actual: asiste 1 persona."
     : `Tu respuesta actual: asisten ${current.seatsConfirmed} personas.`;
 }
+
+/** The three lines the household's own size decides. */
+export interface RsvpChoiceCopy {
+  /** The question above the two choices. */
+  readonly question: string;
+  /** The affirmative, in the inviting household's own number. */
+  readonly yes: string;
+  /** And the refusal. */
+  readonly no: string;
+}
+
+/**
+ * The question, and the two answers, in the number the reader answers in.
+ *
+ * Every line here was plural, because an invitation was assumed to be a
+ * household. It is not: a guest invited alone was made to answer "Sí, allá
+ * estaremos" on the one page in the product addressed to them by name. The
+ * couple asked for both voices.
+ *
+ * ZERO READS AS A HOUSEHOLD, AND THAT IS DELIBERATE. An invitation with no
+ * members is refused long before this function is reached, so the branch is
+ * unreachable — but written as `memberCount === 1` rather than `<= 1`, a count
+ * that somehow arrived as zero would address a group in the singular. The cost
+ * of being wrong in the other direction is nothing.
+ */
+export function rsvpChoiceCopy(memberCount: number): RsvpChoiceCopy {
+  return memberCount === 1
+    ? {
+        question: "¿Podrás acompañarnos?",
+        yes: "Sí, allá estaré",
+        no: "No puedo acompañarlos",
+      }
+    : {
+        question: "¿Podrán acompañarnos?",
+        yes: "Sí, allá estaremos",
+        no: "No podemos acompañarlos",
+      };
+}

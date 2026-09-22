@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 
 import {
   currentRsvpSentence,
+  rsvpChoiceCopy,
   rsvpFeedbackMessages,
   seatsSelectionSentence,
   type RsvpFeedback,
@@ -192,6 +193,17 @@ export function RsvpAnswer({
   }, [feedback]);
 
   const isAttending = attending === "yes";
+  /*
+    ONE PERSON IS ASKED A DIFFERENT QUESTION, AND SHOWN A SHORTER FORM.
+
+    The copy is the domain's, beside the other two sentences a member count
+    already decides. The list of who is coming is not rendered at all: there is
+    no choice to make, because the only person who could attend has just said
+    they are. A checkbox there is a question with one answer that the guest
+    still has to find and press before the form will submit.
+  */
+  const soloGuest = guests.length === 1 ? guests[0] : undefined;
+  const choice = rsvpChoiceCopy(guests.length);
   // The cap IS this household's membership since migration 0012, so there is
   // nothing to compare the selection against but the list already rendered.
   const allowanceSpent = selected.length >= guests.length;
@@ -266,7 +278,7 @@ export function RsvpAnswer({
       )}
 
       <fieldset className="rsvp__attending m-0 flex flex-col gap-2 border-0 p-0">
-        <legend className={LEGEND}>¿Podrán acompañarnos?</legend>
+        <legend className={LEGEND}>{choice.question}</legend>
         <label className={CHOICE}>
           <input
             className={CONTROL}
@@ -277,7 +289,7 @@ export function RsvpAnswer({
             onChange={() => setAttending("yes")}
             required
           />
-          Sí, allá estaremos
+          {choice.yes}
         </label>
         <label className={CHOICE}>
           <input
@@ -289,49 +301,56 @@ export function RsvpAnswer({
             onChange={declineNow}
             required
           />
-          No podremos acompañarlos
+          {choice.no}
         </label>
       </fieldset>
 
       {/*
-        DIMMED WHOLE WHEN IT DOES NOT APPLY.
+        NOTHING BELOW EXISTS UNTIL THE QUESTION ABOVE IS ANSWERED YES.
 
-        The fieldset is already `disabled` until somebody says yes — the
-        browser stops every control inside it. Without the opacity it looked
-        live and simply refused the tap, which reads as a broken page rather
-        than as a question that is not theirs yet.
+        This whole block used to be on screen from the first paint, with the
+        attendee list `disabled` and dimmed. The browser honoured that and a
+        reader did not: it looked like a control refusing to work rather than
+        like a question that was not theirs yet. The couple asked for the rest
+        to open only "una vez den click en lo afirmativo".
+
+        A decline needs none of it. It submits on the first tap — see
+        `declineNow` — and a decline names nobody and holds no seats, so there
+        is genuinely nothing here for it to fill in.
+
+        REMOVED RATHER THAN DISABLED, and that makes `declineNow`'s own note
+        about payload timing stronger rather than obsolete: a fieldset that is
+        not mounted cannot contribute a name to the payload at all.
       */}
-      <fieldset
-        className={`
-          rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0
-          transition-opacity duration-(--console-motion-fast)
-          ${isAttending ? "" : "opacity-45"}
-        `}
-        disabled={!isAttending}
-      >
-        <legend className={LEGEND}>¿Quiénes asisten?</legend>
-        <p className="rsvp__seats text-xs text-[#f6efe2]/70">
-          {seatsSelectionSentence(selected.length, guests.length)}
-        </p>
-        {guests.map((guest) => {
-          const checked = selected.includes(guest.id);
+      {!isAttending ? null : (
+        <>
+          {soloGuest === undefined ? (
+            <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
+              <legend className={LEGEND}>¿Quiénes asisten?</legend>
+              <p className="rsvp__seats text-xs text-[#f6efe2]/70">
+                {seatsSelectionSentence(selected.length, guests.length)}
+              </p>
+              {guests.map((guest) => {
+                const checked = selected.includes(guest.id);
 
-          return (
-            <label className={CHOICE} key={guest.id}>
-              <input
-                className={CONTROL}
-                type="checkbox"
-                name="attendee"
-                value={guest.id}
-                checked={checked}
-                // The cap, enforced as an absence: an unchecked box stops being
-                // selectable once the allowance is spent. Already-checked boxes
-                // stay live so the household can swap one person for another.
-                disabled={!checked && allowanceSpent}
-                onChange={(event) => toggle(guest.id, event.target.checked)}
-              />
-              {guest.fullName}
-              {/*
+                return (
+                  <label className={CHOICE} key={guest.id}>
+                    <input
+                      className={CONTROL}
+                      type="checkbox"
+                      name="attendee"
+                      value={guest.id}
+                      checked={checked}
+                      // The cap, enforced as an absence: an unchecked box stops being
+                      // selectable once the allowance is spent. Already-checked boxes
+                      // stay live so the household can swap one person for another.
+                      disabled={!checked && allowanceSpent}
+                      onChange={(event) =>
+                        toggle(guest.id, event.target.checked)
+                      }
+                    />
+                    {guest.fullName}
+                    {/*
                 THE SPACE IS OUTSIDE THE SPAN, AND THAT IS NOT FUSSINESS.
 
                 Accessible-name computation TRIMS each element's text before
@@ -340,61 +359,77 @@ export function RsvpAnswer({
                 node it survives. The spec asserting that the form and the
                 couple's own list read alike caught exactly this.
               */}
-              {guest.isChild ? (
-                <>
-                  {" "}
-                  <span className="text-[#f6efe2]/60">(niño o niña)</span>
-                </>
-              ) : (
-                ""
-              )}
-            </label>
-          );
-        })}
-      </fieldset>
+                    {guest.isChild ? (
+                      <>
+                        {" "}
+                        <span className="text-[#f6efe2]/60">(niño o niña)</span>
+                      </>
+                    ) : (
+                      ""
+                    )}
+                  </label>
+                );
+              })}
+            </fieldset>
+          ) : (
+            /*
+              THE SEAT IS STILL NAMED, BECAUSE THE DATABASE COUNTS NAMES.
 
-      <div className="flex flex-col gap-2">
-        <label className={LEGEND} htmlFor="rsvp-dietary">
-          Restricciones alimentarias (opcional)
-        </label>
-        {/*
+              `seats_confirmed` is derived from the attendees and must EQUAL
+              their number (migration 0007). A solo invitation that submitted
+              no name would record an accepted answer holding zero seats — a
+              household the couple would then cook for nobody. The payload is
+              byte for byte the one a single ticked box produced.
+            */
+            <input type="hidden" name="attendee" value={soloGuest.id} />
+          )}
+
+          <div className="flex flex-col gap-2">
+            <label className={LEGEND} htmlFor="rsvp-dietary">
+              Restricciones alimentarias (opcional)
+            </label>
+            {/*
           A FIELD THAT LOOKS LIKE A FIELD. On a photograph an unbordered
           textarea is an invisible control: a guest cannot tell there is
           anywhere to type.
         */}
-        <textarea
-          className="
+            <textarea
+              className="
             min-h-24 w-full rounded-xl border border-[#f6efe2]/20 bg-black/25
             px-4 py-3 text-sm text-[#f6efe2] placeholder:text-[#f6efe2]/40
             focus-visible:border-[#f6efe2]/50 focus-visible:outline-2
             focus-visible:outline-offset-2 focus-visible:outline-[#f6efe2]
           "
-          id="rsvp-dietary"
-          name="dietaryNotes"
-          maxLength={DIETARY_NOTES_MAX_LENGTH}
-          defaultValue={current?.dietaryNotes ?? ""}
-        />
-      </div>
+              id="rsvp-dietary"
+              name="dietaryNotes"
+              maxLength={DIETARY_NOTES_MAX_LENGTH}
+              defaultValue={current?.dietaryNotes ?? ""}
+            />
+          </div>
 
-      {/*
-        FULL WIDTH, because on a phone this is the one thing the whole page
-        exists to have pressed, and it sat inline at the end of a paragraph.
-      */}
-      <button
-        className="
-          w-full rounded-full border border-[#f6efe2]/40 bg-[#f6efe2]/10 px-5
-          py-3 text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
-          duration-(--console-motion-fast) ease-(--ease-console-out)
-          hover:bg-[#f6efe2]/20
-          focus-visible:outline-2 focus-visible:outline-offset-2
-          focus-visible:outline-[#f6efe2]
-          disabled:opacity-50
-        "
-        type="submit"
-        disabled={pending}
-      >
-        Enviar respuesta
-      </button>
+          {/*
+            FULL WIDTH, because on a phone this is the one thing the whole page
+            exists to have pressed, and it sat inline at the end of a
+            paragraph.
+          */}
+          <button
+            className="
+              w-full rounded-full border border-[#f6efe2]/40 bg-[#f6efe2]/10
+              px-5 py-3 text-sm text-[#f6efe2] backdrop-blur-sm
+              transition-colors duration-(--console-motion-fast)
+              ease-(--ease-console-out)
+              hover:bg-[#f6efe2]/20
+              focus-visible:outline-2 focus-visible:outline-offset-2
+              focus-visible:outline-[#f6efe2]
+              disabled:opacity-50
+            "
+            type="submit"
+            disabled={pending}
+          >
+            Enviar respuesta
+          </button>
+        </>
+      )}
 
       {messages.length === 0 ? null : (
         // `role="alert"` so a screen reader announces the outcome; a guest who

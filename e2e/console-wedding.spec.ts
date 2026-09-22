@@ -279,7 +279,7 @@ test.describe("saving an edit", () => {
         .getByRole("button", { name: "Ver la invitación" })
         .click();
       await guestPage
-        .getByRole("radio", { name: /No podremos acompañarlos/ })
+        .getByRole("radio", { name: /No podemos acompañarlos/ })
         .check();
 
       const card = guestPage.getByRole("group", { name: /transmisión/i });
