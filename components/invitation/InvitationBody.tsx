@@ -14,6 +14,7 @@
  */
 
 import { RSVP_DEADLINE_TEXT } from "@/lib/domain/wedding-day";
+import { SaveTheDate } from "@/components/landing/SaveTheDate";
 
 export interface InvitationBodyGuest {
   readonly id: string;
@@ -107,25 +108,47 @@ export function InvitationBody({
       One number, used twice, rather than two that drift.
     */
     <article
+      /*
+        THE MEASURE IS THE PHONE'S, AND IT LIFTS AT `lg` FOR THE SAME REASON
+        THE GATE'S DOES.
+
+        `max-w-md` — 448px — keeps the lines readable on a narrow screen. Now
+        that this page carries the announcement, the names are set at
+        `text-6xl` above the breakpoint, and "Luis & Michell" at that size does
+        not fit in 448px: it broke after the ampersand, which reads as a
+        mistake in the middle of the couple's own names. Exactly the defect
+        `InvitationGate` records and fixes the same way; the grid column has
+        the room.
+      */
       className="
         invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
         sm:pt-12 sm:pb-10
-        lg:justify-center lg:px-4 lg:py-[7dvh]
+        lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
       "
     >
-      <header className="flex flex-col items-center gap-4 text-center">
-        <p
-          className="
-            invitation__couple font-script text-2xl text-[#f6efe2]/90
-            [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
-            sm:text-3xl
-          "
-        >
-          {wedding.coupleNames}
-        </p>
+      {/*
+        THE ANNOUNCEMENT THE GATE MAKES, KEPT ON THE PAGE BEHIND IT.
 
-        <h1
+        The couple, having read both a tap apart: "quisiera que en esta última
+        página se conserve". The gate opened with the greeting, "Nos casamos",
+        the names, the day and the counter; this page opened with a household's
+        name and a line of prose. A guest who answers the question is the one
+        person guaranteed to read this page, so it is the last place the
+        announcement should be the thinner of the two.
+
+        SHARED RATHER THAN REPRODUCED, for the reason `SaveTheDate` gives for
+        its own existence: four copies of those elements would match today and
+        drift on the first tweak to any of them.
+
+        THE SCRIPT COUPLE LINE THAT USED TO BE HERE IS GONE, AND THAT IS NOT A
+        DELETION. `SaveTheDate` renders the same names, larger, and now from
+        this page's own `ceremony` row rather than from the constant — so the
+        fact is still here, said once instead of twice, and still the one an
+        operator can correct.
+      */}
+      <header className="flex flex-col items-center gap-6 text-center">
+        <h2
           className="
             invitation__greeting font-display text-3xl leading-[1.05]
             text-balance text-[#f6efe2]
@@ -133,8 +156,16 @@ export function InvitationBody({
             sm:text-4xl
           "
         >
-          {invitation.greetingName}
-        </h1>
+          ¡Hola, {invitation.greetingName}!
+        </h2>
+
+        {/*
+          `showDate={false}`: the details list below states the day from the
+          operator's own value, which is the one they can correct. This block's
+          line is built from `WEDDING_INSTANT`, so both would be a duplication
+          today and a contradiction the first time those two disagree.
+        */}
+        <SaveTheDate coupleNames={wedding.coupleNames} showDate={false} />
 
         <p
           className="

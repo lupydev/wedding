@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RSVP_DEADLINE_TEXT } from "@/lib/domain/wedding-day";
 
@@ -46,7 +46,75 @@ const household: InvitationBodyInvitation = {
   ],
 };
 
+/**
+ * THE CLOCK IS FROZEN FOR THE SNAPSHOTS, AND THAT IS NOT TIDINESS.
+ *
+ * The announcement this page now carries includes the COUNTDOWN, whose seconds
+ * figure is different on every run. A snapshot of a live clock fails
+ * immediately and for no reason anybody can act on — which is worse than no
+ * guard, because a guard that cries wolf gets updated with `-u` without being
+ * read, and that is precisely the failure mode these two tests exist to
+ * prevent.
+ *
+ * Any fixed instant will do. This one is comfortably before the wedding, so
+ * the counter renders figures rather than its arrived state.
+ */
+function freezeTheClock(): void {
+  vi.useFakeTimers({ now: new Date("2026-09-22T11:00:00-05:00").getTime() });
+}
+
 describe("InvitationBody", () => {
+  /**
+   * THE ANNOUNCEMENT THE GATE MAKES, KEPT ON THE PAGE BEHIND IT.
+   *
+   * The couple, after reading both on a laptop: "quisiera que en esta última
+   * página se conserve" — the greeting, "Nos casamos", the names, the day and
+   * the counter.
+   *
+   * They are one tap apart, and the gate was the one that got the wedding
+   * while the invitation behind it opened with a household's name and a line
+   * of prose. A guest who answers the question is the one person guaranteed to
+   * read this page, so it is the last place the announcement should be thin.
+   *
+   * SHARED, NOT REPRODUCED. `SaveTheDate` is the landing's own block and
+   * already appears on `/` and on the gate; a fourth copy of those four
+   * elements would match today and drift on the first tweak to any of them.
+   */
+  it("opens with the same announcement the gate makes", () => {
+    render(<InvitationBody invitation={household} wedding={wedding} />);
+
+    expect(
+      screen.getByRole("heading", { name: "¡Hola, Ñoño, Aurelia y Tomás!" }),
+    ).toBeInTheDocument();
+    /*
+      THE COUPLE'S NAMES COME FROM THE `ceremony` ROW, NOT FROM THE CONSTANT.
+
+      `SaveTheDate` reads `COUPLE_NAMES` for the landing, where there is
+      nothing else to read. This page already carried the operator's own value
+      in a script line above the greeting, and a browser test requires a guest
+      to see an edit made in the console. Rendering the block unchanged would
+      have put two couple names on one page — and on the day somebody corrects
+      a spelling in the console, two DIFFERENT ones.
+    */
+    expect(
+      screen.getByRole("heading", { level: 1, name: wedding.coupleNames }),
+    ).toBeInTheDocument();
+
+    /*
+      AND THE DAY IS STATED ONCE, BY THE DETAILS LIST BELOW.
+
+      The announcement's own date line is the constant's; the list carries the
+      operator's, which is the one they can correct. Both would be a
+      duplication today and a contradiction the first time those two disagree,
+      so the block is rendered without it here.
+    */
+    expect(screen.queryByTestId("save-the-date-when")).not.toBeInTheDocument();
+
+    // The counter stays, and it is the element that would have been quietly
+    // left out: it is the one part of the announcement that is not copy.
+    expect(screen.getByTestId("countdown-figures")).toBeInTheDocument();
+  });
+
   it("greets the household by its greeting name", () => {
     render(<InvitationBody invitation={household} wedding={wedding} />);
 
@@ -99,7 +167,9 @@ describe("InvitationBody", () => {
     ).not.toBeInTheDocument();
 
     // What survives: the greeting, and the members by name.
-    expect(screen.getByText(household.greetingName)).toBeInTheDocument();
+    expect(
+      screen.getByText(`¡Hola, ${household.greetingName}!`),
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
 
@@ -241,7 +311,13 @@ describe("InvitationBody", () => {
     expect(container.innerHTML).not.toMatch(/\+?\d{7,}/);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("matches its approved markup", () => {
+    freezeTheClock();
+
     const { container } = render(
       <InvitationBody invitation={household} wedding={wedding} />,
     );
@@ -270,6 +346,8 @@ describe("InvitationBody's RSVP slot", () => {
   });
 
   it("renders exactly as before when the route supplies nothing", () => {
+    freezeTheClock();
+
     // The operator preview has no RSVP to show. An empty section or a stray
     // heading would put a control in the preview that no guest can use.
     const { container } = render(

@@ -108,6 +108,22 @@ own screen after a unit shipped, which is the only reason it was found.
       the phone number is measured fluid, by the wall clock rather than by a
       comparison that had gone toothless.
 
+The couple read the unlocked invitation on a laptop and asked for three things
+— the announcement kept, the question asked one step at a time, and the
+declined screen given the language `/transmision` already uses.
+
+- [x] **U17 — the unlocked invitation keeps the announcement.** The gate opens
+      with the greeting, "Nos casamos", the names, the day and the counter; the
+      invitation behind it dropped all but the names. "Quisiera que en esta
+      última página se conserve."
+- [ ] **U18 — the RSVP asks one question at a time, in the household's own
+      number.** One person is asked "¿Podrás acompañarnos?" and answers "Sí,
+      allá estaré"; two or more keep the plural. Nothing but those two choices
+      shows until one is picked, and a household of one is never asked to tick
+      its own name.
+- [ ] **U19 — the declined screen in `/transmision`'s language.** "Los
+      esperamos por Zoom", rather than the longer explanation it carries now.
+
 ## Checks per unit
 
 `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`,
@@ -821,6 +837,59 @@ can sound at all. Every file restored and `git status` confirmed clean.
 now-toothless `currentTime` comparison.
 
 Green: 2307 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
+### U17 — done (the invitation keeps the announcement the gate makes)
+
+The couple, having read both a tap apart: "quisiera que en esta última página se
+conserve" — the greeting, "Nos casamos", the names and the counter.
+
+The gate was the screen that got the wedding; the page behind it opened with a
+household's name and a line of prose. A guest who answers the question is the
+one person guaranteed to read it, so it was the last place the announcement
+should have been the thinner of the two.
+
+**`SaveTheDate` TOOK ITS FIRST PROPS, AND THE REASON IS A FACT IT CANNOT READ.**
+Its own comment said props would be "a wiring step with nothing to wire" — true
+when it had one caller whose facts were module constants. It has four now, and
+this one already held the couple's names in a form an operator can CORRECT, from
+the `ceremony` row. Rendering the constant beside that would have put two couple
+names on one page, and two DIFFERENT ones the first time somebody fixed a
+spelling. So `coupleNames` and `showDate` are optional props and the constants
+remain the default: the three pages with nothing to read still pass nothing.
+
+**The day is stated once.** `showDate={false}` here, because the details list
+immediately below carries the operator's own value. The block's own line is
+built from `WEDDING_INSTANT` — a duplication today, and a contradiction the
+first time those two disagree. The counter stays: it runs to the instant and
+nothing else on the page says how long is left.
+
+**The script couple line is gone and that is not a deletion.** `SaveTheDate`
+renders the same names, larger, now from this page's own row.
+
+**A LIVE CLOCK BROKE TWO DRIFT GUARDS, AND NEITHER DESERVED TO BE DELETED.**
+The two `toMatchSnapshot` guards began failing on the countdown's SECONDS
+figure — a guard that cries wolf gets updated with `-u` without being read,
+which is exactly the failure it exists to prevent. They freeze the clock with
+`vi.useFakeTimers` now, and three consecutive runs confirm they are stable.
+
+The browser's equivalent is `console-preview.spec.ts`, which compares the
+operator's preview against the guest's page byte for byte: the two are loaded
+one after the other, so the seconds differed by the time the second rendered.
+The figures are EMPTIED rather than the block removed, so a preview that stopped
+rendering the counter, or rendered a different number of units, still fails.
+
+**And the same measure bug the gate already recorded.** `max-w-md` is 448px and
+"Luis & Michell" at `text-6xl` does not fit, so it broke after the ampersand —
+in the middle of the couple's own names. `lg:max-w-none`, exactly as
+`InvitationGate` does it. Found by screenshot, not by assertion.
+
+**One diagnosis worth keeping: an aborted browser run leaves seeds behind, and
+the next run reads them.** Two console specs failed on households they did not
+expect; they failed identically with my changes stashed, and passed on a cleared
+database. Clear before trusting a run that follows an abort.
+
+Green: 2308 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.
 
 ## Next

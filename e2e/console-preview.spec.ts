@@ -67,6 +67,19 @@ function invitationBody(target: Page) {
  * invisible to a reader; treating them as a difference would fail this test on
  * a fact about React rather than about the invitation.
  *
+ * AND THE COUNTDOWN'S FIGURES, WHICH ARE A CLOCK.
+ *
+ * The invitation now opens with the landing's announcement, counter included.
+ * The two surfaces are loaded one after the other, so the seconds figure is
+ * simply different by the time the second one renders — 53 against 54 — and a
+ * byte comparison of a running clock can never pass. That says nothing about
+ * whether the operator is previewing what the guest reads, which is the only
+ * thing this test is for.
+ *
+ * The figures are emptied rather than the block removed, so the counter's
+ * STRUCTURE is still compared: a preview that stopped rendering it, or rendered
+ * a different number of units, still fails here.
+ *
  * Nothing else is normalised. Element names, attributes, ordering, whitespace
  * and every character of copy are compared exactly, so a genuine divergence
  * between the two surfaces still fails here.
@@ -75,6 +88,17 @@ async function bodyWithoutRsvp(target: Page): Promise<string> {
   const markup = await invitationBody(target).evaluate((article) => {
     const clone = article.cloneNode(true) as HTMLElement;
     clone.querySelector(".invitation__rsvp")?.remove();
+
+    for (const figure of clone.querySelectorAll(
+      '[data-testid="countdown-figure"]',
+    )) {
+      figure.textContent = "";
+    }
+    const summary = clone.querySelector('[data-testid="countdown-summary"]');
+    if (summary !== null) {
+      summary.textContent = "";
+    }
+
     return clone.innerHTML;
   });
 

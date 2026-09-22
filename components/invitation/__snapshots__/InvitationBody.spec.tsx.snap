@@ -5,17 +5,21 @@ exports[`InvitationBody > matches its approved markup 1`] = `
         invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
         sm:pt-12 sm:pb-10
-        lg:justify-center lg:px-4 lg:py-[7dvh]
-      "><header class="flex flex-col items-center gap-4 text-center"><p class="
-            invitation__couple font-script text-2xl text-[#f6efe2]/90
-            [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
-            sm:text-3xl
-          ">Ana y Bruno</p><h1 class="
+        lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
+      "><header class="flex flex-col items-center gap-6 text-center"><h2 class="
             invitation__greeting font-display text-3xl leading-[1.05]
             text-balance text-[#f6efe2]
             [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
             sm:text-4xl
-          ">Ñoño, Aurelia y Tomás</h1><p class="
+          ">¡Hola, Ñoño, Aurelia y Tomás!</h2><div class="flex flex-col items-center gap-6 text-center sm:gap-8"><p class="
+          font-script text-3xl text-[#f6efe2]/90
+          [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
+          sm:text-4xl
+        ">Nos casamos</p><h1 class="
+          font-display text-4xl leading-[1.05] text-[#f6efe2]
+          [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+          sm:text-6xl
+        ">Ana y Bruno</h1><span aria-hidden="true" class="block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><div class="flex flex-col items-center gap-3"><p class="sr-only" data-testid="countdown-summary">Faltan 67 días para la boda.</p><ol aria-hidden="true" data-testid="countdown-figures" class="flex items-start justify-center gap-5 sm:gap-8"><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">67</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">días</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">6</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">horas</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">minutos</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">segundos</span></div></li></ol></div></div><p class="
             invitation__lead max-w-sm text-sm text-[#f6efe2]/85
             [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
             sm:text-base
@@ -27,17 +31,21 @@ exports[`InvitationBody's RSVP slot > renders exactly as before when the route s
         invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
         sm:pt-12 sm:pb-10
-        lg:justify-center lg:px-4 lg:py-[7dvh]
-      "><header class="flex flex-col items-center gap-4 text-center"><p class="
-            invitation__couple font-script text-2xl text-[#f6efe2]/90
-            [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
-            sm:text-3xl
-          ">Ana y Bruno</p><h1 class="
+        lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
+      "><header class="flex flex-col items-center gap-6 text-center"><h2 class="
             invitation__greeting font-display text-3xl leading-[1.05]
             text-balance text-[#f6efe2]
             [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
             sm:text-4xl
-          ">Ñoño, Aurelia y Tomás</h1><p class="
+          ">¡Hola, Ñoño, Aurelia y Tomás!</h2><div class="flex flex-col items-center gap-6 text-center sm:gap-8"><p class="
+          font-script text-3xl text-[#f6efe2]/90
+          [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
+          sm:text-4xl
+        ">Nos casamos</p><h1 class="
+          font-display text-4xl leading-[1.05] text-[#f6efe2]
+          [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+          sm:text-6xl
+        ">Ana y Bruno</h1><span aria-hidden="true" class="block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><div class="flex flex-col items-center gap-3"><p class="sr-only" data-testid="countdown-summary">Faltan 67 días para la boda.</p><ol aria-hidden="true" data-testid="countdown-figures" class="flex items-start justify-center gap-5 sm:gap-8"><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">67</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">días</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">6</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">horas</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">minutos</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">segundos</span></div></li></ol></div></div><p class="
             invitation__lead max-w-sm text-sm text-[#f6efe2]/85
             [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
             sm:text-base
