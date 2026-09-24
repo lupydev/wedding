@@ -118,8 +118,10 @@ test.describe("answering the invitation", () => {
     await unlock(page, invitation);
 
     await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
-    await attendeeBox(page, GUEST_ONE).check();
-    await attendeeBox(page, GUEST_TWO).check();
+    // Everybody starts checked, so two seats means UNCHECKING the third. The
+    // property under test is unchanged: the count is derived from the names,
+    // never typed.
+    await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);
 
     await expect(rsvpAlert(page)).toContainText(
@@ -420,6 +422,17 @@ test.describe("the seat cap", () => {
 
       await unlock(page, invitation);
       await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+      /*
+        ROOM IS MADE FIRST, AND THAT IS WHAT KEEPS THIS TEST ABOUT OWNERSHIP.
+
+        A fresh answer now opens with every member checked, so appending a
+        stranger would put the payload OVER the household's allowance — and the
+        seat cap would refuse it before ownership was ever considered, with a
+        different message. Unchecking one member leaves a payload that is
+        well-formed and within the cap, and still names somebody this
+        invitation does not.
+      */
+      await attendeeBox(page, GUEST_THREE).uncheck();
       await page.evaluate((guestId) => {
         const injected = document.createElement("input");
         injected.type = "hidden";
@@ -495,7 +508,10 @@ test.describe("the RSVP deadline", () => {
 
       await expect(page.locator("form.rsvp__form")).toBeVisible();
       await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
-      await attendeeBox(page, GUEST_ONE).check();
+      // One seat, so the other two come off: a fresh answer opens with the whole
+      // household coming.
+      await attendeeBox(page, GUEST_TWO).uncheck();
+      await attendeeBox(page, GUEST_THREE).uncheck();
       await submit(page);
 
       await expect(rsvpAlert(page)).toContainText(

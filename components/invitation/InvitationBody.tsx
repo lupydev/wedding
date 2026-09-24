@@ -153,11 +153,27 @@ export function InvitationBody({
         operator can correct.
       */}
       <header className="flex flex-col items-center gap-6 text-center">
+        {/*
+          ON A LAPTOP ONLY, BECAUSE ON A PHONE IT IS ON THE PHOTOGRAPH.
+
+          The couple asked for the greeting to sit over the picture on a phone:
+          in `band` the photograph is a strip and the words start beneath it, so
+          this line sat under the picture with a band of empty ground above it.
+          The route passes the same greeting to the stage's `overPhoto` slot,
+          which renders it over the strip and hides itself at `lg`.
+
+          TWO ELEMENTS, ONE STRING, AND ONLY ONE IS EVER ANNOUNCED. Both are
+          `display: none` on the side they do not belong to, which assistive
+          technology honours — so a reader meets the greeting once, wherever
+          they are. Placing ONE element in both cells is not something a grid
+          can do.
+        */}
         <h2
           className="
-            invitation__greeting font-display text-3xl leading-[1.05]
-            text-balance text-[#f6efe2]
+            invitation__greeting hidden font-display text-3xl
+            leading-[1.05] text-balance text-[#f6efe2]
             [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+            lg:block
             sm:text-4xl
           "
         >

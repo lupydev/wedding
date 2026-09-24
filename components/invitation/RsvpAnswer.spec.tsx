@@ -201,9 +201,9 @@ describe("RsvpAnswer seat cap", () => {
     renderForm({ guests });
     await user.click(screen.getByRole("radio", { name: /Sí, allá estaremos/ }));
 
-    for (const guest of guests) {
-      await user.click(screen.getByRole("checkbox", { name: guest.fullName }));
-    }
+    // Nothing is clicked: a fresh answer opens with everybody already coming,
+    // which is the state this test is about — the cap spent, and said so in
+    // words rather than by silently freezing the boxes.
 
     const checked = attendeeBoxes().filter(
       (box) => (box as HTMLInputElement).checked,
@@ -228,9 +228,8 @@ describe("RsvpAnswer seat cap", () => {
     renderForm({ guests: [GUESTS[0], GUESTS[1]] });
 
     await user.click(acceptRadio());
-    await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
-    await user.click(screen.getByRole("checkbox", { name: "Rodrigo Aguirre" }));
 
+    // Both are already checked, which is the allowance spent.
     expect(screen.getByText("Ya seleccionaron las 2.")).toBeInTheDocument();
   });
 
@@ -252,8 +251,9 @@ describe("RsvpAnswer submission", () => {
     const action = renderForm();
 
     await user.click(screen.getByRole("radio", { name: /Sí, allá estaremos/ }));
-    await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
-    await user.click(screen.getByRole("checkbox", { name: "Rodrigo Aguirre" }));
+    // Everybody starts checked, so this household is UNCHECKING the one who
+    // cannot come — which is the exception the new default is built around.
+    await user.click(screen.getByRole("checkbox", { name: "Sara Aguirre" }));
     await user.click(submitButton());
 
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
@@ -742,5 +742,119 @@ describe("where the wedding is", () => {
       screen.queryByLabelText(/Restricciones alimentarias/),
     ).not.toBeInTheDocument();
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+  });
+});
+
+/**
+ * HOW MANY TAPS IT TAKES TO SAY YES.
+ *
+ * The couple, watching it on a phone: "al dar click en 'sí voy a asistir' se
+ * abre y se pierde la información, toca hacer un scroll… ¿qué propones para que
+ * sea lo suficiente para confirmar evitándose un click de más?"
+ *
+ * The count was worse than the scroll. A household of three had to tap five
+ * times — yes, three empty boxes, send — because the boxes started EMPTY. The
+ * common case is that everybody named on an invitation comes; starting from
+ * nobody made the form ask the household to re-enter what the invitation
+ * already says.
+ */
+describe("how many taps it takes to say yes", () => {
+  const SOLO: readonly RsvpAnswerGuest[] = [GUESTS[0]];
+
+  /**
+   * ONE PERSON CONFIRMS IN ONE TAP, EXACTLY AS A DECLINE DOES.
+   *
+   * There is nothing to choose: one person, one seat. The second tap carried no
+   * information at all, which is the definition of friction.
+   *
+   * IT IS SAFE HERE FOR THE REASON THE DECLINE IS SAFE. A mis-tap cannot store
+   * a wrong NUMBER — the only person who could attend is attending. A household
+   * keeps its explicit send, because there a mis-tap would confirm seats the
+   * couple then cook for.
+   */
+  it("submits on the first tap when the invitation names one person", async () => {
+    const action = renderForm({ guests: SOLO });
+
+    await userEvent.click(
+      screen.getByRole("radio", { name: "Sí, allá estaré" }),
+    );
+
+    await waitFor(() => expect(action).toHaveBeenCalled());
+
+    const formData = action.mock.calls[0]![1];
+    expect(formData.get("attending")).toBe("yes");
+    expect(formData.getAll("attendee")).toEqual([SOLO[0]!.id]);
+  });
+
+  it("asks a household to send, and does not answer for them", async () => {
+    const action = renderForm();
+
+    await userEvent.click(acceptRadio());
+
+    expect(action).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Enviar respuesta" }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND THE HOUSEHOLD STARTS WITH EVERYBODY COMING.
+   *
+   * Unchecking one person is the exception; checking three is what every
+   * household was made to do. The invitation already names them, so an empty
+   * list asked the household to repeat it.
+   */
+  it("starts a fresh answer with every member selected", async () => {
+    renderForm();
+
+    await userEvent.click(acceptRadio());
+
+    for (const box of screen.getAllByRole("checkbox")) {
+      expect(box).toBeChecked();
+    }
+    expect(screen.getByText("Ya seleccionaron las 3.")).toBeInTheDocument();
+  });
+
+  /**
+   * BUT AN ANSWER ON FILE IS NOT OVERWRITTEN.
+   *
+   * A household that already said two of three are coming must find that
+   * answer, not a form that quietly re-added the third.
+   */
+  it("keeps the answer already on file rather than selecting everybody", () => {
+    renderForm({
+      current: {
+        attending: true,
+        seatsConfirmed: 1,
+        attendeeGuestIds: [GUESTS[0].id],
+        dietaryNotes: null,
+      },
+    });
+
+    expect(
+      screen.getByRole("checkbox", { name: GUESTS[0].fullName }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: GUESTS[1].fullName }),
+    ).not.toBeChecked();
+  });
+
+  /**
+   * AND WHAT OPENS IS BROUGHT INTO VIEW.
+   *
+   * On a phone the revealed block lands below the fold, so the household taps
+   * yes and the screen appears not to change. Asserted against a stub because
+   * jsdom has no layout and no scrolling — what is being checked is that the
+   * component ASKS, which is the part a browser cannot be relied on to do by
+   * itself.
+   */
+  it("brings what it opened into view", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    renderForm();
+    await userEvent.click(acceptRadio());
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
   });
 });

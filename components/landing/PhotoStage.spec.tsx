@@ -203,3 +203,59 @@ describe("where the stage puts the words", () => {
     }
   });
 });
+
+/**
+ * SOMETHING THE STAGE WILL LAY OVER THE PHOTOGRAPH, ON A PHONE ONLY.
+ *
+ * The couple, looking at the invitation on a phone: "el 'Hola, nombre de la
+ * persona' que quede en la parte superior de la fotografía."
+ *
+ * In `band` the photograph is a strip and the words start beneath it, so the
+ * greeting sat under the picture with a band of empty ground above it. Over the
+ * strip it reads as a caption on their own photograph.
+ *
+ * ONLY ON A PHONE, AND THAT IS THE WHOLE CONSTRAINT. At `lg` the photograph is
+ * a framed print in its own column, and type laid over a framed print is a
+ * different design — the one `overlay` exists for, on a picture chosen for it.
+ */
+describe("what the stage lays over the photograph", () => {
+  function overlaid(): HTMLElement | null {
+    return document.querySelector<HTMLElement>(".photo-stage__over-photo");
+  }
+
+  it("renders nothing extra when the caller offers nothing", () => {
+    render(
+      <PhotoStage photo={WEDDING}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    expect(overlaid()).toBeNull();
+  });
+
+  it("puts what it is given in the photograph's own cell", () => {
+    render(
+      <PhotoStage overPhoto={<h2>¡Hola, Mimi!</h2>} photo={WEDDING}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    const over = overlaid()!;
+
+    expect(over).not.toBeNull();
+    expect(over.textContent).toContain("¡Hola, Mimi!");
+    // The print's cell, not the words': one row, one column, two layers.
+    expect(over.className).toContain("col-start-1");
+    expect(over.className).toContain("row-start-1");
+  });
+
+  it("takes it away again above the breakpoint", () => {
+    render(
+      <PhotoStage overPhoto={<h2>¡Hola, Mimi!</h2>} photo={WEDDING}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    expect(overlaid()!.className).toContain("lg:hidden");
+  });
+});

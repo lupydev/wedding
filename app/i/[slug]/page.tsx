@@ -147,7 +147,23 @@ export default async function InvitationPage({ params }: RouteParams) {
         a photograph, the same measurement that put the stream invitation in a
         band before it.
       */
-      <PhotoStage mobilePhoto="band" photo={WEDDING_PHOTO}>
+      <PhotoStage
+        mobilePhoto="band"
+        /*
+          THE GREETING GOES ON THE PHOTOGRAPH, ON A PHONE.
+
+          `InvitationBody` renders the same line for a laptop, where the
+          photograph is a framed print and type over it would be a different
+          design. Passed from here rather than from inside the body, because the
+          stage is what owns the photograph's cell.
+        */
+        overPhoto={
+          <h2 className="font-display text-3xl leading-[1.05] text-balance text-[#f6efe2] [text-shadow:0_2px_24px_rgba(0,0,0,0.65)] sm:text-4xl">
+            ¡Hola, {invitation.greetingName}!
+          </h2>
+        }
+        photo={WEDDING_PHOTO}
+      >
         <InvitationBody
           invitation={invitation}
           wedding={ceremony}

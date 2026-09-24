@@ -135,6 +135,9 @@ declined screen given the language `/transmision` already uses.
 - [x] **U23 — the declined screen, warmer and with a control that fills its
       column.**
 
+- [x] **U24 — the greeting sits on the photograph, on a phone.**
+- [x] **U25 — saying yes costs one tap alone and two as a household.**
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -1096,6 +1099,63 @@ already in that position. Both belong to the couple to decide.
 
 Green: 2327 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Verified by screenshot at 390 in all three states.
+
+### U24 and U25 — done (the greeting on the photograph, and the cost of saying yes)
+
+The couple, on a phone: "el 'Hola, nombre' que quede en la parte superior de la
+fotografía", and "al dar click en 'sí voy a asistir' se abre y se pierde la
+información, toca hacer un scroll… ¿qué propones para evitarse un click de más?"
+
+**THE COUNT WAS WORSE THAN THE SCROLL, AND THAT IS WHAT THE QUESTION WAS REALLY
+ABOUT.** A household of three tapped FIVE times: yes, three empty boxes, send.
+The boxes started empty, so the form asked the household to type back the names
+the invitation had just printed to them.
+
+**What was proposed, and what the couple chose.** One person confirms in ONE
+tap, exactly as a decline already does: there is nothing to choose, and the
+second tap carried no information. A HOUSEHOLD keeps its explicit send — put to
+them as a choice, and they took it. The reason is the asymmetry that already
+justified the auto-submitting decline: a decline confirms zero seats and names
+nobody, so a mis-tap cannot store a wrong number, while an accepted answer does
+— and the send is the one place a wrong count can be caught before the couple
+cook for it.
+
+**And the household starts with everybody coming.** Unchecking whoever cannot is
+the exception. An answer already on file still wins, so a household that said
+two of three are coming finds that rather than a form that quietly re-added the
+third.
+
+**What opens is brought into view.** `scrollIntoView` with `block: "nearest"`,
+so the question they just answered stays on screen above what it opened rather
+than being pushed off the top by it. Guarded, because jsdom has no layout and a
+screen that scrolls is worth nothing if the page throws on the way.
+
+**THE GREETING NEEDED THE STAGE TO OFFER A PLACE FOR IT.** In `band` the
+photograph is a strip and the words begin beneath it, so "¡Hola, Mimi!" sat
+under the picture with a band of empty ground above. `PhotoStage` takes an
+optional `overPhoto` now, rendered in the print's own cell with its own scrim —
+`overlay`'s pair is not rendered in `band` — and hidden at `lg`, where the
+photograph is a framed print and type over it is a different design.
+
+TWO ELEMENTS, ONE STRING, and only ever one announced: each is `display: none`
+on the side it does not belong to, which assistive technology honours. Placing
+ONE element in two different grid cells is not something a grid can do.
+
+**The side padding is 64px and it is measured, not chosen.** The music control
+sits at `right-5` and is 44px across, so it occupies the last 64px of the row;
+a long household name reaching further would run underneath it. The same gutter
+both sides keeps the line centred, and the top clears the notch from the same
+safe-area inset that control uses.
+
+**Four browser tests checked boxes that now start checked.** Each was rewritten
+to UNCHECK instead, which preserves what it was about — two names means two
+seats — and one mattered more than the others: the forged-payload test appended
+a stranger to a full household, which put it over the cap, so the SEAT rule
+refused it before ownership was ever considered. It makes room first now, and is
+about ownership again.
+
+Green: 2334 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. Verified by screenshot at 390.
 
 ## Next
 

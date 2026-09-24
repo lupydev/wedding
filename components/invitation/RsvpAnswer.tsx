@@ -169,7 +169,19 @@ export function RsvpAnswer({
     current === null ? "" : current.attending ? "yes" : "no",
   );
   const [selected, setSelected] = useState<readonly string[]>(
-    current?.attendeeGuestIds ?? [],
+    /*
+      EVERYBODY, WHEN THERE IS NO ANSWER ON FILE YET.
+
+      The boxes used to start EMPTY, so a household of three tapped five times:
+      yes, three boxes, send. The invitation already NAMES those three — an
+      empty list asked the household to repeat it back. Unchecking somebody who
+      cannot come is the exception, and it is one tap.
+
+      An answer already on file wins, obviously: a household that said two of
+      three are coming must find that, not a form that quietly re-added the
+      third.
+    */
+    current?.attendeeGuestIds ?? guests.map((guest) => guest.id),
   );
 
   // The answer ON FILE, which is what decides the surface. It starts as the row
@@ -184,13 +196,18 @@ export function RsvpAnswer({
   const submittedAnswer = useRef<Answer>("");
 
   const formRef = useRef<HTMLFormElement>(null);
-  // A counter rather than a boolean: two declines in a row are two distinct
+  const openedRef = useRef<HTMLDivElement>(null);
+  // A counter rather than a boolean: two answers in a row are two distinct
   // requests, and a boolean that is already `true` would produce no change for
   // the effect below to act on.
-  const [declineRequests, setDeclineRequests] = useState(0);
+  //
+  // It counts BOTH self-submitting answers now — a decline, and an acceptance
+  // from an invitation that names one person. Both are answers with nothing
+  // left to fill in.
+  const [selfSubmits, setSelfSubmits] = useState(0);
 
   useEffect(() => {
-    if (declineRequests === 0) {
+    if (selfSubmits === 0) {
       return;
     }
 
@@ -202,7 +219,33 @@ export function RsvpAnswer({
     // one refactor away from reaching the database and failing its
     // `rsvp_declined_has_zero_seats` constraint as a 500.
     formRef.current?.requestSubmit();
-  }, [declineRequests]);
+  }, [selfSubmits]);
+
+  /**
+   * WHAT OPENS IS BROUGHT INTO VIEW.
+   *
+   * The couple, on a phone: "se abre y se pierde la información, toca hacer un
+   * scroll." The revealed block lands below the fold, so a household taps yes
+   * and the screen appears not to have changed.
+   *
+   * `block: "nearest"` rather than `"start"`: the question they just answered
+   * should stay on screen above what it opened, not be pushed off the top by
+   * it.
+   *
+   * GUARDED, because `scrollIntoView` is not implemented in every environment
+   * this renders in — jsdom has no layout at all — and a screen that scrolls is
+   * worth nothing if the page throws on the way.
+   */
+  useEffect(() => {
+    if (attending !== "yes") {
+      return;
+    }
+
+    openedRef.current?.scrollIntoView?.({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [attending]);
 
   useEffect(() => {
     if (feedback.status !== "recorded") {
@@ -255,7 +298,26 @@ export function RsvpAnswer({
    */
   function declineNow() {
     setAttending("no");
-    setDeclineRequests((requests) => requests + 1);
+    setSelfSubmits((requests) => requests + 1);
+  }
+
+  /**
+   * A SOLO INVITATION CONFIRMS ON THE FIRST TAP, LIKE A DECLINE.
+   *
+   * There is nothing left to choose: one person, one seat, and the hidden field
+   * below already names them. The second tap carried no information, which is
+   * the definition of friction — the couple counted it: "evitándose un click de
+   * más".
+   *
+   * SAFE FOR THE REASON THE DECLINE IS SAFE, and only for that reason. A
+   * mis-tap here cannot store a wrong NUMBER, because the only person who could
+   * attend is attending. A HOUSEHOLD keeps its explicit send: there a mis-tap
+   * would confirm seats the couple then cook for, and the send is the one place
+   * a wrong number can be caught before it is recorded.
+   */
+  function acceptNow() {
+    setAttending("yes");
+    setSelfSubmits((requests) => requests + 1);
   }
 
   function record(formData: FormData) {
@@ -313,7 +375,9 @@ export function RsvpAnswer({
             name="attending"
             value="yes"
             checked={attending === "yes"}
-            onChange={() => setAttending("yes")}
+            onChange={
+              soloGuest === undefined ? () => setAttending("yes") : acceptNow
+            }
             required
           />
           {choice.yes}
@@ -350,7 +414,7 @@ export function RsvpAnswer({
         not mounted cannot contribute a name to the payload at all.
       */}
       {!isAttending ? null : (
-        <>
+        <div ref={openedRef} className="flex flex-col gap-5">
           {/*
             WHERE TO GO, NOW THAT THEY HAVE SAID THEY ARE COMING.
 
@@ -471,7 +535,7 @@ export function RsvpAnswer({
           >
             Enviar respuesta
           </button>
-        </>
+        </div>
       )}
 
       {messages.length === 0 ? null : (

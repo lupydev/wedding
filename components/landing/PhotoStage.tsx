@@ -64,6 +64,7 @@ export interface StagePhoto {
 
 export function PhotoStage({
   children,
+  overPhoto,
   photo,
   mobilePhoto = "band",
 }: {
@@ -79,6 +80,21 @@ export function PhotoStage({
    * wrong because a caller no longer says anything about it.
    */
   readonly children: React.ReactNode;
+  /**
+   * A line to lay over the photograph, on a phone only.
+   *
+   * The invitation's greeting. In `band` the photograph is a strip and the
+   * words start beneath it, so "¡Hola, Mimi!" sat under the picture with a band
+   * of empty ground above it; over the strip it reads as a caption on their own
+   * photograph, which is what the couple asked for.
+   *
+   * IT DISAPPEARS AT `lg`, and that is the whole constraint rather than a
+   * nicety. Above the breakpoint the photograph is a framed PRINT in its own
+   * column, and type laid over a framed print is a different design — the one
+   * `overlay` exists for, on a photograph chosen for it. The caller renders its
+   * own copy in the words column there.
+   */
+  readonly overPhoto?: React.ReactNode;
   /** The photograph this page stands on, and what it shows. */
   readonly photo: StagePhoto;
   /** How the photograph and the words share a narrow screen. */
@@ -265,6 +281,42 @@ export function PhotoStage({
             />
           </>
         ) : null}
+
+        {/*
+          AND WHATEVER THE CALLER WANTS ON THE PHOTOGRAPH ITSELF.
+
+          The print's own cell — one row, one column, two layers — so it sits on
+          the picture rather than under it. `self-start` keeps it at the top of
+          the strip, which is where the photograph has sky and a waterfall
+          rather than the couple: the same measurement the scrims above are
+          built from.
+
+          Its own scrim, because a caller cannot know how bright the picture is
+          under one line of type, and `overlay`'s pair is not rendered in
+          `band`.
+
+          THE SIDE PADDING IS 64px AND IT IS MEASURED, not chosen. The music
+          control sits at `right-5` and is 44px across, so it occupies the last
+          64px of the row; text reaching further would run underneath it. The
+          same gutter on both sides keeps the line centred.
+
+          The top clears the notch the way that control does, from the same
+          safe-area inset.
+        */}
+        {overPhoto === undefined ? null : (
+          <div
+            className="
+              photo-stage__over-photo relative col-start-1 row-start-1
+              w-full self-start
+              bg-gradient-to-b from-black/70 via-black/40 to-transparent
+              px-16 pt-[max(1.25rem,env(safe-area-inset-top))] pb-10
+              text-center
+              lg:hidden
+            "
+          >
+            {overPhoto}
+          </div>
+        )}
 
         {/*
           THE CELL THE WORDS LIVE IN, DECIDED HERE.
