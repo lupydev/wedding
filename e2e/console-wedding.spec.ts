@@ -243,7 +243,23 @@ test.describe("saving an edit", () => {
 
       await expect(body).toBeVisible();
       await expect(body).toContainText(EDITED.coupleNames);
-      await expect(body).toContainText(EDITED.ceremonyDate);
+
+      /*
+        THE VENUE NEEDS A YES FIRST, AND THAT IS THE PRODUCT RULE.
+
+        The couple asked for the place and its address to appear "solamente
+        cuando al confirmar la asistencia es positiva": a household that cannot
+        come does not need a street. So the assertion this test exists for —
+        that an edit in the console reaches the guest — now has to answer the
+        question the way a guest going to the wedding would.
+
+        `ceremonyDate` is no longer asserted here: the body states the day from
+        `WEDDING_INSTANT` in its announcement, not from the row, since the two
+        screens were made to open alike. That gap is recorded in
+        `odd/tasks/invitation-design.md`.
+      */
+      await guestPage.getByRole("radio", { name: /Sí, allá estar/ }).check();
+
       await expect(body).toContainText(EDITED.venueName);
       await expect(body).toContainText(EDITED.venueAddress);
     } finally {

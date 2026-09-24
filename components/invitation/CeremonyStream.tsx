@@ -49,19 +49,25 @@ function reconsiderSentence(memberCount: number): string {
 }
 
 /**
- * The invitation to the stream, in the number the household answered in.
+ * What this screen says to a household that has just said no.
  *
- * The couple asked for "un mejor copy como 'los esperamos por Zoom', similar a
- * lo que aparece en /transmision". That page had already been cut to one
- * sentence — "La ceremonia se va a transmitir a través de Zoom. Te esperamos."
- * — and this is the same offer, made to somebody who has just said they cannot
- * be in the room. "Gracias por contarnos" stays: it is the only line that
- * acknowledges the answer they just gave.
+ * THANKS IS NOT THE SAME AS UNDERSTANDING, and the couple named the
+ * difference: "un mensaje más ameno como 'comprendemos que no puedan asistir,
+ * la ceremonia se transmitirá en vivo así pueden acompañarnos'."
+ *
+ * It opened with "Gracias por contarnos" and went straight to the stream.
+ * Somebody telling the couple they cannot come to their wedding has usually
+ * just decided something they are sorry about; the screen that answers them
+ * should say it understands before it says anything practical.
+ *
+ * The stream follows in the same breath rather than in a second paragraph, so
+ * the answer reads as one sentence: we understand, and here is the way to be
+ * here anyway.
  */
 function welcome(memberCount: number): string {
   return memberCount === 1
-    ? "Gracias por contarnos. La ceremonia se va a transmitir en vivo, así que puedas acompañarnos desde donde estés."
-    : "Gracias por contarnos. La ceremonia se va a transmitir en vivo, así que puedan acompañarnos desde donde estén.";
+    ? "Comprendemos que no puedas acompañarnos ese día. Vamos a transmitir la ceremonia en vivo, así que puedes estar con nosotros desde donde estés."
+    : "Comprendemos que no puedan acompañarnos ese día. Vamos a transmitir la ceremonia en vivo, así que pueden estar con nosotros desde donde estén.";
 }
 
 export function CeremonyStream({
@@ -108,8 +114,15 @@ export function CeremonyStream({
       <button
         type="button"
         onClick={onReconsider}
+        /*
+          FULL WIDTH, LIKE THE CONTROL ABOVE IT: "el botón debe ocupar todo el
+          espacio, el de volver a responder." It sat centred at its own text
+          width under a block whose other control fills the column — the same
+          mismatch `/transmision` already had between its two buttons.
+        */
         className="
-          rounded-full border border-[#f6efe2]/30 bg-black/30 px-5 py-2.5
+          block w-full rounded-full border border-[#f6efe2]/30 bg-black/30
+          px-5 py-2.5 text-center
           text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
           duration-(--console-motion-fast) ease-(--ease-console-out)
           hover:bg-black/50

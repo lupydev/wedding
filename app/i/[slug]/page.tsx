@@ -157,6 +157,16 @@ export default async function InvitationPage({ params }: RouteParams) {
               // supplies it, so a client cannot aim an RSVP at another
               // household.
               <RsvpAnswer
+                /*
+                  The place and its address reach the FORM rather than the
+                  body, because only a household that says it is coming is
+                  told where to go. `InvitationBody` is a Server Component and
+                  cannot see that answer.
+                */
+                venue={{
+                  name: ceremony.venueName,
+                  address: ceremony.venueAddress,
+                }}
                 guests={invitation.guests}
                 current={
                   current === null

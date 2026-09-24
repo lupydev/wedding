@@ -39,6 +39,12 @@ const GUESTS: readonly RsvpAnswerGuest[] = [
   { id: "cccccccc-3333-4333-8333-333333333333", fullName: "Sara Aguirre" },
 ];
 
+/** Where the wedding happens, which only an attending household is told. */
+const VENUE = {
+  name: "Hacienda La Ñapa",
+  address: "Calle 12 #34-56, Barrio Centro",
+};
+
 const CEREMONY: CeremonyStreamDetails = {
   ceremonyDate: "sábado 14 de noviembre",
   ceremonyTime: "4:00 p. m.",
@@ -71,6 +77,7 @@ function renderForm(
       guests={options.guests ?? GUESTS}
       current={options.current ?? null}
       ceremony={options.ceremony ?? CEREMONY}
+      venue={VENUE}
     />,
   );
 
@@ -260,22 +267,11 @@ describe("RsvpAnswer submission", () => {
     expect(formData.get("seats")).toBeNull();
   });
 
-  it("sends the dietary notes when the guest fills them in", async () => {
-    const user = userEvent.setup();
-    const action = renderForm();
-
-    await user.click(acceptRadio());
-    await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
-    await user.type(
-      screen.getByLabelText(/Restricciones alimentarias/),
-      "Sin mariscos",
-    );
-    await user.click(submitButton());
-
-    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
-
-    expect(action.mock.calls[0][1].get("dietaryNotes")).toBe("Sin mariscos");
-  });
+  // Three tests stood here, all about the dietary field: that a filled value was
+  // sent, that a blank one was sent as empty rather than as invented text, and
+  // that its length was bounded to what the database accepts. The couple removed
+  // the field — see "no longer asks anybody to type" above. The column and its
+  // bound remain, and `lib/server/rsvp.ts` still owns both.
 
   it("offers no message box, and sends no message field", async () => {
     // The whole flow starts in the guest's own WhatsApp thread with the couple
@@ -298,30 +294,10 @@ describe("RsvpAnswer submission", () => {
     expect(action.mock.calls[0][1].get("message")).toBeNull();
     // `dietaryNotes` STAYS: that is not a message, it is operational data the
     // catering needs and a guest will not think to send unprompted.
-    expect(action.mock.calls[0][1].get("dietaryNotes")).toBe("");
-  });
-
-  it("submits a blank dietary field as empty, never as invented text", async () => {
-    const user = userEvent.setup();
-    const action = renderForm();
-
-    await user.click(acceptRadio());
-    await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
-    await user.click(submitButton());
-
-    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
-
-    expect(action.mock.calls[0][1].get("dietaryNotes")).toBe("");
-  });
-
-  it("bounds the dietary field at the length the database accepts", async () => {
-    renderForm();
-    await userEvent.click(acceptRadio());
-
-    expect(screen.getByLabelText(/Restricciones alimentarias/)).toHaveAttribute(
-      "maxLength",
-      "500",
-    );
+    // And nothing else is sent either: the dietary field went with the
+    // question, so the payload carries the answer and the people alone.
+    expect(action.mock.calls[0][1].get("dietaryNotes")).toBeNull();
+    expect(action.mock.calls[0][1].get("mensaje")).toBeNull();
   });
 
   it("shows what came back from the action", async () => {
@@ -396,9 +372,9 @@ describe("RsvpAnswer with an answer already on file", () => {
     expect(
       screen.getByRole("checkbox", { name: "Sara Aguirre" }),
     ).not.toBeChecked();
-    expect(screen.getByLabelText(/Restricciones alimentarias/)).toHaveValue(
-      "Sin mariscos",
-    );
+    // The dietary field is gone, so there is nothing else to pre-fill: what
+    // survives is the answer and the people, which is what "not retyping
+    // everything" actually meant.
   });
 
   it("lets the household change a yes into a no", async () => {
@@ -642,9 +618,6 @@ describe("what the form asks, and when", () => {
 
     expect(screen.getAllByRole("checkbox")).toHaveLength(GUESTS.length);
     expect(
-      screen.getByLabelText(/Restricciones alimentarias/),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole("button", { name: "Enviar respuesta" }),
     ).toBeInTheDocument();
   });
@@ -665,8 +638,10 @@ describe("what the form asks, and when", () => {
 
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     expect(screen.queryByText(/Quiénes asisten/i)).not.toBeInTheDocument();
+    // What DOES open for one person: the place, and the way to send it.
+    expect(screen.getByText(VENUE.name)).toBeInTheDocument();
     expect(
-      screen.getByLabelText(/Restricciones alimentarias/),
+      screen.getByRole("button", { name: "Enviar respuesta" }),
     ).toBeInTheDocument();
   });
 
@@ -692,5 +667,80 @@ describe("what the form asks, and when", () => {
 
     const formData = action.mock.calls[0]![1];
     expect(formData.getAll("attendee")).toEqual([SOLO[0]!.id]);
+  });
+});
+
+/**
+ * WHERE THE WEDDING IS, AND WHO GETS TOLD.
+ *
+ * The couple: "el lugar y la dirección deben aparecer solamente cuando al
+ * confirmar la asistencia es positiva."
+ *
+ * They were in the invitation's body, above the form, shown to every household
+ * before anybody had been asked anything. A household that cannot come does not
+ * need a street — and handing one to everybody before the question is answered
+ * buries the question under directions.
+ *
+ * IT HAD TO MOVE INTO THIS COMPONENT, and that is not an arbitrary home. The
+ * answer lives here, in client state; the body is a Server Component and cannot
+ * see it. The alternative was lifting the answer out of the form, which would
+ * make a page that is mostly static depend on a client boundary.
+ */
+describe("where the wedding is", () => {
+  it("says nothing about the venue before the question is answered", () => {
+    renderForm();
+
+    expect(screen.queryByText(VENUE.name)).not.toBeInTheDocument();
+    expect(screen.queryByText(VENUE.address)).not.toBeInTheDocument();
+  });
+
+  it("gives the household the place once they say they are coming", async () => {
+    renderForm();
+
+    await userEvent.click(acceptRadio());
+
+    expect(screen.getByText(VENUE.name)).toBeInTheDocument();
+    expect(screen.getByText(VENUE.address)).toBeInTheDocument();
+  });
+
+  /**
+   * AND A HOUSEHOLD THAT ALREADY ACCEPTED SEES IT ON ARRIVAL.
+   *
+   * The answer is read from the row on the first render, so somebody coming
+   * back to check the address finds it without answering again.
+   */
+  it("shows it straight away to a household already on file as attending", () => {
+    renderForm({
+      current: {
+        attending: true,
+        seatsConfirmed: 1,
+        attendeeGuestIds: [GUESTS[0].id],
+        dietaryNotes: null,
+      },
+    });
+
+    expect(screen.getByText(VENUE.name)).toBeInTheDocument();
+  });
+
+  /**
+   * THE DIETARY FIELD IS GONE, ON THE COUPLE'S OWN INSTRUCTION.
+   *
+   * "Podríamos quitar lo de restricciones alimentarias." It was the one thing
+   * on this form that asked the household to type rather than to choose, and
+   * it asked it of everybody who said yes.
+   *
+   * The COLUMN stays. `rsvp_responses.dietary_notes` is nullable, the payload
+   * schema accepts a missing value as null, and dropping a column to remove a
+   * field is a migration that buys nothing.
+   */
+  it("no longer asks anybody to type", async () => {
+    renderForm();
+
+    await userEvent.click(acceptRadio());
+
+    expect(
+      screen.queryByLabelText(/Restricciones alimentarias/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
   });
 });

@@ -62,9 +62,14 @@ export interface InvitationBodyWedding {
    * The wedding date. It is `ceremony_date`: one day, one column, one place to
    * correct it. A second `wedding_date` would be the drift again.
    */
-  readonly ceremonyDate: string;
-  readonly venueName: string;
-  readonly venueAddress: string;
+  /*
+    THE DAY, THE VENUE AND ITS ADDRESS USED TO BE DECLARED HERE TOO.
+
+    The day is stated by the announcement now, and the venue and its address
+    reach `RsvpAnswer` directly, because only a household that says it is
+    coming is told where to go. A prop this component no longer renders is a
+    lie about where a value comes from.
+  */
 }
 
 export function InvitationBody({
@@ -160,12 +165,18 @@ export function InvitationBody({
         </h2>
 
         {/*
-          `showDate={false}`: the details list below states the day from the
-          operator's own value, which is the one they can correct. This block's
-          line is built from `WEDDING_INSTANT`, so both would be a duplication
-          today and a contradiction the first time those two disagree.
+          THE WHOLE BLOCK, DATE LINE INCLUDED, EXACTLY AS THE GATE SHOWS IT.
+
+          The couple read the two screens side by side: "debería ser igual a la
+          primera pantalla… para tener una misma consistencia."
+
+          IT USED TO PASS `showDate={false}`, and the reversal is the right way
+          round. The line was hidden because a details list below stated the day
+          too, from the `ceremony` row rather than from `WEDDING_INSTANT` —
+          hiding the one the guest reads FIRST to protect the one beneath it got
+          the priority backwards. The list is the part that went.
         */}
-        <SaveTheDate coupleNames={wedding.coupleNames} showDate={false} />
+        <SaveTheDate coupleNames={wedding.coupleNames} />
 
         <p
           className="
@@ -179,43 +190,15 @@ export function InvitationBody({
       </header>
 
       {/*
-        THE THREE FACTS, AS A LIST AND NOT AS A PARAGRAPH.
+        THE DETAILS LIST STOOD HERE AND HELD THREE LABELLED FACTS.
 
-        A `dl` because that is what they are: three labels and three values.
-        The label is small and quiet and the value carries the weight, so the
-        eye lands on "28 de noviembre" rather than on the word "Fecha".
-
-        `sr-only` was considered for the labels and rejected. On the stream page
-        the two credentials are self-evident from their shape; a venue name and
-        a street address are not, and a guest scanning for where to go needs
-        the word "Dirección" as much as the address.
+        Fecha, Lugar and Dirección. The day is stated by the announcement above
+        now, so the row repeating it had to go — and the two that remain answer
+        a question this household has not been asked yet. They moved into the
+        RSVP's affirmative branch, where somebody has just said they are coming:
+        a household that cannot come does not need a street, and handing one to
+        everybody before the question is answered buries the question.
       */}
-      <dl className="invitation__details m-0 flex flex-col gap-3 text-center">
-        <div className="flex flex-col gap-0.5">
-          <dt className="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">
-            Fecha
-          </dt>
-          <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
-            {wedding.ceremonyDate}
-          </dd>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <dt className="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">
-            Lugar
-          </dt>
-          <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
-            {wedding.venueName}
-          </dd>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <dt className="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase">
-            Dirección
-          </dt>
-          <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
-            {wedding.venueAddress}
-          </dd>
-        </div>
-      </dl>
 
       {/* WHO THIS IS FOR, SAID ONCE.
        * The greeting above already names this household and the list below

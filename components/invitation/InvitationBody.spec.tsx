@@ -29,6 +29,16 @@ import {
  */
 const wedding: InvitationBodyWedding = {
   coupleNames: "Ana y Bruno",
+};
+
+/**
+ * The day, the venue and its address, which this component no longer states.
+ *
+ * Kept as a fixture because two tests below assert their ABSENCE: the day is in
+ * the announcement and the venue reaches `RsvpAnswer`, and a test that named no
+ * value could not tell "removed" from "never rendered".
+ */
+const elsewhere = {
   ceremonyDate: "sábado 14 de noviembre de 2026",
   venueName: "Hacienda La Ñapa",
   venueAddress: "Calle 12 #34-56, Barrio Centro",
@@ -101,14 +111,21 @@ describe("InvitationBody", () => {
     ).toBeInTheDocument();
 
     /*
-      AND THE DAY IS STATED ONCE, BY THE DETAILS LIST BELOW.
+      THE DAY IS IN THE ANNOUNCEMENT, EXACTLY AS THE GATE STATES IT.
 
-      The announcement's own date line is the constant's; the list carries the
-      operator's, which is the one they can correct. Both would be a
-      duplication today and a contradiction the first time those two disagree,
-      so the block is rendered without it here.
+      The couple read the two screens side by side and asked for one
+      announcement, not two versions of it: "debería ser igual a la primera
+      pantalla… para tener una misma consistencia."
+
+      THIS REVERSES A DECISION I MADE IN U17, and the reversal is the right
+      way round. I hid this line here because the details list stated the day
+      too, and the two come from different places: this one from
+      `WEDDING_INSTANT`, that one from the `ceremony` row an operator can
+      correct. Hiding the one the guest reads FIRST to protect the one below it
+      got the priority backwards — the announcement is the screen the gate
+      already showed them, and it is the list that is redundant.
     */
-    expect(screen.queryByTestId("save-the-date-when")).not.toBeInTheDocument();
+    expect(screen.getByTestId("save-the-date-when")).toBeInTheDocument();
 
     // The counter stays, and it is the element that would have been quietly
     // left out: it is the one part of the announcement that is not copy.
@@ -230,14 +247,15 @@ describe("InvitationBody", () => {
    * drift, which is how a reference project's WhatsApp template kept announcing
    * a venue the event had already left.
    */
-  it("renders the couple, date, venue and address it is given", () => {
+  it("renders the couple it is given", () => {
+    // ONE fact now, not four. The day moved into the announcement and the venue
+    // into the RSVP's affirmative branch; what this component still states on
+    // its own authority is who is getting married.
     const { container } = render(
       <InvitationBody invitation={household} wedding={wedding} />,
     );
 
-    for (const value of Object.values(wedding)) {
-      expect(container.textContent).toContain(value);
-    }
+    expect(container.textContent).toContain(wedding.coupleNames);
   });
 
   it("renders a DIFFERENT wedding's facts when it is given different ones", () => {
@@ -247,19 +265,12 @@ describe("InvitationBody", () => {
     const { container } = render(
       <InvitationBody
         invitation={household}
-        wedding={{
-          coupleNames: "Camila y Dario",
-          ceremonyDate: "viernes 3 de abril de 2027",
-          venueName: "Casa del Río",
-          venueAddress: "Vereda El Alto, kilómetro 4",
-        }}
+        wedding={{ coupleNames: "Camila y Dario" }}
       />,
     );
 
     expect(container.textContent).toContain("Camila y Dario");
-    expect(container.textContent).toContain("Casa del Río");
     expect(container.textContent).not.toContain("Ana y Bruno");
-    expect(container.textContent).not.toContain("Hacienda La Ñapa");
   });
 
   it("renders a placeholder verbatim when that is what the row still holds", () => {
@@ -269,37 +280,17 @@ describe("InvitationBody", () => {
     const { container } = render(
       <InvitationBody
         invitation={household}
-        wedding={{
-          coupleNames: "{{COUPLE_NAMES}}",
-          ceremonyDate: "{{CEREMONY_DATE}}",
-          venueName: "{{VENUE_NAME}}",
-          venueAddress: "{{VENUE_ADDRESS}}",
-        }}
+        wedding={{ coupleNames: "{{COUPLE_NAMES}}" }}
       />,
     );
 
     expect(container.textContent).toContain("{{COUPLE_NAMES}}");
-    expect(container.textContent).toContain("{{VENUE_ADDRESS}}");
   });
 
-  it("keeps the date and the venue apart, each under its own term", () => {
-    const { container } = render(
-      <InvitationBody invitation={household} wedding={wedding} />,
-    );
-    const terms = [...container.querySelectorAll("dt")].map(
-      (term) => term.textContent,
-    );
-    const values = [...container.querySelectorAll("dd")].map(
-      (value) => value.textContent,
-    );
-
-    expect(terms).toEqual(["Fecha", "Lugar", "Dirección"]);
-    expect(values).toEqual([
-      wedding.ceremonyDate,
-      wedding.venueName,
-      wedding.venueAddress,
-    ]);
-  });
+  // The test that stood here read the body's own `dt`/`dd` pairs: Fecha, Lugar
+  // and Dirección. The day is in the announcement now and the other two moved
+  // into the RSVP's affirmative branch, where `RsvpAnswer.spec.tsx` asserts the
+  // same property — each value under its own visible label.
 
   it("renders no phone number anywhere in its markup", () => {
     const { container } = render(
@@ -355,5 +346,30 @@ describe("InvitationBody's RSVP slot", () => {
     );
 
     expect(container.innerHTML).toMatchSnapshot();
+  });
+});
+
+/**
+ * THE DETAILS LIST IS GONE, AND THE DATE IS WHY.
+ *
+ * It held three labelled facts: Fecha, Lugar and Dirección. The day is now
+ * stated by the announcement above, exactly as the gate states it, so the row
+ * that repeated it had to go — and the two that remain answer a question a
+ * household has not been asked yet. They moved into the RSVP's affirmative
+ * branch, where somebody has just said they are coming.
+ */
+describe("what the body no longer states by itself", () => {
+  it("does not repeat the day under the announcement", () => {
+    render(<InvitationBody invitation={household} wedding={wedding} />);
+
+    expect(screen.queryByText("Fecha")).not.toBeInTheDocument();
+    expect(screen.queryByText(elsewhere.ceremonyDate)).not.toBeInTheDocument();
+  });
+
+  it("does not hand out the venue to a household that has not answered", () => {
+    render(<InvitationBody invitation={household} wedding={wedding} />);
+
+    expect(screen.queryByText(elsewhere.venueName)).not.toBeInTheDocument();
+    expect(screen.queryByText(elsewhere.venueAddress)).not.toBeInTheDocument();
   });
 });

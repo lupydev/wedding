@@ -125,16 +125,37 @@ const LEGEND = "text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase";
 
 const CONTROL = "size-4 shrink-0 accent-[#f6efe2]";
 
+/** Where the wedding happens. Only an attending household is told. */
+export interface RsvpAnswerVenue {
+  readonly name: string;
+  readonly address: string;
+}
+
 export function RsvpAnswer({
   guests,
   current,
   ceremony,
+  venue,
   action,
 }: {
   readonly guests: readonly RsvpAnswerGuest[];
   readonly current: RsvpAnswerCurrent | null;
   /** The ceremony stream, shown in place of the form to a declining household. */
   readonly ceremony: CeremonyStreamDetails;
+  /**
+   * The place and its address, shown only once somebody says they are coming.
+   *
+   * IT LIVED IN THE INVITATION'S BODY, above this form, and every household saw
+   * it before anybody had been asked anything. A household that cannot come does
+   * not need a street, and handing one to everybody buries the question under
+   * directions.
+   *
+   * It had to move HERE rather than stay there, and that is not arbitrary: the
+   * answer is client state owned by this component, and the body is a Server
+   * Component that cannot see it. The alternative was lifting the answer out of
+   * the form, which would make a mostly-static page depend on a client boundary.
+   */
+  readonly venue: RsvpAnswerVenue;
   readonly action: RsvpAnswerAction;
 }) {
   const [feedback, submit, pending] = useActionState(action, IDLE);
@@ -330,6 +351,32 @@ export function RsvpAnswer({
       */}
       {!isAttending ? null : (
         <>
+          {/*
+            WHERE TO GO, NOW THAT THEY HAVE SAID THEY ARE COMING.
+
+            A list rather than a paragraph, because that is what it is: two
+            labels and two values, with the value carrying the weight so the
+            eye lands on the street rather than on the word "Dirección".
+
+            The labels are visible rather than `sr-only`. A venue name and a
+            street address are not self-evident from their shape, and a guest
+            scanning for where to go needs the word as much as the value.
+          */}
+          <dl className="rsvp__venue m-0 flex flex-col gap-3 text-center">
+            <div className="flex flex-col gap-0.5">
+              <dt className={LEGEND}>Lugar</dt>
+              <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
+                {venue.name}
+              </dd>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <dt className={LEGEND}>Dirección</dt>
+              <dd className="m-0 text-sm text-[#f6efe2] sm:text-base">
+                {venue.address}
+              </dd>
+            </div>
+          </dl>
+
           {soloGuest === undefined ? (
             <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
               <legend className={LEGEND}>¿Quiénes asisten?</legend>
@@ -390,28 +437,18 @@ export function RsvpAnswer({
             <input type="hidden" name="attendee" value={soloGuest.id} />
           )}
 
-          <div className="flex flex-col gap-2">
-            <label className={LEGEND} htmlFor="rsvp-dietary">
-              Restricciones alimentarias (opcional)
-            </label>
-            {/*
-          A FIELD THAT LOOKS LIKE A FIELD. On a photograph an unbordered
-          textarea is an invisible control: a guest cannot tell there is
-          anywhere to type.
-        */}
-            <textarea
-              className="
-            min-h-24 w-full rounded-xl border border-[#f6efe2]/20 bg-black/25
-            px-4 py-3 text-sm text-[#f6efe2] placeholder:text-[#f6efe2]/40
-            focus-visible:border-[#f6efe2]/50 focus-visible:outline-2
-            focus-visible:outline-offset-2 focus-visible:outline-[#f6efe2]
-          "
-              id="rsvp-dietary"
-              name="dietaryNotes"
-              maxLength={DIETARY_NOTES_MAX_LENGTH}
-              defaultValue={current?.dietaryNotes ?? ""}
-            />
-          </div>
+          {/*
+            THE DIETARY FIELD STOOD HERE, AND THE COUPLE REMOVED IT: "podríamos
+            quitar lo de restricciones alimentarias."
+
+            It was the one thing on this form that asked a household to TYPE
+            rather than to choose, and it asked it of everybody who said yes.
+
+            `rsvp_responses.dietary_notes` STAYS. The column is nullable, the
+            payload schema accepts a missing value as null, and dropping a
+            column to remove a field is a migration that buys nothing — and
+            forecloses asking again.
+          */}
 
           {/*
             FULL WIDTH, because on a phone this is the one thing the whole page

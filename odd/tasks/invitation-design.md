@@ -121,6 +121,20 @@ declined screen given the language `/transmision` already uses.
       allá estaré"; two or more keep the plural. Nothing but those two choices
       shows until one is picked, and a household of one is never asked to tick
       its own name.
+      The couple read the unlocked invitation beside the gate and asked for four
+      things: the same announcement on both, the venue kept back until somebody says
+      yes, the dietary field gone, and a warmer declined screen.
+
+- [x] **U21 — the announcement says the same thing on both screens.** The gate
+      names the day; the invitation behind it hid that line and restated the
+      date in a list below. One of them has to go, and it is the list.
+- [x] **U22 — the address waits for a yes, and the dietary field goes.** A
+      household that cannot come does not need a street, and asking every
+      household about food before they have said they are coming is a question
+      out of order.
+- [x] **U23 — the declined screen, warmer and with a control that fills its
+      column.**
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -1026,6 +1040,62 @@ it belongs there is theirs to say.
 
 Green: 2323 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.
+
+### U21, U22 and U23 — done (the two screens say the same thing, and the form asks in order)
+
+The couple read the gate and the invitation side by side and asked for four
+things at once.
+
+**THE ANNOUNCEMENT IS THE SAME ON BOTH, AND THAT REVERSES U17.** The gate names
+the day; the invitation hid that line and restated the date in a list below. I
+hid it because the two come from different places — the announcement from
+`WEDDING_INSTANT`, the list from the `ceremony` row an operator can correct —
+and protecting the correctable one got the priority backwards. The screen a
+guest reads FIRST is the announcement, and the list is what went.
+
+**THE VENUE WAITS FOR A YES, AND IT HAD TO CHANGE COMPONENTS TO DO IT.** The
+address was in `InvitationBody`, above the form, shown to everybody before
+anybody had been asked anything. A household that cannot come does not need a
+street, and handing one to everybody buries the question under directions.
+
+The answer is client state owned by `RsvpAnswer`; `InvitationBody` is a Server
+Component and cannot see it. So the venue moved into the form rather than the
+answer moving out of it — the alternative would make a mostly-static page depend
+on a client boundary.
+
+**WHAT THAT COSTS, STATED.** The operator preview renders no RSVP, so it no
+longer shows the venue. That is CORRECT rather than lost: it now matches what an
+unanswered guest sees, and the operator checks that copy at `/console/wedding`
+where they type it. `console-wedding.spec.ts` answers the question before
+asserting the venue, which is what a guest going to the wedding does.
+
+**THE DIETARY FIELD IS GONE AND THE COLUMN STAYS.** It was the one thing on the
+form that asked a household to type rather than choose, and it asked it of
+everybody who said yes. `rsvp_responses.dietary_notes` is nullable, an absent
+field arrives as null, and dropping a column to remove a field is a migration
+that buys nothing and forecloses asking again. The browser test asserts the
+stored value is NULL rather than dropping the assertion, so a field quietly
+reappearing is reported.
+
+**AND THE DECLINED SCREEN UNDERSTANDS BEFORE IT EXPLAINS.** It opened with
+"Gracias por contarnos" and went straight to the stream. Thanks is not
+understanding: somebody telling the couple they cannot come to their wedding has
+usually just decided something they are sorry about. "Comprendemos que no puedan
+acompañarnos ese día" comes first, the stream follows in the same breath, and
+the way back fills its column like the control above it.
+
+**One thing the couple reported that needed no work.** The Meet address showing
+as `{{MEET_URL}}` text rather than a button is the UNFINISHED state: the same
+component renders the button the moment the row holds a real address, which was
+confirmed by screenshot.
+
+**A KNOWN GAP, RECORDED RATHER THAN FIXED:** the invitation now states the day
+from `WEDDING_INSTANT` and no longer from the `ceremony` row, so an operator
+correcting `ceremony_date` changes nothing a guest reads. `ceremony_time` was
+already in that position. Both belong to the couple to decide.
+
+Green: 2327 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. Verified by screenshot at 390 in all three states.
 
 ## Next
 

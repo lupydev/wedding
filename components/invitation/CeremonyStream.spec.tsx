@@ -121,7 +121,7 @@ describe("the words on the card", () => {
       screen.getByRole("heading", { name: "Los esperamos por Google Meet" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/La ceremonia se va a transmitir en vivo/),
+      screen.getByText(/Vamos a transmitir la ceremonia en vivo/),
     ).toBeInTheDocument();
   });
 
@@ -156,5 +156,51 @@ describe("the words on the card", () => {
 
     expect(screen.queryByText(CEREMONY.ceremonyDate)).not.toBeInTheDocument();
     expect(screen.queryByText(CEREMONY.ceremonyTime)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * THE WORDS A HOUSEHOLD READS AFTER SAYING NO, AND HOW THEY READ.
+ *
+ * The couple: "un mensaje más ameno como 'comprendemos que no puedan asistir,
+ * la ceremonia se transmitirá en vivo así pueden acompañarnos' o algo similar
+ * que sea cercano."
+ *
+ * It opened with "Gracias por contarnos" and then explained the stream. Thanks
+ * is not the same as understanding: a household telling the couple they cannot
+ * come to their wedding has usually just decided something they are sorry
+ * about, and the screen that answers them should say so before it says anything
+ * practical.
+ */
+describe("how the card answers a decline", () => {
+  it("understands first, and offers the stream second", () => {
+    renderCard();
+
+    expect(screen.getByText(/Comprendemos/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Gracias por contarnos/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says it to one person in the singular", () => {
+    renderCard(vi.fn(), 1);
+
+    expect(screen.getByText(/no puedas acompañarnos/i)).toBeInTheDocument();
+  });
+
+  /**
+   * AND THE WAY BACK FILLS ITS COLUMN.
+   *
+   * "El botón debe ocupar todo el espacio, el de volver a responder." It sat
+   * centred at its own text width under a block whose other control is full
+   * width, which is the same mismatch `/transmision` already had between its
+   * two buttons.
+   */
+  it("gives the way back the width of the block", () => {
+    renderCard();
+
+    const back = screen.getByRole("button", { name: /Volver a responder/ });
+
+    expect(back.className).toContain("w-full");
   });
 });

@@ -120,9 +120,6 @@ test.describe("answering the invitation", () => {
     await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
     await attendeeBox(page, GUEST_ONE).check();
     await attendeeBox(page, GUEST_TWO).check();
-    await page
-      .getByLabel(/Restricciones alimentarias/)
-      .fill("Sara no come mariscos.");
     await submit(page);
 
     await expect(rsvpAlert(page)).toContainText(
@@ -136,7 +133,16 @@ test.describe("answering the invitation", () => {
     // Never typed, always counted: two names, two seats.
     expect(history[0].seatsConfirmed).toBe(2);
     expect(history[0].attendeeGuestIds).toHaveLength(2);
-    expect(history[0].dietaryNotes).toBe("Sara no come mariscos.");
+    /*
+      NULL, BECAUSE THERE IS NOTHING LEFT TO TYPE.
+
+      The dietary field was removed on the couple's instruction. The COLUMN
+      stays: `formData.get` yields null for a field the form no longer has, the
+      payload schema accepts that, and the row records it as null. Asserted
+      rather than dropped, so a field quietly reappearing — or the column
+      starting to store the empty string instead — is reported here.
+    */
+    expect(history[0].dietaryNotes).toBeNull();
   });
 
   test("shows the household what they already answered", async ({ page }) => {
@@ -364,11 +370,13 @@ test.describe("the seat cap", () => {
 
     // Nor a message box. The guest reached this page from their own WhatsApp
     // thread with the couple, so a free-text field here competes with the chat
-    // they are already in — and loses. `dietary_notes` stays, because that is
-    // operational data the catering needs rather than a message.
+    // they are already in — and loses.
+    //
+    // NOR ANY OTHER BOX TO TYPE IN. The dietary field was the last one, and the
+    // couple removed it; asserting no textbox at all is stronger than naming
+    // the two that used to be absent.
     await expect(page.getByLabel(/Mensaje/i)).toHaveCount(0);
-    await expect(page.locator('[name="message"]')).toHaveCount(0);
-    await expect(page.getByLabel(/Restricciones alimentarias/)).toBeVisible();
+    await expect(page.getByRole("textbox")).toHaveCount(0);
   });
 
   test("refuses a submission naming somebody from another household", async ({
