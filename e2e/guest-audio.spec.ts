@@ -143,7 +143,9 @@ test.describe("the song a guest hears", () => {
     await page.goto("/");
     await startByTouchingThePage(page);
 
-    const door = page.getByRole("link", { name: "Acompáñanos por Zoom" });
+    const door = page.getByRole("link", {
+      name: "Acompáñanos por Google Meet",
+    });
     await expect(door).toBeVisible();
 
     const before = await audioState(page);

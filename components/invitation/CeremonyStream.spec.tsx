@@ -21,8 +21,7 @@ import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
 const CEREMONY: CeremonyStreamDetails = {
   ceremonyDate: "sábado 14 de noviembre",
   ceremonyTime: "4:00 p. m.",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "boda2026",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 function renderCard(onReconsider = vi.fn(), memberCount = 2) {
@@ -38,7 +37,7 @@ function renderCard(onReconsider = vi.fn(), memberCount = 2) {
 }
 
 describe("CeremonyStream", () => {
-  it("shows the two credentials, each beside its own label", () => {
+  it("shows the one address, each beside its own label", () => {
     renderCard();
 
     const details = screen.getByRole("group", { name: /transmisión/i });
@@ -52,10 +51,7 @@ describe("CeremonyStream", () => {
         term.textContent,
         term.nextElementSibling?.textContent,
       ]),
-    ).toEqual([
-      ["ID de la reunión", CEREMONY.streamMeetingId],
-      ["Clave de acceso", CEREMONY.streamPasscode],
-    ]);
+    ).toEqual([["Enlace de la transmisión", CEREMONY.streamUrl]]);
   });
 
   it("renders whatever the row holds, including an unfinished placeholder", () => {
@@ -67,16 +63,14 @@ describe("CeremonyStream", () => {
         ceremony={{
           ceremonyDate: "{{CEREMONY_DATE}}",
           ceremonyTime: "{{CEREMONY_TIME}}",
-          streamMeetingId: "{{ZOOM_MEETING_ID}}",
-          streamPasscode: "{{ZOOM_PASSCODE}}",
+          streamUrl: "{{MEET_URL}}",
         }}
         memberCount={2}
         onReconsider={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("{{ZOOM_MEETING_ID}}")).toBeInTheDocument();
-    expect(screen.getByText("{{ZOOM_PASSCODE}}")).toBeInTheDocument();
+    expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 
   it("tells the household their answer is not final", () => {
@@ -125,7 +119,7 @@ describe("the words on the card", () => {
     renderCard();
 
     expect(
-      screen.getByRole("heading", { name: "Los esperamos por Zoom" }),
+      screen.getByRole("heading", { name: "Los esperamos por Google Meet" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/La ceremonia se va a transmitir en vivo/),

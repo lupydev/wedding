@@ -49,8 +49,7 @@ import { resolveLocalKeys } from "./helpers/local-keys";
 const CEREMONY_COLUMNS = [
   "ceremony_date",
   "ceremony_time",
-  "stream_meeting_id",
-  "stream_passcode",
+  "stream_url",
   "couple_names",
   "venue_name",
   "venue_address",
@@ -72,9 +71,13 @@ function readMigrationSql(): string[] {
 /**
  * The value each `ceremony` column is SEEDED with, read from the migrations.
  *
- * Two shapes, because the table grew: `0009` seeds its four columns with an
- * INSERT, and `0011` seeds its three with a column default it then drops. Later
- * files win, so a migration that rewrote a seed would be the value reported.
+ * Three shapes, because the table grew AND shrank. `0009` seeds its four
+ * columns with an INSERT; `0011` and `0017` seed theirs with a column default
+ * they then drop; and `0017` DROPS the two Zoom credentials when the ceremony
+ * moved to Google Meet. Later files win, so a migration that rewrote a seed
+ * would be the value reported — and one that removed a column reports nothing
+ * for it, which is what keeps this readable against the schema that exists
+ * rather than against every column that ever existed.
  *
  * Pure on purpose — a string in, a record out, no database and no filesystem —
  * so the negative control below can hand it an invented value directly.
@@ -113,6 +116,15 @@ function parseCeremonySeed(
       for (const [, column, value] of defaults) {
         seed[column] = value;
       }
+
+      // And a column that a later migration removed is no longer seeded by
+      // anything, however many earlier files named it. Without this the INSERT
+      // in 0009 keeps reporting the two credentials 0017 dropped, and this
+      // function describes a table that has not existed since.
+      const drops = statement.matchAll(/drop\s+column\s+(\w+)/gi);
+      for (const [, column] of drops) {
+        delete seed[column];
+      }
     }
   }
 
@@ -143,7 +155,7 @@ describe("the ceremony configuration row", () => {
    * gone untested from the moment a column was added.
    */
   const INTRUDER_VALUES =
-    "'otro dia', 'otra hora', 'otro id', 'otra clave', 'otra pareja', 'otro lugar', 'otra direccion'";
+    "'otro dia', 'otra hora', 'https://meet.google.com/otr-oenl-ace', 'otra pareja', 'otro lugar', 'otra direccion'";
 
   it("refuses a second row instead of letting readers pick one", async () => {
     const error = await withRollback(async (db) => {
@@ -235,18 +247,18 @@ describe("the ceremony configuration row", () => {
   it("still accepts an UPDATE, because that is how the couple will fill it in", async () => {
     const updated = await withRollback(async (db) => {
       await db.query(
-        "update ceremony set stream_passcode = 'clave-nueva' where id",
+        "update ceremony set stream_url = 'https://meet.google.com/nue-vove-nue' where id",
       );
-      const result = await db.query<{ stream_passcode: string }>(
-        "select stream_passcode from ceremony",
+      const result = await db.query<{ stream_url: string }>(
+        "select stream_url from ceremony",
       );
 
-      return result.rows[0].stream_passcode;
+      return result.rows[0].stream_url;
     });
 
     // Unlike `rsvp_responses`, this table is NOT append-only: the whole point
     // of a row rather than an env var is that correcting it is an UPDATE.
-    expect(updated).toBe("clave-nueva");
+    expect(updated).toBe("https://meet.google.com/nue-vove-nue");
   });
 
   /**
@@ -379,13 +391,12 @@ describe("reading the ceremony through the server adapter", () => {
     expect(ceremony).toEqual({
       ceremonyDate: stored.ceremony_date,
       ceremonyTime: stored.ceremony_time,
-      streamMeetingId: stored.stream_meeting_id,
-      streamPasscode: stored.stream_passcode,
+      streamUrl: stored.stream_url,
       coupleNames: stored.couple_names,
       venueName: stored.venue_name,
       venueAddress: stored.venue_address,
     });
-    expect(ceremony.streamMeetingId.length).toBeGreaterThan(0);
+    expect(ceremony.streamUrl.length).toBeGreaterThan(0);
   });
 
   /**
@@ -406,8 +417,7 @@ describe("reading the ceremony through the server adapter", () => {
       await updateCeremony(client, {
         ceremonyDate: "sábado 14 de noviembre de 2026",
         ceremonyTime: "4:00 p. m.",
-        streamMeetingId: "123 4567 8901",
-        streamPasscode: "una-clave",
+        streamUrl: "https://meet.google.com/abc-defg-hij",
         coupleNames: "Ana y Bruno",
         venueName: "Hacienda de prueba",
         venueAddress: "Calle de prueba 123, Ciudad",
@@ -416,8 +426,7 @@ describe("reading the ceremony through the server adapter", () => {
       expect(await getCeremony(client)).toEqual({
         ceremonyDate: "sábado 14 de noviembre de 2026",
         ceremonyTime: "4:00 p. m.",
-        streamMeetingId: "123 4567 8901",
-        streamPasscode: "una-clave",
+        streamUrl: "https://meet.google.com/abc-defg-hij",
         coupleNames: "Ana y Bruno",
         venueName: "Hacienda de prueba",
         venueAddress: "Calle de prueba 123, Ciudad",

@@ -11,8 +11,7 @@ import {
 const CEREMONY: StreamInvitationCeremony = {
   ceremonyDate: "sábado 28 de noviembre de 2026",
   ceremonyTime: "5:00 p. m.",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "boda2026",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 const CALENDAR = {
@@ -103,10 +102,7 @@ describe("StreamInvitation", () => {
           term.textContent,
           term.nextElementSibling?.textContent,
         ]),
-    ).toEqual([
-      ["ID de la reunión", CEREMONY.streamMeetingId],
-      ["Clave de acceso", CEREMONY.streamPasscode],
-    ]);
+    ).toEqual([["Enlace de la transmisión", CEREMONY.streamUrl]]);
   });
 
   /**
@@ -188,12 +184,12 @@ describe("StreamInvitation", () => {
   it("renders a seeded placeholder verbatim", () => {
     render(
       <StreamInvitation
-        ceremony={{ ...CEREMONY, streamPasscode: "{{ZOOM_PASSCODE}}" }}
+        ceremony={{ ...CEREMONY, streamUrl: "{{MEET_URL}}" }}
         calendar={CALENDAR}
       />,
     );
 
-    expect(screen.getByText("{{ZOOM_PASSCODE}}")).toBeInTheDocument();
+    expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 
   /**
@@ -266,7 +262,7 @@ describe("the stream page's own words", () => {
     render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
 
     expect(
-      screen.getByText(/La ceremonia se va a transmitir a través de Zoom/i),
+      screen.getByText(/La ceremonia se va a transmitir por Google Meet/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Te esperamos/i)).toBeInTheDocument();
   });

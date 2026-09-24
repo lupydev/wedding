@@ -7,8 +7,7 @@ import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
 const CEREMONY: StreamDetailsValues = {
   ceremonyDate: "sábado 28 de noviembre de 2026",
   ceremonyTime: "5:00 p. m.",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "boda2026",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 /**
@@ -60,8 +59,7 @@ describe("StreamDetails", () => {
     ).toEqual([
       ["Fecha", CEREMONY.ceremonyDate],
       ["Hora", CEREMONY.ceremonyTime],
-      ["ID de la reunión", CEREMONY.streamMeetingId],
-      ["Clave de acceso", CEREMONY.streamPasscode],
+      ["Enlace de la transmisión", CEREMONY.streamUrl],
     ]);
   });
 
@@ -76,12 +74,10 @@ describe("StreamDetails", () => {
    */
   it("renders an unfinished value exactly as the row holds it", () => {
     render(
-      <StreamDetails
-        ceremony={{ ...CEREMONY, streamMeetingId: "{{ZOOM_MEETING_ID}}" }}
-      />,
+      <StreamDetails ceremony={{ ...CEREMONY, streamUrl: "{{MEET_URL}}" }} />,
     );
 
-    expect(screen.getByText("{{ZOOM_MEETING_ID}}")).toBeInTheDocument();
+    expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 
   /**
@@ -93,14 +89,11 @@ describe("StreamDetails", () => {
    * a button that removes the typing is worth more than any amount of styling.
    */
   describe("copying a credential", () => {
-    it("offers to copy the meeting id and the passcode", () => {
+    it("offers to copy the one address there is", () => {
       render(<StreamDetails ceremony={CEREMONY} />);
 
       expect(
-        screen.getByRole("button", { name: /copiar el id/i }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: /copiar la clave/i }),
+        screen.getByRole("button", { name: /copiar el enlace/i }),
       ).toBeInTheDocument();
     });
 
@@ -114,7 +107,9 @@ describe("StreamDetails", () => {
     it("offers nothing to copy for the date or the time", () => {
       render(<StreamDetails ceremony={CEREMONY} />);
 
-      expect(screen.getAllByRole("button")).toHaveLength(2);
+      // One copy control, because there is one value to copy. The link itself is
+      // an anchor, not a button, so it is not counted here.
+      expect(screen.getAllByRole("button")).toHaveLength(1);
     });
 
     it("puts the value on the clipboard, and says it did", async () => {
@@ -122,9 +117,11 @@ describe("StreamDetails", () => {
       const writeText = stubClipboard(() => Promise.resolve());
 
       render(<StreamDetails ceremony={CEREMONY} />);
-      await user.click(screen.getByRole("button", { name: /copiar el id/i }));
+      await user.click(
+        screen.getByRole("button", { name: /copiar el enlace/i }),
+      );
 
-      expect(writeText).toHaveBeenCalledWith(CEREMONY.streamMeetingId);
+      expect(writeText).toHaveBeenCalledWith(CEREMONY.streamUrl);
       expect(
         screen.getByRole("button", { name: /copiado/i }),
       ).toBeInTheDocument();
@@ -144,10 +141,12 @@ describe("StreamDetails", () => {
       stubClipboard(() => Promise.reject(new Error("denied")));
 
       render(<StreamDetails ceremony={CEREMONY} />);
-      await user.click(screen.getByRole("button", { name: /copiar el id/i }));
+      await user.click(
+        screen.getByRole("button", { name: /copiar el enlace/i }),
+      );
 
       expect(
-        screen.getByRole("button", { name: /copiar el id/i }),
+        screen.getByRole("button", { name: /copiar el enlace/i }),
       ).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /copiado/i })).toBeNull();
     });
@@ -162,7 +161,9 @@ describe("StreamDetails", () => {
       });
 
       render(<StreamDetails ceremony={CEREMONY} />);
-      await user.click(screen.getByRole("button", { name: /copiar el id/i }));
+      await user.click(
+        screen.getByRole("button", { name: /copiar el enlace/i }),
+      );
 
       expect(error).not.toHaveBeenCalled();
     });
@@ -218,7 +219,7 @@ describe("StreamDetails", () => {
 
       const terms = screen.getAllByRole("term").map((term) => term.textContent);
 
-      expect(terms).toEqual(["ID de la reunión", "Clave de acceso"]);
+      expect(terms).toEqual(["Enlace de la transmisión"]);
     });
 
     it("still shows both by default", () => {
@@ -227,5 +228,62 @@ describe("StreamDetails", () => {
       expect(screen.getByText(CEREMONY.ceremonyDate)).toBeInTheDocument();
       expect(screen.getByText(CEREMONY.ceremonyTime)).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * THE GUEST PRESSES IT; THEY DO NOT TRANSCRIBE IT.
+ *
+ * Zoom was two values a guest READ and TYPED into an app, which is why this
+ * block was a `dl` of credentials set in a grotesque so a 1 could not become a
+ * 7. Google Meet is one address. Rendering it as a value to copy would leave
+ * every guest doing by hand what a link does by itself.
+ *
+ * THE ADDRESS STAYS VISIBLE ANYWAY, and the copy control with it. A guest
+ * reading the invitation on a laptop joins from their phone; one who cannot
+ * join forwards it to somebody who can. A button whose destination is invisible
+ * is also a button nobody can check before a wedding.
+ */
+describe("the link to the ceremony", () => {
+  it("offers a control that opens the call", () => {
+    render(<StreamDetails ceremony={CEREMONY} />);
+
+    const join = screen.getByRole("link", { name: /Entrar a la transmisión/ });
+
+    expect(join).toHaveAttribute("href", CEREMONY.streamUrl);
+  });
+
+  /**
+   * IN A NEW TAB, AND `noopener` IS NOT DECORATION.
+   *
+   * Without it the opened tab can reach back into this one through
+   * `window.opener` — and this page sits behind a phone gate.
+   */
+  it("opens it away from the invitation, safely", () => {
+    render(<StreamDetails ceremony={CEREMONY} />);
+
+    const join = screen.getByRole("link", { name: /Entrar a la transmisión/ });
+
+    expect(join).toHaveAttribute("target", "_blank");
+    expect(join.getAttribute("rel")).toContain("noopener");
+  });
+
+  /**
+   * AND AN UNFINISHED ROW IS NOT A BUTTON THAT GOES NOWHERE.
+   *
+   * `{{MEET_URL}}` is the seeded placeholder and is not an address. Rendered as
+   * a link it would be a control that fails on the one day it is pressed; the
+   * placeholder is shown as the text it is, exactly as the venue placeholder is,
+   * so an unfinished invitation cannot pass for a finished one.
+   */
+  it("does not offer a control for an address nobody has filled in", () => {
+    render(
+      <StreamDetails ceremony={{ ...CEREMONY, streamUrl: "{{MEET_URL}}" }} />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: /Entrar a la transmisión/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 });

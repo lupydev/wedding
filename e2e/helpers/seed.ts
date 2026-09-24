@@ -272,8 +272,7 @@ export async function seededGuestIds(
 export interface SeededCeremony {
   readonly ceremonyDate: string;
   readonly ceremonyTime: string;
-  readonly streamMeetingId: string;
-  readonly streamPasscode: string;
+  readonly streamUrl: string;
 }
 
 /**
@@ -291,11 +290,8 @@ export async function readCeremony(): Promise<SeededCeremony> {
     const result = await db.query<{
       ceremony_date: string;
       ceremony_time: string;
-      stream_meeting_id: string;
-      stream_passcode: string;
-    }>(
-      "select ceremony_date, ceremony_time, stream_meeting_id, stream_passcode from ceremony",
-    );
+      stream_url: string;
+    }>("select ceremony_date, ceremony_time, stream_url from ceremony");
 
     if (result.rows.length !== 1) {
       throw new Error(
@@ -309,8 +305,7 @@ export async function readCeremony(): Promise<SeededCeremony> {
     return {
       ceremonyDate: row.ceremony_date,
       ceremonyTime: row.ceremony_time,
-      streamMeetingId: row.stream_meeting_id,
-      streamPasscode: row.stream_passcode,
+      streamUrl: row.stream_url,
     };
   } finally {
     await db.end();

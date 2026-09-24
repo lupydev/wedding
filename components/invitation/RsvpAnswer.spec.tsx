@@ -42,8 +42,7 @@ const GUESTS: readonly RsvpAnswerGuest[] = [
 const CEREMONY: CeremonyStreamDetails = {
   ceremonyDate: "sábado 14 de noviembre",
   ceremonyTime: "4:00 p. m.",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "boda2026",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 /**
@@ -475,8 +474,8 @@ describe("RsvpAnswer declining", () => {
 
     await waitFor(() => expect(streamCard()).toBeInTheDocument());
 
-    expect(screen.getByText(CEREMONY.streamMeetingId)).toBeInTheDocument();
-    expect(screen.getByText(CEREMONY.streamPasscode)).toBeInTheDocument();
+    expect(screen.getByText(CEREMONY.streamUrl)).toBeInTheDocument();
+    expect(screen.getByText(CEREMONY.streamUrl)).toBeInTheDocument();
     // Not a form beside the card, and not a disabled copy of it. No form.
     expect(
       screen.queryByRole("button", { name: /Enviar respuesta/ }),
@@ -497,7 +496,7 @@ describe("RsvpAnswer declining", () => {
         "Tu sesión ya no está activa.",
       ),
     );
-    expect(screen.queryByText(CEREMONY.streamPasscode)).toBeNull();
+    expect(screen.queryByText(CEREMONY.streamUrl)).toBeNull();
     // The QUESTION is what must still be here. The submit button belongs to
     // the affirmative branch, and this household has just said no.
     expect(acceptRadio()).toBeInTheDocument();
@@ -546,7 +545,7 @@ describe("RsvpAnswer declining", () => {
         "¡Listo! Guardamos su respuesta.",
       ),
     );
-    expect(screen.queryByText(CEREMONY.streamPasscode)).toBeNull();
+    expect(screen.queryByText(CEREMONY.streamUrl)).toBeNull();
   });
 
   it("returns to the stream when a reconsidered answer is a decline again", async () => {

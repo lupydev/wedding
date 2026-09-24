@@ -118,7 +118,7 @@ export function StreamInvitation({
           one person at a time, so it speaks to one person.
         */}
         <p className="max-w-sm text-sm text-[#f6efe2]/85 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">
-          La ceremonia se va a transmitir a través de Zoom. Te esperamos.
+          La ceremonia se va a transmitir por Google Meet. Te esperamos.
         </p>
       </div>
 

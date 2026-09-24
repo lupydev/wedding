@@ -273,8 +273,7 @@ test.describe("declining and the ceremony stream", () => {
       same reasoning `/transmision` already applied to its own copy of this
       block: a third statement is noise, not reassurance.
     */
-    await expect(card).toContainText(ceremony.streamMeetingId);
-    await expect(card).toContainText(ceremony.streamPasscode);
+    await expect(card).toContainText(ceremony.streamUrl);
     await expect(card).not.toContainText(ceremony.ceremonyTime);
 
     // Not a form beside the card, and not a disabled copy of it. No form.

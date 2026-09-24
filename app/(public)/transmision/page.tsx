@@ -61,7 +61,7 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
  * The landing stays static, deliberately. Nothing on it changes on the day.
  */
 
-const TITLE = "Acompáñanos por Zoom";
+const TITLE = "Acompáñanos por Google Meet";
 const DESCRIPTION =
   "Vamos a transmitir la ceremonia en vivo. Acá están los datos para entrar.";
 
@@ -105,8 +105,7 @@ export default async function StreamPage() {
   const calendarEvent = buildStreamCalendarEvent(
     {
       coupleNames: ceremony.coupleNames,
-      streamMeetingId: ceremony.streamMeetingId,
-      streamPasscode: ceremony.streamPasscode,
+      streamUrl: ceremony.streamUrl,
     },
     WEDDING_INSTANT,
   );
@@ -142,8 +141,7 @@ export default async function StreamPage() {
           ceremony={{
             ceremonyDate: ceremony.ceremonyDate,
             ceremonyTime: ceremony.ceremonyTime,
-            streamMeetingId: ceremony.streamMeetingId,
-            streamPasscode: ceremony.streamPasscode,
+            streamUrl: ceremony.streamUrl,
           }}
           calendar={{ googleHref: googleCalendarUrl(calendarEvent) }}
         />

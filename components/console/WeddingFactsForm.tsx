@@ -63,17 +63,21 @@ const CARD_CACHE_WARNING =
   "cada invitación y volver a enviarlas.";
 
 /**
- * The consequence of editing the Zoom passcode.
+ * The consequence of editing the link everybody has already been given.
  *
  * It is not a secret of the operators'. Every household that answered "no"
- * already reads it on their own invitation page, behind the phone gate, and has
- * possibly written it down. Changing it here stops the OLD one from working for
- * anybody; it does not un-share it, and it does not tell those households that
- * the passcode they were given no longer opens the call.
+ * already reads it on their own invitation page, behind the phone gate, and may
+ * have saved it. Replacing it here stops the OLD one from working for anybody;
+ * it does not un-share it, and it does not tell those households that the
+ * address they were given no longer opens the call.
+ *
+ * The wording moved from a passcode to a link when the ceremony moved from Zoom
+ * to Meet, and the warning survived the move because the hazard did: a value
+ * already in a hundred hands, changed from one screen.
  */
-const PASSCODE_SHARED_WARNING =
-  "Esta clave ya la vieron las familias que nos dijeron que no pueden " +
-  "acompañarnos en persona: aparece en su invitación. Cambiarla acá no la " +
+const STREAM_LINK_SHARED_WARNING =
+  "Este enlace ya lo vieron las familias que nos dijeron que no pueden " +
+  "acompañarnos en persona: aparece en su invitación. Cambiarlo acá no lo " +
   "borra de donde ya la anotaron, y a ellas nadie les va a avisar de la " +
   "clave nueva de forma automática.";
 
@@ -137,12 +141,18 @@ function FactField({
         className="h-11"
         id={inputId}
         name={field}
-        // `text` for every one of the seven, the passcode included. A
+        // `text` for every one of the six, the stream link included. A
         // `type="password"` field makes the browser offer to save the value into
         // the operator's own credential store and a phone keychain syncs it
-        // everywhere — for a meeting passcode a hundred households already read
-        // on their own invitation. Masking it would also hide a value the
-        // operator is checking against a Zoom screen, from nobody.
+        // everywhere — for an address a hundred households already read on their
+        // own invitation. Masking it would also hide a value the operator is
+        // checking against the Meet screen they copied it from, from nobody.
+        //
+        // NOT `type="url"` EITHER. Its native validation fires before the form
+        // action and reports in the browser's own English wording, beside a
+        // field whose Spanish message `parseWeddingFacts` already writes. Two
+        // validators disagreeing about the same box is how an operator learns
+        // to distrust both.
         type="text"
         // Nothing here is an identity of the operator's, so nothing here belongs
         // in the browser's autofill store.
@@ -201,7 +211,7 @@ export function WeddingFactsForm({
   pending = false,
 }: WeddingFactsFormProps) {
   const cardWarningId = "wedding-card-warning";
-  const passcodeWarningId = "wedding-passcode-warning";
+  const linkWarningId = "wedding-stream-link-warning";
 
   return (
     <form action={action} className="wedding-facts flex flex-col gap-8">
@@ -246,23 +256,24 @@ export function WeddingFactsForm({
       </section>
 
       <section className="flex flex-col gap-4">
-        <h3 className="text-base">La transmisión por Zoom</h3>
+        <h3 className="text-base">La transmisión por Google Meet</h3>
 
-        <FactField
-          field="streamMeetingId"
-          value={facts.streamMeetingId}
-          error={state.errors.streamMeetingId}
-        />
+        {/*
+          ONE FIELD WHERE TWO WERE, BECAUSE MEET IS ONE ADDRESS.
 
-        <Consequence id={passcodeWarningId} testId={passcodeWarningId}>
-          {PASSCODE_SHARED_WARNING}
+          Zoom is a meeting id and a passcode a guest transcribes into an app.
+          Meet is a link they press. A second box here would ask the operator to
+          invent a passcode Meet never issues.
+        */}
+        <Consequence id={linkWarningId} testId={linkWarningId}>
+          {STREAM_LINK_SHARED_WARNING}
         </Consequence>
 
         <FactField
-          field="streamPasscode"
-          value={facts.streamPasscode}
-          error={state.errors.streamPasscode}
-          warningId={passcodeWarningId}
+          field="streamUrl"
+          value={facts.streamUrl}
+          error={state.errors.streamUrl}
+          warningId={linkWarningId}
         />
       </section>
 

@@ -43,10 +43,10 @@ describe("StreamLink", () => {
 
       render(<StreamLink ceremony={CEREMONY} />);
 
-      const closed = screen.getByRole("button", { name: /Zoom/i });
+      const closed = screen.getByRole("button", { name: /Google Meet/i });
 
       expect(closed).toBeDisabled();
-      expect(screen.queryByRole("link", { name: /Zoom/i })).toBeNull();
+      expect(screen.queryByRole("link", { name: /Google Meet/i })).toBeNull();
       expect(
         screen.getByText(/se abre el 21 de noviembre de 2026/i),
       ).toBeInTheDocument();
@@ -64,7 +64,9 @@ describe("StreamLink", () => {
 
       render(<StreamLink ceremony={CEREMONY} />);
 
-      expect(screen.getByRole("button", { name: /Zoom/i })).toHaveAttribute(
+      expect(
+        screen.getByRole("button", { name: /Google Meet/i }),
+      ).toHaveAttribute(
         "title",
         expect.stringMatching(/21 de noviembre de 2026/),
       );
@@ -77,10 +79,10 @@ describe("StreamLink", () => {
 
       render(<StreamLink ceremony={CEREMONY} />);
 
-      const link = screen.getByRole("link", { name: /Zoom/i });
+      const link = screen.getByRole("link", { name: /Google Meet/i });
 
       expect(link).toHaveAttribute("href", STREAM_PATH);
-      expect(screen.queryByRole("button", { name: /Zoom/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Google Meet/i })).toBeNull();
     });
 
     it("drops the line about when it opens", () => {
@@ -96,7 +98,9 @@ describe("StreamLink", () => {
 
       render(<StreamLink ceremony={CEREMONY} />);
 
-      expect(screen.getByRole("link", { name: /Zoom/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /Google Meet/i }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -105,21 +109,23 @@ describe("StreamLink", () => {
 
     render(<StreamLink ceremony={CEREMONY} />);
 
-    expect(screen.getByRole("link", { name: /Zoom/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Google Meet/i }),
+    ).toBeInTheDocument();
   });
 
   it("reads the same words whether it is open or not", () => {
     vi.useFakeTimers({ now: daysBefore(30) });
     const { unmount } = render(<StreamLink ceremony={CEREMONY} />);
     const closedLabel = screen.getByRole("button", {
-      name: /Zoom/i,
+      name: /Google Meet/i,
     }).textContent;
     unmount();
 
     vi.useFakeTimers({ now: daysBefore(2) });
     render(<StreamLink ceremony={CEREMONY} />);
 
-    expect(screen.getByRole("link", { name: /Zoom/i }).textContent).toBe(
+    expect(screen.getByRole("link", { name: /Google Meet/i }).textContent).toBe(
       closedLabel,
     );
   });

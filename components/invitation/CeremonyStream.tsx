@@ -77,7 +77,7 @@ export function CeremonyStream({
   return (
     <div className="rsvp__stream flex flex-col items-center gap-4 text-center">
       <h2 className="font-display text-xl text-[#f6efe2] sm:text-2xl">
-        Los esperamos por Zoom
+        Los esperamos por Google Meet
       </h2>
       <p className="max-w-sm text-sm text-[#f6efe2]/85">
         {welcome(memberCount)}

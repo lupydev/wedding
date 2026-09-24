@@ -148,8 +148,7 @@ describe("row level security", () => {
       ceremony: {
         ceremony_date: "fecha intrusa",
         ceremony_time: "hora intrusa",
-        stream_meeting_id: "id intruso",
-        stream_passcode: "clave intrusa",
+        stream_url: "https://meet.google.com/int-ruso-xxx",
       },
     };
 

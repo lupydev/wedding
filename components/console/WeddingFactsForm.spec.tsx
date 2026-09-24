@@ -47,8 +47,7 @@ const facts: WeddingFacts = {
   ceremonyTime: "4:00 p. m.",
   venueName: "Hacienda La Ñapa",
   venueAddress: "Calle 12 #34-56, Barrio Centro",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "clave-de-prueba",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 function renderForm(state = IDLE_WEDDING_FACTS_STATE) {
@@ -151,25 +150,25 @@ describe("WeddingFactsForm's warning about the cached Open Graph card", () => {
   });
 });
 
-describe("WeddingFactsForm's warning about the already-shared passcode", () => {
-  it("states that the old passcode is already out, beside the passcode field", () => {
+describe("WeddingFactsForm's warning about the already-shared link", () => {
+  it("states that the old link is already out, beside the link field", () => {
     renderForm();
 
-    const warning = screen.getByTestId("wedding-passcode-warning");
+    const warning = screen.getByTestId("wedding-stream-link-warning");
 
     expect(warning).toBeVisible();
     expect(warning.textContent).toMatch(
-      /no pudieron acompañarnos|declin|ya la vieron|ya la conocen/i,
+      /no pudieron acompañarnos|declin|ya lo vieron|ya lo conocen/i,
     );
   });
 
-  it("attaches that warning to the passcode field for a screen reader", () => {
+  it("attaches that warning to the link field for a screen reader", () => {
     renderForm();
 
-    const field = screen.getByLabelText(WEDDING_FACT_LABELS.streamPasscode);
+    const field = screen.getByLabelText(WEDDING_FACT_LABELS.streamUrl);
 
     expect(field.getAttribute("aria-describedby") ?? "").toContain(
-      screen.getByTestId("wedding-passcode-warning").id,
+      screen.getByTestId("wedding-stream-link-warning").id,
     );
   });
 
@@ -190,7 +189,7 @@ describe("WeddingFactsForm's warning about the already-shared passcode", () => {
   it("does not present the passcode as a browser-savable password", () => {
     renderForm();
 
-    const field = screen.getByLabelText(WEDDING_FACT_LABELS.streamPasscode);
+    const field = screen.getByLabelText(WEDDING_FACT_LABELS.streamUrl);
 
     expect(field).toHaveAttribute("type", "text");
     expect(

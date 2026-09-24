@@ -42,8 +42,7 @@ export interface CalendarEvent {
 /** The stream half of the `ceremony` row, plus who is getting married. */
 export interface StreamCalendarFacts {
   readonly coupleNames: string;
-  readonly streamMeetingId: string;
-  readonly streamPasscode: string;
+  readonly streamUrl: string;
 }
 
 /** `YYYYMMDDTHHMMSSZ` — the iCalendar UTC form, and Google's `dates` form. */
@@ -73,10 +72,9 @@ export function buildStreamCalendarEvent(
     durationMinutes: CEREMONY_MINUTES,
     title: `Matrimonio de ${facts.coupleNames}`,
     description: [
-      "Nos casamos y los acompañamos por Zoom.",
+      "Nos casamos y los acompañamos por Google Meet.",
       "",
-      `ID de la reunión: ${facts.streamMeetingId}`,
-      `Clave de acceso: ${facts.streamPasscode}`,
+      `Enlace: ${facts.streamUrl}`,
     ].join("\n"),
   };
 }

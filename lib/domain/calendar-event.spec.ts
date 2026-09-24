@@ -9,8 +9,7 @@ import {
 const START = new Date("2026-11-28T17:00:00-05:00");
 const FACTS = {
   coupleNames: "Luis & Michell",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "boda2026",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 const EVENT = buildStreamCalendarEvent(FACTS, START);
@@ -21,8 +20,8 @@ describe("buildStreamCalendarEvent", () => {
   });
 
   it("carries the joining details in the description", () => {
-    expect(EVENT.description).toContain(FACTS.streamMeetingId);
-    expect(EVENT.description).toContain(FACTS.streamPasscode);
+    expect(EVENT.description).toContain(FACTS.streamUrl);
+    expect(EVENT.description).toContain(FACTS.streamUrl);
   });
 
   /**
@@ -62,7 +61,7 @@ describe("googleCalendarUrl", () => {
     // Google reads a query parameter, not an iCalendar TEXT value, so the
     // backslash escaping that the file needs would arrive as literal
     // backslashes in the guest's event.
-    expect(details).toContain(FACTS.streamMeetingId);
+    expect(details).toContain(FACTS.streamUrl);
     expect(details).not.toContain("\\,");
   });
 });

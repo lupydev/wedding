@@ -36,9 +36,8 @@ export interface CeremonyDetails {
   /** The wedding date AND the stream date. One day, one column. */
   readonly ceremonyDate: string;
   readonly ceremonyTime: string;
-  readonly streamMeetingId: string;
   /** Visible behind the phone gate to every household that declined. */
-  readonly streamPasscode: string;
+  readonly streamUrl: string;
   /** Reaches guests through the immutable, WhatsApp-cached card. */
   readonly coupleNames: string;
   readonly venueName: string;
@@ -48,15 +47,14 @@ export interface CeremonyDetails {
 interface CeremonyRow {
   ceremony_date: string;
   ceremony_time: string;
-  stream_meeting_id: string;
-  stream_passcode: string;
+  stream_url: string;
   couple_names: string;
   venue_name: string;
   venue_address: string;
 }
 
 const CEREMONY_SELECT =
-  "ceremony_date, ceremony_time, stream_meeting_id, stream_passcode, " +
+  "ceremony_date, ceremony_time, stream_url, " +
   "couple_names, venue_name, venue_address";
 
 /**
@@ -92,8 +90,7 @@ export async function getCeremony(
   return {
     ceremonyDate: data.ceremony_date,
     ceremonyTime: data.ceremony_time,
-    streamMeetingId: data.stream_meeting_id,
-    streamPasscode: data.stream_passcode,
+    streamUrl: data.stream_url,
     coupleNames: data.couple_names,
     venueName: data.venue_name,
     venueAddress: data.venue_address,
@@ -130,8 +127,7 @@ export async function updateCeremony(
     .update({
       ceremony_date: details.ceremonyDate,
       ceremony_time: details.ceremonyTime,
-      stream_meeting_id: details.streamMeetingId,
-      stream_passcode: details.streamPasscode,
+      stream_url: details.streamUrl,
       couple_names: details.coupleNames,
       venue_name: details.venueName,
       venue_address: details.venueAddress,

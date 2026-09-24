@@ -48,11 +48,27 @@ import { useState } from "react";
  */
 
 /** The stream half of the `ceremony` row, as a component renders it. */
+/**
+ * Is this value somewhere a browser can actually go?
+ *
+ * The row is seeded with an unfinished marker and the console refuses to save
+ * anything that is not an absolute `https` address, so in practice this asks
+ * one question: has the couple filled it in yet? Checked here anyway rather
+ * than trusted, because this component is also rendered from the operator
+ * preview and from a row an older migration wrote.
+ */
+function isJoinable(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export interface StreamDetailsValues {
   readonly ceremonyDate: string;
   readonly ceremonyTime: string;
-  readonly streamMeetingId: string;
-  readonly streamPasscode: string;
+  readonly streamUrl: string;
 }
 
 export function StreamDetails({
@@ -132,23 +148,62 @@ export function StreamDetails({
         </div>
       )}
 
+      {/*
+        ONE ADDRESS, PRESSED RATHER THAN TRANSCRIBED.
+
+        Zoom was two values a guest READ and TYPED into an app, which is why
+        this block was a list of credentials set in a grotesque so a 1 could
+        not become a 7. Meet is a link. Leaving it as a value to copy would
+        have every guest doing by hand what an anchor does by itself.
+
+        THE ADDRESS STAYS VISIBLE, and the copy control with it: a guest
+        reading on a laptop joins from their phone, one who cannot join
+        forwards it to somebody who can, and a button whose destination is
+        invisible is a button nobody can check before the day.
+      */}
       <Credential
-        label="ID de la reunión"
-        value={ceremony.streamMeetingId}
-        copyLabel="Copiar el ID de la reunión"
+        label="Enlace de la transmisión"
+        value={ceremony.streamUrl}
+        copyLabel="Copiar el enlace de la transmisión"
       />
 
-      <Credential
-        label="Clave de acceso"
-        value={ceremony.streamPasscode}
-        copyLabel="Copiar la clave de acceso"
-      />
+      {/*
+        AND THE CONTROL ITSELF — ONLY WHEN THERE IS SOMEWHERE TO GO.
+
+        The migration seeds this column with an obviously-unfinished marker
+        rather than an address. Rendered as a link it would be a control that
+        fails on the one day it is pressed; left as the text it is, it reads as
+        a value nobody has filled in yet — exactly as the venue's marker does,
+        so an unfinished invitation cannot pass for a finished one.
+      */}
+      {isJoinable(ceremony.streamUrl) ? (
+        <a
+          href={ceremony.streamUrl}
+          target="_blank"
+          /*
+           * `noopener` first, and not decoration: without it the opened tab
+           * can reach back into this one through `window.opener`, and this
+           * page sits behind a phone gate.
+           */
+          rel="noopener noreferrer"
+          className="
+            mt-4 block rounded-full border border-current/30 bg-black/25 px-5
+            py-2.5 text-center text-sm backdrop-blur-sm transition-colors
+            duration-(--console-motion-fast) ease-(--ease-console-out)
+            hover:bg-black/40
+            focus-visible:outline-2 focus-visible:outline-offset-2
+            focus-visible:outline-current
+          "
+        >
+          Entrar a la transmisión
+        </a>
+      ) : null}
     </dl>
   );
 }
 
 /**
- * One value somebody is going to type into Zoom.
+ * One value somebody is going to read, copy, or forward.
  *
  * SET IN THE SANS, NOT THE DISPLAY FACE, AND THAT IS A CORRECTION.
  *
