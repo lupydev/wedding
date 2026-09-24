@@ -282,9 +282,17 @@ test.describe("saving an edit", () => {
         .getByRole("radio", { name: /No podemos acompañarlos/ })
         .check();
 
-      const card = guestPage.getByRole("group", { name: /transmisión/i });
+      /*
+        THE CONTROL'S DESTINATION, WHICH IS STRONGER THAN THE OLD ASSERTION.
 
-      await expect(card).toContainText(EDITED.streamUrl);
+        This read the address as TEXT on the card. The address is not printed
+        any more — the couple removed it once the button existed — so the
+        evidence that an edit made in the console reaches the guest is where
+        that button actually points.
+      */
+      await expect(
+        guestPage.getByRole("link", { name: /Entrar a la transmisión/ }),
+      ).toHaveAttribute("href", EDITED.streamUrl);
 
       /*
         `ceremonyTime` IS NO LONGER ASSERTED HERE, AND THAT IS A REAL LOSS

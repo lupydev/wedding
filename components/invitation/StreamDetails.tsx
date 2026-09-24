@@ -1,47 +1,44 @@
-"use client";
-
-import { Check, Copy } from "lucide-react";
-import { useState } from "react";
-
 /**
- * The four values a guest needs in order to join the ceremony.
+ * The way in to the ceremony, wherever it is offered.
  *
  * ONE BLOCK, TWO SURFACES, AND THAT IS THE WHOLE REASON IT EXISTS.
  *
- * `CeremonyStream` shows these to a household behind the phone gate that told
- * us they cannot come in person. `/transmision` shows them to everybody else,
+ * `CeremonyStream` shows this to a household behind the phone gate that told us
+ * they cannot come in person. `/transmision` shows it to everybody else,
  * publicly. Migration 0009 states the rule for the row itself — "every surface
  * that shows them MUST read this row; never restate a value" — and this file is
- * that rule one level up: the labels, their order, and the decision to render
- * values verbatim are written once instead of twice.
+ * that rule one level up: the label, the safety attributes on the link and the
+ * decision about what an unfinished row looks like are written once.
  *
- * NOT ALL FOUR ARE THE SAME KIND OF THING, AND THE FIRST DESIGN PRETENDED THEY
- * WERE.
+ * IT USED TO BE A LIST OF CREDENTIALS, AND THE HISTORY EXPLAINS THE SHAPE.
  *
- * It rendered four identical rows in two columns. But the date and the time are
- * READ — context, glanced at once — while the meeting id and the passcode are
- * TRANSCRIBED: typed into another application, on a phone, often while the
- * ceremony is already starting. Giving an eleven digit number the same weight
- * as the word "Fecha" is what made the card feel like a form.
+ * Zoom is a meeting id and a passcode: values a guest READS and TYPES into
+ * another application, on a phone, often while the ceremony has already
+ * started. So this rendered them large, in a description list, each with a
+ * button that removed the typing — a surface built for transcription, in a
+ * grotesque with tabular figures so a 1 could not become a 7.
  *
- * So the date and time became a quiet caption, the two credentials became the
- * content, and each of them carries a button that removes the typing
- * altogether. The labels for the caption are still in the markup and still read
- * aloud — they are `sr-only`, not deleted, because "28-11-2026 · 5:00 p. m."
- * needs no label to a reader and very much needs one to a screen reader.
+ * Google Meet is one address, and the guest presses it. The couple removed the
+ * printed address once the control existed — "en vista de que existe un botón
+ * de ingresar a la reunión no valdría la pena tener el link para copiar" — and
+ * with it went the copy button, the tabular figures, the description list and
+ * this component's client boundary. What is left is a link.
  *
- * Props-only apart from the copy state. It performs no data access, and its
- * prop type has no field for a phone number or a guest, so neither can reach it
- * by accident.
+ * WHAT THAT COST, STATED RATHER THAN GLOSSED. A household behind the gate who
+ * wants the address on a second device has to open their invitation there
+ * instead of pasting a link. On `/transmision` nothing is lost at all: the page
+ * is public, so forwarding it does everything forwarding the address did and
+ * carries the day and the counter too.
  *
- * NO PALETTE OF ITS OWN, AND THAT IS NOW LITERALLY TRUE.
+ * Props-only. It performs no data access, and its prop type has no field for a
+ * phone number or a guest, so neither can reach it by accident.
  *
- * It used to SAY so while reaching for `--foreground`, `--paper-hint` and
- * `--border`. Those are the paper palette, which is the document default, so on
- * the invitation's cream card they were right and on the stream page's dark
- * ground `--foreground` resolved to a near-black on near-black: the values were
- * rendered and invisible. Everything here is `currentColor` and opacity now, so
- * the surface decides and this cannot be wrong on either.
+ * NO PALETTE OF ITS OWN, AND THAT IS LITERALLY TRUE. It used to SAY so while
+ * reaching for `--foreground`, `--paper-hint` and `--border` — the paper
+ * palette, right on the invitation's cream card and resolving to near-black on
+ * near-black on the stream page's dark ground, where the values were rendered
+ * and invisible. Everything here is `currentColor` and opacity, so the surface
+ * decides and this cannot be wrong on either.
  *
  * Guest-facing copy is Spanish, neutral register. Identifiers and comments stay
  * English.
@@ -117,29 +114,23 @@ export function StreamDetails({
      * turn an obviously incomplete invitation into a plausible wrong one, and
      * nobody would notice until a guest joined a call that does not exist.
      */
-    <dl
-      /*
-        THE CALLER'S CLASS IS ADDED, NOT SUBSTITUTED, AND THAT IS THE FIX.
+    /*
+      A `<div>`, WHERE THIS USED TO BE A `<dl role="group">`.
 
-        It used to be `className ?? "rsvp__stream-details"` — a caller's value
-        REPLACED everything this component wanted. Both callers passed
-        `text-left`, so the alignment could not be decided here at all: a block
-        centred by default and left-aligned by every caller is centred by
-        nobody. The couple saw the result — the address at one edge, the copy
-        control at the other, and centred buttons directly beneath.
-      */
-      className={`rsvp__stream-details text-center ${className ?? ""}`}
-      role="group"
-      aria-label="Detalles de la transmisión"
-    >
-      {/*
-        THE LINE ITSELF GOES WHEN IT WOULD BE EMPTY.
+      It was a description list because it held terms and values: a meeting id
+      and a passcode, each with its label and a button that removed the typing.
+      The couple asked for the address to go — "en vista de que existe un botón
+      de ingresar a la reunión no valdría la pena tener el link para copiar" —
+      and a description list describing nothing is invalid markup rather than
+      merely odd.
 
-        `/transmision` drops both: the announcement above names the day in
-        prose, and the countdown lands on the hour. Rendering the container
-        anyway would leave a gap above the credentials that nobody put there on
-        purpose.
-      */}
+      The group name went with it. One control needs no grouping: the link
+      carries its own accessible name and says where it goes.
+
+      The optional date/time line keeps a list of its own, because there the
+      labels still have values.
+    */
+    <div className={`rsvp__stream-details text-center ${className ?? ""}`}>
       {(showDate || showTime) && (
         <div className="mb-4 flex items-baseline justify-center gap-2 text-sm opacity-70">
           {showDate ? (
@@ -159,32 +150,13 @@ export function StreamDetails({
       )}
 
       {/*
-        ONE ADDRESS, PRESSED RATHER THAN TRANSCRIBED.
+        ONE CONTROL, AND ONLY WHEN THERE IS SOMEWHERE TO GO.
 
-        Zoom was two values a guest READ and TYPED into an app, which is why
-        this block was a list of credentials set in a grotesque so a 1 could
-        not become a 7. Meet is a link. Leaving it as a value to copy would
-        have every guest doing by hand what an anchor does by itself.
-
-        THE ADDRESS STAYS VISIBLE, and the copy control with it: a guest
-        reading on a laptop joins from their phone, one who cannot join
-        forwards it to somebody who can, and a button whose destination is
-        invisible is a button nobody can check before the day.
-      */}
-      <Credential
-        label="Enlace de la transmisión"
-        value={ceremony.streamUrl}
-        copyLabel="Copiar el enlace de la transmisión"
-      />
-
-      {/*
-        AND THE CONTROL ITSELF — ONLY WHEN THERE IS SOMEWHERE TO GO.
-
-        The migration seeds this column with an obviously-unfinished marker
-        rather than an address. Rendered as a link it would be a control that
-        fails on the one day it is pressed; left as the text it is, it reads as
-        a value nobody has filled in yet — exactly as the venue's marker does,
-        so an unfinished invitation cannot pass for a finished one.
+        The migration seeds this column with an obviously-unfinished marker.
+        Rendered as a link it would be a button that fails the one time it is
+        pressed; left as the text it is, it reads as a value nobody has filled
+        in yet — which, now that the address is not printed anywhere else, is
+        also the only thing on the page that would say so.
       */}
       {isJoinable(ceremony.streamUrl) ? (
         <a
@@ -197,7 +169,7 @@ export function StreamDetails({
            */
           rel="noopener noreferrer"
           className="
-            mt-4 block w-full rounded-full border border-current/30 bg-black/25
+            block w-full rounded-full border border-current/30 bg-black/25
             px-5 py-2.5 text-center text-sm backdrop-blur-sm transition-colors
             duration-(--console-motion-fast) ease-(--ease-console-out)
             hover:bg-black/40
@@ -207,123 +179,11 @@ export function StreamDetails({
         >
           Entrar a la transmisión
         </a>
-      ) : null}
-    </dl>
-  );
-}
-
-/**
- * One value somebody is going to read, copy, or forward.
- *
- * SET IN THE SANS, NOT THE DISPLAY FACE, AND THAT IS A CORRECTION.
- *
- * It was `font-display` — Yeseva One — beside a comment arguing that tabular
- * figures matter here. The two contradicted each other: Yeseva is a decorative
- * single-weight serif and does not carry a tabular set, so the utility asking
- * for one had nothing to apply. A meeting id is read one digit at a time, out
- * loud or under the breath, and the grotesque the body is already set in is the
- * face that keeps a 1 from becoming a 7. Elegance belongs to the heading above;
- * this is a string somebody has to get right.
- */
-function Credential({
-  label,
-  value,
-  copyLabel,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly copyLabel: string;
-}) {
-  return (
-    <div className="mb-3 last:mb-0">
-      <dt className="text-[0.65rem] tracking-[0.18em] uppercase opacity-65">
-        {label}
-      </dt>
-
-      {/*
-        TOGETHER AND CENTRED, WHERE THIS USED TO BE `justify-between`.
-
-        Pushing the value to one edge and the control to the other was right
-        for TWO credentials: a meeting id and a passcode are a column an eye
-        runs down while typing into another app, and a shared left edge is what
-        makes that possible. There is one value now, read once, with a button
-        beneath it.
-      */}
-      <dd className="m-0 mt-1 flex items-center justify-center gap-2">
-        {/*
-          SMALLER THAN IT WAS, AND `tabular-nums` IS GONE WITH THE DIGITS.
-
-          `text-xl` and a tabular figure set were sized for a meeting id read
-          ONE DIGIT AT A TIME, out loud or under the breath, where a 1 becoming
-          a 7 is the whole failure. A URL is read once or copied, and it has no
-          figures to align — at that size it wrapped onto a second line on a
-          390px screen and left the copy control floating beside the remainder.
-        */}
-        <span className="text-sm font-medium tracking-wide break-all sm:text-base">
-          {value}
-        </span>
-        <CopyButton value={value} label={copyLabel} />
-      </dd>
-    </div>
-  );
-}
-
-/**
- * The button that removes the typing.
- *
- * ICON ONLY, AND THE CONFIRMATION IS AN ICON TOO. Its accessible name carries
- * everything — "Copiar el ID de la reunión", then "Copiado" — so the button
- * contributes no TEXT to the `<dd>` it sits in. That is what keeps the value
- * beside its label readable as exactly the value, by a screen reader and by
- * `StreamDetails.spec.tsx` alike.
- */
-function CopyButton({
-  value,
-  label,
-}: {
-  readonly value: string;
-  readonly label: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    try {
-      /*
-       * `navigator.clipboard` IS UNDEFINED OUTSIDE A SECURE CONTEXT, and the
-       * write can be refused by permission even inside one. Both land here.
-       *
-       * Swallowed, deliberately, and the state is NOT set: a button that says
-       * "copiado" over an empty clipboard sends a guest to Zoom to paste
-       * nothing, convinced they have the id. The value is on screen to read
-       * either way, so failing quietly costs nothing and lying costs the call.
-       */
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      aria-label={copied ? "Copiado" : label}
-      className="
-        flex size-9 shrink-0 items-center justify-center rounded-full
-        opacity-65 transition-[opacity,background-color]
-        duration-(--console-motion-fast) ease-(--ease-console-out)
-        hover:bg-current/10 hover:opacity-100
-        focus-visible:outline-2 focus-visible:outline-offset-2
-        focus-visible:outline-current
-      "
-    >
-      {copied ? (
-        <Check className="size-4" aria-hidden />
       ) : (
-        <Copy className="size-4" aria-hidden />
+        <p className="text-sm font-medium tracking-wide break-all">
+          {ceremony.streamUrl}
+        </p>
       )}
-    </button>
+    </div>
   );
 }

@@ -43,25 +43,9 @@ describe("StreamDetails", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
-  it("puts each label beside its own value, in order", () => {
-    render(<StreamDetails ceremony={CEREMONY} />);
-
-    const details = screen.getByRole("group", { name: /transmisión/i });
-    const terms = within(details).getAllByRole("term");
-
-    // Read as PAIRS. Asserting the four texts are each "somewhere on the page"
-    // would pass with the passcode rendered where the meeting id belongs.
-    expect(
-      terms.map((term) => [
-        term.textContent,
-        term.nextElementSibling?.textContent,
-      ]),
-    ).toEqual([
-      ["Fecha", CEREMONY.ceremonyDate],
-      ["Hora", CEREMONY.ceremonyTime],
-      ["Enlace de la transmisión", CEREMONY.streamUrl],
-    ]);
-  });
+  // The test that stood here read the label/value pairs of a description
+  // list. There is no list and no printed value now — see "what the block
+  // holds now" below, which asserts the control instead.
 
   /**
    * AN UNFINISHED VALUE STAYS VISIBLY UNFINISHED.
@@ -80,94 +64,9 @@ describe("StreamDetails", () => {
     expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 
-  /**
-   * THE TWO CREDENTIALS ARE TRANSCRIBED, NOT READ.
-   *
-   * Everything else on the page is read once. These two are typed into ANOTHER
-   * application, usually on a phone, usually while the ceremony is starting —
-   * an eleven digit meeting id and a passcode. That is where a guest fails, and
-   * a button that removes the typing is worth more than any amount of styling.
-   */
-  describe("copying a credential", () => {
-    it("offers to copy the one address there is", () => {
-      render(<StreamDetails ceremony={CEREMONY} />);
-
-      expect(
-        screen.getByRole("button", { name: /copiar el enlace/i }),
-      ).toBeInTheDocument();
-    });
-
-    /**
-     * And offers nothing for the date or the time.
-     *
-     * A button per row would be four buttons where two of them do something
-     * nobody wants. A control that exists because the row above it had one is
-     * how a card becomes noise.
-     */
-    it("offers nothing to copy for the date or the time", () => {
-      render(<StreamDetails ceremony={CEREMONY} />);
-
-      // One copy control, because there is one value to copy. The link itself is
-      // an anchor, not a button, so it is not counted here.
-      expect(screen.getAllByRole("button")).toHaveLength(1);
-    });
-
-    it("puts the value on the clipboard, and says it did", async () => {
-      const user = userEvent.setup();
-      const writeText = stubClipboard(() => Promise.resolve());
-
-      render(<StreamDetails ceremony={CEREMONY} />);
-      await user.click(
-        screen.getByRole("button", { name: /copiar el enlace/i }),
-      );
-
-      expect(writeText).toHaveBeenCalledWith(CEREMONY.streamUrl);
-      expect(
-        screen.getByRole("button", { name: /copiado/i }),
-      ).toBeInTheDocument();
-    });
-
-    /**
-     * A REFUSED WRITE MUST NOT CLAIM SUCCESS.
-     *
-     * `navigator.clipboard` is undefined outside a secure context and its write
-     * can be refused by permission. Handled badly, the button says "copiado"
-     * over an empty clipboard and the guest pastes nothing into Zoom, believing
-     * they have the id. The value stays on screen either way, which is why
-     * failing quietly is acceptable and lying is not.
-     */
-    it("keeps offering to copy when the browser refuses", async () => {
-      const user = userEvent.setup();
-      stubClipboard(() => Promise.reject(new Error("denied")));
-
-      render(<StreamDetails ceremony={CEREMONY} />);
-      await user.click(
-        screen.getByRole("button", { name: /copiar el enlace/i }),
-      );
-
-      expect(
-        screen.getByRole("button", { name: /copiar el enlace/i }),
-      ).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /copiado/i })).toBeNull();
-    });
-
-    it("survives a browser with no clipboard at all", async () => {
-      const error = vi.spyOn(console, "error").mockImplementation(() => {});
-      const user = userEvent.setup();
-
-      Object.defineProperty(navigator, "clipboard", {
-        value: undefined,
-        configurable: true,
-      });
-
-      render(<StreamDetails ceremony={CEREMONY} />);
-      await user.click(
-        screen.getByRole("button", { name: /copiar el enlace/i }),
-      );
-
-      expect(error).not.toHaveBeenCalled();
-    });
-  });
+  // The copy-to-clipboard suite stood here. It covered a button that existed
+  // to remove the typing of a meeting id; a link is pressed, not typed, and
+  // the button went with the printed address.
 
   /**
    * THE DATE CAN BE LEFT OUT WHERE SOMETHING ABOVE ALREADY SAID IT.
@@ -206,20 +105,23 @@ describe("StreamDetails", () => {
     });
 
     /**
-     * WITH NEITHER, THE ROW ITSELF GOES.
+     * WITH NEITHER, THE ROW ITSELF GOES — AND SO DOES ITS LIST.
      *
-     * An empty line above the credentials is a gap nobody put there on
-     * purpose, and it is exactly what `/transmision` would render: it already
-     * drops the day, and now drops the hour too.
+     * An empty line above the control is a gap nobody put there on purpose,
+     * and it is what BOTH surfaces render: each states the day above this
+     * block and runs a counter to the hour.
+     *
+     * The list is the assertion now. It used to be the remaining `term`, back
+     * when the address had a label of its own; the date and the hour are the
+     * only labelled values left, so no line means no `dl` at all.
      */
     it("renders no line at all when it would be empty", () => {
-      render(
+      const { container } = render(
         <StreamDetails ceremony={CEREMONY} showDate={false} showTime={false} />,
       );
 
-      const terms = screen.getAllByRole("term").map((term) => term.textContent);
-
-      expect(terms).toEqual(["Enlace de la transmisión"]);
+      expect(container.querySelector("dl")).toBeNull();
+      expect(screen.queryAllByRole("term")).toHaveLength(0);
     });
 
     it("still shows both by default", () => {
@@ -315,13 +217,9 @@ describe("how the block is aligned", () => {
   function valueRow(): HTMLElement {
     return screen.getByText(CEREMONY.streamUrl).closest("dd")!;
   }
-
-  it("keeps the address and its copy control together, centred", () => {
-    render(<StreamDetails ceremony={CEREMONY} />);
-
-    expect(valueRow().className).toContain("justify-center");
-    expect(valueRow().className).not.toContain("justify-between");
-  });
+  // The row holding the address beside its copy control is gone with both of
+  // them. What the block's alignment means now is covered by the two tests
+  // below, which are about the container rather than about that row.
 
   /**
    * AND NEITHER CALLER OVERRIDES IT BACK.
@@ -333,7 +231,9 @@ describe("how the block is aligned", () => {
   it("is centred by default, with no caller class needed", () => {
     const { container } = render(<StreamDetails ceremony={CEREMONY} />);
 
-    expect(container.querySelector("dl")!.className).toContain("text-center");
+    expect(
+      container.querySelector(".rsvp__stream-details")!.className,
+    ).toContain("text-center");
   });
 
   /**
@@ -351,10 +251,66 @@ describe("how the block is aligned", () => {
       <StreamDetails ceremony={CEREMONY} className="w-full max-w-sm" />,
     );
 
-    const list = container.querySelector("dl")!;
+    // The OUTER container, which is a `div` now: the description list is only
+    // rendered for the optional date/time line, where labels still have values.
+    const list = container.querySelector(".rsvp__stream-details")!;
 
     expect(list.className).toContain("text-center");
     expect(list.className).toContain("rsvp__stream-details");
     expect(list.className).toContain("w-full max-w-sm");
+  });
+});
+
+/**
+ * THE ADDRESS ITSELF IS GONE, AND THE BUTTON IS THE WHOLE BLOCK.
+ *
+ * The couple: "en vista de que existe un botón de ingresar a la reunión no
+ * valdría la pena tener el link para copiar, entonces eso se puede quitar."
+ *
+ * They are right, and the argument I made for keeping it does not survive
+ * contact with the page. It was: a guest on a laptop joins from their phone,
+ * one who cannot join forwards it, and a destination nobody can see is a
+ * destination nobody can check. But `/transmision` is a PUBLIC page whose whole
+ * content is this control — forwarding the page does everything forwarding the
+ * address did, and carries the day and the counter with it.
+ *
+ * What is genuinely lost is narrower: a household behind the phone gate who
+ * wants the address on a second device has to open their invitation there
+ * rather than paste a link. That is a real cost and a small one.
+ *
+ * AND THE CONTAINER STOPPED BEING A `<dl>`. It held one term and one
+ * definition; with those gone it would have been a description list describing
+ * nothing, which is invalid markup rather than merely odd. The optional
+ * date/time line keeps its own list, where the labels still have values.
+ */
+describe("what the block holds now", () => {
+  it("offers the control and not the address to copy", () => {
+    render(<StreamDetails ceremony={CEREMONY} />);
+
+    expect(
+      screen.getByRole("link", { name: /Entrar a la transmisión/ }),
+    ).toHaveAttribute("href", CEREMONY.streamUrl);
+    expect(screen.queryByText(CEREMONY.streamUrl)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /copiar/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * AND AN UNFINISHED ROW STILL SAYS SO.
+   *
+   * With the address no longer printed, a placeholder that rendered nothing at
+   * all would leave the page looking finished and the button pointing nowhere.
+   * The marker is shown as the text it is, and no control is offered.
+   */
+  it("says the link is missing rather than offering a dead control", () => {
+    render(
+      <StreamDetails ceremony={{ ...CEREMONY, streamUrl: "{{MEET_URL}}" }} />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: /Entrar a la transmisión/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 });

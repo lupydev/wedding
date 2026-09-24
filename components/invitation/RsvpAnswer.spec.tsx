@@ -93,9 +93,16 @@ const DECLINED: RsvpAnswerCurrent = {
   dietaryNotes: null,
 };
 
-/** The declined household's surface: the stream card that replaces the form. */
-function streamCard() {
-  return screen.getByRole("group", { name: /transmisión/i });
+/**
+ * The declined household's surface: the stream block that replaces the form.
+ *
+ * Found by its class rather than by a named group. It WAS a `dl role="group"`
+ * called "Detalles de la transmisión", because it held a meeting id and a
+ * passcode with their labels. It holds one link now, which carries its own
+ * accessible name and needs no grouping.
+ */
+function streamCard(): HTMLElement {
+  return document.querySelector<HTMLElement>(".rsvp__stream-details")!;
 }
 
 function attendeeBoxes() {
@@ -474,7 +481,11 @@ describe("RsvpAnswer declining", () => {
 
     await waitFor(() => expect(streamCard()).toBeInTheDocument());
 
-    expect(screen.getByText(CEREMONY.streamUrl)).toBeInTheDocument();
+    // The address is no longer PRINTED; the control that carries it is the
+    // evidence that the stream block replaced the form.
+    expect(
+      screen.getByRole("link", { name: /Entrar a la transmisión/ }),
+    ).toHaveAttribute("href", CEREMONY.streamUrl);
     // Not a form beside the card, and not a disabled copy of it. No form.
     expect(
       screen.queryByRole("button", { name: /Enviar respuesta/ }),

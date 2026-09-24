@@ -90,19 +90,20 @@ describe("StreamInvitation", () => {
    * Read as PAIRS. Asserting the texts are each "somewhere on the page" would
    * pass with the passcode rendered where the meeting id belongs.
    */
-  it("carries the joining details, each beside its own label", () => {
-    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
-
-    const details = screen.getByRole("group", { name: /transmisión/i });
+  /**
+   * THE WAY IN, WHICH IS A CONTROL RATHER THAN A LIST OF VALUES.
+   *
+   * This asserted label/value pairs in a description list, because the block
+   * held a meeting id and a passcode to transcribe. It holds one link now,
+   * and the thing worth asserting is where that link GOES — a label rendered
+   * beside the wrong address would have passed the old test and fails this.
+   */
+  it("offers a way in that points at the stored address", () => {
+    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
 
     expect(
-      within(details)
-        .getAllByRole("term")
-        .map((term) => [
-          term.textContent,
-          term.nextElementSibling?.textContent,
-        ]),
-    ).toEqual([["Enlace de la transmisión", CEREMONY.streamUrl]]);
+      screen.getByRole("link", { name: /Entrar a la transmisión/ }),
+    ).toHaveAttribute("href", CEREMONY.streamUrl);
   });
 
   /**

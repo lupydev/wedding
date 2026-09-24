@@ -200,6 +200,40 @@ component's own to survive beside it.
 Green: 2327 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Verified by screenshot at 390 and 1920.
 
+### U6 — done (the printed address came out, and took a lot with it)
+
+The couple: "en vista de que existe un botón de ingresar a la reunión no valdría
+la pena tener el link para copiar, entonces eso se puede quitar."
+
+**MY ARGUMENT FOR KEEPING IT DOES NOT SURVIVE THE PAGE.** U1 recorded three
+reasons: a guest on a laptop joins from their phone, one who cannot join
+forwards it, and a destination nobody can see is one nobody can check.
+`/transmision` is a PUBLIC page whose whole content is this control — forwarding
+the page does everything forwarding the address did, and carries the day and the
+counter too.
+
+**What is genuinely lost, stated rather than glossed:** a household behind the
+phone gate who wants the address on a second device has to open their invitation
+there instead of pasting a link. Real, and small.
+
+**IT TOOK FOUR OTHER THINGS WITH IT, AND NONE WAS A SEPARATE DECISION.** The
+copy button existed to remove the typing of a meeting id. The client boundary
+existed for that button's state — this is a Server Component again. The
+`tabular-nums` and `text-xl` were sized so a 1 could not become a 7. And the
+`<dl role="group">` held one term and one definition: with the address gone it
+would have been a description list describing nothing, which is invalid markup
+rather than merely odd. The optional date/time line keeps a list of its own,
+where the labels still have values.
+
+**FIVE TEST SITES LOCATED THE BLOCK BY THAT GROUP NAME**, in two specs and two
+browser files. They find the control now — and in `console-wedding.spec.ts` the
+assertion got STRONGER on the way: it read the address as TEXT, and it reads
+`href` on the control instead, so a button labelled correctly and aimed at the
+wrong address now fails where it used to pass.
+
+Green: 2322 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. Verified by screenshot at 390 and 1920.
+
 ## Next
 
 - The couple has the Meet link. It goes in at `/console/wedding`; it is

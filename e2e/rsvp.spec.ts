@@ -85,7 +85,14 @@ function accept(page: Page) {
 }
 
 function streamCard(page: Page) {
-  return page.getByRole("group", { name: /transmisión/i });
+  /*
+    BY CLASS, NOT BY A NAMED GROUP.
+
+    It WAS a `dl role="group"` called "Detalles de la transmisión", because it
+    held a meeting id and a passcode with their labels. It holds one link now,
+    which carries its own accessible name and needs no grouping.
+  */
+  return page.locator(".rsvp__stream-details");
 }
 
 function rsvpAlert(page: Page) {
@@ -266,14 +273,20 @@ test.describe("declining and the ceremony stream", () => {
     const card = streamCard(page);
 
     /*
-      THE TWO CREDENTIALS, AND DELIBERATELY NOT THE DAY OR THE HOUR.
+      THE WAY IN, AND DELIBERATELY NOT THE DAY OR THE HOUR.
 
-      The card sits inside the invitation, under an announcement that names the
-      day and counts down to it and a details list that states it again. The
-      same reasoning `/transmision` already applied to its own copy of this
-      block: a third statement is noise, not reassurance.
+      The block sits inside the invitation, under an announcement that names
+      the day and counts down to it and a details list that states it again: a
+      third statement is noise, not reassurance.
+
+      The address is not printed either, since the couple removed it once this
+      control existed. Where the control POINTS is the assertion — and it is
+      the stronger one, because a button labelled correctly and aimed at the
+      wrong address would have passed a text check.
     */
-    await expect(card).toContainText(ceremony.streamUrl);
+    await expect(
+      card.getByRole("link", { name: /Entrar a la transmisión/ }),
+    ).toHaveAttribute("href", ceremony.streamUrl);
     await expect(card).not.toContainText(ceremony.ceremonyTime);
 
     // Not a form beside the card, and not a disabled copy of it. No form.
