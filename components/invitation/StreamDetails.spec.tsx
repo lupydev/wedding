@@ -287,3 +287,52 @@ describe("the link to the ceremony", () => {
     expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 });
+
+/**
+ * THE BLOCK IS CENTRED, LIKE EVERY OTHER BLOCK ON THESE PAGES.
+ *
+ * The couple, with a screenshot of it: "esto debe quedar centrado."
+ *
+ * It was left-aligned, and the row holding the value used `justify-between` —
+ * which pushed the address to one edge and the copy button to the other, with
+ * the centred join and calendar buttons directly beneath. Two alignments in one
+ * column reads as a mistake, because it is one.
+ *
+ * IT WAS RIGHT FOR TWO CREDENTIALS AND STOPPED BEING RIGHT FOR ONE. A meeting
+ * id and a passcode are a column somebody's eye runs DOWN while typing into
+ * another app, and a shared left edge is what makes that possible. There is one
+ * value now, it is read once, and the thing below it is a button.
+ */
+describe("how the block is aligned", () => {
+  /**
+   * The row holding the ADDRESS, found by the address.
+   *
+   * `querySelector("dd")` was wrong and failed against a working component:
+   * the first `dd` in the document belongs to the date/time line above, which
+   * carries no alignment of its own. Locating the row by the value it holds is
+   * what makes this test about the thing it names.
+   */
+  function valueRow(): HTMLElement {
+    return screen.getByText(CEREMONY.streamUrl).closest("dd")!;
+  }
+
+  it("keeps the address and its copy control together, centred", () => {
+    render(<StreamDetails ceremony={CEREMONY} />);
+
+    expect(valueRow().className).toContain("justify-center");
+    expect(valueRow().className).not.toContain("justify-between");
+  });
+
+  /**
+   * AND NEITHER CALLER OVERRIDES IT BACK.
+   *
+   * Both passed `text-left` explicitly, which is why this could not be fixed
+   * in one place: a component centred by default and left-aligned by every
+   * caller is centred by nobody.
+   */
+  it("is centred by default, with no caller class needed", () => {
+    const { container } = render(<StreamDetails ceremony={CEREMONY} />);
+
+    expect(container.querySelector("dl")!.className).toContain("text-center");
+  });
+});

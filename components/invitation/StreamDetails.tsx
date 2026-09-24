@@ -118,7 +118,17 @@ export function StreamDetails({
      * nobody would notice until a guest joined a call that does not exist.
      */
     <dl
-      className={className ?? "rsvp__stream-details"}
+      /*
+        THE CALLER'S CLASS IS ADDED, NOT SUBSTITUTED, AND THAT IS THE FIX.
+
+        It used to be `className ?? "rsvp__stream-details"` — a caller's value
+        REPLACED everything this component wanted. Both callers passed
+        `text-left`, so the alignment could not be decided here at all: a block
+        centred by default and left-aligned by every caller is centred by
+        nobody. The couple saw the result — the address at one edge, the copy
+        control at the other, and centred buttons directly beneath.
+      */
+      className={`rsvp__stream-details text-center ${className ?? ""}`}
       role="group"
       aria-label="Detalles de la transmisión"
     >
@@ -230,8 +240,26 @@ function Credential({
         {label}
       </dt>
 
-      <dd className="m-0 mt-1 flex items-center justify-between gap-3">
-        <span className="text-xl font-semibold tracking-wide tabular-nums break-all">
+      {/*
+        TOGETHER AND CENTRED, WHERE THIS USED TO BE `justify-between`.
+
+        Pushing the value to one edge and the control to the other was right
+        for TWO credentials: a meeting id and a passcode are a column an eye
+        runs down while typing into another app, and a shared left edge is what
+        makes that possible. There is one value now, read once, with a button
+        beneath it.
+      */}
+      <dd className="m-0 mt-1 flex items-center justify-center gap-2">
+        {/*
+          SMALLER THAN IT WAS, AND `tabular-nums` IS GONE WITH THE DIGITS.
+
+          `text-xl` and a tabular figure set were sized for a meeting id read
+          ONE DIGIT AT A TIME, out loud or under the breath, where a 1 becoming
+          a 7 is the whole failure. A URL is read once or copied, and it has no
+          figures to align — at that size it wrapped onto a second line on a
+          390px screen and left the copy control floating beside the remainder.
+        */}
+        <span className="text-sm font-medium tracking-wide break-all sm:text-base">
           {value}
         </span>
         <CopyButton value={value} label={copyLabel} />

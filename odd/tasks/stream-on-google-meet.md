@@ -145,6 +145,40 @@ credentials, which is the job that sentence was doing that the control cannot.
 Green: 2323 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Verified by screenshot at 1920.
 
+### U4 — done (the block is centred, like everything around it)
+
+The couple, with a screenshot: "esto debe quedar centrado."
+
+**IT COULD NOT BE FIXED IN ONE PLACE, AND THAT WAS THE BUG BEHIND THE BUG.**
+The `<dl>` read `className={className ?? "rsvp__stream-details"}` — a caller's
+value REPLACED everything the component wanted. Both callers passed `text-left`,
+so the alignment was not decidable here at all: a block centred by default and
+left-aligned by every caller is centred by nobody. The caller's class is
+appended now, and both callers dropped the override.
+
+**And the value row was `justify-between`**, which pushed the address to one
+edge and the copy control to the other while centred buttons sat directly
+beneath. Two alignments in one column reads as a mistake because it is one.
+
+**IT WAS ALL RIGHT FOR TWO CREDENTIALS AND STOPPED BEING RIGHT FOR ONE.** A
+meeting id and a passcode are a column an eye runs DOWN while typing into
+another app, and a shared left edge is what makes that possible. There is one
+value now, read once, with a button under it.
+
+**The type came down with it.** `text-xl` and `tabular-nums` were sized for a
+meeting id read one digit at a time, where a 1 becoming a 7 is the whole
+failure. A URL has no figures to align — and at that size it wrapped onto a
+second line on a 390px screen and left the copy control floating beside the
+remainder. Found by screenshot after the centring was already green.
+
+**One of my own tests failed against a working component, in the good
+direction.** It located the row with `querySelector("dd")`, which returns the
+FIRST one in the document — the date/time line above, which carries no
+alignment of its own. It finds the row by the address it holds now.
+
+Green: 2325 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. Verified by screenshot at 390 and 1920.
+
 ## Next
 
 - The couple has the Meet link. It goes in at `/console/wedding`; it is

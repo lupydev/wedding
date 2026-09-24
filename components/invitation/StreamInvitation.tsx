@@ -143,7 +143,7 @@ export function StreamInvitation({
         */}
         <StreamDetails
           ceremony={ceremony}
-          className="block w-full text-left"
+          className="block w-full"
           /*
             NEITHER THE DAY NOR THE HOUR IS REPEATED HERE.
 

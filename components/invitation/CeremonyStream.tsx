@@ -97,7 +97,7 @@ export function CeremonyStream({
       */}
       <StreamDetails
         ceremony={ceremony}
-        className="w-full max-w-sm text-left"
+        className="w-full max-w-sm"
         showDate={false}
         showTime={false}
       />
