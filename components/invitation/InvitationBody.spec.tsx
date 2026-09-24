@@ -31,18 +31,14 @@ const wedding: InvitationBodyWedding = {
   coupleNames: "Ana y Bruno",
 };
 
-/**
- * The day, the venue and its address, which this component no longer states.
- *
- * Kept as a fixture because two tests below assert their ABSENCE: the day is in
- * the announcement and the venue reaches `RsvpAnswer`, and a test that named no
- * value could not tell "removed" from "never rendered".
- */
-const elsewhere = {
-  ceremonyDate: "sábado 14 de noviembre de 2026",
-  venueName: "Hacienda La Ñapa",
-  venueAddress: "Calle 12 #34-56, Barrio Centro",
-};
+/*
+  A SECOND FIXTURE STOOD HERE, HOLDING THE DAY, THE VENUE AND ITS ADDRESS.
+
+  It existed so two tests could assert those values were absent — from a
+  component whose prop type no longer carries them, which made the assertions
+  impossible to fail. What replaced them guards the LABELS, which were hard
+  coded here and are what a restored list would bring back.
+*/
 
 const household: InvitationBodyInvitation = {
   // The joined short names a household is greeted by, which is what
@@ -359,17 +355,27 @@ describe("InvitationBody's RSVP slot", () => {
  * branch, where somebody has just said they are coming.
  */
 describe("what the body no longer states by itself", () => {
-  it("does not repeat the day under the announcement", () => {
-    render(<InvitationBody invitation={household} wedding={wedding} />);
+  /**
+   * THE LABELS, NOT THE VALUES, AND THE DIFFERENCE IS WHETHER THIS CAN FAIL.
+   *
+   * The first version of these tests asserted that the venue's NAME and ADDRESS
+   * were absent — values this component is no longer even given, since the prop
+   * type carries `coupleNames` alone. An absence that the type already makes
+   * impossible is not an assertion; it is a sentence. The review said so.
+   *
+   * The labels were hard-coded HERE, in the list this change removed. They are
+   * the part somebody restoring that list would bring back, so they are the
+   * part worth guarding — together with the list element itself, which is what
+   * "the body states no facts of its own" actually means.
+   */
+  it("renders no details list of its own", () => {
+    const { container } = render(
+      <InvitationBody invitation={household} wedding={wedding} />,
+    );
 
-    expect(screen.queryByText("Fecha")).not.toBeInTheDocument();
-    expect(screen.queryByText(elsewhere.ceremonyDate)).not.toBeInTheDocument();
-  });
-
-  it("does not hand out the venue to a household that has not answered", () => {
-    render(<InvitationBody invitation={household} wedding={wedding} />);
-
-    expect(screen.queryByText(elsewhere.venueName)).not.toBeInTheDocument();
-    expect(screen.queryByText(elsewhere.venueAddress)).not.toBeInTheDocument();
+    for (const label of ["Fecha", "Lugar", "Dirección"]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+    expect(container.querySelector("dl")).toBeNull();
   });
 });

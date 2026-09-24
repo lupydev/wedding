@@ -304,10 +304,27 @@ test.describe("declining and the ceremony stream", () => {
       renders a joinable value directly, and `console-wedding.spec.ts` edits the
       row and then reads the control's `href` from a guest's page.
     */
-    await expect(card).toContainText(ceremony.streamUrl);
-    await expect(
-      card.getByRole("link", { name: /Entrar a la transmisión/ }),
-    ).toHaveCount(0);
+    /*
+      EITHER FORM, BECAUSE THIS FILE DOES NOT OWN THE ROW.
+
+      The block shows the address as a CONTROL when the row holds a real one and
+      as TEXT while it still holds the seeded marker. This test asserted the text
+      form only, which made it pass or fail on whether somebody had filled the
+      row in — and an aborted `wedding-facts` run, which edits that row, is
+      enough to leave a real address behind.
+
+      What is true either way: the way in is on the card, carrying the value the
+      row holds.
+    */
+    const joinable = ceremony.streamUrl.startsWith("https://");
+
+    if (joinable) {
+      await expect(
+        card.getByRole("link", { name: /Entrar a la transmisión/ }),
+      ).toHaveAttribute("href", ceremony.streamUrl);
+    } else {
+      await expect(card).toContainText(ceremony.streamUrl);
+    }
     await expect(card).not.toContainText(ceremony.ceremonyTime);
 
     // Not a form beside the card, and not a disabled copy of it. No form.
@@ -377,6 +394,16 @@ test.describe("the seat cap", () => {
     // the two that used to be absent.
     await expect(page.getByLabel(/Mensaje/i)).toHaveCount(0);
     await expect(page.getByRole("textbox")).toHaveCount(0);
+    /*
+      AND NOT AS A HIDDEN FIELD EITHER.
+
+      `getByRole("textbox")` covers what a guest can see and type into, and the
+      named-field check was dropped when it replaced it — but a `message` field
+      smuggled in as `type="hidden"` has no role and would have passed. It is
+      the shape a free-text field would most plausibly come back in.
+    */
+    await expect(page.locator('[name="message"]')).toHaveCount(0);
+    await expect(page.locator('[name="dietaryNotes"]')).toHaveCount(0);
   });
 
   test("refuses a submission naming somebody from another household", async ({
