@@ -182,8 +182,20 @@ export function StreamInvitation({
            * implies it on modern browsers and is set for its own sake as well.
            */
           rel="noopener noreferrer"
+          /*
+            THE SAME WIDTH AS "Entrar a la transmisión", ON THE COUPLE'S
+            INSTRUCTION: "el botón de Google debe quedar igual que el de entrar
+            a la reunión en tamaño."
+
+            That one is `block w-full`, so it fills the column; this shrank to
+            its own text. Two controls stacked in one column at two different
+            widths reads as one of them being less of a button than the other —
+            and the smaller was the optional action, which is the wrong one to
+            make look provisional.
+          */
           className="
-            rounded-full border border-[#f6efe2]/30 bg-black/30 px-5 py-2.5
+            block w-full rounded-full border border-[#f6efe2]/30 bg-black/30
+            px-5 py-2.5 text-center
             text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
             duration-(--console-motion-fast) ease-(--ease-console-out)
             hover:bg-black/50

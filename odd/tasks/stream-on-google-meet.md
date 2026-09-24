@@ -179,6 +179,27 @@ alignment of its own. It finds the row by the address it holds now.
 Green: 2325 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Verified by screenshot at 390 and 1920.
 
+### U5 — done (the two controls are the same size)
+
+The couple, with a screenshot of them stacked: "el botón de Google debe quedar
+igual que el de entrar a la reunión en tamaño."
+
+"Entrar a la transmisión" is `block`, so it fills the column; the calendar link
+shrank to its own text. Two controls stacked in one column at two different
+widths reads as one of them being less of a button than the other — and the
+smaller was the OPTIONAL action, which is the wrong one to make look
+provisional.
+
+**AND THE REVIEW'S POINT WAS FAIR: THE `className` MERGE WAS UNTESTED.** U4
+changed the `<dl>` from `className ?? "rsvp__stream-details"` to an append, and
+asserted the RESULT (centred) without asserting the MECHANISM. Both existing
+tests render with no caller class, so restoring the substitution would leave
+them green. There is now a test that passes a caller class and requires the
+component's own to survive beside it.
+
+Green: 2327 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. Verified by screenshot at 390 and 1920.
+
 ## Next
 
 - The couple has the Meet link. It goes in at `/console/wedding`; it is

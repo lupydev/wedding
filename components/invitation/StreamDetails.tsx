@@ -197,8 +197,8 @@ export function StreamDetails({
            */
           rel="noopener noreferrer"
           className="
-            mt-4 block rounded-full border border-current/30 bg-black/25 px-5
-            py-2.5 text-center text-sm backdrop-blur-sm transition-colors
+            mt-4 block w-full rounded-full border border-current/30 bg-black/25
+            px-5 py-2.5 text-center text-sm backdrop-blur-sm transition-colors
             duration-(--console-motion-fast) ease-(--ease-console-out)
             hover:bg-black/40
             focus-visible:outline-2 focus-visible:outline-offset-2

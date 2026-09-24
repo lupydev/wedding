@@ -299,3 +299,30 @@ describe("the stream page's own words", () => {
     expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
   });
 });
+
+/**
+ * THE TWO CONTROLS ARE THE SAME SIZE.
+ *
+ * The couple, with a screenshot of them stacked: "el botón de Google debe
+ * quedar igual que el de entrar a la reunión en tamaño."
+ *
+ * "Entrar a la transmisión" is `block`, so it fills the column. The calendar
+ * link shrank to its own text, so two controls sitting one above the other in
+ * the same column were two different widths — which reads as one of them being
+ * less of a button than the other, and the smaller one is the optional action.
+ */
+describe("the two things there are to press", () => {
+  it("gives the calendar control the join control's width", () => {
+    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
+
+    const join = screen.getByRole("link", { name: /Entrar a la transmisión/ });
+    const calendar = screen.getByRole("link", {
+      name: /Agregar a Google Calendar/,
+    });
+
+    for (const control of [join, calendar]) {
+      expect(control.className).toContain("block");
+      expect(control.className).toContain("w-full");
+    }
+  });
+});

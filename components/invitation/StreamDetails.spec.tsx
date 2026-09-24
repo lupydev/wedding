@@ -335,4 +335,26 @@ describe("how the block is aligned", () => {
 
     expect(container.querySelector("dl")!.className).toContain("text-center");
   });
+
+  /**
+   * AND A CALLER'S CLASS IS ADDED TO THAT, NOT PUT IN ITS PLACE.
+   *
+   * This is the actual mechanism, and it was changed without being asserted:
+   * the `<dl>` read `className ?? "rsvp__stream-details"`, so whatever a caller
+   * passed REPLACED the component's own classes. Both callers passed
+   * `text-left`, and the alignment became undecidable here. Restoring the
+   * substitution would pass both tests above — a caller passing nothing is
+   * still centred — so this is the one that would catch it.
+   */
+  it("keeps its own classes when a caller adds spacing of its own", () => {
+    const { container } = render(
+      <StreamDetails ceremony={CEREMONY} className="w-full max-w-sm" />,
+    );
+
+    const list = container.querySelector("dl")!;
+
+    expect(list.className).toContain("text-center");
+    expect(list.className).toContain("rsvp__stream-details");
+    expect(list.className).toContain("w-full max-w-sm");
+  });
 });
