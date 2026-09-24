@@ -21,7 +21,6 @@ describe("buildStreamCalendarEvent", () => {
 
   it("carries the joining details in the description", () => {
     expect(EVENT.description).toContain(FACTS.streamUrl);
-    expect(EVENT.description).toContain(FACTS.streamUrl);
   });
 
   /**

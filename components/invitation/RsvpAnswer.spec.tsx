@@ -475,7 +475,6 @@ describe("RsvpAnswer declining", () => {
     await waitFor(() => expect(streamCard()).toBeInTheDocument());
 
     expect(screen.getByText(CEREMONY.streamUrl)).toBeInTheDocument();
-    expect(screen.getByText(CEREMONY.streamUrl)).toBeInTheDocument();
     // Not a form beside the card, and not a disabled copy of it. No form.
     expect(
       screen.queryByRole("button", { name: /Enviar respuesta/ }),

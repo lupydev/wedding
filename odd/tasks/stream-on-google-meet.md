@@ -111,6 +111,17 @@ hand instead.
 Green: 2323 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Migration chain replayed from zero.
 
+**AND THE REVIEW FOUND THREE DUPLICATED ASSERTIONS, ALL MINE.** Moving two
+fields onto one meant rewriting dozens of fixtures, and where a spec asserted
+the meeting id and then the passcode, a blind rename left the SAME assertion
+twice — in `console-wedding.spec.ts`, `RsvpAnswer.spec.tsx` and
+`calendar-event.spec.ts`. Harmless and green, which is exactly why nothing else
+would have reported them.
+
+The lesson is narrower than "read your diffs": a rename that COLLAPSES two
+things into one produces duplicates by construction, and the way to find them is
+to look for consecutive identical lines rather than to reread the whole change.
+
 ## Next
 
 - The couple has the Meet link. It goes in at `/console/wedding`; it is

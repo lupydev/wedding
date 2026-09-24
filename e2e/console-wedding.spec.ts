@@ -285,7 +285,6 @@ test.describe("saving an edit", () => {
       const card = guestPage.getByRole("group", { name: /transmisión/i });
 
       await expect(card).toContainText(EDITED.streamUrl);
-      await expect(card).toContainText(EDITED.streamUrl);
 
       /*
         `ceremonyTime` IS NO LONGER ASSERTED HERE, AND THAT IS A REAL LOSS
