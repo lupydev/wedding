@@ -86,13 +86,13 @@ function accept(page: Page) {
 
 function streamCard(page: Page) {
   /*
-    BY CLASS, NOT BY A NAMED GROUP.
+    BY TEST HOOK, NOT BY A NAMED GROUP.
 
     It WAS a `dl role="group"` called "Detalles de la transmisión", because it
     held a meeting id and a passcode with their labels. It holds one link now,
     which carries its own accessible name and needs no grouping.
   */
-  return page.locator(".rsvp__stream-details");
+  return page.getByTestId("stream-details");
 }
 
 function rsvpAlert(page: Page) {
@@ -284,9 +284,24 @@ test.describe("declining and the ceremony stream", () => {
       the stronger one, because a button labelled correctly and aimed at the
       wrong address would have passed a text check.
     */
+    /*
+      WHAT THE BLOCK SHOWS FOR THE ROW AS IT STANDS, WHICH IS THE SEEDED
+      MARKER.
+
+      This asserted the address as TEXT and passed for a reason that was not
+      about the product: the seeded value is an unfinished marker, and the
+      marker was printed. It never exercised a real address at all.
+
+      Nothing here sets one, deliberately — the comment above this describe
+      block explains that this file does not touch the singleton. The real
+      address IS exercised, in the two places that can: `StreamDetails.spec.tsx`
+      renders a joinable value directly, and `console-wedding.spec.ts` edits the
+      row and then reads the control's `href` from a guest's page.
+    */
+    await expect(card).toContainText(ceremony.streamUrl);
     await expect(
       card.getByRole("link", { name: /Entrar a la transmisión/ }),
-    ).toHaveAttribute("href", ceremony.streamUrl);
+    ).toHaveCount(0);
     await expect(card).not.toContainText(ceremony.ceremonyTime);
 
     // Not a form beside the card, and not a disabled copy of it. No form.

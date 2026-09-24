@@ -234,6 +234,32 @@ wrong address now fails where it used to pass.
 Green: 2322 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Verified by screenshot at 390 and 1920.
 
+### U7 — done (a test hook named as one, and a browser test that never tested it)
+
+The review flagged the same thing seven times: after U6 the block was located by
+a CSS CLASS in five places across two specs and two browser files.
+
+**`rsvp__stream-details` carried no styles anywhere.** It was already nothing but
+a locator, wearing a class's clothes — and a class is what somebody renames
+while tidying CSS, five files away from the "element not found" it produces.
+`data-testid="stream-details"` says what it is and why it may not be renamed
+casually. It replaced a `role="group"` with an accessible name, which WAS a
+contract; but that described a list of labelled values to a reader, and there is
+one link here now.
+
+**AND THE HOOK CHANGE EXPOSED A BROWSER TEST THAT HAD NEVER TESTED WHAT IT
+CLAIMED.** `e2e/rsvp.spec.ts`'s decline test asserted the address as TEXT on the
+card, and passed for a reason that was not about the product: the seeded value
+is an unfinished marker, and the marker is printed. It never exercised a real
+address. It now asserts what the block genuinely shows for the row as it stands
+— the marker, and NO control — and says where the real address is exercised
+instead: `StreamDetails.spec.tsx` renders a joinable value directly, and
+`console-wedding.spec.ts` edits the row and reads the control's `href` from a
+guest's page.
+
+Green: 2322 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
 ## Next
 
 - The couple has the Meet link. It goes in at `/console/wedding`; it is

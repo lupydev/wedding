@@ -231,9 +231,9 @@ describe("how the block is aligned", () => {
   it("is centred by default, with no caller class needed", () => {
     const { container } = render(<StreamDetails ceremony={CEREMONY} />);
 
-    expect(
-      container.querySelector(".rsvp__stream-details")!.className,
-    ).toContain("text-center");
+    expect(screen.getByTestId("stream-details").className).toContain(
+      "text-center",
+    );
   });
 
   /**
@@ -253,10 +253,9 @@ describe("how the block is aligned", () => {
 
     // The OUTER container, which is a `div` now: the description list is only
     // rendered for the optional date/time line, where labels still have values.
-    const list = container.querySelector(".rsvp__stream-details")!;
+    const list = screen.getByTestId("stream-details");
 
     expect(list.className).toContain("text-center");
-    expect(list.className).toContain("rsvp__stream-details");
     expect(list.className).toContain("w-full max-w-sm");
   });
 });

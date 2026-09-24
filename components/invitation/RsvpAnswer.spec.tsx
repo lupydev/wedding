@@ -96,13 +96,14 @@ const DECLINED: RsvpAnswerCurrent = {
 /**
  * The declined household's surface: the stream block that replaces the form.
  *
- * Found by its class rather than by a named group. It WAS a `dl role="group"`
+ * Found by its test hook rather than by a named group. It WAS a `dl`
+ * with `role="group"`
  * called "Detalles de la transmisión", because it held a meeting id and a
  * passcode with their labels. It holds one link now, which carries its own
  * accessible name and needs no grouping.
  */
 function streamCard(): HTMLElement {
-  return document.querySelector<HTMLElement>(".rsvp__stream-details")!;
+  return screen.getByTestId("stream-details");
 }
 
 function attendeeBoxes() {

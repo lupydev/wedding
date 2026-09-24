@@ -130,7 +130,24 @@ export function StreamDetails({
       The optional date/time line keeps a list of its own, because there the
       labels still have values.
     */
-    <div className={`rsvp__stream-details text-center ${className ?? ""}`}>
+    <div
+      /*
+        A TEST HOOK NAMED AS ONE, WHERE A STYLING CLASS WAS PRETENDING.
+
+        `rsvp__stream-details` carried no styles anywhere — it was already
+        nothing but a locator, and five call sites across two specs and two
+        browser files depended on it. A class is renamed by anybody tidying
+        CSS, and the failure it produces is "element not found" five files
+        away. `data-testid` says what it is and why it may not be renamed
+        casually.
+
+        It replaced a `role="group"` with an accessible name, which WAS a
+        contract — but that described a list of labelled values to a reader,
+        and there is one link here now.
+      */
+      data-testid="stream-details"
+      className={`text-center ${className ?? ""}`}
+    >
       {(showDate || showTime) && (
         <div className="mb-4 flex items-baseline justify-center gap-2 text-sm opacity-70">
           {showDate ? (
