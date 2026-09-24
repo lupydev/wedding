@@ -122,6 +122,29 @@ The lesson is narrower than "read your diffs": a rename that COLLAPSES two
 things into one produces duplicates by construction, and the way to find them is
 to look for consecutive identical lines rather than to reread the whole change.
 
+### U3 — done (the lead on `/transmision` came out)
+
+The couple: "esto lo podemos quitar: La ceremonia se va a transmitir por Google
+Meet. Te esperamos."
+
+That sentence was written to answer the question the reader arrives with — how
+do I attend? — back when the answer below it was a meeting id and a passcode to
+transcribe into an app. The block under it now carries a control that says
+"Entrar a la transmisión", above the Google Meet address itself: it answers that
+question by being pressable. A line explaining that the ceremony arrives by
+Google Meet, above a button whose destination is a Google Meet address, is the
+page saying the same thing twice.
+
+**Asserted as an absence rather than deleted quietly.** A sentence removed on
+request is a decision, and the next person who feels this page is missing a lead
+should find out that it was taken out rather than never written.
+
+The announcement above still says this is an invitation rather than a set of
+credentials, which is the job that sentence was doing that the control cannot.
+
+Green: 2323 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. Verified by screenshot at 1920.
+
 ## Next
 
 - The couple has the Meet link. It goes in at `/console/wedding`; it is

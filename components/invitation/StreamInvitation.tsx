@@ -107,19 +107,24 @@ export function StreamInvitation({
         <SaveTheDate />
 
         {/*
-          WARMTH AFTER THE ANNOUNCEMENT, THE PRACTICAL FACT INSIDE IT.
+          THE LEAD THAT STOOD HERE IS GONE, ON THE COUPLE'S OWN INSTRUCTION:
+          "esto lo podemos quitar".
 
-          This page is read by the guests who cannot be in the room, so it still
-          has to say it is an invitation and not a set of credentials.
+          It read "La ceremonia se va a transmitir por Google Meet. Te
+          esperamos." and it was written to answer the question the reader
+          arrives with — how do I attend? — back when the answer below it was a
+          meeting id and a passcode to transcribe into an app.
 
-          SINGULAR, AND THAT IS A DELIBERATE BREAK FROM THE REST OF THE PRODUCT.
-          `/i/[slug]` says "ustedes" throughout and is right to: that invitation
-          belongs to a household and names every member. This page is read by
-          one person at a time, so it speaks to one person.
+          The block below now carries a control that says "Entrar a la
+          transmisión", above the Google Meet address itself. It answers that
+          question by being pressable. A sentence explaining that the ceremony
+          arrives by Google Meet, sitting above a button whose destination is a
+          Google Meet address, is the page saying the same thing twice.
+
+          The announcement above still says this is an invitation rather than a
+          set of credentials, which is the job the sentence was doing that the
+          control cannot.
         */}
-        <p className="max-w-sm text-sm text-[#f6efe2]/85 [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">
-          La ceremonia se va a transmitir por Google Meet. Te esperamos.
-        </p>
       </div>
 
       <div className="flex w-full max-w-md flex-col items-center gap-6 text-[#f6efe2]">

@@ -258,13 +258,31 @@ describe("StreamInvitation", () => {
  * than repaired, because its reasoning no longer describes the page.
  */
 describe("the stream page's own words", () => {
-  it("says how the ceremony arrives, then says they are expected", () => {
+  /**
+   * AND THE LEAD IS GONE, ON THE COUPLE'S OWN INSTRUCTION.
+   *
+   * "Esto lo podemos quitar: La ceremonia se va a transmitir por Google Meet.
+   * Te esperamos."
+   *
+   * The sentence was written to answer the question the reader arrived with —
+   * how do I attend? — back when the answer was a meeting id and a passcode to
+   * transcribe. The page now carries a control that says "Entrar a la
+   * transmisión" above the address itself, which answers that question by being
+   * pressable. A line explaining that the ceremony arrives by Google Meet, above
+   * a button labelled with the Google Meet address, is the page saying the same
+   * thing twice.
+   *
+   * Asserted as an ABSENCE rather than deleted quietly: a sentence removed on
+   * request is a decision, and the next person to feel this page is missing a
+   * lead should find out here that it was taken out rather than never written.
+   */
+  it("does not explain the stream above a control that is the explanation", () => {
     render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
 
     expect(
-      screen.getByText(/La ceremonia se va a transmitir por Google Meet/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Te esperamos/i)).toBeInTheDocument();
+      screen.queryByText(/La ceremonia se va a transmitir/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Te esperamos/i)).not.toBeInTheDocument();
   });
 
   /**
