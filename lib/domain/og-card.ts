@@ -1,14 +1,22 @@
 /**
- * The Open Graph card model, and the page metadata text that accompanies it.
+ * The text of the Open Graph preview, and the page metadata that carries it.
  *
- * Pure on purpose. The card is the single piece of this product that an
- * unauthenticated crawler renders and that anyone holding a forwarded link can
+ * Pure on purpose. This is the single piece of this product that an
+ * unauthenticated crawler reads and that anyone holding a forwarded link can
  * see, so what it may contain is a business rule, not a rendering detail. It
  * lives here, next to the other domain rules, and is unit-testable without a
  * browser, a database or a running Next.js server.
  *
- * Confirmed product decision: the card is NAMES ONLY. No wedding date, no
+ * Confirmed product decision: the preview is NAMES ONLY. No wedding date, no
  * venue name, no venue address, no phone number.
+ *
+ * WHERE THAT RULE NOW APPLIES. It used to govern two things: these strings, and
+ * a model projected onto the card IMAGE. The image is a photograph now and
+ * renders no text whatsoever, so it carries no guest data at all and there is
+ * nothing on it left to govern — `buildOgCardModel` and `OgCardModel` were
+ * deleted with the last caller. What WhatsApp shows beside the thumbnail is
+ * built here and emitted by `app/i/[slug]/page.tsx`, which makes this file the
+ * only place a household name reaches a preview.
  */
 
 /**
@@ -53,12 +61,6 @@ export interface OgCardSource {
   readonly coupleNames: string;
 }
 
-/** Exactly what the card renders. Two strings, and nothing else exists. */
-export interface OgCardModel {
-  readonly greetingName: string;
-  readonly invitationLine: string;
-}
-
 /** The server-rendered `<title>` / `og:title` and `og:description` text. */
 export interface InvitationMetadataText {
   readonly title: string;
@@ -66,26 +68,17 @@ export interface InvitationMetadataText {
 }
 
 /**
- * Projects an invitation onto the card.
- *
- * A projection rather than a redaction, for the same reason
- * `toGuestFacingInvitation` is: a field added to the read model tomorrow cannot
- * leak onto a public card by being forgotten here, because nothing is copied
- * except the two values named below.
- */
-export function buildOgCardModel(invitation: OgCardSource): OgCardModel {
-  return {
-    greetingName: invitation.greetingName,
-    invitationLine: buildOgCardInvitationLine(invitation.coupleNames),
-  };
-}
-
-/**
  * Builds the server-rendered metadata text for one invitation.
  *
- * Same names-only rule as the card: these strings end up in `og:title` and
- * `og:description`, which WhatsApp shows beside the image in the preview
- * bubble and which travel with every forward of the link.
+ * A PROJECTION rather than a redaction, for the same reason
+ * `toGuestFacingInvitation` is: a field added to the read model tomorrow cannot
+ * leak into a public preview by being forgotten here, because nothing is copied
+ * except the two values `OgCardSource` names.
+ *
+ * These strings end up in `og:title` and `og:description`, which WhatsApp shows
+ * beside the thumbnail in the preview bubble and which travel with every
+ * forward of the link. Since the card image became a photograph carrying no
+ * text, they are the WHOLE of what a forwarded link says about a household.
  */
 export function buildInvitationMetadataText(
   invitation: OgCardSource,

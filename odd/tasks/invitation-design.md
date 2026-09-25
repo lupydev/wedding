@@ -1239,6 +1239,141 @@ Commit `0e13786`. RDD: assessed **medium** (`executable_change`, 4 paths, 95
 authored lines), `review_due: false` — under the ~400-line delivery budget, so
 the candidate is the slice, not this commit. Deferred to slice close.
 
+### U29 — done (the card became the photograph, and stopped saying the name twice)
+
+The couple, on the WhatsApp preview: the card should be the PICTURE, with the
+household's name and our line beside it — the bubble WhatsApp actually draws.
+
+**IT WAS SAYING THE SAME THING TWICE.** WhatsApp renders a thumbnail with
+`og:title` and `og:description` next to it, and those two strings already
+carried "Familia Muñóz" and "Nos casamos — Luis & Michell". The card then
+rasterized both of them AGAIN, in Satori's fallback face, on cream, on the one
+surface where the photograph had to do the work. `app/i/[slug]/opengraph-image.tsx`
+renders no text at all now: one full-bleed photograph, and the names stay
+exactly where they were, in `buildInvitationMetadataText`.
+
+**THE SHAPE IS A DECISION AND IT IS THE COUPLE'S.** 1200×630 is the
+conventional Open Graph size and it was right for words on a cream ground. It
+is the wrong frame for this picture: at 1.9:1 the band cannot hold her head and
+his knee on the ground at once, and every crop that fits the band loses either
+the waterfall above them or the two of them standing in it. At the size a
+preview is actually drawn, what has to survive is the emotion, not the
+composition. They chose the square, and it keeps the waterfall and both people.
+
+**AND THE SQUARE HAD TO BE A NEW FILE, FOR A REASON THAT IS A HARD LIMIT.**
+`ImageResponse` refuses a bundle over 500 KB — "your JSX, CSS, fonts, images,
+and any other assets" — and the only way to get a local file into Satori is a
+base64 data URI, which costs four bytes for every three. `img/boda.jpg` is
+518,242 bytes and encodes to **690,992**: it cannot render at all. The
+derivative `img/og-card.jpg` is the `1800x1800+0+500` window of the original,
+resized to 1200×1200 at q80 with the EXIF stripped — 265,052 bytes, **353,404**
+encoded, about 147 KB of headroom.
+
+That is a trap with no signal of its own: an over-budget card throws at request
+time, the crawler gets nothing, and the message goes out with a blank preview
+nobody sees until a guest mentions it. So `tools/og-card-asset-budget.spec.ts`
+measures the asset on disk — that it is 1200×1200, read out of the JPEG's own
+frame header rather than trusted from its filename, and that its base64 length
+clears the ceiling with room to spare.
+
+**AND THAT GUARD WAS GREEN THE MOMENT IT WAS WRITTEN, SO IT WAS MADE TO FAIL ON
+PURPOSE.** `3a7f89a` in this same branch exists because two assertions in this
+repository could not fail; a budget guard written against an asset that already
+fits is exactly that shape. Pointed at `img/boda.jpg` it reported:
+
+    AssertionError: expected 690992 to be less than 500000
+    AssertionError: expected { height: 2400, width: 1800 } to deeply equal
+      { width: 1200, height: 1200 }
+
+Pointed back, green. The negative control stayed in the file rather than only
+in this paragraph: the last test measures the full-resolution original and
+asserts it does NOT fit, so the ceiling assertion is proven falsifiable on every
+run instead of once, by me, today.
+
+**THE CARD IS NOW BYTE-IDENTICAL FOR EVERY HOUSEHOLD, AND THAT IS A STRONGER
+GUARANTEE THAN THE ONE IT REPLACED.** The route reads no invitation, takes no
+`params` and touches no database. `buildOgCardModel` existed to be a PROJECTION
+so a field added to the read model could not leak onto a public card by being
+forgotten — good reasoning, and now obsolete: an image with no input cannot leak
+anything. It and `OgCardModel` were deleted with their only caller.
+`buildOgCardInvitationLine`, `OgCardSource` and `buildInvitationMetadataText`
+stay; the page and the dispatch console still read them.
+
+**RED, quoted.** `e2e/invitation-page-og.spec.ts` asserted the OPPOSITE of the
+new truth — "renders visibly different pixels for the accented and unaccented
+name", which required the card to vary by household. Its replacement asserts
+two households get equal BYTES, and it failed against the old card exactly as
+it should:
+
+    ✘ 6 › the Open Graph card image › is byte-identical for two households,
+          while their og:title still differs
+      Error: expect(received).toBe(expected) // Object.is equality
+      Expected: true
+      Received: false
+      > 285 |       expect(mineBody.equals(theirsBody)).toBe(true);
+
+**Both halves of it can fail, and that is the point.** Equal bytes alone would
+also be satisfied by deleting personalization altogether, so the same test reads
+`og:title` for both households and requires them to DIFFER. One half guards the
+image against guest data; the other guards the product against a green run that
+got there by breaking the preview.
+
+And the tools guard binds itself to the subject: it reads the route file and
+asserts it names `og-card.jpg`, because a budget guard measuring a file the
+route no longer embeds is green and proves nothing.
+
+**A TEST WAS DELETED, AND A GREEN ONE.** `tools/og-font-coverage.spec.ts` read
+the cmap of the font `next/og` bundles and proved `ñ`, `Ñ` and the accented
+vowels were real glyphs rather than tofu. Its premise was "the card renders
+guest names". Nothing renders text in the image any more and no font is loaded,
+so it asserted a property of a font this product no longer uses — four green
+tests describing nothing. A test that cannot fail is worse than no test,
+because it is read as coverage. `tools/ttf-cmap.ts` went with it: it had exactly
+one consumer. `tools/no-source-placeholders.spec.ts` was checked first, since it
+requires at least 50 source files and globs `tools/**/*.ts` — 144 before, 143
+after.
+
+**TWO WRITTEN REQUIREMENTS WERE FALSE AND WERE REWRITTEN RATHER THAN DROPPED.**
+`openspec/specs/invitation-page/spec.md` said the card was names-only "when the
+rendered image and its `og:description` text are inspected", and that the image
+must render accented and enye characters without tofu. Neither describes this
+product now. The first became the same prohibition over the METADATA TEXT plus
+the stronger image claim — two households, byte-identical card — and the second
+became the guarantee that a Spanish name survives the path it actually travels:
+`og:title` in the first HTML response, byte for byte, with the card's own
+obligation kept as "it must return a real PNG raster", because that is what an
+over-budget card stops doing.
+
+**THE ASSET SHIPS, AND THAT WAS VERIFIED RATHER THAN ASSUMED.** `img/` sits
+outside `public/`, `next.config.ts` has no `outputFileTracingIncludes`, and the
+path is built at module scope from `process.cwd()` — three reasons a traced
+bundle might not carry the file, and a card that renders locally and 500s in
+production is the worst way to find out. The build's own trace answers it:
+`.next/server/app/i/[slug]/opengraph-image/route.js.nft.json` lists
+`../../../../../../img/og-card.jpg` among its 204 traced files.
+
+**THE CONSOLE'S BUBBLE WAS MEASURED, NOT EYEBALLED.** A 1:1 image dropped into a
+box built for a 1.9:1 one is exactly where a squash or a letterbox hides.
+`WhatsAppBubble` renders `<img class="block w-full">` with no height, no
+`aspect-ratio` and no `object-fit`, and `app/globals.css` has no `img` rule at
+all, so the browser uses the intrinsic ratio. Measured through a throwaway probe
+that injected the committed snapshot's own markup into a page carrying the built
+stylesheet: **366 × 366, ratio 1.000**. No distortion, no letterbox, and the
+snapshot needed no update — it encodes classes, never dimensions. The probe was
+deleted.
+
+`og:image:alt` changed with the image. "Invitación de boda" was an honest label
+for a card that said those words; for a photograph of two people it tells a
+screen-reader user nothing. It describes the picture now, and still names
+nobody and nowhere — it travels with every forward of the link, exactly like the
+image.
+
+Green: 2334 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. The unit figure is four lower than the last run on purpose: nine
+tests were deleted with `buildOgCardModel` and the font guard, and five were
+added with the asset budget. Verified by eye at 1200×1200 and inside the bubble
+at 1440.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still

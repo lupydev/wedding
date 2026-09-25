@@ -1,40 +1,68 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { ImageResponse } from "next/og";
 
-import { buildOgCardModel } from "@/lib/domain/og-card";
-
-import { loadCeremony, loadGuestFacingInvitation } from "./load-invitation";
-
 /**
- * The per-guest Open Graph card.
+ * The per-guest Open Graph card: one photograph, and nothing else.
  *
  * This is the "image" in the WhatsApp message. There is no attachment: the
  * preview card IS the picture the recipient sees, and it is fetched by an
  * unauthenticated crawler from a URL that travels with every forward of the
- * link. That is why the card is NAMES ONLY — no wedding date, no venue name,
- * no venue address, no phone number.
+ * link.
  *
- * The couple's names on it come from the `ceremony` row, and this route is the
- * reason the console warns about editing them: the response below is served
- * `immutable, max-age=31536000` and WhatsApp caches a preview per URL, so every
- * card already delivered keeps the names it was generated with. Nothing here can
- * change that afterwards — only a rotated slug, which is a new URL.
+ * IT USED TO RENDER THE HOUSEHOLD'S NAME AND THE COUPLE'S LINE INTO THE PIXELS.
+ * It no longer renders any text at all, because that is not the bubble WhatsApp
+ * draws. WhatsApp draws a THUMBNAIL with the title and description BESIDE it,
+ * read from `og:title` and `og:description` — so a card that also rasterized
+ * the household name said the same thing twice, in a typeface nobody chose, on
+ * the one surface where the photograph had to do the work.
  *
- * What may appear here is decided by `buildOgCardModel`, which projects rather
- * than redacts, so a field added to the read model later cannot leak onto a
- * public card by being forgotten.
+ * The personalization did not go away; it moved to where the preview already
+ * looks for it. `buildInvitationMetadataText` in `lib/domain/og-card.ts` builds
+ * both strings, `app/i/[slug]/page.tsx` emits them, and the names-only product
+ * rule now governs that text rather than this image.
  *
- * No custom font is loaded. `next/og` bundles a Latin font that already covers
- * accented vowels and both cases of the enye, which `tools/og-font-coverage.spec.ts`
- * asserts against the exact file; a font missing those would render Spanish
- * names as tofu boxes with no error anywhere. Layout is flexbox only — Satori
- * does not implement CSS grid.
+ * WHAT THAT BUYS, AND IT IS THE STRONGEST PROPERTY THIS ROUTE HAS EVER HAD:
+ * this file reads no invitation, takes no `params` and touches no database, so
+ * the card is BYTE-IDENTICAL for every household. A projection can be widened
+ * by accident; an image with no input cannot leak anything, because there is
+ * nothing to leak. `e2e/invitation-page-og.spec.ts` asserts exactly that — two
+ * households, equal bytes — alongside their `og:title` values still differing,
+ * so the guarantee cannot be satisfied by breaking personalization.
+ *
+ * THE ROUTE STAYS PER-SLUG even though its output no longer varies. Three
+ * things depend on the path: `lib/server/og-warm.ts` warms the URL the page
+ * advertises, the console's dispatch preview renders that same per-slug URL,
+ * and `app/robots.ts` allows the per-slug card path back in under a blanket
+ * `Disallow: /i/`. Collapsing it to one shared card would be a different URL
+ * and would break all three for no gain — WhatsApp caches a preview per URL
+ * anyway.
+ *
+ * Layout is flexbox only: Satori does not implement CSS grid.
  */
 
-/** Node runtime: the loader reaches Supabase through the server-only adapter. */
+/** Node runtime: `fs` is not available on the edge, and the photograph is read from disk. */
 export const runtime = "nodejs";
 
-/** The size WhatsApp renders as a large card. */
-export const size = { width: 1200, height: 630 };
+/**
+ * A SQUARE CARD, AND THE SHAPE IS A DECISION RATHER THAN A DEFAULT.
+ *
+ * 1200×630 is the conventional Open Graph size and it was this card's size
+ * while the card was words on a cream ground. It is the wrong frame for this
+ * photograph: at 1.9:1 the band cannot hold her head and her feet at once, and
+ * the crop that fits the band loses either the waterfall above them or the two
+ * of them standing in it. At the size WhatsApp actually draws a preview, what
+ * has to survive is the emotion, not the composition.
+ *
+ * So the couple chose the square. `img/og-card.jpg` is the `1800x1800+0+500`
+ * window of the 1800×2400 original, resized to 1200×1200 — waterfall and both
+ * people, and legible as a thumbnail.
+ *
+ * Next.js emits these two numbers as `og:image:width` and `og:image:height`, so
+ * changing them here is what tells a crawler the card's shape.
+ */
+export const size = { width: 1200, height: 1200 };
 
 export const contentType = "image/png";
 
@@ -50,66 +78,90 @@ export const contentType = "image/png";
  *
  * `immutable` is safe because the URL changes whenever the content can: a
  * rotated slug is a new path, and a redeployment changes the build hash Next.js
- * appends to `og:image`. The residual case — renaming a household without
- * redeploying — leaves a stale card until the next deploy, which is the
- * tradeoff the design accepted when it chose an immutable card.
+ * appends to `og:image`. It is safer still now that the image carries no
+ * household name: the stale-card case this header used to accept — renaming a
+ * household without redeploying — no longer exists for the IMAGE, because the
+ * image never held the name. The name is in `og:title`, which is rendered per
+ * request and is never cached by this header.
  */
 const CARD_CACHE_CONTROL = "public, immutable, no-transform, max-age=31536000";
 
-/** Names-only, like the card itself. Ends up in `og:image:alt`. */
-export const alt = "Invitación de boda";
+/**
+ * `og:image:alt`, for a preview read aloud rather than looked at.
+ *
+ * It describes the PHOTOGRAPH now, because the photograph is what the card is.
+ * "Invitación de boda" was an honest label for a card that said those words;
+ * for a picture of two people it tells a screen-reader user nothing about what
+ * they are being shown. No name and no place appear in it: this string travels
+ * with every forward of the link, exactly like the image it describes.
+ *
+ * Guest-facing copy is Spanish; identifiers and comments stay English.
+ */
+export const alt = "Los novios, de noche, frente a una cascada iluminada";
 
 /**
- * What the card says when the slug names no invitation.
+ * The photograph, read once at module scope and embedded as a data URI.
  *
- * A household name would be a fabrication and a blank card reads as broken, so
- * it says only that it is an invitation — which tells a stranger probing slugs
- * nothing about whether any particular one exists.
+ * THIS IS THE ONLY FORM THAT WORKS, and it is the documented recipe rather than
+ * a workaround: `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/opengraph-image.md`,
+ * "Using Node.js runtime with local assets". Satori has no filesystem and no
+ * relative-URL base, so `<img src="/img/og-card.jpg">` resolves to nothing;
+ * there is no static-import form either, because the asset has to arrive as
+ * bytes rather than as a URL the browser would fetch. Read at module scope
+ * because the file does not depend on the request, so the encode is paid once
+ * per process instead of once per card.
+ *
+ * WHY A DERIVATIVE AND NOT `img/boda.jpg`, WHICH EVERY OTHER SURFACE RENDERS:
+ * `ImageResponse` has a hard 500 KB ceiling over the whole bundle — JSX, CSS,
+ * fonts and images together — and base64 costs four bytes for every three. The
+ * 518,242-byte original encodes to 690,992 bytes and cannot render at all; this
+ * 265,052-byte square encodes to 353,404, leaving room to spare.
+ * `tools/og-card-asset-budget.spec.ts` measures both numbers and fails on a
+ * replacement that would overrun, because the failure mode otherwise is a card
+ * that silently stops existing.
+ *
+ * `img/` sits outside `public/` on purpose — nothing here is meant to be
+ * fetched directly — so this path relies on Next.js tracing the file into the
+ * function bundle. That trace is verified per build; if it ever stops,
+ * `outputFileTracingIncludes` in `next.config.ts` is the lever.
  */
-const UNKNOWN_HOUSEHOLD_GREETING = "Invitación";
+const cardPhotograph = await readFile(
+  join(process.cwd(), "img/og-card.jpg"),
+  "base64",
+);
 
-export default async function OpenGraphImage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-  const invitation = await loadGuestFacingInvitation(slug);
-  // Read for the unknown slug too, and deliberately: a card that named the
-  // couple only for real invitations would tell a stranger probing slugs which
-  // ones exist, from an image nobody has to authenticate for.
-  const { coupleNames } = await loadCeremony();
+const cardPhotographSrc = `data:image/jpeg;base64,${cardPhotograph}`;
 
-  // An unknown or rotated slug still gets a card rather than a broken image:
-  // the link may already be sitting in a chat. It carries no household name,
-  // which is also what keeps it from confirming that any slug exists.
-  const card = buildOgCardModel({
-    greetingName: invitation?.greetingName ?? UNKNOWN_HOUSEHOLD_GREETING,
-    coupleNames,
-  });
-
+export default async function OpenGraphImage() {
   return new ImageResponse(
     <div
       style={{
         width: "100%",
         height: "100%",
         display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 32,
-        padding: 80,
-        textAlign: "center",
-        backgroundColor: "#f7f3ee",
-        color: "#2b2118",
+        // The photograph is already 1200×1200, the exact size of the card, so
+        // this only guards the case where the two ever disagree: it fills the
+        // frame and crops rather than letterboxing, which would show a band of
+        // whatever is behind it.
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", fontSize: 76, lineHeight: 1.15 }}>
-        {card.greetingName}
-      </div>
-      <div style={{ display: "flex", fontSize: 40, opacity: 0.8 }}>
-        {card.invitationLine}
-      </div>
+      {/*
+        A plain `<img>`, and `@next/next/no-img-element` does not fire on it:
+        eslint-config-next exempts the metadata image conventions, because
+        `next/image` is a React component for a BROWSER and Satori is neither.
+        There is no optimizer here and no DOM — this element is rasterized.
+      */}
+      <img
+        src={cardPhotographSrc}
+        width={size.width}
+        height={size.height}
+        // The description lives in `alt` above, which Next emits as
+        // `og:image:alt`. Repeating it here would put it nowhere a reader can
+        // reach: this element is rasterized into pixels, not served as HTML.
+        alt=""
+        style={{ objectFit: "cover" }}
+      />
     </div>,
     {
       ...size,

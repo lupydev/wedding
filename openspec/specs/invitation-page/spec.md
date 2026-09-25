@@ -22,27 +22,46 @@ The invitation page at `/i/[slug]` MUST server-render `og:title` and `og:image` 
 - WHEN `/i/k7q2m9xr4t` is fetched with a standard desktop browser User-Agent
 - THEN the raw HTML response body MUST also contain the same `og:title` and `og:image` tags inside `<head>`, not appended near `</body>`
 
-### Requirement: OG card content is names-only
+### Requirement: OG preview content is names-only, and the card image carries no guest data at all
 
-The Open Graph preview card MUST show the household's greeting name and an invitation line only. It MUST NOT include the wedding date, the venue name or address, or any phone number (per A confirmed decision).
+The Open Graph preview MUST identify the household by its greeting name and an invitation line only. It MUST NOT include the wedding date, the venue name or address, or any phone number (per A confirmed decision).
 
-#### Scenario: Card omits private details
+That names-only rule governs the METADATA TEXT — `og:title` and `og:description` — which is where WhatsApp draws the household's name, beside the thumbnail. The card IMAGE renders no text whatsoever: it is a photograph, identical for every household, generated from no invitation data. Where the text is a projection that may not be widened, the image is an artefact with no guest input at all, so there is nothing on it to redact.
 
-- GIVEN an invitation's OG image is generated
-- WHEN the rendered image and its `og:description` text are inspected
+(This supersedes the earlier form of this requirement, which placed the greeting name inside the rendered image. It is a strengthening, not a relaxation: the private-detail prohibition still holds over everything a forwarded link exposes.)
+
+#### Scenario: Metadata text names the household and omits private details
+
+- GIVEN an invitation's page is fetched
+- WHEN `og:title` and `og:description` are inspected
 - THEN neither MUST contain the wedding date, venue name, venue address, or any phone number
-- AND both MUST contain the household's greeting name
+- AND `og:title` MUST contain the household's greeting name
 
-### Requirement: OG image renders accented and enye characters
+#### Scenario: Two households receive the same card image and different metadata text
 
-The OG image generation MUST correctly render guest names containing accented vowels and the letter enye.
+- GIVEN two invitations whose greeting names differ
+- WHEN each invitation's OG image is fetched and each invitation's page is fetched
+- THEN the two image responses MUST be byte-identical, proving no guest data reaches the image
+- AND their `og:title` values MUST differ, proving the household is still named in the text
 
-#### Scenario: Name with accents and enye renders without corruption
+### Requirement: A Spanish household name survives the preview path uncorrupted
+
+A greeting name containing accented vowels or the letter enye MUST reach a WhatsApp preview intact, and the card route MUST answer with a real raster rather than an error page.
+
+(This supersedes the earlier form of this requirement, which asserted that the rendered IMAGE drew those glyphs without tofu. The image renders no glyphs now, so the guarantee moved to the surface that carries the name: the metadata text in the first HTML response. The card's own obligation — that it renders at all — is kept here rather than dropped, because an over-budget or otherwise failing card produces a blank preview with no error anywhere.)
+
+#### Scenario: Name with accents and enye reaches og:title uncorrupted
 
 - GIVEN an invitation with `greeting_name` containing "Ñoño Muñóz"
+- WHEN the invitation page is fetched with a WhatsApp User-Agent
+- THEN the `og:title` in the raw HTML response MUST equal "Ñoño Muñóz" exactly, byte for byte
+
+#### Scenario: The card route returns a real PNG raster
+
+- GIVEN any invitation
 - WHEN the OG image route is fetched
-- THEN it MUST return `content-type: image/png` with a non-zero byte body
-- AND the rendered glyphs MUST NOT be replaced with tofu/placeholder boxes
+- THEN it MUST return status 200 with `content-type: image/png`
+- AND the body MUST begin with the PNG magic number and be larger than 1 KB
 
 ### Requirement: Invalid or rotated slug shows a friendly page
 

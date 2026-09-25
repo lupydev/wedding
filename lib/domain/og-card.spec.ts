@@ -3,21 +3,25 @@ import { describe, expect, it } from "vitest";
 import {
   buildInvitationMetadataText,
   buildOgCardInvitationLine,
-  buildOgCardModel,
 } from "./og-card";
 
 /**
- * The Open Graph card is fetched by an UNAUTHENTICATED crawler and is visible
+ * The Open Graph preview is read by an UNAUTHENTICATED crawler and is visible
  * to anyone holding a forwarded link. The confirmed product decision is
  * names-only: no wedding date, no venue name, no venue address, no phone.
  *
  * These tests exist because the read model the page loads legitimately carries
- * an RSVP deadline (a date) and could later grow more fields. The card model is
- * a PROJECTION, not a redaction: a new field cannot leak by being forgotten,
+ * an RSVP deadline (a date) and could later grow more fields. The metadata text
+ * is a PROJECTION, not a redaction: a new field cannot leak by being forgotten,
  * because it is never copied in the first place.
+ *
+ * The `buildOgCardModel` block that used to open this file went with its only
+ * caller. The card IMAGE is a photograph now — it renders no text and reads no
+ * invitation — so the projection it was the model for no longer exists, and the
+ * names-only rule is enforced entirely on the strings below.
  */
 
-/** A read model deliberately carrying every value the card must NOT show. */
+/** A read model deliberately carrying every value the preview must NOT show. */
 const invitationCarryingPrivateDetails = {
   slug: "abcdefghijklmnop",
   // The couple's names come from the `ceremony` row, which is why they are an
@@ -34,65 +38,6 @@ const invitationCarryingPrivateDetails = {
   venueAddress: "Calle 100 #15-20",
   phoneE164: "+573005550000",
 };
-
-describe("buildOgCardModel", () => {
-  it("carries the greeting name and the invitation line", () => {
-    const model = buildOgCardModel(invitationCarryingPrivateDetails);
-
-    expect(model).toEqual({
-      greetingName: "Ñoño Muñóz",
-      invitationLine: buildOgCardInvitationLine("Ana y Bruno"),
-    });
-  });
-
-  it("carries a different household's greeting name unchanged", () => {
-    const model = buildOgCardModel({
-      ...invitationCarryingPrivateDetails,
-      greetingName: "Familia Restrepo",
-    });
-
-    expect(model.greetingName).toBe("Familia Restrepo");
-    expect(model.invitationLine).toBe(buildOgCardInvitationLine("Ana y Bruno"));
-  });
-
-  it("exposes no field beyond the greeting name and the invitation line", () => {
-    const model = buildOgCardModel(invitationCarryingPrivateDetails);
-
-    expect(Object.keys(model).sort()).toEqual([
-      "greetingName",
-      "invitationLine",
-    ]);
-  });
-
-  it("carries a different couple's names when the row holds different ones", () => {
-    // The triangulation that proves the line is BUILT rather than looked up: a
-    // module constant would return the same string for both couples.
-    const model = buildOgCardModel({
-      ...invitationCarryingPrivateDetails,
-      coupleNames: "Camila y Dario",
-    });
-
-    expect(model.invitationLine).toContain("Camila y Dario");
-    expect(model.invitationLine).not.toContain("Ana y Bruno");
-  });
-
-  it("renders no wedding date, venue or phone into any card value", () => {
-    const model = buildOgCardModel(invitationCarryingPrivateDetails);
-    const rendered = Object.values(model).join(" ");
-
-    expect(rendered).toContain("Ñoño Muñóz");
-    for (const secret of [
-      "2027-05-01",
-      "2027",
-      "Hacienda El Roble",
-      "Calle 100 #15-20",
-      "+573005550000",
-      "3005550000",
-    ]) {
-      expect(rendered).not.toContain(secret);
-    }
-  });
-});
 
 describe("buildOgCardInvitationLine", () => {
   it("states the invitation and names the couple it was given", () => {
