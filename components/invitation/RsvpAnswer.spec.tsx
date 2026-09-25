@@ -518,7 +518,9 @@ describe("RsvpAnswer declining", () => {
       screen.getByRole("button", { name: /Volver a responder/ }),
     );
     await user.click(acceptRadio());
-    await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
+    // Nothing is ticked afterwards: reconsidering opens with the whole
+    // household coming, which is the fix this test now stands beside — a
+    // decline names nobody, so seeding the boxes from it left them empty.
     await user.click(submitButton());
 
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
@@ -526,7 +528,9 @@ describe("RsvpAnswer declining", () => {
     const formData = action.mock.calls[0][1];
 
     expect(formData.get("attending")).toBe("yes");
-    expect(formData.getAll("attendee")).toEqual([GUESTS[0].id]);
+    expect(formData.getAll("attendee")).toEqual(
+      GUESTS.map((guest) => guest.id),
+    );
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(
         "¡Listo! Guardamos su respuesta.",
@@ -821,6 +825,40 @@ describe("how many taps it takes to say yes", () => {
    * A household that already said two of three are coming must find that
    * answer, not a form that quietly re-added the third.
    */
+  /**
+   * AND A DECLINE NAMES NOBODY, WHICH IS NOT AN ANSWER ABOUT WHO.
+   *
+   * A recorded decline stores an EMPTY attendee list, by construction — it
+   * confirms zero seats. Seeding the form from that list gave a household that
+   * declines and then reconsiders an empty set of boxes: the exact friction
+   * this default removed, in the one case where somebody is changing their
+   * mind, which is when a form should be at its most helpful.
+   *
+   * The review found it. `?? ` does not fall back for an empty array.
+   */
+  it("starts from everybody when the answer on file is a decline", async () => {
+    renderForm({
+      action: actionReturning({ status: "not_authorized" }),
+      current: {
+        attending: false,
+        seatsConfirmed: 0,
+        attendeeGuestIds: [],
+        dietaryNotes: null,
+      },
+    });
+
+    // A declined household meets the stream card, not the form: the way back
+    // is what this case is actually about.
+    await userEvent.click(
+      screen.getByRole("button", { name: /Volver a responder/ }),
+    );
+    await userEvent.click(acceptRadio());
+
+    for (const box of screen.getAllByRole("checkbox")) {
+      expect(box).toBeChecked();
+    }
+  });
+
   it("keeps the answer already on file rather than selecting everybody", () => {
     renderForm({
       current: {

@@ -206,7 +206,16 @@ test.describe("answering the invitation", () => {
     ).not.toBeChecked();
 
     await accept(page);
-    await attendeeBox(page, GUEST_ONE).check();
+    /*
+      ONE SEAT, SO THE OTHER TWO COME OFF.
+
+      Reconsidering opens with the whole household coming. A recorded decline
+      names NOBODY — it confirms zero seats by construction — so seeding the
+      boxes from it used to leave them empty, which is the friction this default
+      removes in exactly the case where somebody is changing their mind.
+    */
+    await attendeeBox(page, GUEST_TWO).uncheck();
+    await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);
 
     await expect(rsvpAlert(page)).toContainText(

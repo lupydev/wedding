@@ -1210,6 +1210,35 @@ given in front of us — so there is a test for that too.
 Green: 2338 unit and component tests, 222 browser tests, typecheck, lint,
 format, build.
 
+### U28 — done (a decline names nobody, and the form was reading it as if it did)
+
+The review's validator found it after the scroll fix, and it is a defect I
+introduced with the pre-checked default.
+
+**`??` DOES NOT FALL BACK FOR AN EMPTY ARRAY.** A recorded decline stores an
+empty attendee list BY CONSTRUCTION — it confirms zero seats. So
+`current?.attendeeGuestIds ?? guests.map(...)` took the empty list, and a
+household that declined and then pressed "Volver a responder" met a form with
+nothing ticked: the exact friction the default had just removed, in the one case
+where somebody is changing their mind, which is when a form should be at its
+most helpful.
+
+An ACCEPTED answer on file still wins. The condition is `current.attending` now,
+not the presence of a list.
+
+**One more known limitation, recorded rather than fixed.** Both radios answer on
+`change`, so a keyboard user arrowing through the group passes over the first
+option and answers it. That shape predates this work — the decline has always
+had it — and it is recoverable from either side. Named here so it is a decision
+rather than an oversight.
+
+Green: 2339 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
+Commit `0e13786`. RDD: assessed **medium** (`executable_change`, 4 paths, 95
+authored lines), `review_due: false` — under the ~400-line delivery budget, so
+the candidate is the slice, not this commit. Deferred to slice close.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still

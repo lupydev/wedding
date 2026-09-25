@@ -177,11 +177,20 @@ export function RsvpAnswer({
       empty list asked the household to repeat it back. Unchecking somebody who
       cannot come is the exception, and it is one tap.
 
-      An answer already on file wins, obviously: a household that said two of
-      three are coming must find that, not a form that quietly re-added the
-      third.
+      An ACCEPTED answer already on file wins, obviously: a household that said
+      two of three are coming must find that, not a form that quietly re-added
+      the third.
+
+      A DECLINE IS NOT AN ANSWER ABOUT WHO, and `??` does not fall back for an
+      empty array. A recorded decline stores an empty attendee list by
+      construction — it confirms zero seats — so seeding from it handed a
+      household that declines and then reconsiders an empty set of boxes: the
+      exact friction this default removes, in the one case where somebody is
+      changing their mind, which is when a form should be at its most helpful.
     */
-    current?.attendeeGuestIds ?? guests.map((guest) => guest.id),
+    current !== null && current.attending
+      ? current.attendeeGuestIds
+      : guests.map((guest) => guest.id),
   );
 
   // The answer ON FILE, which is what decides the surface. It starts as the row
