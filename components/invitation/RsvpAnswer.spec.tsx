@@ -857,4 +857,63 @@ describe("how many taps it takes to say yes", () => {
 
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
   });
+
+  /**
+   * AND DOES NOT MOVE THE PAGE FOR SOMEBODY WHO JUST ARRIVED.
+   *
+   * `attending` is read from the row on the first render, so a household that
+   * already accepted mounts with the block ALREADY open. An effect keyed on
+   * that value alone fires on mount and smooth-scrolls the page under somebody
+   * who has done nothing but reopen their invitation.
+   *
+   * The test above cannot tell the two apart: it clicks first, so a scroll on
+   * load satisfies it just as well as a scroll on answering. The review found
+   * this, and this is the assertion it was missing.
+   */
+  it("does not move the page for a household that merely reopens it", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    renderForm({
+      current: {
+        attending: true,
+        seatsConfirmed: 1,
+        attendeeGuestIds: [GUESTS[0].id],
+        dietaryNotes: null,
+      },
+    });
+
+    // The block IS open — this is not a test about it being closed.
+    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  /**
+   * AND STILL SCROLLS WHEN THAT SAME HOUSEHOLD CHANGES ITS MIND AND COMES BACK.
+   *
+   * A guard that simply remembered "we already mounted as yes" would also
+   * silence the scroll for a household that declines and then accepts again in
+   * the same visit, which is a real answer given in front of us.
+   */
+  it("scrolls again when an answer changes back to yes", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    renderForm({
+      action: actionReturning({ status: "not_authorized" }),
+      current: {
+        attending: true,
+        seatsConfirmed: 1,
+        attendeeGuestIds: [GUESTS[0].id],
+        dietaryNotes: null,
+      },
+    });
+
+    await userEvent.click(declineRadio());
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    await userEvent.click(acceptRadio());
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  });
 });

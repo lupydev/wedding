@@ -1183,6 +1183,33 @@ layout and "the same width" is not measurable there.
 Green: 2336 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Verified by screenshot at 390 and 1920.
 
+### U27 — done (the scroll fired on the way in, and the review caught it)
+
+Rated CRITICAL, and it was right.
+
+**`attending` IS READ FROM THE ROW ON THE FIRST RENDER.** A household that has
+already accepted therefore MOUNTS with the block open — and an effect keyed on
+that value alone fired immediately, smooth-scrolling the page under somebody who
+had done nothing but reopen their invitation.
+
+The self-submitting effect directly above it guards its own first run, for
+exactly the same reason. This one had no equivalent; the idiom was right there
+and I did not reach for it.
+
+**MY TEST COULD NOT TELL THE TWO APART.** It clicked the radio and then checked
+the stub, so "scrolled because the guest just answered" and "scrolled on load"
+both satisfied it. That is the fourth time this session a test has passed for a
+reason unrelated to the behaviour it names, and the shape is always the same: an
+assertion that the good path satisfies AND the bad path satisfies.
+
+**The guard is a ref of the value last acted on, seeded with the value we
+ARRIVED with.** A plain "have we mounted yet" boolean would also silence a
+household that declines and then accepts again in the same visit — a real answer
+given in front of us — so there is a test for that too.
+
+Green: 2338 unit and component tests, 222 browser tests, typecheck, lint,
+format, build.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still

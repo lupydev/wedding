@@ -197,6 +197,10 @@ export function RsvpAnswer({
 
   const formRef = useRef<HTMLFormElement>(null);
   const openedRef = useRef<HTMLDivElement>(null);
+  /** The answer the scroll effect below last acted on. Seeded at mount. */
+  const scrolledFor = useRef<Answer>(
+    current === null ? "" : current.attending ? "yes" : "no",
+  );
   // A counter rather than a boolean: two answers in a row are two distinct
   // requests, and a boolean that is already `true` would produce no change for
   // the effect below to act on.
@@ -237,6 +241,27 @@ export function RsvpAnswer({
    * worth nothing if the page throws on the way.
    */
   useEffect(() => {
+    /*
+      ONLY WHEN THE ANSWER CHANGED, NEVER ON THE WAY IN.
+
+      `attending` is read from the row on the first render, so a household that
+      already accepted MOUNTS with this block open — and an effect keyed on that
+      value alone fired immediately, smooth-scrolling the page under somebody
+      who had done nothing but reopen their invitation. The self-submitting
+      effect above guards its own first run for the same reason; this one had no
+      equivalent until the review said so.
+
+      A ref of the value we last acted on, seeded with the value we ARRIVED
+      with, is the guard. A plain "have we mounted yet" boolean would also
+      silence a household that declines and then accepts again in the same
+      visit, which is a real answer given in front of us.
+    */
+    if (attending === scrolledFor.current) {
+      return;
+    }
+
+    scrolledFor.current = attending;
+
     if (attending !== "yes") {
       return;
     }
