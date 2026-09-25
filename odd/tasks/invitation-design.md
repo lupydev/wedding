@@ -135,6 +135,7 @@ declined screen given the language `/transmision` already uses.
 - [x] **U23 — the declined screen, warmer and with a control that fills its
       column.**
 
+- [x] **U26 — one element decides how wide the declined card's controls are.**
 - [x] **U24 — the greeting sits on the photograph, on a phone.**
 - [x] **U25 — saying yes costs one tap alone and two as a household.**
 
@@ -1156,6 +1157,31 @@ about ownership again.
 
 Green: 2334 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. Verified by screenshot at 390.
+
+### U26 — done (both controls the same width, decided in one place)
+
+The couple, with a screenshot of them stacked: "los botones tienen diferentes
+anchos, deben quedar del mismo ancho."
+
+**BOTH WERE ALREADY `w-full`.** Of two different boxes. "Entrar a la
+transmisión" lives inside the stream block, which this card was capping at
+`max-w-sm`; "Volver a responder" is a sibling of that block and inherited the
+card's full width. Two elements each correctly filling their own parent, and
+the parents were different sizes.
+
+**The measure moved onto the card, and nothing inside it caps anything a second
+time.** That is the part worth keeping: with one capping element every control
+is `w-full` of the same box BY CONSTRUCTION, rather than by three places
+agreeing — so it survives somebody adding a third button. The welcome
+paragraph's own `max-w-sm` went too; a measure for prose inside a box already
+that wide was a second opinion about the same number.
+
+The test asserts exactly that structure — the card carries a `max-w-`, and the
+block, the link and the button carry `w-full` and no cap — because jsdom has no
+layout and "the same width" is not measurable there.
+
+Green: 2336 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. Verified by screenshot at 390 and 1920.
 
 ## Next
 

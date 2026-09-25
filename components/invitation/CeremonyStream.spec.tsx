@@ -204,3 +204,44 @@ describe("how the card answers a decline", () => {
     expect(back.className).toContain("w-full");
   });
 });
+
+/**
+ * THE TWO CONTROLS ARE THE SAME WIDTH, AND ONE ELEMENT DECIDES IT.
+ *
+ * The couple, with a screenshot of them stacked: "los botones tienen diferentes
+ * anchos, deben quedar del mismo ancho."
+ *
+ * They were. "Entrar a la transmisión" lives inside the stream block, which
+ * this card was capping at `max-w-sm`; "Volver a responder" is a sibling of
+ * that block and inherited the card's full width. Both were `w-full` — of two
+ * different things.
+ *
+ * THE MEASURE BELONGS TO THE CARD, not to one child of it. With the cap on the
+ * container, every control inside is `w-full` of the same box and they cannot
+ * drift apart again — which is what "same width" has to mean if it is to
+ * survive somebody adding a third button.
+ */
+describe("how wide the controls are", () => {
+  function card(): HTMLElement {
+    return document.querySelector<HTMLElement>(".rsvp__stream")!;
+  }
+
+  it("puts the measure on the card itself", () => {
+    renderCard();
+
+    expect(card().className).toMatch(/max-w-/);
+  });
+
+  it("caps nothing inside it a second time", () => {
+    renderCard();
+
+    const details = screen.getByTestId("stream-details");
+    const back = screen.getByRole("button", { name: /Volver a responder/ });
+    const join = screen.getByRole("link", { name: /Entrar a la transmisión/ });
+
+    for (const inside of [details, back, join]) {
+      expect(inside.className).toContain("w-full");
+      expect(inside.className).not.toMatch(/max-w-/);
+    }
+  });
+});

@@ -81,13 +81,24 @@ export function CeremonyStream({
   readonly onReconsider: () => void;
 }) {
   return (
-    <div className="rsvp__stream flex flex-col items-center gap-4 text-center">
+    /*
+      THE MEASURE LIVES HERE, ON THE CARD, AND NOWHERE INSIDE IT.
+
+      The couple counted the difference: "los botones tienen diferentes anchos,
+      deben quedar del mismo ancho." Both WERE `w-full` — of two different
+      boxes. "Entrar a la transmisión" sits inside the stream block, which this
+      card was capping at `max-w-sm`; "Volver a responder" is a sibling of that
+      block and inherited the card's full width.
+
+      One capping element is what makes "the same width" survive somebody adding
+      a third control: every child is `w-full` of the same box by construction,
+      rather than by three places agreeing.
+    */
+    <div className="rsvp__stream mx-auto flex w-full max-w-sm flex-col items-center gap-4 text-center">
       <h2 className="font-display text-xl text-[#f6efe2] sm:text-2xl">
         Los esperamos por Google Meet
       </h2>
-      <p className="max-w-sm text-sm text-[#f6efe2]/85">
-        {welcome(memberCount)}
-      </p>
+      <p className="text-sm text-[#f6efe2]/85">{welcome(memberCount)}</p>
 
       {/*
         The same block the public stream page renders, so the two surfaces
@@ -103,7 +114,7 @@ export function CeremonyStream({
       */}
       <StreamDetails
         ceremony={ceremony}
-        className="w-full max-w-sm"
+        className="w-full"
         showDate={false}
         showTime={false}
       />
