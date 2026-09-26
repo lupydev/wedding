@@ -60,6 +60,33 @@ export interface StagePhoto {
    * a confident, wrong answer, which is worse than no answer.
    */
   readonly alt: string;
+  /**
+   * Where to look when the photograph is CROPPED to fill a phone viewport.
+   *
+   * An `object-position` value, or nothing at all.
+   *
+   * `overlay` contained the photograph, full stop, and that was right for the
+   * only picture it had: the engagement shot is 0.46:1 and a phone is 0.462:1,
+   * so containing it wastes nothing. A picture of another shape contained on a
+   * phone is a letterbox with the blurred backdrop filling the rest, which is
+   * the `band` layout again by another route.
+   *
+   * Covering it instead throws away whatever does not fit, and on a portrait
+   * that is a third of its WIDTH. Where that third is taken from is the whole
+   * question, and only somebody who has looked at the picture can answer it —
+   * so the answer travels with the photograph, exactly as its `alt` does. A
+   * photograph that says nothing is contained, as before.
+   *
+   * IT IS A FRACTION OF THE OVERFLOW, NOT A POINT IN THE IMAGE, and that
+   * distinction has already cost one wrong value: `50%` shows the middle of the
+   * picture only when nothing is being cropped. At `p` the visible window
+   * starts `p × (imageWidth − cropWidth)` in, and `cropWidth` depends on the
+   * viewport, so the same percentage lands somewhere different on every phone.
+   * `components/landing/photos.spec.ts` does that arithmetic against the
+   * measured position of the couple, on both phones the invitation is checked
+   * on, because a crop that loses somebody does not fail — it renders.
+   */
+  readonly overlayFocus?: string;
 }
 
 export function PhotoStage({
@@ -101,6 +128,7 @@ export function PhotoStage({
   readonly mobilePhoto?: MobilePhoto;
 }) {
   const overlay = mobilePhoto === "overlay";
+  const { overlayFocus } = photo;
   return (
     /*
      * `min-h-dvh`, not `min-h-screen`. On a phone `100vh` is the viewport with
@@ -228,15 +256,40 @@ export function PhotoStage({
              * `object-fit` is not a prop — removed in Next 13 — so it is a
              * utility class.
              *
-             * `contain` below `lg`, where the figure is the whole viewport and
-             * its shape is the phone's rather than the photograph's; `cover` at
-             * `lg`, where the figure carries the photograph's own ratio so the
-             * two agree by construction, and cover is the one that cannot leave
-             * a hairline of background inside the rounded frame.
+             * Below `lg` the figure is the whole viewport in `overlay` and a
+             * strip in `band`, so the fit is the mobile layout's decision;
+             * `cover` at `lg`, where the figure carries the photograph's own
+             * ratio so the two agree by construction, and cover is the one that
+             * cannot leave a hairline of background inside the rounded frame.
+             *
+             * `contain` IN `overlay` UNLESS THE PHOTOGRAPH SAYS OTHERWISE. A
+             * picture the shape of a phone loses nothing to it; one that is
+             * not loses a third of its width to `cover` and has to say where
+             * that third comes from.
              */
             className={`lg:object-center lg:object-cover ${
-              overlay ? "object-contain" : "object-[center_72%] object-cover"
+              overlay
+                ? overlayFocus === undefined
+                  ? "object-contain"
+                  : "object-cover"
+                : "object-[center_72%] object-cover"
             }`}
+            /*
+             * AN INLINE VALUE, BECAUSE TAILWIND CANNOT COMPILE A RUNTIME ONE —
+             * the same reason the frame's ratio travels as a custom property.
+             *
+             * It is set only where a crop is actually happening. At `lg` it
+             * would survive into the framed print and override `lg:object-center`
+             * — inline styles beat classes — and that is harmless rather than
+             * lucky: the frame is drawn at `aspect-[var(--photo-stage-ratio)]`,
+             * the photograph's own shape, so the cover has no overflow to
+             * distribute and every object-position renders the same picture.
+             */
+            style={
+              overlay && overlayFocus !== undefined
+                ? { objectPosition: overlayFocus }
+                : undefined
+            }
           />
         </figure>
 

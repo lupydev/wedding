@@ -205,6 +205,85 @@ describe("where the stage puts the words", () => {
 });
 
 /**
+ * HOW A PHOTOGRAPH MEETS A PHONE VIEWPORT WHEN IT FILLS ONE.
+ *
+ * `overlay` used to mean one thing: `object-contain`. That was correct for the
+ * only photograph it was ever given — the engagement picture is 0.46:1 and a
+ * phone is 0.462:1, so containing it wastes a few pixels and crops nobody.
+ *
+ * The wedding photograph is 0.75:1. Contained on a phone it becomes a letterbox
+ * with the blurred backdrop above and below it, which is the "band" layout
+ * again with extra steps. Covered, it is cropped to the viewport's shape — and
+ * the two people stand left and right of centre, so WHERE the crop falls is the
+ * difference between a photograph of the couple and a photograph of a
+ * waterfall with somebody's shoe leaving the frame.
+ *
+ * So the crop is a property of the PHOTOGRAPH rather than of the stage: only
+ * whoever looked at the picture knows where its subject is. A photograph that
+ * says nothing is contained, exactly as before.
+ */
+describe("how a photograph fills a phone viewport", () => {
+  const FOCUSED = { ...WEDDING, overlayFocus: "68% center" };
+
+  it("covers the viewport at the focus the photograph declares", () => {
+    render(
+      <PhotoStage mobilePhoto="overlay" photo={FOCUSED}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    const image = screen.getByAltText(WEDDING.alt);
+
+    expect(image.className).toContain("object-cover");
+    expect(image.className).not.toContain("object-contain");
+    expect(image.style.objectPosition).toBe("68% center");
+  });
+
+  /**
+   * AND CONTAINS ONE THAT DOES NOT, which is the landing page unchanged.
+   *
+   * The engagement photograph is the phone's own shape, so there is nothing to
+   * decide and nothing to get wrong. Asserted rather than assumed because this
+   * is the page the couple have already approved: a crop introduced here would
+   * be a silent change to a screen nobody asked to change.
+   */
+  it("contains a photograph that declares no focus", () => {
+    render(
+      <PhotoStage mobilePhoto="overlay" photo={ENGAGEMENT}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    const image = screen.getByAltText(ENGAGEMENT.alt);
+
+    expect(image.className).toContain("object-contain");
+    expect(image.style.objectPosition).toBe("");
+  });
+
+  /**
+   * THE FOCUS BELONGS TO THE FULL-VIEWPORT CROP AND NOWHERE ELSE.
+   *
+   * In `band` the photograph is a strip whose own crop was measured separately
+   * (`object-[center_72%]`, which is about the vertical), and at `lg` it is a
+   * framed print drawn at the file's own ratio, where there is no overflow for
+   * an object-position to move. A focus leaking into either would be moving a
+   * picture that is not being cropped.
+   */
+  it("leaves the band strip's own crop alone", () => {
+    render(
+      <PhotoStage mobilePhoto="band" photo={FOCUSED}>
+        <p>Las palabras</p>
+      </PhotoStage>,
+    );
+
+    const image = screen.getByAltText(WEDDING.alt);
+
+    expect(image.className).toContain("object-[center_72%]");
+    expect(image.style.objectPosition).toBe("");
+  });
+});
+
+/**
  * SOMETHING THE STAGE WILL LAY OVER THE PHOTOGRAPH, ON A PHONE ONLY.
  *
  * The couple, looking at the invitation on a phone: "el 'Hola, nombre de la
