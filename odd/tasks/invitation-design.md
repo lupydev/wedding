@@ -1565,6 +1565,36 @@ names in `components/landing/photos.ts` — two literals that are one fact:
   (`tools/og-card-asset-budget.spec.ts:132`, SUGGESTION) — the frame-header walk
   does not account for standalone markers.
 
+### U30 — done (two assertions that read stronger than they were)
+
+Written earlier and left on disk uncommitted; committed now on request, after
+reading them rather than trusting them.
+
+**`for (const box of getAllByRole("checkbox")) expect(box).toBeChecked()` is
+satisfied by ONE rendered checkbox**, and it never says which guest any box
+belongs to. The default under test exists precisely so the household arrives
+complete, so the count is now pinned and every guest named by `fullName`. Two
+occurrences in `components/invitation/RsvpAnswer.spec.tsx`.
+
+**In the browser test the failure ran the other way.** `uncheck()` is satisfied
+by the state it wants, so on a box already off it does nothing and reports
+nothing. A default that regressed to empty would have passed both `uncheck()`
+calls and failed later through the seat count — a test that says something
+broke without saying what. `e2e/rsvp.spec.ts` now asserts all three boxes
+checked before touching any of them.
+
+Same family as `3a7f89a`: the assertion existed, and it could not fail.
+
+Green: 2335 unit and component tests, 14 rsvp browser tests, typecheck, lint
+(0 errors; the 9 warnings are pre-existing and none are in these files —
+verified by re-linting the stashed base), format.
+
+Commit `902007d`. RDD: assessed **medium** (`executable_change` in
+`components/invitation/RsvpAnswer.spec.tsx`), 3 paths, 92 changed lines,
+`review_due: false` — `under_budget`. The slice stays pending; the reviewed
+boundary remains this unit's predecessor until a later commit reaches the
+delivery budget.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
