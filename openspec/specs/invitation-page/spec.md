@@ -46,9 +46,9 @@ That names-only rule governs the METADATA TEXT — `og:title` and `og:descriptio
 
 ### Requirement: A Spanish household name survives the preview path uncorrupted
 
-A greeting name containing accented vowels or the letter enye MUST reach a WhatsApp preview intact, and the card route MUST answer with a real raster rather than an error page.
+A greeting name containing accented vowels or the letter enye MUST reach a WhatsApp preview intact, and the card route MUST answer with a real image rather than an error page.
 
-(This supersedes the earlier form of this requirement, which asserted that the rendered IMAGE drew those glyphs without tofu. The image renders no glyphs now, so the guarantee moved to the surface that carries the name: the metadata text in the first HTML response. The card's own obligation — that it renders at all — is kept here rather than dropped, because an over-budget or otherwise failing card produces a blank preview with no error anywhere.)
+(This supersedes the earlier form of this requirement, which asserted that the rendered IMAGE drew those glyphs without tofu. The image renders no glyphs now, so the guarantee moved to the surface that carries the name: the metadata text in the first HTML response. The card's own obligation — that it answers with an image at all — is kept here rather than dropped, because a failing card produces a blank preview with no error anywhere.)
 
 #### Scenario: Name with accents and enye reaches og:title uncorrupted
 
@@ -56,12 +56,15 @@ A greeting name containing accented vowels or the letter enye MUST reach a Whats
 - WHEN the invitation page is fetched with a WhatsApp User-Agent
 - THEN the `og:title` in the raw HTML response MUST equal "Ñoño Muñóz" exactly, byte for byte
 
-#### Scenario: The card route returns a real PNG raster
+#### Scenario: The card route serves the photograph's own JPEG bytes
 
 - GIVEN any invitation
 - WHEN the OG image route is fetched
-- THEN it MUST return status 200 with `content-type: image/png`
-- AND the body MUST begin with the PNG magic number and be larger than 1 KB
+- THEN it MUST return status 200 with `content-type: image/jpeg`
+- AND the body MUST begin with the JPEG magic number and be larger than 1 KB
+- AND the body MUST be byte-identical to the photograph on disk, so the card is served rather than re-encoded
+
+(This scenario said `image/png` until the route stopped composing the card. `ImageResponse` always rasterizes to PNG, and the measured PNG of this photograph was 2,887,177 bytes against the 265,052-byte JPEG it was rendering. The card is a static photograph with nothing to compose, so it is served directly; the byte-identity clause is what keeps "serve it" from quietly becoming "re-encode it" again.)
 
 ### Requirement: Invalid or rotated slug shows a friendly page
 

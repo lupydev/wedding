@@ -1374,6 +1374,150 @@ tests were deleted with `buildOgCardModel` and the font guard, and five were
 added with the asset budget. Verified by eye at 1200×1200 and inside the bubble
 at 1440.
 
+#### U29 amended — the card worked, and it was 11× too heavy
+
+Not a new unit: a defect in the one above, found by the parent's verification of
+it rather than by a guest, a couple or a review.
+
+**THE MEASUREMENT, AND HOW IT WAS FOUND.** Every check U29 shipped with was
+green, and each one was true. The card returned 200, it carried PNG magic bytes,
+it was byte-identical across households, the asset cleared the 500 KB
+`ImageResponse` ceiling with 147 KB to spare. Not one of them looked at HOW MANY
+BYTES a crawler downloads. Rendering the route's real output through the actual
+Satori + Resvg pipeline — rather than trusting "it returns a valid PNG" —
+answered it:
+
+| what                                  | bytes         |
+| ------------------------------------- | ------------- |
+| `img/og-card.jpg` on disk             | 265,052       |
+| its base64, for the data URI          | 353,404       |
+| **the PNG the route actually served** | **2,887,177** |
+
+Reproduced here before anything was changed, by constructing the shipped JSX
+against `ImageResponse` directly: `2887177 bytes`, magic `89 50 4e 47`.
+
+**`ImageResponse` ALWAYS RASTERIZES TO PNG, AND THAT IS WHY THE NUMBER IS THAT
+SHAPE.** PNG is lossless, so a photograph re-encoded into it costs eleven times
+the JPEG it was made from. The card this route used to draw was words on a flat
+cream ground — the one case where PNG costs almost nothing — and U29 changed the
+content out from under that encoding without noticing the encoding was part of
+the decision. Every crawler then paid 2.88 MB for a thumbnail, and every cold
+generation paid a full Satori + Resvg rasterization to produce a worse version
+of a file the repository already had.
+
+**THE TOOL WAS WRONG THE MOMENT THE CARD STOPPED BEING COMPOSED.**
+`ImageResponse` exists to turn JSX into pixels. U29's own strongest claim —
+"this file reads no invitation, takes no `params` and touches no database, so
+the card is BYTE-IDENTICAL for every household" — is precisely the statement
+that there is nothing to compose. A static photograph run through a layout
+engine is a layout engine being asked to copy a file.
+
+**AND RETURNING IT DIRECTLY IS THE CONVENTION'S ACTUAL CONTRACT, NOT A WAY
+AROUND IT.** `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/opengraph-image.md`
+line 251: "The default export function should return a `Response`." Line 253:
+"> **Good to know**: `ImageResponse` satisfies this return type." `alt`, `size`
+and `contentType` stay separate config exports (lines 257-263 and 302-311), and
+`contentType` is the image MIME type — `image/jpeg` now, which Next emits as
+`og:image:type`.
+
+**THE FILE IS `.ts`, NOT `.tsx`,** because no JSX survived. The convention
+accepts `.js`, `.ts` and `.tsx` alike (same document, "Generate images using
+code"), and the extension never reaches the URL — which is what `og-warm.ts`,
+the console's dispatch preview and `app/robots.ts` all depend on. `git mv`, so
+the history follows.
+
+**THE BUDGET GUARD'S PREMISE DIED WITH THE RASTERIZER, AND THE REPLACEMENT SAYS
+WHAT IT IS.** The 500 KB ceiling was an `ImageResponse` bundle limit; there is
+no bundle. Base64 length is now irrelevant to this product. What matters is the
+served payload, so `tools/og-card-asset-budget.spec.ts` measures the raw JPEG
+and the 1200×1200 frame out of the file's own header.
+
+Its threshold is **self-imposed and labelled as such in the file**. I could not
+verify a documented maximum image size for WhatsApp link previews from any
+source available in this session, so none is claimed and none is cited: 500,000
+bytes is a crawler-friendliness budget chosen here, about 2× headroom over the
+265,052 the card weighs. The real, measured reason the guard exists is written
+beside it — the PNG this route used to return was 2,887,177 bytes. The negative
+control stays: `img/boda.jpg` is 518,242 bytes and fails the same budget on its
+own, so the assertion is proven falsifiable on every run rather than once.
+
+The old "and with headroom" assertion was dropped on purpose, and that is a
+weakening only in appearance. It existed because overrunning `ImageResponse`'s
+ceiling meant the card did not render AT ALL — a cliff worth standing well back
+from. A raw-bytes budget has no cliff: a file at 499,900 bytes is heavy, not
+broken, and keeping the margin would have made the real budget 400,000 while the
+constant said 500,000.
+
+**ONE NEW ASSERTION BINDS THE GUARD TO THE ROUTE'S BEHAVIOUR**, because every
+number in that file is about a JPEG on disk and that is only the served payload
+while the route returns those bytes. It asserts the route neither imports
+`next/og` nor constructs an `ImageResponse`. Written first as a bare
+`toContain`, it failed against the CORRECT implementation — the route's comments
+name `ImageResponse` several times to explain why it is gone — so it checks the
+import and the construction by shape instead. A guard that forbids the
+explanation alongside the defect is one the next person loosens.
+
+**RED, OBSERVED AND QUOTED, TWICE.** The unit guard, pointed at the route that
+shipped in `8b9e348`:
+
+    AssertionError: expected '…import { ImageResponse } from "next/og"…'
+      not to match /from\s+["']next\/og["']/
+    ❯ tools/og-card-asset-budget.spec.ts:184
+
+And the browser test, run against that same restored route before the fix was
+put back:
+
+    ✘ 9 › the Open Graph card image › answers a crawler with the photograph's
+          own JPEG bytes, not a re-encoding
+      Error: expect(received).toContain(expected) // indexOf
+      Expected substring: "image/jpeg"
+      Received string:    "image/png"
+      > 246 |  expect(response.headers()["content-type"]).toContain("image/jpeg");
+
+**THE E2E ASSERTS EQUALITY WITH THE FILE, NOT A SIZE THRESHOLD.** A threshold
+answers "is it small enough"; `body.equals(CARD_PHOTOGRAPH)` answers the
+question that actually matters, which is "was anything re-encoded at all". It
+cannot be satisfied by a smaller re-encoding, it needs no number anybody chose,
+and a reintroduced `ImageResponse` fails it on the first byte. The
+byte-identical-across-households test and the `og:title`-differs half are
+untouched and both still able to fail; so is the cache-control test, and the
+header value is unchanged.
+
+**One trap on the way in, worth the line.** `import.meta.url` cannot resolve the
+asset path in a Playwright spec: the runner transpiles these to CommonJS and
+fails the whole FILE with "Cannot use 'import.meta' outside a module", which it
+then reports as **"No tests found"** rather than as an error on that line.
+`__dirname`.
+
+**THE TRACE SURVIVED THE RENAME, AND IT WAS CHECKED RATHER THAN ASSUMED**, since
+`img/` sits outside `public/` and the path is built at module scope from
+`process.cwd()`. `.next/server/app/i/[slug]/opengraph-image/route.js.nft.json`
+still lists `../../../../../../img/og-card.jpg` — now among **100** traced files
+rather than 204, the other hundred having been Satori and Resvg.
+
+**AND THE PAYLOAD WAS MEASURED, NOT ASSUMED.** Against `next start` on the final
+build:
+
+    content-type: image/jpeg
+    cache-control: public, immutable, no-transform, max-age=31536000
+    served bytes: 265052
+    byte-identical to img/og-card.jpg
+
+**2,887,177 → 265,052. The card is 9.2% of what it was**, and it is now the file
+rather than a picture of it.
+
+Three stale claims elsewhere were corrected rather than left: `og-warm.ts` said
+the first fetch pays for "a cold Satori + Resvg generation" — it pays for a disk
+read now, and the warm is still worth doing because it is the CDN edge holding
+the object that matters, which never depended on how the bytes were produced;
+`openspec/specs/invitation-page/spec.md` required `content-type: image/png` and
+PNG magic bytes, and now requires the JPEG and the byte-identity; and three
+comments naming `opengraph-image.tsx` follow the rename. The historical
+`openspec/changes/**` planning artifacts were deliberately left alone.
+
+Green: 2335 unit and component tests, 222 browser tests, typecheck, lint,
+format, build. One test added — the no-rasterizer assertion — and none deleted.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still

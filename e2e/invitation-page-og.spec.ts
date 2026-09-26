@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, test } from "@playwright/test";
 
 import { seedInvitation, type SeededInvitation } from "./helpers/seed";
@@ -26,6 +29,22 @@ const DESKTOP_USER_AGENT =
 
 /** The fixture name is load-bearing: enye in both cases, plus an accented o. */
 const GREETING_NAME = "Ñoño Muñóz";
+
+/**
+ * The photograph the card route serves, read from the repository.
+ *
+ * Read here rather than described by a number, because the assertion below is
+ * "the response body IS this file". A byte count would go on passing against a
+ * different photograph of a similar size; these bytes cannot.
+ *
+ * `__dirname`, not `import.meta.url`: Playwright transpiles these specs to
+ * CommonJS, and the `import.meta` form fails to load the whole file with
+ * "Cannot use 'import.meta' outside a module" — which the runner reports as
+ * "No tests found", not as an error in this line.
+ */
+const CARD_PHOTOGRAPH = readFileSync(
+  join(__dirname, "..", "img", "og-card.jpg"),
+);
 
 let invitation: SeededInvitation;
 
@@ -192,33 +211,47 @@ test.describe("per-guest Open Graph tags in the first HTML response", () => {
 });
 
 test.describe("the Open Graph card image", () => {
-  test("answers a crawler with a real PNG raster rather than an error page", async ({
+  test("answers a crawler with the photograph's own JPEG bytes, not a re-encoding", async ({
     request,
   }) => {
-    // This used to be framed as an ACCENT test — the fixture name carries an
-    // enye in both cases and an accented o, and the card used to rasterize that
-    // name with Satori. The card renders no text at all now, so nothing here
-    // can say anything about accents; what it still proves is worth keeping on
-    // its own, which is why it was renamed rather than deleted.
-    //
-    // A route that throws inside `ImageResponse` — the exact failure an
-    // over-budget photograph produces — does not answer 200 with PNG magic
-    // bytes. Nothing else in the suite would notice: the message still sends
-    // and the preview is simply blank.
+    /*
+      THIS USED TO ASSERT A PNG, AND THE PNG IS THE DEFECT IT NOW GUARDS.
+
+      It was first framed as an ACCENT test — the fixture name carries an enye
+      in both cases and an accented o, and the card rasterized that name with
+      Satori. The card renders no text at all now, so nothing here can say
+      anything about accents, and the assertion became "it is a real raster,
+      not an error page".
+
+      What that could not see is HOW BIG a raster. `ImageResponse` always
+      rasterizes to PNG, and a photographic 1200x1200 PNG is enormous: the
+      measured body this route returned was **2,887,177 bytes** — eleven times
+      the 265,052-byte JPEG it was rendering. Every crawler paid it, every check
+      was green, and no assertion in the repository looked at the payload.
+
+      The card is a STATIC photograph, byte-identical for every household, so
+      there is nothing for Satori to compose. The route returns the file. This
+      test asserts exactly that, by comparing the response body against the
+      bytes on disk rather than against a size threshold somebody chose: a
+      threshold answers "is it small enough", and equality answers the question
+      that actually matters, which is "was anything re-encoded at all". A
+      reintroduced `ImageResponse` fails it on the first byte.
+    */
     const response = await request.get(
       `/i/${invitation.slug}/opengraph-image`,
       { headers: { "user-agent": WHATSAPP_USER_AGENT } },
     );
 
     expect(response.status()).toBe(200);
-    expect(response.headers()["content-type"]).toContain("image/png");
+    expect(response.headers()["content-type"]).toContain("image/jpeg");
 
     const body = await response.body();
 
     expect(body.byteLength).toBeGreaterThan(1_000);
-    // PNG magic number: proves a real raster, not an error page with the
-    // wrong content type.
-    expect([...body.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    // JPEG magic number (SOI + the first marker): proves a real image, not an
+    // error page wearing the wrong content type.
+    expect([...body.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+    expect(body.equals(CARD_PHOTOGRAPH)).toBe(true);
   });
 
   test("is cacheable forever, which is what makes warming worth doing", async ({

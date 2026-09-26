@@ -87,7 +87,7 @@ export async function generateMetadata({
     description,
     robots,
     // `openGraph.images` is deliberately NOT set here. The
-    // `opengraph-image.tsx` file convention injects the absolute `og:image`
+    // `opengraph-image.ts` file convention injects the absolute `og:image`
     // plus its width and height; hand-writing the URL would be a second source
     // of truth that silently drifts from the route that serves the bytes.
     openGraph: {

@@ -1,8 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { ImageResponse } from "next/og";
-
 /**
  * The per-guest Open Graph card: one photograph, and nothing else.
  *
@@ -39,7 +37,12 @@ import { ImageResponse } from "next/og";
  * and would break all three for no gain — WhatsApp caches a preview per URL
  * anyway.
  *
- * Layout is flexbox only: Satori does not implement CSS grid.
+ * AND IT IS A `.ts` FILE, NOT `.tsx`, BECAUSE THERE IS NO JSX LEFT TO COMPILE.
+ * The convention accepts `.js`, `.ts` and `.tsx` alike — see "Generate images
+ * using code" in
+ * `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/opengraph-image.md`
+ * — and the extension never reaches the URL, which is what `og-warm.ts`, the
+ * console preview and `app/robots.ts` all depend on.
  */
 
 /** Node runtime: `fs` is not available on the edge, and the photograph is read from disk. */
@@ -60,11 +63,27 @@ export const runtime = "nodejs";
  * people, and legible as a thumbnail.
  *
  * Next.js emits these two numbers as `og:image:width` and `og:image:height`, so
- * changing them here is what tells a crawler the card's shape.
+ * changing them here is what tells a crawler the card's shape. They are a
+ * DECLARATION, not a resize: nothing in this route scales anything, so a
+ * photograph whose real frame stops matching these numbers advertises a lie.
+ * `tools/og-card-asset-budget.spec.ts` reads the real frame out of the file's
+ * own header and fails on exactly that.
  */
 export const size = { width: 1200, height: 1200 };
 
-export const contentType = "image/png";
+/**
+ * `og:image:type`, and the line that stopped this route rasterizing.
+ *
+ * It said `image/png` while the card went through `ImageResponse`, and it had
+ * to: `ImageResponse` always rasterizes to PNG. That was the right encoding for
+ * the card this used to be — words on a flat cream ground, where PNG costs
+ * almost nothing — and exactly the wrong one for a photograph. Measured, by
+ * rendering this route's real output through the Satori + Resvg pipeline rather
+ * than trusting that it returned a valid PNG: **2,887,177 bytes**, from a
+ * 265,052-byte JPEG. Eleven times the weight, for a worse encoding of a file
+ * the repository already had.
+ */
+export const contentType = "image/jpeg";
 
 /**
  * How long a generated card may be served from cache.
@@ -74,7 +93,7 @@ export const contentType = "image/png";
  * the whole warming strategy (`lib/server/og-warm.ts`) is built on the opposite
  * premise, that only the FIRST fetch of a card pays for generation. Without
  * this header, warming would report success while the crawler still paid for a
- * cold Satori + Resvg render.
+ * cold render.
  *
  * `immutable` is safe because the URL changes whenever the content can: a
  * rotated slug is a new path, and a redeployment changes the build hash Next.js
@@ -100,72 +119,48 @@ const CARD_CACHE_CONTROL = "public, immutable, no-transform, max-age=31536000";
 export const alt = "Los novios, de noche, frente a una cascada iluminada";
 
 /**
- * The photograph, read once at module scope and embedded as a data URI.
+ * The photograph, read once at module scope, as BYTES.
  *
- * THIS IS THE ONLY FORM THAT WORKS, and it is the documented recipe rather than
- * a workaround: `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/opengraph-image.md`,
- * "Using Node.js runtime with local assets". Satori has no filesystem and no
- * relative-URL base, so `<img src="/img/og-card.jpg">` resolves to nothing;
- * there is no static-import form either, because the asset has to arrive as
- * bytes rather than as a URL the browser would fetch. Read at module scope
- * because the file does not depend on the request, so the encode is paid once
- * per process instead of once per card.
+ * IT USED TO BE BASE64, AND THAT WAS NEVER ABOUT THE FILE. Base64 was the only
+ * way to get a local asset into Satori, which has no filesystem and no
+ * relative-URL base, so the card embedded a data URI in an `<img>` and
+ * `ImageResponse` rasterized the result. Nothing composes anything now, so
+ * there is nothing to encode for: the bytes go out as the response body.
  *
- * WHY A DERIVATIVE AND NOT `img/boda.jpg`, WHICH EVERY OTHER SURFACE RENDERS:
- * `ImageResponse` has a hard 500 KB ceiling over the whole bundle — JSX, CSS,
- * fonts and images together — and base64 costs four bytes for every three. The
- * 518,242-byte original encodes to 690,992 bytes and cannot render at all; this
- * 265,052-byte square encodes to 353,404, leaving room to spare.
- * `tools/og-card-asset-budget.spec.ts` measures both numbers and fails on a
- * replacement that would overrun, because the failure mode otherwise is a card
- * that silently stops existing.
+ * Read at module scope because the file does not depend on the request, so the
+ * disk read is paid once per process instead of once per card. Reusing one
+ * buffer across responses is safe — nothing here writes to it.
  *
  * `img/` sits outside `public/` on purpose — nothing here is meant to be
  * fetched directly — so this path relies on Next.js tracing the file into the
- * function bundle. That trace is verified per build; if it ever stops,
- * `outputFileTracingIncludes` in `next.config.ts` is the lever.
+ * function bundle. That trace is verified per build in
+ * `.next/server/app/i/[slug]/opengraph-image/route.js.nft.json`; if it ever
+ * stops, `outputFileTracingIncludes` in `next.config.ts` is the lever.
  */
-const cardPhotograph = await readFile(
-  join(process.cwd(), "img/og-card.jpg"),
-  "base64",
-);
+const cardPhotograph = await readFile(join(process.cwd(), "img/og-card.jpg"));
 
-const cardPhotographSrc = `data:image/jpeg;base64,${cardPhotograph}`;
-
-export default async function OpenGraphImage() {
-  return new ImageResponse(
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        // The photograph is already 1200×1200, the exact size of the card, so
-        // this only guards the case where the two ever disagree: it fills the
-        // frame and crops rather than letterboxing, which would show a band of
-        // whatever is behind it.
-        overflow: "hidden",
-      }}
-    >
-      {/*
-        A plain `<img>`, and `@next/next/no-img-element` does not fire on it:
-        eslint-config-next exempts the metadata image conventions, because
-        `next/image` is a React component for a BROWSER and Satori is neither.
-        There is no optimizer here and no DOM — this element is rasterized.
-      */}
-      <img
-        src={cardPhotographSrc}
-        width={size.width}
-        height={size.height}
-        // The description lives in `alt` above, which Next emits as
-        // `og:image:alt`. Repeating it here would put it nowhere a reader can
-        // reach: this element is rasterized into pixels, not served as HTML.
-        alt=""
-        style={{ objectFit: "cover" }}
-      />
-    </div>,
-    {
-      ...size,
-      headers: { "cache-control": CARD_CACHE_CONTROL },
+/**
+ * Returns the photograph itself.
+ *
+ * A PLAIN `Response`, WHICH IS THE CONVENTION'S ACTUAL CONTRACT rather than a
+ * way around it: "The default export function should return a `Response`", and
+ * "`ImageResponse` satisfies this return type" — lines 251 and 253 of
+ * `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/opengraph-image.md`.
+ * `ImageResponse` is one such `Response`, for the case where the card has to be
+ * COMPOSED. This card is a static photograph, byte-identical for every
+ * household, so there is nothing to compose and every gram of Satori + Resvg on
+ * a cold generation buys a heavier file than the input.
+ *
+ * `content-type` is set on the response as well as exported above: the export
+ * is what Next.js emits as `og:image:type` in the page's HTML, and the header
+ * is what the crawler fetching these bytes reads. They are two different
+ * consumers, and only one of them can see the export.
+ */
+export default function OpenGraphImage(): Response {
+  return new Response(cardPhotograph, {
+    headers: {
+      "content-type": contentType,
+      "cache-control": CARD_CACHE_CONTROL,
     },
-  );
+  });
 }

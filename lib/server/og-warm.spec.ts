@@ -136,7 +136,7 @@ describe("warmOgCard", () => {
     const { client, updates } = fakeClient();
     const fetches = fakeFetch({
       page: html(pageAdvertising(ADVERTISED_CARD_URL)),
-      card: new Response("png", { status: 200 }),
+      card: new Response("jpeg", { status: 200 }),
     });
 
     const warmed = await warmOgCard(client, SLUG, {
@@ -163,7 +163,7 @@ describe("warmOgCard", () => {
     const { client } = fakeClient();
     const fetches = fakeFetch({
       page: html(pageAdvertising(CARD_URL)),
-      card: new Response("png", { status: 200 }),
+      card: new Response("jpeg", { status: 200 }),
     });
 
     await warmOgCard(client, SLUG, { origin: ORIGIN, fetchImpl: fetches.impl });
@@ -175,7 +175,7 @@ describe("warmOgCard", () => {
     const { client } = fakeClient();
     const fetches = fakeFetch({
       page: html(pageAdvertising(ADVERTISED_CARD_URL)),
-      card: new Response("png", { status: 200 }),
+      card: new Response("jpeg", { status: 200 }),
     });
 
     await warmOgCard(client, SLUG, { origin: ORIGIN, fetchImpl: fetches.impl });
@@ -187,7 +187,7 @@ describe("warmOgCard", () => {
     const { client, updates } = fakeClient();
     const fetches = fakeFetch({
       page: html(pageAdvertising(ADVERTISED_CARD_URL)),
-      card: new Response("png", { status: 200 }),
+      card: new Response("jpeg", { status: 200 }),
     });
 
     await warmOgCard(client, SLUG, { origin: ORIGIN, fetchImpl: fetches.impl });
@@ -317,7 +317,7 @@ describe("warmOgCard", () => {
     });
     const fetches = fakeFetch({
       page: html(pageAdvertising(ADVERTISED_CARD_URL)),
-      card: new Response("png", { status: 200 }),
+      card: new Response("jpeg", { status: 200 }),
     });
     const log = vi.fn();
 

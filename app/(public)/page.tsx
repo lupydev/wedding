@@ -31,7 +31,7 @@ import { COUPLE_NAMES, formatWeddingDate } from "@/lib/domain/wedding-day";
  * `metadataBase` is set once in `app/layout.tsx`, so the relative image path
  * below resolves to an absolute HTTPS URL. Without it the emitted `og:image`
  * stays relative and no external crawler can fetch it — the same trap the
- * per-guest card at `/i/[slug]/opengraph-image.tsx` already documents.
+ * per-guest card at `/i/[slug]/opengraph-image.ts` already documents.
  *
  * `compromiso.src` rather than a written path: the static import is
  * content-hashed at build time, so a literal would break on the first change to

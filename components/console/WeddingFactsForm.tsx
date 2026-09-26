@@ -43,7 +43,7 @@ import {
  * The consequence of editing the couple's names, stated where they are edited.
  *
  * THE OPEN GRAPH CARD IS IMMUTABLE AND WhatsApp CACHES IT PER URL.
- * `app/i/[slug]/opengraph-image.tsx` answers `immutable, max-age=31536000`, and
+ * `app/i/[slug]/opengraph-image.ts` answers `immutable, max-age=31536000`, and
  * WhatsApp keeps one preview per link. So a name changed after invitations went
  * out leaves every already-delivered card showing the old text, permanently, and
  * nothing in this console can reach into a chat history to fix it. The only cure
