@@ -165,6 +165,15 @@ declined screen given the language `/transmision` already uses.
       for the first time, and two phone-shaped Playwright projects hold the
       result to 1.00.
 
+- [x] **U35 — the gate's own label could not be read, and its field did not
+      look like a field.** A defect in U34's output, found on U34's own
+      screenshot. Measured against the pixels actually behind it, the label of
+      the only control on the first screen every guest sees was 1.2:1 and the
+      field's edge 1.3:1. The gate carries its own ground now, painted rather
+      than laid out so it costs no height, and `gate-legibility.spec.tsx`
+      holds every word on that screen to the same 4.5:1 the two theme tables
+      are already held to.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -2446,6 +2455,185 @@ before, all in files this unit did not touch), `npm run format:check`,
 `npm run build`, and `PORT=3100 npx playwright test` 239 browser tests (223 plus
 the 8 new ones on each of the two phones).
 
+### U35 — done (the gate's label, measured against what was behind it)
+
+A defect in U34, found on U34's own screenshot, twenty minutes after U34 was
+committed. Worth recording as its own unit rather than folded into that one:
+what it is really about is that U34 measured HEIGHT and never measured
+CONTRAST, and a unit that got a number right can still ship a screen nobody
+can read.
+
+**WHAT WAS WRONG, IN NUMBERS.** Cream type at 60% opacity, laid over the lit
+edge of Michell's dress, with nothing in between.
+
+| iPhone 14            | before (p95 / worst) | after (p95 / worst) |
+| -------------------- | -------------------- | ------------------- |
+| "Escribe tu número…" | 1.21 / 1.05          | 8.08 / 7.00         |
+| `NÚMERO DE CELULAR`  | **1.24 / 1.05**      | 8.43 / 7.48         |
+| the number as typed  | 2.54 / 1.38          | 11.71 / 9.50        |
+| the field's own edge | **1.30**             | 5.27                |
+| `Ver la invitación`  | 4.50 / 3.06          | 13.09 / 12.11       |
+| the WhatsApp way out | 6.33 / 5.36          | 16.23 / 14.20       |
+
+| Pixel 7              | before (p95 / worst) | after (p95 / worst) |
+| -------------------- | -------------------- | ------------------- |
+| "Escribe tu número…" | 5.69 / 1.32          | 11.11 / 10.39       |
+| `NÚMERO DE CELULAR`  | **1.12 / 1.01**      | 7.25 / 6.77         |
+| the number as typed  | 1.47 / 1.03          | 9.59 / 8.23         |
+| the field's own edge | **1.11**             | 4.59                |
+| `Ver la invitación`  | 2.94 / 1.86          | 11.70 / 9.65        |
+| the WhatsApp way out | 3.74 / 2.94          | 10.04 / 8.16        |
+
+WCAG holds body text to 4.5:1 and the boundary of a control to 3:1. Nine of
+those twelve before-numbers are under the first threshold and both edges are
+under the second. 1.12:1 is not "dim": it is the label of the only control on
+the page, absent.
+
+**HOW THEY WERE TAKEN, BECAUSE A CONTRAST NUMBER NOBODY CAN REPRODUCE IS AN
+OPINION WITH A DECIMAL POINT.** The gate was rendered at both phone presets and
+screenshotted twice: once with the form's own grounds stripped, once with only
+the glyphs made transparent. The second shot is what each element actually sits
+on, and the WCAG relative luminance of every pixel inside the element's own box
+was taken from it — p95 because a single specular pixel is not a reading
+surface, and the worst pixel beside it because the floor should be visible too.
+The arithmetic is `lib/design/contrast.ts`, which already grades both theme
+tables.
+
+One trap on the way, recorded because it would cost the next person an hour:
+`getComputedStyle` returns Tailwind's opacity modifiers as `lab(…)`, which
+`parseCssColor` REFUSES by design. Each colour was therefore resolved back to
+`rgba()` by painting it on a canvas over black and over white and solving the
+two results for its alpha, rather than by loosening the parser.
+
+**THE STRUCTURAL CAUSE, WHICH IS NOT "SOMEBODY PICKED A LOW OPACITY".**
+`PhotoStage` lays two scrims over an `overlay` page: the top 55% and the bottom
+38%, fading towards each other so that the middle — where the couple are —
+keeps the least veil of anywhere in the frame. That is exactly right for the
+landing, whose photograph puts the couple low with clear sky above them and
+whose words sit at the two ends.
+
+The wedding photograph puts the couple in the MIDDLE, from 53% to 87% of the
+frame. And the gate's words run all the way down: measured on an iPhone 14 the
+field sits at 60%–72%, in the gap where the top scrim has already faded out and
+the bottom one has not yet begun. The brightest pixel under the label is
+`#FAF8EF` — 0.937 luminance, all but white, against the 0.861 of the cream the
+page writes in.
+
+It is also why the panel on the question screen has been fine at `bg-black/25`
+since U34: it sits at 70%–95%, where the bottom scrim is already carrying 60%
+to 90% of the load. Same card, a third of the work to do.
+
+**THE FIX THAT WAS LOOKED FOR FIRST AND DOES NOT EXIST.** Shifting the crop
+downwards so the couple fall lower and the words get clear sky would have been
+the better answer — one value in `photos.ts`, no new ink on the page. It is not
+available, and now the spec says so rather than a comment: a `cover` crop is
+bound by whichever axis needs the most scaling, and on a 0.75:1 picture in a
+0.59:1 or 0.49:1 window that is the HEIGHT. The scaled height equals the screen
+exactly, so there is no vertical overflow for `object-position` to distribute
+and `68% center`, `68% top` and `68% bottom` are the same picture. Where the
+couple sit vertically is the photograph's, full stop.
+
+`components/landing/photos.spec.ts` asserts it on both phones now, which also
+turns an assumption `visibleSpan` was already making into a line somebody can
+read.
+
+**WHAT THE GATE GREW, AND WHY IT IS PAINTED RATHER THAN LAID OUT.** A ground of
+its own, in the language `RsvpAnswer` already uses — a deepening of the same
+photograph rather than a sheet of paper on it, rounded, ringed and blurred —
+covering the sentence that asks, the label, the field, the button and the
+reserved refusal line.
+
+It is `absolute`, with negative insets and `-z-10`, so it adds NO height and
+does not narrow the text. Both mattered. A card with real padding would have
+taken about 26 pixels from a screen with 57 to spare, and — worse — reflowed
+the refusal onto another line on the one screen whose refusal was already past
+the fold. As painted, the refused gate got SHORTER: 676px on a 664px iPhone 14
+before, 672px after, because the panel absorbed one 16px section gap into a
+12px one and the reserved line went from `min-h-6` to the `min-h-5` that is
+actually one line of `text-sm`.
+
+`isolate` on the panel is load-bearing, and its absence is the same failure
+`PhotoStage` documents for its scrims: painting order is not DOM order. Without
+a stacking context of its own, a `-z-10` ground paints below every positioned
+element in the page — including the photograph — and the gate renders exactly
+as it did before, with nothing to see and no error anywhere.
+
+**AND THE FIELD, WHICH IS A SEPARATE FAILURE FROM THE LABEL.** It was a
+translucent bar with a 25% edge under a button that did read as a button. It is
+a sunk well now — darker than the panel, a 60% edge that measures 5.3:1 and
+4.6:1 against it, an inset shadow, and a placeholder showing the shape of a
+Colombian mobile number. The language is the console's own: `--muted` is "the
+SUNK surface: inputs, alternate rows, wells", and the button above it stays the
+raised one, so the two controls no longer look alike.
+
+The placeholder is not the visible label coming back. `300 123 4567` is an
+example of the thing being asked for, it answers "am I meant to type in here?",
+and it disappears on the first keystroke — which is exactly why it could never
+have been the label.
+
+**WHAT IT COSTS, STATED RATHER THAN GLOSSED.** On the gate the couple are now
+behind the card, blurred and darkened, the same way they already are behind the
+question screen's card. The photograph still carries the screen — the waterfall
+and the lit foliage are untouched above it, and on a Pixel 7 their legs and
+Luis's shoes are clear below it — but the gate is no longer a picture of the
+two of them. If the couple want them visible on the first screen, the answer is
+a different photograph for the gate, and that is theirs to choose, not a value
+to tune.
+
+**RED, QUOTED.** `app/i/[slug]/gate-legibility.spec.tsx` was written first and
+all eleven of its assertions failed against the shipped gate:
+
+    Error: the gate has no `.gate__panel-ground`
+    Error: expected exactly one unconditional `text-` colour on <a class="…">,
+      found 0. This spec measures the colour the component declares, so it
+      cannot fall back to a default.
+
+and, once the panel existed but its edge did not yet clear the non-text
+threshold:
+
+    AssertionError: expected 2.8266786718264405 to be greater than or equal to 3
+
+The new assertion in `photos.spec.ts` cannot fail on today's photograph, so it
+was forced: declaring the source 300×2400 — a picture narrower than a phone, so
+the WIDTH binds — turned it red on both phones.
+
+    × has nothing to crop vertically on a iPhone 14
+    × has nothing to crop vertically on a Pixel 7
+
+**WHAT THE SPEC DELIBERATELY DOES NOT CREDIT.** The panel blurs what is behind
+it, and a blur pulls a highlight towards its dark surroundings — which is why
+the numbers measured on the real page (8.4:1 for the label) are far above the
+5.6:1 the spec's arithmetic predicts from the same tokens. The spec measures
+the SHARP pixel. A floor that credits an unmeasurable is not a floor.
+
+**GREEN.** `npm test` 2403 unit and component tests (2389 at `c930ac0`),
+`npm run typecheck`, `npm run lint` (0 errors, 8 warnings — the same eight, all
+in files this unit did not touch), `npm run format:check`, `npm run build`.
+Every step of the invitation still measures 1.00 on both phones.
+
+**NOT GREEN, AND NOT THIS UNIT'S DOING.** `PORT=3100 npx playwright test`
+cannot complete on this machine: `e2e/console-guest-directory.spec.ts` fails at
+its first assertion, which aborts the rest of its serial describe and skips the
+`wedding-facts` project that depends on `chromium`. The cause is the local
+Supabase, which has accumulated 607 invitations and 1074 `invitation_guests`
+rows from crashed runs — `listGuestDirectory` issues an unpaginated
+`.select()`, PostgREST caps a page at 1000 rows, and a freshly seeded fixture
+now falls outside it. Reproduced at `c930ac0` with this unit's changes stashed,
+so it predates them.
+
+Run around it, every other test passes: 179 of `chromium`'s 207, all 8 on
+`iphone-14`, all 8 on `pixel-7`, all 16 of `wedding-facts` — 211 of the 211
+tests outside that one file, with 1 passed, 1 failed and 26 skipped inside it.
+The fixtures were left in place rather than deleted: 265 of those invitations
+do not match any fixture-naming pattern, and a local database is not something
+to clear on a guess.
+
+It is also a real defect wearing a test failure's clothes. `listGuestDirectory`
+will silently stop returning guests past the thousandth in production too. The
+list is 388 people today, so it is not urgent, but it is not hypothetical
+either — and it is nothing to do with the invitation, so it is written down
+here rather than fixed here.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
@@ -2462,9 +2650,26 @@ the 8 new ones on each of the two phones).
   the invitation. It repeated the WhatsApp message that brings a guest here and
   cost the question screen a tenth of its height. Theirs to overrule — the price
   is stated in U34.
-- A refused gate is twelve pixels taller than an iPhone 14 screen. The gate is
-  the one surface deliberately left free to scroll, so this is a degradation
-  rather than a defect, but it is the only number in the feature that is not
-  1.00.
-- The submit button is quiet against the photograph. Legible and unambiguous,
-  since it is the only one, but a judgement the couple may want to overrule.
+- A refused gate is eight pixels taller than an iPhone 14 screen — it was
+  twelve until U35 absorbed a section gap into the panel and stopped
+  over-reserving the refusal's line. The gate is the one surface deliberately
+  left free to scroll, so this is a degradation rather than a defect, but it is
+  still the only number in the feature that is not 1.00.
+- The submit button is quiet against the photograph. That was written here as
+  "legible and unambiguous, since it is the only one", and U35 measured it:
+  2.94:1 on a Pixel 7, against a 4.5:1 minimum. It was quiet because it was
+  half-readable. On the gate's panel it now measures 11.7:1 and 13.1:1 without
+  the button itself changing at all, so what is left really is a question of
+  weight rather than of legibility — and still one the couple may want to
+  overrule.
+- The gate's card covers the couple, the way the question screen's card already
+  does. The photograph carries the screen through the waterfall above it, but a
+  guest who opens the invitation no longer sees Luis and Michell until they are
+  through the gate. Overruling it means a different photograph for that one
+  screen — the engagement shot is already the landing's and is the phone's own
+  shape — which is the couple's choice, not a value to tune.
+- `listGuestDirectory` reads the guest directory with an unpaginated
+  `.select()`, and PostgREST stops at 1000 rows. The list is 388 people, so
+  nothing is missing today; past a thousand the console would simply stop
+  showing the rest, with no error. Found while verifying U35, unrelated to the
+  invitation, and not fixed there.
