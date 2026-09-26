@@ -9,8 +9,6 @@ import {
 } from "./StreamInvitation";
 
 const CEREMONY: StreamInvitationCeremony = {
-  ceremonyDate: "sábado 28 de noviembre de 2026",
-  ceremonyTime: "5:00 p. m.",
   streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
@@ -110,12 +108,20 @@ describe("StreamInvitation", () => {
    * And the day is not repeated, which is the point of dropping it.
    *
    * The date the page DOES show comes from `SaveTheDate` above, in prose and
-   * from the domain. This asserts the row's own rendering of it is absent.
+   * from the domain. This used to assert that the ROW's own rendering of the
+   * day was absent — a comparison against a fixture string that the prop type
+   * no longer has a field for, because migration 0018 dropped the column.
+   *
+   * What is left to assert is the announcement's own line, and that it appears
+   * ONCE. `SaveTheDate` reads `WEDDING_INSTANT`, so this is the only statement
+   * of the day on the page and a second one would have to come from somewhere
+   * new.
    */
-  it("does not state the day twice", () => {
+  it("states the day exactly once, from the announcement", () => {
     render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
 
-    expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
+    // `SaveTheDate`'s own `<time>`, and nothing else on the page.
+    expect(screen.getAllByTestId("save-the-date-when")).toHaveLength(1);
   });
 
   /**
@@ -292,12 +298,17 @@ describe("the stream page's own words", () => {
    * The day is above in prose, from the domain; the hour is where the counter
    * lands, and the add-to-calendar button carries the precise time for anybody
    * who wants to keep it.
+   *
+   * This compared against two fixture strings until migration 0018 dropped the
+   * columns they came from. The block below the announcement carried them in a
+   * `dt`/`dd` pair, so `term` and `definition` are what would come back — and
+   * unlike a string comparison, this catches a line restated in ANY wording.
    */
   it("states neither the day nor the hour a second time", () => {
     render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
 
-    expect(screen.queryByText(CEREMONY.ceremonyTime)).toBeNull();
-    expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
+    expect(screen.queryAllByRole("term")).toHaveLength(0);
+    expect(screen.queryAllByRole("definition")).toHaveLength(0);
   });
 });
 

@@ -81,6 +81,12 @@ describe("INVITATION_MESSAGE_TEMPLATE", () => {
    * the event moved, the page was corrected in minutes, and the already-delivered
    * messages kept announcing the old venue forever. The link resolves to the one
    * surface that can still be corrected, which is the whole argument.
+   *
+   * Two of these names are now doubly impossible: migration 0018 dropped
+   * `ceremony_date` and `ceremony_time` outright. They stay on the list for the
+   * reason `wedding_date` — which was never a column at all — is on it: this
+   * guard forbids NAMES in a template, not columns in a schema, and the name is
+   * what somebody would reach for.
    */
   it("declares no date, time, venue or address variable, and never will", () => {
     for (const forbidden of [

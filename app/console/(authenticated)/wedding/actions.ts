@@ -15,7 +15,7 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
 import type { WeddingFactsState } from "./wedding-facts-state";
 
 /**
- * Rewrites the wedding's seven facts from the console editor.
+ * Rewrites the wedding's four facts from the console editor.
  *
  * THREE THINGS HAPPEN, IN THIS ORDER, AND THE ORDER IS THE POINT
  *
@@ -27,10 +27,10 @@ import type { WeddingFactsState } from "./wedding-facts-state";
  * 2. `parseWeddingFacts` — on the SERVER. The form's `required` and `maxLength`
  *    attributes are a convenience; a hand-rolled request carries whatever it
  *    likes, and a blank venue stored here renders as an invitation that looks
- *    finished and names no place. A refusal writes nothing — not even the six
- *    fields that were fine, because six saved values and one refused is exactly
+ *    finished and names no place. A refusal writes nothing — not even the
+ *    three fields that were fine, because three saved values and one refused is
  *    the partial state one-form-one-save exists to prevent.
- * 3. `updateCeremony` — one UPDATE of the singleton, all seven columns together.
+ * 3. `updateCeremony` — one UPDATE of the singleton, all four columns together.
  *
  * NO OWNERSHIP CHECK, AND THAT IS DELIBERATE RATHER THAN FORGOTTEN. The
  * `ceremony` row belongs to the wedding, not to a sender: unlike an invitation,
@@ -39,7 +39,7 @@ import type { WeddingFactsState } from "./wedding-facts-state";
  * would be a queue with nobody in it.
  *
  * NOTHING IS LOGGED. Not the values, not a summary of them, not on the failure
- * path. One of the seven is the Zoom passcode, and a log line is a copy of it in
+ * path. One of the four is the stream link, and a log line is a copy of it in
  * a place nobody will remember to rotate. The whole-form notice below carries no
  * submitted value either, for the same reason: an error message is rendered into
  * a page and pasted into a bug report.
@@ -47,8 +47,8 @@ import type { WeddingFactsState } from "./wedding-facts-state";
  * IT RETURNS STATE RATHER THAN THROWING, unlike `updateGuestPhoneAction`. The
  * difference is what a refusal means to the operator: a phone number the
  * repository rejects is one field, and Next.js's error boundary is an honest
- * answer. Here there are seven fields, one of which may be wrong, and an error
- * page would discard the other six the operator just typed.
+ * answer. Here there are four fields, one of which may be wrong, and an error
+ * page would discard the other three the operator just typed.
  */
 export async function saveWeddingFactsAction(
   _previous: WeddingFactsState,

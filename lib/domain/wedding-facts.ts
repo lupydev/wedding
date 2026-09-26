@@ -2,7 +2,7 @@
  * The wedding's facts, and what counts as an acceptable value for each.
  *
  * Pure on purpose, and in `lib/domain` for the same reason the Open Graph card
- * model is: these seven values are the whole content of the invitation, they
+ * model is: these four values are the whole content of the invitation, they
  * reach a guest through four separate surfaces, and one of those surfaces — the
  * Open Graph card — is served immutably and cached by WhatsApp per URL. What may
  * be stored is therefore a rule about the product rather than a detail of one
@@ -34,11 +34,19 @@
  */
 export const CONSOLE_WEDDING_PATH = "/console/wedding";
 
-/** The seven values, in the order the console's form presents them. */
+/**
+ * The four values, in the order the console's form presents them.
+ *
+ * THE DAY AND THE HOUR ARE DELIBERATELY ABSENT. `ceremonyDate` and
+ * `ceremonyTime` were here, and nothing a guest could open rendered either:
+ * every caller of `StreamDetails` passed `showDate={false} showTime={false}`.
+ * The day a guest reads comes from `WEDDING_INSTANT` in `lib/domain/
+ * wedding-day.ts`, which also drives the countdown, the RSVP deadline and the
+ * add-to-calendar link. Migration 0018 dropped both columns, so a field added
+ * back here would validate something nothing stores.
+ */
 export const WEDDING_FACT_FIELDS = [
   "coupleNames",
-  "ceremonyDate",
-  "ceremonyTime",
   "venueName",
   "venueAddress",
   "streamUrl",
@@ -73,8 +81,6 @@ export const WEDDING_FACT_MAX_LENGTHS: Readonly<
   Record<WeddingFactField, number>
 > = {
   coupleNames: 200,
-  ceremonyDate: 200,
-  ceremonyTime: 200,
   venueName: 200,
   venueAddress: 300,
   streamUrl: 500,
@@ -83,8 +89,6 @@ export const WEDDING_FACT_MAX_LENGTHS: Readonly<
 /** What each field is called on the operator's screen and in its own errors. */
 export const WEDDING_FACT_LABELS: Readonly<Record<WeddingFactField, string>> = {
   coupleNames: "Nombres de la pareja",
-  ceremonyDate: "Fecha",
-  ceremonyTime: "Hora",
   venueName: "Lugar",
   venueAddress: "Dirección",
   streamUrl: "Enlace de Google Meet",
@@ -208,7 +212,7 @@ function fieldError(field: WeddingFactField, raw: unknown): string | null {
 /**
  * Validates a whole submission.
  *
- * EVERY BROKEN FIELD AT ONCE, NOT THE FIRST. Seven fields and one error per
+ * EVERY BROKEN FIELD AT ONCE, NOT THE FIRST. Four fields and one error per
  * round trip, on venue Wi-Fi, is how a form stops getting filled in — and these
  * are the values without which no invitation can be sent at all.
  *

@@ -139,6 +139,11 @@ declined screen given the language `/transmision` already uses.
 - [x] **U24 — the greeting sits on the photograph, on a phone.**
 - [x] **U25 — saying yes costs one tap alone and two as a household.**
 
+- [x] **U31 — the day and the hour leave the database entirely.** Two columns
+      nothing guest-facing rendered, and a console hint that said they did.
+      The wedding date now lives only in `WEDDING_INSTANT`, which answers
+      `odd/tasks/wedding-landing.md`'s open question in the negative.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -1594,6 +1599,188 @@ Commit `902007d`. RDD: assessed **medium** (`executable_change` in
 `review_due: false` — `under_budget`. The slice stays pending; the reviewed
 boundary remains this unit's predecessor until a later commit reaches the
 delivery budget.
+
+### U31 — done (the day and the hour leave the database entirely)
+
+The owner asked for the removal outright: delete `ceremony_date` and
+`ceremony_time` — column, domain field, console field, read model, rendering
+path and tests. "They are dead weight and the console actively lies about them."
+
+**NOTHING A GUEST COULD OPEN RENDERED EITHER, AND THAT WAS CHECKED RATHER THAN
+ASSUMED.** `StreamDetails` was the only component that ever printed them, above
+the join control, behind `showDate` and `showTime` props that **defaulted to
+true**. There are exactly two callers and both passed false:
+
+| caller                               | what it passes                      |
+| ------------------------------------ | ----------------------------------- |
+| `StreamInvitation` (`/transmision`)  | `showDate={false} showTime={false}` |
+| `CeremonyStream` (the declined card) | `showDate={false} showTime={false}` |
+
+`RsvpAnswer` reaches the block only through the second of those, so there is no
+third caller and no third answer. A default nothing takes is not a safe default:
+it is a branch that renders only in a spec file, and it kept two columns alive
+in the schema, the read model, the console form and every fixture that had to
+name them.
+
+**AND THE CONSOLE TOLD THE OPERATOR THE OPPOSITE.** Beside the date field:
+"Se muestra tal como se escriba acá, en la invitación y en la transmisión."
+False. An operator correcting the date changed nothing a guest reads and was
+told it had worked — which is worse than an editor that is simply missing,
+because the wrong belief survives the visit. That hint went with the field.
+
+**THE DATE A GUEST ACTUALLY READS COMES FROM SOMEWHERE ELSE AND STAYS THERE.**
+`WEDDING_INSTANT` in `lib/domain/wedding-day.ts`, hardcoded, driving
+`SaveTheDate` on every guest-facing screen, the countdown and the RSVP deadline.
+Untouched by this unit.
+
+**THE CALENDAR LINK WAS THE ONE THING THAT COULD HAVE BLOCKED THIS, AND IT WAS
+VERIFIED BEFORE ANYTHING WAS DELETED.** `/transmision` builds
+`googleCalendarUrl(calendarEvent)`, and `buildStreamCalendarEvent` takes
+`{ coupleNames, streamUrl }` plus a `Date` — the page passes `WEDDING_INSTANT`.
+The event's `uid`, `start` and `dates` are all derived from that instant. No
+path from the dropped columns to the calendar entry, so the link is byte-for-byte
+what it was.
+
+**THE CONSEQUENCE THE OWNER ACCEPTED, WRITTEN DOWN RATHER THAN DISCOVERED
+LATER.** The wedding date now lives ONLY in code. Moving the wedding is a deploy,
+not an UPDATE at `/console/wedding`. And `odd/tasks/wedding-landing.md` carried
+the OPPOSITE open question under "Next step" — wire the landing TO the
+`ceremony` row, so the day becomes correctable without a deploy. **This change
+answers that question in the negative**, and that document now says so at the
+top of the section rather than continuing to read as undecided.
+
+**RED, OBSERVED AND QUOTED, ON FOUR FRONTS.** A deletion's honest red is a test
+asserting the thing is gone; `3a7f89a` exists in this branch because two
+assertions here could not fail, so each of these was run before a line of
+implementation.
+
+The domain field list:
+
+    AssertionError: expected [ Array(6) ] to deeply equal
+      [ 'coupleNames', 'streamUrl', …(2) ]
+    +   "ceremonyDate",
+    +   "ceremonyTime",
+    ❯ lib/domain/wedding-facts.spec.ts:76:45
+
+The live schema, asked of the catalog rather than of a list in the test file:
+
+    ✕ the ceremony configuration row > no longer has the two columns migration
+      0018 dropped
+    AssertionError: expected [ 'ceremony_date', 'ceremony_time' ]
+      to deeply equal []
+    ❯ supabase/tests/ceremony.spec.ts:190:21
+
+The console form, once for each box:
+
+    ✕ WeddingFactsForm's fields > offers no Fecha box to type into
+    AssertionError: expected <input data-slot="input" …(9)></input> to be null
+    + <input … id="wedding-ceremonyDate" name="ceremonyDate" required=""
+             value="sábado 14 de noviembre de 2026" />
+
+And the component, with no props at all — which is what both callers passed in
+effect:
+
+    ✕ StreamDetails > states no day and no hour, with nothing to switch off
+    AssertionError: expected [ <dt class="sr-only"></dt>, …(1) ]
+      to have a length of +0 but got 2
+
+**THE SCHEMA ASSERTION IS AGAINST THE CATALOG, NOT AGAINST A SHORTER LIST.**
+Removing two entries from `CEREMONY_COLUMNS` proves only that the test stopped
+asking. It cannot tell a tree that stopped reading two columns from one where
+the migration actually ran — the exact gap `seats-allowed-dropped.spec.ts` was
+written to close for 0013. So `DROPPED_COLUMNS` is kept by name and
+`information_schema.columns` is queried for it.
+
+**NO SCANNER GUARD, AND THAT IS THE ESTABLISHED PATTERN RATHER THAN AN
+OMISSION.** 0013 shipped `tools/no-seats-allowed.spec.ts`, and it is the only
+drop that did: 0016 (`rsvp_deadline`) and 0017 (the two Zoom credentials, on
+this same table) shipped a migration and a down script and nothing else. 0013's
+guard exists because 0012 deliberately left the column standing, dead, for one
+migration — a window where source and schema disagreed on purpose. There is no
+such window here.
+
+**WHAT THE MIGRATION HAD TO ACCOUNT FOR, ASKED OF THE RUNNING CATALOG.** The
+same four questions 0013 and 0016 ask, because PL/pgSQL resolves a column
+reference when a function RUNS: views — none; indexes — none but `ceremony_pkey`
+on `id`; functions and triggers — none; constraints — **four**, all of them
+column checks on the two columns (`ceremony_ceremony_date_check` and
+`_time_check` from 0009, `_not_blank` for each from 0011). A check naming one
+column is dropped with it, which is what 0017 relied on, so step 2 is a bare
+`drop column` and not `cascade`.
+
+**THE VALUES DESTROYED WERE REAL, NOT PLACEHOLDERS.** The row held
+`28 de noviembre de 2026` and `5:00 pm`, typed by the couple. Unlike 0017, which
+could say honestly that it was dropping `{{ZOOM_MEETING_ID}}`. So the migration
+prints them in a `raise notice` before the drop, following 0013 and 0016: the
+deploy log is the only place they survive, and the down script says so rather
+than pretending otherwise.
+
+**THE DOWN SCRIPT RESTORES THE PLACEHOLDER, NOT THE DATE WE KNOW.** Writing a
+rendering of `WEDDING_INSTANT` into the column would be an invention wearing the
+shape of a restore — and it is precisely the drift the drop exists to end. It
+comes back as `{{CEREMONY_DATE}}` / `{{CEREMONY_TIME}}`, visibly unfinished.
+
+**AND THE DOWN SCRIPT WAS RUN, NOT READ.** Against the live schema inside a
+transaction that was then rolled back, because a rollback path nobody executes
+is a rollback path nobody knows works:
+
+    before:              []
+    after down (in txn): [ 'ceremony_date', 'ceremony_time' ]
+    restored values:     {"ceremony_date":"{{CEREMONY_DATE}}",
+                          "ceremony_time":"{{CEREMONY_TIME}}"}
+    constraints back:    ceremony_ceremony_date_check,
+                         ceremony_ceremony_date_not_blank,
+                         ceremony_ceremony_time_check,
+                         ceremony_ceremony_time_not_blank
+    after rollback:      []
+
+All four constraints return under their original names, so a later rollback of
+0011 finds what it expects to drop. Nothing leaked out of the transaction.
+
+**THREE ASSERTIONS WERE REWRITTEN RATHER THAN DELETED, AND THEY GOT STRONGER.**
+Each compared against a fixture string the prop type no longer has a field for.
+`Fecha` and `Hora` were the only `<dt>`/`<dd>` pair these surfaces ever carried,
+so `term` and `definition` are what would come back — and unlike a string
+comparison, a role count catches the line restated in ANY wording.
+`StreamInvitation`'s day test became `getAllByTestId("save-the-date-when")`
+having length one, which is the announcement's own `<time>` and the only
+statement of the day on the page.
+
+**ONE TEST NAME WAS FALSE AND SURVIVED TWO EARLIER SHRINKS OF THIS FORM.**
+`e2e/console-wedding.spec.ts` said "offers all six facts", and `WeddingFactsForm`
+and five other files said "seven" while the list had been six since 0017. Both
+are four now, corrected wherever the prose names THIS list. The console form's
+`Cuándo y dónde` heading became `Dónde`: a heading promising a "cuándo" above two
+boxes that only ask where is the same defect as the hint, one level up.
+
+**AND THE ABSENCE IS ASSERTED, NOT MERELY UNLISTED.** The browser test names the
+four labels it expects AND requires `Fecha` and `Hora` to have count zero. A list
+that simply stopped naming them would go green with both boxes still on the page.
+
+`lib/domain/dispatch-message.spec.ts` keeps `ceremony_date` and `ceremony_time`
+on its forbidden-variable list on purpose, for the same reason `wedding_date` —
+never a column at all — is on it: that guard forbids NAMES in a WhatsApp
+template, not columns in a schema, and the name is what somebody would reach for.
+
+Green: **2321 unit and component tests** (14 fewer, and the arithmetic is
+exact: five `it.each` over `WEDDING_FACT_FIELDS` lost two cases each, two over
+`CEREMONY_COLUMNS` lost two each, `StreamDetails` lost four prop-driven cases,
+and six were added — the catalog assertion, the two `Fecha`/`Hora` absences, and
+three rewritten in place), **222 browser tests**, typecheck, lint (0 errors; the
+9 warnings are pre-existing — the identical 9 were re-measured on the stashed
+base), format, build.
+
+The migration was applied to the LOCAL database only, with
+`npx supabase migration up --local`, which applies the pending file without
+touching data — so no reset, and the seeded operators the browser suite needs
+were never emptied. **Nothing was pushed to the hosted database**; that is the
+owner's step, with the couple present.
+
+**ONE THING FOUND AND NOT TOUCHED, BECAUSE IT IS NOT THIS UNIT'S.**
+`img/og-card.jpg` changed in the working tree during this session — 265,052
+bytes at `HEAD`, 243,748 on disk, mtime 21:03 — and nothing in this unit reads
+or writes that file. It is still a valid 1200×1200 JPEG and every check that
+measures it passes, so it is left unstaged rather than reverted or committed.
 
 ## Next
 

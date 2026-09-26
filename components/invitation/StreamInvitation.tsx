@@ -141,20 +141,20 @@ export function StreamInvitation({
           `StreamDetails` carries no colours of its own, so it simply becomes
           cream here and stays near-black on the invitation's paper.
         */}
-        <StreamDetails
-          ceremony={ceremony}
-          className="block w-full"
-          /*
-            NEITHER THE DAY NOR THE HOUR IS REPEATED HERE.
+        {/*
+          NEITHER THE DAY NOR THE HOUR IS REPEATED HERE, AND THERE IS NO LONGER
+          A PROP THAT COULD REPEAT THEM.
 
-            The announcement above names the day in prose, and the countdown
-            beside it runs to the ceremony instant — so the hour is already on
-            screen, ticking. The add-to-calendar button carries the precise
-            time for anybody who wants to keep it.
-          */
-          showDate={false}
-          showTime={false}
-        />
+          The announcement above names the day in prose, and the countdown
+          beside it runs to the ceremony instant — so the hour is already on
+          screen, ticking. The add-to-calendar button carries the precise time
+          for anybody who wants to keep it.
+
+          This page and `CeremonyStream` were the only two callers and both
+          passed `showDate={false} showTime={false}`, so the block prints one
+          control now and the two columns behind those props are gone.
+        */}
+        <StreamDetails ceremony={ceremony} className="block w-full" />
 
         {/*
           THE REMINDER, WHICH IS THE ONLY THING ON THIS PAGE THAT SPEAKS UP BY

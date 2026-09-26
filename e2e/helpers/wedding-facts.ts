@@ -32,11 +32,15 @@ const LOCAL_DB_URL =
   process.env.SUPABASE_DB_URL ??
   "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-/** The seven values, named as the application names them. */
+/**
+ * The four values, named as the application names them.
+ *
+ * `ceremonyDate` and `ceremonyTime` were here until migration 0018 dropped
+ * their columns. Nothing a guest could open rendered either, and the day every
+ * screen shows comes from `WEDDING_INSTANT`.
+ */
 export interface WeddingFactValues {
   readonly coupleNames: string;
-  readonly ceremonyDate: string;
-  readonly ceremonyTime: string;
   readonly venueName: string;
   readonly venueAddress: string;
   readonly streamUrl: string;
@@ -58,15 +62,12 @@ async function connect(): Promise<Client> {
   return db;
 }
 
-const SELECT_FACTS = `select couple_names, ceremony_date, ceremony_time,
-                             venue_name, venue_address,
+const SELECT_FACTS = `select couple_names, venue_name, venue_address,
                              stream_url
                       from ceremony`;
 
 interface FactsRow {
   couple_names: string;
-  ceremony_date: string;
-  ceremony_time: string;
   venue_name: string;
   venue_address: string;
   stream_url: string;
@@ -90,8 +91,6 @@ export async function readWeddingFacts(): Promise<WeddingFactValues> {
 
     return {
       coupleNames: row.couple_names,
-      ceremonyDate: row.ceremony_date,
-      ceremonyTime: row.ceremony_time,
       venueName: row.venue_name,
       venueAddress: row.venue_address,
       streamUrl: row.stream_url,
@@ -102,7 +101,7 @@ export async function readWeddingFacts(): Promise<WeddingFactValues> {
 }
 
 /**
- * Writes the seven values straight to the row.
+ * Writes the four values straight to the row.
  *
  * For TEARDOWN only. The spec under test edits these through the console form,
  * because going around the form would prove nothing about the product; this
@@ -117,18 +116,10 @@ export async function restoreWeddingFacts(
   try {
     await db.query(
       `update ceremony
-          set couple_names = $1, ceremony_date = $2, ceremony_time = $3,
-              venue_name = $4, venue_address = $5,
-              stream_url = $6
+          set couple_names = $1, venue_name = $2, venue_address = $3,
+              stream_url = $4
         where id`,
-      [
-        facts.coupleNames,
-        facts.ceremonyDate,
-        facts.ceremonyTime,
-        facts.venueName,
-        facts.venueAddress,
-        facts.streamUrl,
-      ],
+      [facts.coupleNames, facts.venueName, facts.venueAddress, facts.streamUrl],
     );
   } finally {
     await db.end();

@@ -11,7 +11,7 @@ import type { WeddingFactErrors } from "@/lib/domain/wedding-facts";
  *
  * THREE FIELDS, BECAUSE THERE ARE THREE DIFFERENT THINGS TO SAY
  *
- * `errors` belongs to individual fields and is rendered beside each one — seven
+ * `errors` belongs to individual fields and is rendered beside each one — four
  * fields and one error per round trip is how a form stops getting filled in.
  * `notice` is a refusal that belongs to no single field, such as the database
  * declining a write the pure validator had no way to foresee; without it that

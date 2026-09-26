@@ -109,15 +109,15 @@ export function CeremonyStream({
       {/*
         NEITHER THE DAY NOR THE HOUR, FOR THE REASON `/transmision` ALREADY
         GAVE. This card sits inside the invitation, below an announcement that
-        names the day and counts down to it and a details list that states it
-        again. A third statement is not reassurance, it is noise.
+        names the day and counts down to it. A second statement is not
+        reassurance, it is noise.
+
+        It used to say so with `showDate={false} showTime={false}`. `/transmision`
+        passed exactly the same pair, so the block never once printed either
+        value on a page a guest could open — and migration 0018 dropped the two
+        columns those props read.
       */}
-      <StreamDetails
-        ceremony={ceremony}
-        className="w-full"
-        showDate={false}
-        showTime={false}
-      />
+      <StreamDetails ceremony={ceremony} className="w-full" />
 
       <p className="rsvp__reconsider text-xs text-[#f6efe2]/70">
         {reconsiderSentence(memberCount)}

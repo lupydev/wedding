@@ -93,14 +93,16 @@ export default async function StreamPage() {
   const ceremony = await getCeremony(createServerSupabaseClient());
 
   /*
-   * The start comes from `WEDDING_INSTANT`, not from `ceremony_time`.
+   * The start comes from `WEDDING_INSTANT`, and there is nowhere else it could
+   * come from.
    *
-   * That column is free prose an operator types — "5:00 p. m.", or anything
-   * else — and a calendar needs an instant. Recovering one by parsing the text
-   * is a guess that fails silently on the first wording nobody anticipated, and
-   * its failure mode is a reminder that fires on the wrong day. This is the
-   * same instant the countdown uses, so the page and the calendar entry cannot
-   * disagree.
+   * A `ceremony_time` column used to sit beside this, free prose an operator
+   * typed — "5:00 p. m.", or anything else — while a calendar needs an instant.
+   * Recovering one by parsing the text is a guess that fails silently on the
+   * first wording nobody anticipated, and its failure mode is a reminder that
+   * fires on the wrong day. Nothing ever read it, so migration 0018 dropped it
+   * along with `ceremony_date`. This is the same instant the countdown uses, so
+   * the page and the calendar entry cannot disagree.
    */
   const calendarEvent = buildStreamCalendarEvent(
     {
@@ -132,17 +134,15 @@ export default async function StreamPage() {
         "
       >
         {/*
-          `coupleNames` and the four stream values come from the row and nothing
-          else. The venue and its address are on that same row and are NOT
-          passed: `StreamInvitation`'s prop type has no field for them, so this
-          page cannot leak an address even by a careless edit here.
+          The stream address comes from the row and nothing else, and it is the
+          ONLY value this page hands down. The venue and its street are on that
+          same row and are NOT passed: `StreamInvitation`'s prop type has no
+          field for them, so this page cannot leak an address even by a careless
+          edit here. `coupleNames` reaches the announcement through
+          `SaveTheDate`, which reads the domain rather than this row.
         */}
         <StreamInvitation
-          ceremony={{
-            ceremonyDate: ceremony.ceremonyDate,
-            ceremonyTime: ceremony.ceremonyTime,
-            streamUrl: ceremony.streamUrl,
-          }}
+          ceremony={{ streamUrl: ceremony.streamUrl }}
           calendar={{ googleHref: googleCalendarUrl(calendarEvent) }}
         />
       </div>

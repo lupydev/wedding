@@ -47,13 +47,22 @@ import { resolveLocalKeys } from "./helpers/local-keys";
 
 /** Every value column of the singleton, in the order the migrations added them. */
 const CEREMONY_COLUMNS = [
-  "ceremony_date",
-  "ceremony_time",
   "stream_url",
   "couple_names",
   "venue_name",
   "venue_address",
 ] as const;
+
+/**
+ * The two columns migration 0018 destroyed, kept by name so their ABSENCE can
+ * be asserted against the live catalog rather than inferred from this list.
+ *
+ * A shorter `CEREMONY_COLUMNS` only proves this file stopped naming them. It
+ * cannot tell a tree that stopped reading two columns from one where the
+ * migration actually ran — the same gap `seats-allowed-dropped.spec.ts` was
+ * written to close for 0013.
+ */
+const DROPPED_COLUMNS = ["ceremony_date", "ceremony_time"] as const;
 
 /** A seed value that is visibly unfinished: `{{LIKE_THIS}}`. */
 const PLACEHOLDER = /^\{\{[A-Z_]+\}\}$/;
@@ -155,7 +164,31 @@ describe("the ceremony configuration row", () => {
    * gone untested from the moment a column was added.
    */
   const INTRUDER_VALUES =
-    "'otro dia', 'otra hora', 'https://meet.google.com/otr-oenl-ace', 'otra pareja', 'otro lugar', 'otra direccion'";
+    "'https://meet.google.com/otr-oenl-ace', 'otra pareja', 'otro lugar', 'otra direccion'";
+
+  it("no longer has the two columns migration 0018 dropped", async () => {
+    // AGAINST THE LIVE CATALOG, NOT AGAINST A LIST IN THIS FILE.
+    //
+    // `CEREMONY_COLUMNS` above stopped naming them, which proves only that the
+    // test stopped asking. This asks Postgres. A tree whose code no longer
+    // reads the columns while the migration has not run is exactly the state
+    // this distinguishes — and it is the state a `supabase db push` that was
+    // never issued leaves behind.
+    const present = await withDb(async (db) => {
+      const found = await db.query<{ column_name: string }>(
+        `select column_name
+           from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'ceremony'
+            and column_name = any($1)`,
+        [[...DROPPED_COLUMNS]],
+      );
+
+      return found.rows.map((row) => row.column_name).sort();
+    });
+
+    expect(present).toEqual([]);
+  });
 
   it("refuses a second row instead of letting readers pick one", async () => {
     const error = await withRollback(async (db) => {
@@ -224,11 +257,11 @@ describe("the ceremony configuration row", () => {
     // is the mutation the test above exists to catch, asserted directly rather
     // than by editing a migration and hoping somebody notices.
     const invented = parseCeremonySeed([
-      "insert into ceremony (ceremony_date) values ('sábado 14 de noviembre');",
+      "insert into ceremony (venue_name) values ('Hacienda La Ñapa');",
     ]);
 
-    expect(invented).toEqual({ ceremony_date: "sábado 14 de noviembre" });
-    expect(invented.ceremony_date).not.toMatch(PLACEHOLDER);
+    expect(invented).toEqual({ venue_name: "Hacienda La Ñapa" });
+    expect(invented.venue_name).not.toMatch(PLACEHOLDER);
   });
 
   it("does not read another table's defaulted column as a ceremony seed", () => {
@@ -265,7 +298,7 @@ describe("the ceremony configuration row", () => {
    * BLANK IS REFUSED BY THE TABLE, NOT ONLY BY THE FORM.
    *
    * Before migration 0011 the only writer was a migration, so "not null" was
-   * enough. Now a console form writes these seven values, and a form field that
+   * enough. Now a console form writes these four values, and a form field that
    * an operator clears submits an empty string rather than a null — which
    * satisfies `not null` perfectly and renders as an invitation with a hole
    * where the venue should be. Nothing about that reads as broken to a guest:
@@ -389,8 +422,6 @@ describe("reading the ceremony through the server adapter", () => {
     // literal, so the mapping is proved without pinning the placeholder text
     // this test is deliberately not allowed to invent.
     expect(ceremony).toEqual({
-      ceremonyDate: stored.ceremony_date,
-      ceremonyTime: stored.ceremony_time,
       streamUrl: stored.stream_url,
       coupleNames: stored.couple_names,
       venueName: stored.venue_name,
@@ -410,13 +441,11 @@ describe("reading the ceremony through the server adapter", () => {
    * Committed and then restored, because the adapter goes through the Supabase
    * API in its own connection and would not see this suite's open transaction.
    */
-  it("writes all seven facts back and reads exactly what was written", async () => {
+  it("writes all four facts back and reads exactly what was written", async () => {
     const before = await getCeremony(client);
 
     try {
       await updateCeremony(client, {
-        ceremonyDate: "sábado 14 de noviembre de 2026",
-        ceremonyTime: "4:00 p. m.",
         streamUrl: "https://meet.google.com/abc-defg-hij",
         coupleNames: "Ana y Bruno",
         venueName: "Hacienda de prueba",
@@ -424,8 +453,6 @@ describe("reading the ceremony through the server adapter", () => {
       });
 
       expect(await getCeremony(client)).toEqual({
-        ceremonyDate: "sábado 14 de noviembre de 2026",
-        ceremonyTime: "4:00 p. m.",
         streamUrl: "https://meet.google.com/abc-defg-hij",
         coupleNames: "Ana y Bruno",
         venueName: "Hacienda de prueba",

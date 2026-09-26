@@ -15,7 +15,7 @@ import { WeddingFactsForm } from "./WeddingFactsForm";
 /**
  * The one screen where the wedding's own facts are edited.
  *
- * ONE FORM, ONE SAVE, SEVEN FIELDS. Not seven inline editors: these values are
+ * ONE FORM, ONE SAVE, FOUR FIELDS. Not four inline editors: these values are
  * read together by every surface, and a partial save is how the date comes to
  * belong to one correction and the venue to another. The guest list's inline
  * phone editor is the opposite case for the opposite reason — three people and
@@ -43,8 +43,6 @@ import { WeddingFactsForm } from "./WeddingFactsForm";
 
 const facts: WeddingFacts = {
   coupleNames: "Ana y Bruno",
-  ceremonyDate: "sábado 14 de noviembre de 2026",
-  ceremonyTime: "4:00 p. m.",
   venueName: "Hacienda La Ñapa",
   venueAddress: "Calle 12 #34-56, Barrio Centro",
   streamUrl: "https://meet.google.com/abc-defg-hij",
@@ -60,7 +58,27 @@ function renderForm(state = IDLE_WEDDING_FACTS_STATE) {
 }
 
 describe("WeddingFactsForm's fields", () => {
-  it("offers every one of the seven facts, each with its own label", () => {
+  /**
+   * THE DAY AND THE HOUR ARE NOT ON THIS FORM, AND THAT IS THE REQUIREMENT.
+   *
+   * They were, and the hint beside the date said "Se muestra tal como se
+   * escriba acá, en la invitación y en la transmisión." That was false by the
+   * time it was read: every caller of `StreamDetails` passed
+   * `showDate={false} showTime={false}`, so nothing a guest could open rendered
+   * either value. An operator typing a corrected date changed nothing and was
+   * told otherwise.
+   *
+   * The day a guest actually reads comes from `WEDDING_INSTANT`, which also
+   * drives the countdown and the RSVP deadline. Migration 0018 drops both
+   * columns, so a field restored here would edit something that does not exist.
+   */
+  it.each(["Fecha", "Hora"])("offers no %s box to type into", (label) => {
+    renderForm();
+
+    expect(screen.queryByLabelText(label)).toBeNull();
+  });
+
+  it("offers every one of the four facts, each with its own label", () => {
     renderForm();
 
     for (const field of WEDDING_FACT_FIELDS) {
@@ -82,7 +100,7 @@ describe("WeddingFactsForm's fields", () => {
 
   it("names each field the way the action reads it back", () => {
     // The `name` attribute IS the contract with `parseWeddingFacts`, which looks
-    // its seven fields up by exactly these keys. A renamed input would submit a
+    // its four fields up by exactly these keys. A renamed input would submit a
     // field the server reports as missing.
     renderForm();
 
@@ -107,11 +125,11 @@ describe("WeddingFactsForm's fields", () => {
     }
   });
 
-  it("saves all seven in one submission, with exactly one save button", () => {
+  it("saves all four in one submission, with exactly one save button", () => {
     renderForm();
 
-    // Seven inline editors would allow a partial save, and these values are read
-    // together by four surfaces.
+    // Four separate inline editors would allow a partial save, and these
+    // values are read together by four surfaces.
     expect(screen.getAllByRole("button", { name: /Guardar/i })).toHaveLength(1);
   });
 });
@@ -224,12 +242,14 @@ describe("WeddingFactsForm when the server refuses a value", () => {
       ...IDLE_WEDDING_FACTS_STATE,
       errors: {
         venueName: "Lugar no puede quedar vacío.",
-        ceremonyTime: "Hora no puede quedar vacío.",
+        coupleNames: "Nombres de la pareja no puede quedar vacío.",
       },
     });
 
     expect(screen.getByText("Lugar no puede quedar vacío.")).toBeVisible();
-    expect(screen.getByText("Hora no puede quedar vacío.")).toBeVisible();
+    expect(
+      screen.getByText("Nombres de la pareja no puede quedar vacío."),
+    ).toBeVisible();
   });
 
   it("attaches a field's error to that field", () => {
@@ -253,7 +273,7 @@ describe("WeddingFactsForm when the server refuses a value", () => {
     });
 
     expect(
-      screen.getByLabelText(WEDDING_FACT_LABELS.ceremonyDate),
+      screen.getByLabelText(WEDDING_FACT_LABELS.venueAddress),
     ).not.toHaveAttribute("aria-invalid", "true");
   });
 

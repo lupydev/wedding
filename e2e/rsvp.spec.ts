@@ -349,7 +349,17 @@ test.describe("declining and the ceremony stream", () => {
     } else {
       await expect(card).toContainText(ceremony.streamUrl);
     }
-    await expect(card).not.toContainText(ceremony.ceremonyTime);
+    /*
+      AND NOTHING ON THE CARD IS A LABELLED DATE OR HOUR.
+
+      This used to compare against `ceremony.ceremonyTime`, read from the row.
+      Migration 0018 dropped that column: nothing rendered it, and the day a
+      guest reads comes from `WEDDING_INSTANT` through the announcement above.
+      `Fecha` and `Hora` were the only `<dt>`/`<dd>` pair this card ever had, so
+      a `term` appearing inside it again is the repetition coming back.
+    */
+    await expect(card.getByRole("term")).toHaveCount(0);
+    await expect(card.getByRole("definition")).toHaveCount(0);
 
     // Not a form beside the card, and not a disabled copy of it. No form.
     await expect(page.locator("form.rsvp__form")).toHaveCount(0);

@@ -22,7 +22,7 @@ import { WeddingFactsEditor } from "./wedding-facts-editor";
  * a reference project's WhatsApp template went on announcing a venue the event had
  * already left.
  *
- * Now all seven live in one row and this is where they are edited. Nothing about
+ * Now all four live in one row and this is where they are edited. Nothing about
  * the couple, the date or the venue is written anywhere in the source, which
  * `tools/no-source-placeholders.spec.ts` keeps true.
  *

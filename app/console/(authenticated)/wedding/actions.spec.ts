@@ -16,7 +16,7 @@ import { IDLE_WEDDING_FACTS_STATE } from "./wedding-facts-state";
  *    hand-rolled POST carries whatever it likes, and a blank venue stored here
  *    renders as an invitation that looks finished and names no place.
  *  - No submitted value is logged, at any severity, on any path. The Zoom
- *    passcode is one of the seven, and a log line is a copy of it in a place
+ *    passcode is one of the four, and a log line is a copy of it in a place
  *    nobody will remember to rotate.
  *  - The two surfaces that render these values are revalidated, or the operator
  *    saves successfully and the console keeps showing the old text.
@@ -56,8 +56,6 @@ const ANA = { id: "aaaaaaaa-1111-4111-8111-111111111111", displayName: "Ana" };
 
 const COMPLETE: Record<string, string> = {
   coupleNames: "Ana y Bruno",
-  ceremonyDate: "sábado 14 de noviembre de 2026",
-  ceremonyTime: "4:00 p. m.",
   venueName: "Hacienda La Ñapa",
   venueAddress: "Calle 12 #34-56, Barrio Centro",
   streamUrl: "https://meet.google.com/abc-defg-hij",
@@ -117,7 +115,7 @@ describe("saveWeddingFactsAction's session requirement", () => {
 });
 
 describe("saveWeddingFactsAction's server-side validation", () => {
-  it("writes all seven trimmed values when the submission is complete", async () => {
+  it("writes all four trimmed values when the submission is complete", async () => {
     const state = await saveWeddingFactsAction(
       IDLE_WEDDING_FACTS_STATE,
       form({ coupleNames: "  Ana y Bruno  " }),
@@ -128,8 +126,6 @@ describe("saveWeddingFactsAction's server-side validation", () => {
       { marker: "supabase-client" },
       {
         coupleNames: "Ana y Bruno",
-        ceremonyDate: "sábado 14 de noviembre de 2026",
-        ceremonyTime: "4:00 p. m.",
         venueName: "Hacienda La Ñapa",
         venueAddress: "Calle 12 #34-56, Barrio Centro",
         streamUrl: "https://meet.google.com/abc-defg-hij",
@@ -137,14 +133,14 @@ describe("saveWeddingFactsAction's server-side validation", () => {
     );
   });
 
-  it("refuses a blank field and writes NOTHING, not even the valid six", async () => {
+  it("refuses a blank field and writes NOTHING, not even the valid three", async () => {
     const state = await saveWeddingFactsAction(
       IDLE_WEDDING_FACTS_STATE,
       form({ venueName: "   " }),
     );
 
-    // All or nothing. Six saved values and one refused is the partial state this
-    // one-form-one-save design exists to make impossible.
+    // All or nothing. Three saved values and one refused is the partial state
+    // this one-form-one-save design exists to make impossible.
     expect(state.saved).toBe(false);
     expect(state.errors.venueName).toBeDefined();
     expect(updateCeremony).not.toHaveBeenCalled();
@@ -173,11 +169,11 @@ describe("saveWeddingFactsAction's server-side validation", () => {
   it("reports every refused field at once", async () => {
     const state = await saveWeddingFactsAction(
       IDLE_WEDDING_FACTS_STATE,
-      form({ venueName: "", ceremonyTime: "" }),
+      form({ venueName: "", coupleNames: "" }),
     );
 
     expect(Object.keys(state.errors).sort()).toEqual([
-      "ceremonyTime",
+      "coupleNames",
       "venueName",
     ]);
   });

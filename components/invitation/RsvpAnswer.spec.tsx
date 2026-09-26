@@ -46,8 +46,6 @@ const VENUE = {
 };
 
 const CEREMONY: CeremonyStreamDetails = {
-  ceremonyDate: "sábado 14 de noviembre",
-  ceremonyTime: "4:00 p. m.",
   streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 

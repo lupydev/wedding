@@ -20,7 +20,7 @@ import {
  *
  * The editor page, the invitation page and the Open Graph metadata are all async
  * Server Components, which Vitest cannot render. So the claim this whole work
- * unit rests on — that these seven values live in ONE place and every surface
+ * unit rests on — that these four values live in ONE place and every surface
  * reads it — is only checkable here: type a new venue into the console, then look
  * at what a guest receives.
  *
@@ -65,8 +65,6 @@ const GUEST_PHONE = "+573005557701";
 /** Values nothing else in the suite uses, so a leak into another spec is legible. */
 const EDITED = {
   coupleNames: "Prueba Novia y Prueba Novio",
-  ceremonyDate: "sábado 27 de marzo de 2027",
-  ceremonyTime: "5:30 p. m.",
   venueName: "Salón de Prueba Ñandú",
   venueAddress: "Carrera de Prueba 45 #67-89, Barrio Prueba",
   streamUrl: "https://meet.google.com/e2e-test-abc",
@@ -88,8 +86,6 @@ function saveButton(target: Page) {
 
 async function fillEveryFact(target: Page, values: typeof EDITED) {
   await field(target, "Nombres de la pareja").fill(values.coupleNames);
-  await field(target, "Fecha").fill(values.ceremonyDate);
-  await field(target, "Hora").fill(values.ceremonyTime);
   await field(target, "Lugar").fill(values.venueName);
   await field(target, "Dirección").fill(values.venueAddress);
   await field(target, "Enlace de Google Meet").fill(values.streamUrl);
@@ -124,21 +120,27 @@ test.afterAll(async () => {
 });
 
 test.describe("the wedding-facts editor", () => {
-  test("offers all six facts on one page with one save", async () => {
+  test("offers all four facts on one page with one save, and nothing else", async () => {
     await page.goto("/console/wedding");
 
-    // SIX, not seven. The two Zoom credentials became one Meet address when the
-    // ceremony moved: an id and a passcode are what a guest transcribes into an
-    // app, and a link is what they press.
+    // FOUR. The two Zoom credentials became one Meet address when the ceremony
+    // moved — an id and a passcode are what a guest transcribes into an app,
+    // and a link is what they press — and migration 0018 dropped the day and
+    // the hour, which no guest-facing surface rendered.
     for (const label of [
       "Nombres de la pareja",
-      "Fecha",
-      "Hora",
       "Lugar",
       "Dirección",
       "Enlace de Google Meet",
     ]) {
       await expect(field(page, label)).toBeVisible();
+    }
+
+    // AND THE TWO THAT WENT ARE ASSERTED ABSENT, not merely left off the list
+    // above. A list that stopped naming them would go green with both boxes
+    // still on the page.
+    for (const gone of ["Fecha", "Hora"]) {
+      await expect(field(page, gone)).toHaveCount(0);
     }
 
     await expect(saveButton(page)).toHaveCount(1);
@@ -210,7 +212,7 @@ test.describe("the wedding-facts editor", () => {
 });
 
 test.describe("saving an edit", () => {
-  test("stores all seven values and says so", async () => {
+  test("stores all four values and says so", async () => {
     await page.goto("/console/wedding");
     await fillEveryFact(page, EDITED);
     await saveButton(page).click();
@@ -253,10 +255,10 @@ test.describe("saving an edit", () => {
         that an edit in the console reaches the guest — now has to answer the
         question the way a guest going to the wedding would.
 
-        `ceremonyDate` is no longer asserted here: the body states the day from
-        `WEDDING_INSTANT` in its announcement, not from the row, since the two
-        screens were made to open alike. That gap is recorded in
-        `odd/tasks/invitation-design.md`.
+        THE DAY IS NOT ASSERTED HERE BECAUSE THE ROW NO LONGER HOLDS ONE. The
+        body states the day from `WEDDING_INSTANT` in its announcement, and
+        migration 0018 dropped `ceremony_date` and `ceremony_time` outright —
+        nothing rendered either, and the console form promised otherwise.
       */
       await guestPage.getByRole("radio", { name: /Sí, allá estar/ }).check();
 
@@ -311,19 +313,17 @@ test.describe("saving an edit", () => {
       ).toHaveAttribute("href", EDITED.streamUrl);
 
       /*
-        `ceremonyTime` IS NO LONGER ASSERTED HERE, AND THAT IS A REAL LOSS
-        RATHER THAN A TIDY-UP.
+        `ceremonyTime` IS NOT ASSERTED HERE, AND THE GAP THAT USED TO BE
+        RECORDED IN THIS COMMENT IS CLOSED RATHER THAN STILL OPEN.
 
         This card stopped stating the day and the hour when it was rewritten in
-        the invitation's own voice: it sits under an announcement that names the
-        day and counts down to it, so a third statement was noise. But the
-        invitation's details list names Fecha, Lugar and Dirección and no hour —
-        which means the `ceremony_time` an operator can edit is now rendered on
-        no guest-facing surface at all.
+        the invitation's own voice, which left an hour an operator could edit
+        and no guest could ever see. Migration 0018 answered that by dropping
+        both columns: the day comes from `WEDDING_INSTANT` and there is nothing
+        left to type.
 
-        The two credentials still prove what this test is for: an edit made in
-        the console reaches the guest. The missing hour is recorded in
-        `odd/tasks/invitation-design.md` and belongs to the couple to decide.
+        The link still proves what this test is for — an edit made in the
+        console reaches the guest.
       */
     } finally {
       await guest.close();

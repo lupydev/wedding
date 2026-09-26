@@ -222,10 +222,22 @@ screenshot. All three now carry `relative`.
 
 ## Next step
 
-Open question for the couple, recorded rather than decided: wire the landing to
-the `ceremony` row. `couple_names` is ALREADY a column and could be read today;
-only the countdown instant needs the new `timestamptz`. Doing it makes `/`
-dynamic instead of static and makes the page render the seeded placeholder until
-the console is filled in — which is the project's stated preference for an
-unfinished value, and a decision that belongs to the couple, not to this
-document.
+**ANSWERED, IN THE NEGATIVE — see U31 in `odd/tasks/invitation-design.md`.**
+
+The question below was whether to wire the landing TO the `ceremony` row. The
+couple went the other way: `ceremony_date` and `ceremony_time` were deleted
+entirely — column, field, form and all — because nothing a guest could open ever
+rendered either, and the console's hint said otherwise. The day now lives only
+in `WEDDING_INSTANT`, so moving the wedding is a deploy rather than an UPDATE,
+and that consequence was put to them and accepted. `couple_names` remains a
+column and the invitation surfaces still read it; the landing still does not.
+
+The original question, left as it was written:
+
+> Open question for the couple, recorded rather than decided: wire the landing to
+> the `ceremony` row. `couple_names` is ALREADY a column and could be read today;
+> only the countdown instant needs the new `timestamptz`. Doing it makes `/`
+> dynamic instead of static and makes the page render the seeded placeholder until
+> the console is filled in — which is the project's stated preference for an
+> unfinished value, and a decision that belongs to the couple, not to this
+> document.

@@ -62,59 +62,39 @@ function isJoinable(value: string): boolean {
   }
 }
 
+/**
+ * The one value this block needs, and there is deliberately only one.
+ *
+ * `ceremonyDate` and `ceremonyTime` were here too, printed above the control
+ * behind `showDate` and `showTime` props that DEFAULTED TO TRUE — and both
+ * callers passed false. `StreamInvitation` states the day in the announcement
+ * above and runs a countdown to the hour; `CeremonyStream` sits inside the
+ * invitation, under that same announcement. So the default rendered on no page
+ * anybody could open, while keeping two columns alive in the schema, the read
+ * model and the console form.
+ *
+ * The day a guest reads comes from `WEDDING_INSTANT` in
+ * `lib/domain/wedding-day.ts`, and migration 0018 dropped the two columns.
+ */
 export interface StreamDetailsValues {
-  readonly ceremonyDate: string;
-  readonly ceremonyTime: string;
   readonly streamUrl: string;
 }
 
 export function StreamDetails({
   ceremony,
   className,
-  showDate = true,
-  showTime = true,
 }: {
   readonly ceremony: StreamDetailsValues;
   /** The host surface's own spacing. Never its colours. */
   readonly className?: string;
-  /**
-   * Whether to state the day, or leave it to something above.
-   *
-   * False on `/transmision`, where the landing's announcement sits directly
-   * above this block and names the day in prose. Repeating it put the same
-   * date on one small screen twice in two formats — "sábado, 28 de noviembre
-   * de 2026" and "28-11-2026" — which reads as a defect however good each
-   * reason is.
-   *
-   * The invitation behind the phone gate keeps both, because it has no
-   * announcement above it.
-   */
-  readonly showDate?: boolean;
-  /**
-   * Whether to print the hour.
-   *
-   * DROPPED WHERE A COUNTER ALREADY LANDS ON IT. `/transmision` runs a
-   * countdown to the ceremony instant, so printing "5:00 p. m." underneath is
-   * the same fact stated twice — and the add-to-calendar button beside it
-   * carries the precise time for anybody who wants to keep it.
-   *
-   * The couple asked for this in those terms: "hay que eliminar la hora ya que
-   * el contador llega hasta el día 28 de noviembre a las 5:00pm".
-   */
-  readonly showTime?: boolean;
 }) {
   return (
     /*
-     * `role="group"` with a name, rather than a bare `<dl>`: it gives assistive
-     * technology one addressable thing called "Detalles de la transmisión"
-     * instead of four loose term/definition pairs adrift on the page.
-     *
-     * Every value is rendered exactly as the row holds it, including the seeded
-     * `{{...}}` placeholders. Hiding or prettifying an unfinished value would
-     * turn an obviously incomplete invitation into a plausible wrong one, and
-     * nobody would notice until a guest joined a call that does not exist.
-     */
-    /*
+      The value is rendered exactly as the row holds it, including the seeded
+      `{{...}}` placeholder. Hiding or prettifying an unfinished value would
+      turn an obviously incomplete invitation into a plausible wrong one, and
+      nobody would notice until a guest joined a call that does not exist.
+
       A `<div>`, WHERE THIS USED TO BE A `<dl role="group">`.
 
       It was a description list because it held terms and values: a meeting id
@@ -127,8 +107,10 @@ export function StreamDetails({
       The group name went with it. One control needs no grouping: the link
       carries its own accessible name and says where it goes.
 
-      The optional date/time line keeps a list of its own, because there the
-      labels still have values.
+      An optional date/time line survived that change, carrying a `dt`/`dd`
+      pair of its own behind `showDate` and `showTime`. Neither caller ever
+      asked for it and migration 0018 removed the columns behind it, so there
+      is nothing labelled in this block at all any more.
     */
     <div
       /*
@@ -148,24 +130,6 @@ export function StreamDetails({
       data-testid="stream-details"
       className={`text-center ${className ?? ""}`}
     >
-      {(showDate || showTime) && (
-        <div className="mb-4 flex items-baseline justify-center gap-2 text-sm opacity-70">
-          {showDate ? (
-            <>
-              <dt className="sr-only">Fecha</dt>
-              <dd className="m-0">{ceremony.ceremonyDate}</dd>
-            </>
-          ) : null}
-          {showDate && showTime ? <span aria-hidden="true">·</span> : null}
-          {showTime ? (
-            <>
-              <dt className="sr-only">Hora</dt>
-              <dd className="m-0">{ceremony.ceremonyTime}</dd>
-            </>
-          ) : null}
-        </div>
-      )}
-
       {/*
         ONE CONTROL, AND ONLY WHEN THERE IS SOMEWHERE TO GO.
 

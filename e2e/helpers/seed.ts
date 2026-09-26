@@ -268,10 +268,14 @@ export async function seededGuestIds(
   }
 }
 
-/** The ceremony and its stream details, exactly as the singleton row holds them. */
+/**
+ * The ceremony's stream details, exactly as the singleton row holds them.
+ *
+ * One value, where there were three. `ceremonyDate` and `ceremonyTime` were
+ * dropped by migration 0018: nothing a guest could open rendered either, and
+ * the day every screen shows comes from `WEDDING_INSTANT`.
+ */
 export interface SeededCeremony {
-  readonly ceremonyDate: string;
-  readonly ceremonyTime: string;
   readonly streamUrl: string;
 }
 
@@ -279,19 +283,17 @@ export interface SeededCeremony {
  * Reads the `ceremony` row (migration 0009).
  *
  * Read rather than hard-coded, for the reason the row exists at all: an
- * expectation that restated the seeded placeholders would be a second copy of
- * the same four facts, and the assertion would keep passing after the couple
- * changed them.
+ * expectation that restated the seeded placeholder would be a second copy of
+ * the same fact, and the assertion would keep passing after the couple changed
+ * it.
  */
 export async function readCeremony(): Promise<SeededCeremony> {
   const db = await connect();
 
   try {
     const result = await db.query<{
-      ceremony_date: string;
-      ceremony_time: string;
       stream_url: string;
-    }>("select ceremony_date, ceremony_time, stream_url from ceremony");
+    }>("select stream_url from ceremony");
 
     if (result.rows.length !== 1) {
       throw new Error(
@@ -303,8 +305,6 @@ export async function readCeremony(): Promise<SeededCeremony> {
     const row = result.rows[0];
 
     return {
-      ceremonyDate: row.ceremony_date,
-      ceremonyTime: row.ceremony_time,
       streamUrl: row.stream_url,
     };
   } finally {

@@ -12,11 +12,12 @@ import {
 /**
  * The one screen where the wedding's own facts are edited.
  *
- * ONE FORM, ONE SAVE, SEVEN FIELDS
+ * ONE FORM, ONE SAVE, FOUR FIELDS
  *
- * Not seven inline editors. Every surface reads these values together, and a
- * partial save is how the date comes to belong to one correction while the venue
- * still belongs to the previous one. The guest list's inline phone editor is the
+ * Not four inline editors. Every surface reads these values together, and a
+ * partial save is how the venue comes to belong to one correction while its
+ * street still belongs to the previous one. The guest list's inline phone
+ * editor is the
  * opposite case for the opposite reason: three people and ten digits, where
  * sending somebody to a full edit screen means the data never gets entered at
  * all.
@@ -81,12 +82,24 @@ const STREAM_LINK_SHARED_WARNING =
   "borra de donde ya la anotaron, y a ellas nadie les va a avisar de la " +
   "clave nueva de forma automática.";
 
-/** What the field is for, beside its label, when the label is not enough. */
-const FIELD_HINTS: Partial<Record<WeddingFactField, string>> = {
-  ceremonyDate:
-    "Se muestra tal como se escriba acá, en la invitación y en la transmisión. Es una sola fecha para las dos cosas.",
-  ceremonyTime: "También se muestra tal como se escriba acá.",
-};
+/**
+ * What the field is for, beside its label, when the label is not enough.
+ *
+ * EMPTY, AND THAT IS THE HONEST STATE RATHER THAN AN OVERSIGHT.
+ *
+ * It held two hints, both on fields that no longer exist. The one beside the
+ * date read "Se muestra tal como se escriba acá, en la invitación y en la
+ * transmisión." — which was false: every caller of `StreamDetails` passed
+ * `showDate={false} showTime={false}`, so nothing a guest could open rendered
+ * the typed value. A hint that promises a rendering the product does not
+ * perform is worse than no hint, because the operator believes they have fixed
+ * something.
+ *
+ * Kept as a declared, wired-up map rather than deleted with its contents: the
+ * remaining fields are a name, a venue, a street and a link, and the next one
+ * that needs explaining should find the mechanism already here.
+ */
+const FIELD_HINTS: Partial<Record<WeddingFactField, string>> = {};
 
 export type WeddingFactsFormAction = (formData: FormData) => void;
 
@@ -141,7 +154,7 @@ function FactField({
         className="h-11"
         id={inputId}
         name={field}
-        // `text` for every one of the six, the stream link included. A
+        // `text` for every one of the four, the stream link included. A
         // `type="password"` field makes the browser offer to save the value into
         // the operator's own credential store and a phone keychain syncs it
         // everywhere — for an address a hundred households already read on their
@@ -231,18 +244,24 @@ export function WeddingFactsForm({
       </section>
 
       <section className="flex flex-col gap-4">
-        <h3 className="text-base">Cuándo y dónde</h3>
+        {/*
+          "Cuándo y dónde" until the day and the hour left this form. A heading
+          promising a "cuándo" above two boxes that only ask where is the same
+          defect as the hint that went with them, one level up.
+        */}
+        <h3 className="text-base">Dónde</h3>
 
-        <FactField
-          field="ceremonyDate"
-          value={facts.ceremonyDate}
-          error={state.errors.ceremonyDate}
-        />
-        <FactField
-          field="ceremonyTime"
-          value={facts.ceremonyTime}
-          error={state.errors.ceremonyTime}
-        />
+        {/*
+          THE DAY AND THE HOUR STOOD HERE AND ARE NOT COMING BACK.
+
+          Neither was rendered anywhere a guest could reach: `StreamDetails`
+          was the only component that printed them, and both of its callers
+          switched them off. The day every guest-facing screen DOES show comes
+          from `WEDDING_INSTANT`, which also drives the countdown and the RSVP
+          deadline — so moving the wedding is a deploy, not an edit here.
+
+          Migration 0018 dropped both columns.
+        */}
         <FactField
           field="venueName"
           value={facts.venueName}

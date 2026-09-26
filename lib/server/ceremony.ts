@@ -31,11 +31,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * complaint, never a submitted value.
  */
 
-/** The ceremony row, in the shape a component renders. */
+/**
+ * The ceremony row, in the shape a component renders.
+ *
+ * THE DAY IS NOT HERE, AND THAT IS DELIBERATE. `ceremonyDate` and
+ * `ceremonyTime` were two more fields on this interface until migration 0018
+ * dropped their columns: nothing a guest could open rendered either, and the
+ * day every guest-facing screen DOES show comes from `WEDDING_INSTANT` in
+ * `lib/domain/wedding-day.ts`, which also drives the countdown, the RSVP
+ * deadline and `/transmision`'s add-to-calendar link.
+ */
 export interface CeremonyDetails {
-  /** The wedding date AND the stream date. One day, one column. */
-  readonly ceremonyDate: string;
-  readonly ceremonyTime: string;
   /** Visible behind the phone gate to every household that declined. */
   readonly streamUrl: string;
   /** Reaches guests through the immutable, WhatsApp-cached card. */
@@ -45,17 +51,13 @@ export interface CeremonyDetails {
 }
 
 interface CeremonyRow {
-  ceremony_date: string;
-  ceremony_time: string;
   stream_url: string;
   couple_names: string;
   venue_name: string;
   venue_address: string;
 }
 
-const CEREMONY_SELECT =
-  "ceremony_date, ceremony_time, stream_url, " +
-  "couple_names, venue_name, venue_address";
+const CEREMONY_SELECT = "stream_url, couple_names, venue_name, venue_address";
 
 /**
  * Reads the ceremony row.
@@ -88,8 +90,6 @@ export async function getCeremony(
   }
 
   return {
-    ceremonyDate: data.ceremony_date,
-    ceremonyTime: data.ceremony_time,
     streamUrl: data.stream_url,
     coupleNames: data.couple_names,
     venueName: data.venue_name,
@@ -98,7 +98,7 @@ export async function getCeremony(
 }
 
 /**
- * Writes all seven facts back to the singleton.
+ * Writes all four facts back to the singleton.
  *
  * AN UPDATE, NEVER AN UPSERT. The row exists from migration 0009 onward, and an
  * upsert against a table whose primary key is a constant `true` would either
@@ -107,9 +107,10 @@ export async function getCeremony(
  * names the one row explicitly rather than relying on a bare `update` matching
  * whatever is there.
  *
- * ALL SEVEN AT ONCE, NOT A PATCH. The console edits them in one form and saves
+ * ALL FOUR AT ONCE, NOT A PATCH. The console edits them in one form and saves
  * them in one submission, so a partial write has no caller — and a partial write
- * is how the date ends up belonging to one correction and the venue to another.
+ * is how the venue ends up belonging to one correction and its street to
+ * another.
  *
  * Validation happens before this: `parseWeddingFacts` in `lib/domain` trims and
  * refuses blanks, over-long values and line breaks. This function is not a
@@ -125,8 +126,6 @@ export async function updateCeremony(
   const { error } = await client
     .from("ceremony")
     .update({
-      ceremony_date: details.ceremonyDate,
-      ceremony_time: details.ceremonyTime,
       stream_url: details.streamUrl,
       couple_names: details.coupleNames,
       venue_name: details.venueName,

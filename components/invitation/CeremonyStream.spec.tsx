@@ -19,8 +19,6 @@ import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
  */
 
 const CEREMONY: CeremonyStreamDetails = {
-  ceremonyDate: "sábado 14 de noviembre",
-  ceremonyTime: "4:00 p. m.",
   streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
@@ -59,11 +57,7 @@ describe("CeremonyStream", () => {
     // obviously unfinished invitation into a plausible wrong one.
     render(
       <CeremonyStream
-        ceremony={{
-          ceremonyDate: "{{CEREMONY_DATE}}",
-          ceremonyTime: "{{CEREMONY_TIME}}",
-          streamUrl: "{{MEET_URL}}",
-        }}
+        ceremony={{ streamUrl: "{{MEET_URL}}" }}
         memberCount={2}
         onReconsider={vi.fn()}
       />,
@@ -144,18 +138,24 @@ describe("the words on the card", () => {
   });
 
   /**
-   * THE DAY AND THE HOUR ARE NOT STATED A THIRD TIME.
+   * THE DAY AND THE HOUR ARE NOT STATED A SECOND TIME.
    *
    * This card sits inside the invitation, below an announcement that names the
-   * day and counts down to it and a details list that states it again. The
-   * same reasoning `/transmision` already applied to its own copy of this
-   * block.
+   * day and counts down to it. The same reasoning `/transmision` already
+   * applied to its own copy of this block.
+   *
+   * It used to say so by passing `showDate={false} showTime={false}` and
+   * asserting the two fixture strings were absent. Both props are gone and so
+   * are the columns behind them, so the assertion is structural now: `Fecha`
+   * and `Hora` were the only labelled values this card ever carried, and a
+   * `<dt>` is the role `term`. One appearing here again is somebody restating
+   * the announcement.
    */
   it("leaves the day and the hour to the page around it", () => {
     renderCard();
 
-    expect(screen.queryByText(CEREMONY.ceremonyDate)).not.toBeInTheDocument();
-    expect(screen.queryByText(CEREMONY.ceremonyTime)).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("term")).toHaveLength(0);
+    expect(screen.queryAllByRole("definition")).toHaveLength(0);
   });
 });
 

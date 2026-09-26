@@ -146,8 +146,6 @@ describe("row level security", () => {
       rsvp_responses: { attending: true, seats_confirmed: 1 },
       gate_attempts: { ip_hash: "0".repeat(32), succeeded: true },
       ceremony: {
-        ceremony_date: "fecha intrusa",
-        ceremony_time: "hora intrusa",
         stream_url: "https://meet.google.com/int-ruso-xxx",
       },
     };

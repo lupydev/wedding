@@ -15,7 +15,7 @@ import {
  *
  * WHY THIS IS A DOMAIN MODULE AND NOT A CHECK INSIDE THE SERVER ACTION
  *
- * These seven values reach a guest through four surfaces, one of which — the
+ * These four values reach a guest through four surfaces, one of which — the
  * Open Graph card — is cached immutably and cannot be corrected after dispatch.
  * What counts as an acceptable value is therefore a rule about the product, not
  * a detail of one form handler, and it is testable here without a database, a
@@ -30,8 +30,6 @@ import {
 /** A complete, already-valid submission. Every test varies one field of it. */
 const COMPLETE: Readonly<Record<string, string>> = {
   coupleNames: "Ana y Bruno",
-  ceremonyDate: "sábado 14 de noviembre de 2026",
-  ceremonyTime: "4:00 p. m.",
   venueName: "Hacienda La Ñapa",
   venueAddress: "Calle 12 #34-56, Barrio Centro, Ciudad",
   streamUrl: "https://meet.google.com/abc-defg-hij",
@@ -63,13 +61,17 @@ function refusalFor(
 }
 
 describe("the wedding facts' field list", () => {
-  it("names exactly the seven values the ceremony row holds", () => {
-    // The same seven the migration declares and `updateCeremony` writes. A
-    // field here with no column behind it would validate something nothing
+  it("names exactly the four values the ceremony row holds", () => {
+    // The same four the migrations leave standing and `updateCeremony` writes.
+    // A field here with no column behind it would validate something nothing
     // stores; a column with no field here would be uneditable.
+    //
+    // `ceremonyDate` and `ceremonyTime` ARE NOT ON THIS LIST, and their absence
+    // is the requirement. Migration 0018 drops both columns: the day a guest
+    // reads comes from `WEDDING_INSTANT`, and nothing rendered the typed
+    // values. A field restored here would be an editor over a column that no
+    // longer exists, which fails at the UPDATE rather than in the form.
     expect([...WEDDING_FACT_FIELDS].sort()).toEqual([
-      "ceremonyDate",
-      "ceremonyTime",
       "coupleNames",
       "streamUrl",
       "venueAddress",
@@ -105,8 +107,6 @@ describe("parseWeddingFacts on a complete submission", () => {
   it("accepts a different complete submission, values and all", () => {
     const other = {
       coupleNames: "Camila y Dario",
-      ceremonyDate: "viernes 3 de abril de 2027",
-      ceremonyTime: "11:30 a. m.",
       venueName: "Casa del Río",
       venueAddress: "Vereda El Alto, kilómetro 4",
       streamUrl: "https://meet.google.com/zzz-yyyy-xxx",
@@ -181,13 +181,18 @@ describe("parseWeddingFacts on a field that is missing", () => {
   });
 
   it("reports every broken field at once and not just the first", () => {
-    // One round trip per mistake, on venue Wi-Fi, with seven fields, is how a
-    // form stops getting filled in.
-    const result = parsed({ coupleNames: "", venueName: "", ceremonyTime: "" });
+    // One round trip per mistake, on venue Wi-Fi, is how a form stops getting
+    // filled in. Three of the four at once, so the assertion still proves the
+    // collection rather than one error happening to be reported.
+    const result = parsed({
+      coupleNames: "",
+      venueName: "",
+      venueAddress: "",
+    });
 
     expect(!result.ok && Object.keys(result.errors).sort()).toEqual([
-      "ceremonyTime",
       "coupleNames",
+      "venueAddress",
       "venueName",
     ]);
   });

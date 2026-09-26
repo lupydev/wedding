@@ -51,24 +51,25 @@ export interface InvitationBodyInvitation {
  * stay visibly unfinished; hiding or prettifying it turns an obviously
  * incomplete invitation into a plausible wrong one.
  *
- * FOUR FIELDS AND NOT SEVEN. The row also carries the Zoom meeting id and its
- * passcode, which this component does not render — so its prop type has no field
- * for them, exactly as it has no field for a phone number. A component cannot
- * leak what it was never handed.
+ * ONE FIELD, AND NOT THE WHOLE ROW. The row also carries the stream link, the
+ * venue and its street, which this component does not render — so its prop type
+ * has no field for them, exactly as it has no field for a phone number. A
+ * component cannot leak what it was never handed.
  */
 export interface InvitationBodyWedding {
   readonly coupleNames: string;
-  /**
-   * The wedding date. It is `ceremony_date`: one day, one column, one place to
-   * correct it. A second `wedding_date` would be the drift again.
-   */
   /*
     THE DAY, THE VENUE AND ITS ADDRESS USED TO BE DECLARED HERE TOO.
 
-    The day is stated by the announcement now, and the venue and its address
-    reach `RsvpAnswer` directly, because only a household that says it is
-    coming is told where to go. A prop this component no longer renders is a
-    lie about where a value comes from.
+    The venue and its address reach `RsvpAnswer` directly, because only a
+    household that says it is coming is told where to go. A prop this component
+    no longer renders is a lie about where a value comes from.
+
+    THE DAY IS NOT A PROP BECAUSE IT IS NO LONGER A COLUMN. A doc comment stood
+    here calling it `ceremony_date` — "one day, one column, one place to correct
+    it" — above no field at all. The announcement states the day from
+    `WEDDING_INSTANT`, nothing ever rendered the typed value, and migration 0018
+    dropped the column.
   */
 }
 

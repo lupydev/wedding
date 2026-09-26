@@ -5,8 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
 
 const CEREMONY: StreamDetailsValues = {
-  ceremonyDate: "sábado 28 de noviembre de 2026",
-  ceremonyTime: "5:00 p. m.",
   streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
@@ -69,67 +67,28 @@ describe("StreamDetails", () => {
   // the button went with the printed address.
 
   /**
-   * THE DATE CAN BE LEFT OUT WHERE SOMETHING ABOVE ALREADY SAID IT.
+   * THE DAY AND THE HOUR ARE NOT HERE AT ALL, AND NO PROP CAN BRING THEM BACK.
    *
-   * On `/transmision` the landing's announcement sits directly above this
-   * block and names the day in prose. Repeating it here put the same date on
-   * one small screen twice, in two formats — "sábado, 28 de noviembre de 2026"
-   * and "28-11-2026" — which reads as a defect however good each reason is.
+   * They used to be optional, behind `showDate` and `showTime`, both defaulting
+   * to TRUE — and every real caller passed false. `StreamInvitation` and
+   * `CeremonyStream` are the only two, and `RsvpAnswer` reaches this block only
+   * through the second of them, so the default was never once exercised by a
+   * page a guest can open.
    *
-   * The HOUR stays, because nothing above it says the hour and a stream guest
-   * needs one. The invitation behind the phone gate keeps both: it has no
-   * announcement above it.
+   * A default nothing takes is not a safe default: it is a branch that renders
+   * only in this file, and it kept two columns alive in the schema, the read
+   * model, the console form and every fixture that had to name them.
+   *
+   * So the block is stated with no props at all. Passing none is what every
+   * caller already did in effect, and there is now nothing else to pass.
    */
-  describe("when the moment is already stated above", () => {
-    it("drops the day when the page has already said it", () => {
-      render(<StreamDetails ceremony={CEREMONY} showDate={false} />);
+  it("states no day and no hour, with nothing to switch off", () => {
+    render(<StreamDetails ceremony={CEREMONY} />);
 
-      expect(screen.queryByText(CEREMONY.ceremonyDate)).toBeNull();
-      expect(screen.getByText(CEREMONY.ceremonyTime)).toBeInTheDocument();
-    });
-
-    /**
-     * AND THE HOUR, WHERE A COUNTDOWN ALREADY LANDS ON IT.
-     *
-     * The couple: "hay que eliminar la hora ya que el contador llega hasta el
-     * día 28 de noviembre a las 5:00pm". On a page whose counter runs to that
-     * exact instant, printing the hour underneath is the same fact twice — and
-     * the add-to-calendar button beside it carries the precise time for
-     * anybody who wants to keep it.
-     */
-    it("drops the hour when a counter above already lands on it", () => {
-      render(<StreamDetails ceremony={CEREMONY} showTime={false} />);
-
-      expect(screen.queryByText(CEREMONY.ceremonyTime)).toBeNull();
-      expect(screen.getByText(CEREMONY.ceremonyDate)).toBeInTheDocument();
-    });
-
-    /**
-     * WITH NEITHER, THE ROW ITSELF GOES — AND SO DOES ITS LIST.
-     *
-     * An empty line above the control is a gap nobody put there on purpose,
-     * and it is what BOTH surfaces render: each states the day above this
-     * block and runs a counter to the hour.
-     *
-     * The list is the assertion now. It used to be the remaining `term`, back
-     * when the address had a label of its own; the date and the hour are the
-     * only labelled values left, so no line means no `dl` at all.
-     */
-    it("renders no line at all when it would be empty", () => {
-      const { container } = render(
-        <StreamDetails ceremony={CEREMONY} showDate={false} showTime={false} />,
-      );
-
-      expect(container.querySelector("dl")).toBeNull();
-      expect(screen.queryAllByRole("term")).toHaveLength(0);
-    });
-
-    it("still shows both by default", () => {
-      render(<StreamDetails ceremony={CEREMONY} />);
-
-      expect(screen.getByText(CEREMONY.ceremonyDate)).toBeInTheDocument();
-      expect(screen.getByText(CEREMONY.ceremonyTime)).toBeInTheDocument();
-    });
+    // `term` is the role a `<dt>` carries, and the date and the hour were the
+    // only labelled values left in this block. None means no line.
+    expect(screen.queryAllByRole("term")).toHaveLength(0);
+    expect(screen.queryAllByRole("definition")).toHaveLength(0);
   });
 });
 
