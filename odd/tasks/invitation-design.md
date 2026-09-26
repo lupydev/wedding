@@ -144,6 +144,12 @@ declined screen given the language `/transmision` already uses.
       The wedding date now lives only in `WEDDING_INSTANT`, which answers
       `odd/tasks/wedding-landing.md`'s open question in the negative.
 
+- [x] **U32 — the couple's line goes back onto the card, painted into the
+      JPEG.** The preview reads as a wedding at a glance again, without
+      `ImageResponse` and without the household's name. The card stays
+      byte-identical for every household; what it costs is that those names are
+      now inside an asset served `immutable` for a year.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -1781,6 +1787,197 @@ owner's step, with the couple present.
 bytes at `HEAD`, 243,748 on disk, mtime 21:03 — and nothing in this unit reads
 or writes that file. It is still a valid 1200×1200 JPEG and every check that
 measures it passes, so it is left unstaged rather than reverted or committed.
+
+### U32 — done (the couple's line goes back onto the card, and what that costs)
+
+This is the file U31 found unstaged and correctly left alone. It is committed
+here, with the words that explain it.
+
+**WHAT THE COUPLE ASKED FOR, AND WHY IT IS NOT A REVERSAL OF U29.** The preview
+should read as a WEDDING at a glance. U29 took every word off the card and moved
+the personalization into `og:title` and `og:description`, which is the bubble
+WhatsApp actually draws — and it was right about the HOUSEHOLD's name, which
+said the same thing twice in a typeface nobody chose. What it left behind is a
+thumbnail of two people in the dark. A forwarded chat scrolls past the title
+beside the picture; the picture is the part that stops a thumb. So the couple's
+line goes back on, and ONLY theirs.
+
+**TOP, NOT BOTTOM, AND THAT WAS SETTLED BY LOOKING RATHER THAN BY ARGUING.**
+Both were rendered and put in front of the couple. The bottom placement covered
+them: the crop is `1800x1800+0+500` of a 1800×2400 portrait, so the two of them
+stand through the lower two thirds and anything written under them lands on her
+dress and on his knee. The top third is waterfall and dark rock — the words sit
+there with nothing behind them that anybody came to see. The couple picked the
+top after seeing both.
+
+Two faces, the same pair the site already uses (`app/globals.css:200-201`):
+"Nos casamos" in **Caveat** (`--font-script`) and "Luis & Michell" in **Yeseva
+One** (`--font-display`). Both are OFL, fetched from the `google/fonts`
+repository for the one render. They are NOT vendored: nothing in this repository
+rasterizes text any more, so a font in the tree would be a dependency with no
+consumer.
+
+**REPRODUCTION, SO THE ASSET IS NOT A MYSTERY BINARY.** This is the whole
+derivation, from the original the repository already ships:
+
+    magick img/boda.jpg -crop 1800x1800+0+500 +repage -resize 1200x1200 base.png
+    magick -background none -fill '#f6efe2' -font Caveat.ttf    -pointsize 92  label:'Nos casamos'    \( +clone -background black -shadow 90x14+0+5 \) +swap -background none -layers merge +repage t1.png
+    magick -background none -fill '#f6efe2' -font YesevaOne.ttf -pointsize 104 label:'Luis & Michell' \( +clone -background black -shadow 90x14+0+5 \) +swap -background none -layers merge +repage t2.png
+    magick base.png \( -size 1200x480 gradient:'rgba(0,0,0,0.62)'-none \) -gravity north -composite \
+      t1.png -gravity north -geometry +0+70  -composite \
+      t2.png -gravity north -geometry +0+170 -composite \
+      -sampling-factor 4:2:0 -strip -quality 80 img/og-card.jpg
+
+1200×1200, 243,748 bytes, EXIF stripped. Smaller than the 265,052-byte cut it
+replaces, which is the opposite of what adding words suggests: the second pass
+through the encoder at quality 80 gave back more than the text took.
+
+**THE HOUSEHOLD'S NAME DELIBERATELY DID NOT GO ON, AND THAT IS THE WHOLE
+DESIGN.** It was the obvious next step and it is the one thing that must never
+happen. The couple's names are the same fact for every household, so the card
+stays ONE asset: `e2e/invitation-page-og.spec.ts` fetches it for two different
+households and requires equal bytes, which is a statement that no guest data
+reaches the image at all. A household name on the card destroys exactly that —
+the image becomes per-guest data on a public, crawlable URL that travels with
+every forward of the link, fetched by an unauthenticated crawler. The names-only
+metadata rule would then have to be enforced twice, in two places, one of which
+is a JPEG nobody can grep.
+
+**THE SPEC SENTENCE HAD TO CHANGE SHAPE, NOT JUST WORDING.**
+`openspec/specs/invitation-page/spec.md` said "The card IMAGE renders no text
+whatsoever". That was a STRUCTURAL guarantee: it needed no judgement, because an
+image with no text has nothing on it to leak. What replaces it is CONDITIONAL —
+the image may carry only facts that are identical for every household — and a
+conditional rule is strictly weaker to enforce, because somebody has to apply
+it. The requirement now says so in as many words, and names the operative test
+("would two households receive different bytes"), so a future reader who sees
+names on the card and infers that the household's name may join them is refused
+by the requirement instead of encouraged by the precedent.
+
+**`ImageResponse` WAS DELIBERATELY NOT REINTRODUCED, AND THE NUMBER WAS
+RE-MEASURED RATHER THAN QUOTED.** Wanting text on the card again is the exact
+reason somebody would reach back for `next/og`. U29 measured 2,887,177 bytes of
+PNG from the 265,052-byte JPEG the card was then; that number belongs to that
+cut, so the same probe was run again against THIS card, through `next/og`'s real
+`ImageResponse`:
+
+    jpeg on disk : 243748 bytes
+    ImageResponse: 2646572 bytes
+    magic        : 89 50 4e 47
+    content-type : image/png
+
+Still eleven times, because the cost was never the words — it is that
+`ImageResponse` always rasterizes to PNG and a photographic 1200×1200 PNG is
+enormous. Words painted into the JPEG cost nothing at request time. The same
+words composed over it cost 2.4 MB on every cold fetch, and the route would stop
+returning static bytes. Both numbers are now in
+`app/i/[slug]/opengraph-image.ts`, each attributed to the cut it was taken from.
+
+**THE REGRESSION, AND IT IS A REGRESSION RATHER THAN AN OVERSIGHT.** When the
+text moved OUT of the image earlier this week, the stated benefit was that every
+word a guest could read then lived in `og:title` and `og:description` — rebuilt
+on every request, and therefore CORRECTABLE AFTER A DISPATCH, including for
+links already sitting in somebody's chat. Baking "Luis & Michell" into an asset
+served `public, immutable, no-transform, max-age=31536000` gives that property
+back up. If the couple's names were ever wrong, cards already delivered could
+not be fixed; the only lever left would be rotating the slug, which is a new URL
+and a new message. It is theoretical here — they are the couple's own names and
+they are already correct — but it is a property this project HAD and chose to
+spend. `lib/domain/og-card.ts` still carries the comment explaining why the
+names are an input from the `ceremony` row rather than a constant: that reason
+("they can be fixed BEFORE the first dispatch without a deploy") now covers only
+the metadata text, and the image is past even that. Written into the
+cache-control comment in `app/i/[slug]/opengraph-image.ts` so the next reader
+meets it where the header is set.
+
+**ONE INVITATION IS ALREADY OUT WITH THE OLD CARD AND KEEPS IT.** "Momo y Lucho"
+was dispatched with the text-free photograph. WhatsApp caches one preview per
+URL, so that chat will go on showing what it downloaded no matter what this
+commit does. Not worth rotating a working slug over: the household has the right
+link to the right invitation, and the card they see is the one the couple were
+happy to send that morning.
+
+**THE RED, AND WHY THERE IS SO LITTLE OF IT.** This unit is prose plus one
+binary. The binary was already green before a word was written — the owner had
+replaced it and `tools/og-card-asset-budget.spec.ts` passed 6/6 against it — and
+no assertion in the repository can fail because a comment is wrong. Nothing was
+invented to fill the gap; `3a7f89a` exists in this branch because two assertions
+that could not fail had to be removed, and manufacturing a third would be the
+same defect wearing a TDD costume.
+
+What WAS done instead is a failability probe, so "the guards are green" is not
+confused with "the guards are looking at this file". `img/boda.jpg` was copied
+over `img/og-card.jpg` and the budget spec re-run:
+
+    ✕ the photograph the Open Graph card serves > is the square crop the couple
+      chose, read from the file's own header
+    AssertionError: expected { height: 2400, width: 1800 } to deeply equal
+      { width: 1200, height: 1200 }
+    ❯ tools/og-card-asset-budget.spec.ts:193:32
+
+    ✕ the photograph the Open Graph card serves > fits inside the self-imposed
+      served-payload budget
+    AssertionError: expected 518242 to be less than 500000
+    ❯ tools/og-card-asset-budget.spec.ts:212:29
+
+    Tests  2 failed | 4 passed (6)
+
+The real file was restored from a copy taken beforehand and verified by hash
+(`98214e70…471e97da`, 243,748 bytes) before anything else ran.
+
+**WHICH EXISTING TESTS COVER THIS CHANGE, AND WHY NO NEW ONE WAS ADDED.**
+
+| Guard                                                                                                           | What it holds for this unit                                                                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2e/invitation-page-og.spec.ts` — "is byte-identical for two households, while their `og:title` still differs" | The load-bearing one. It is now the ONLY check that can tell the couple's line from a household name painted beside it, and its comment says so.                                                                                                      |
+| `e2e/invitation-page-og.spec.ts` — "answers a crawler with the photograph's own JPEG bytes, not a re-encoding"  | The response body equals `img/og-card.jpg` on disk. The new asset ships only if it is the asset actually served.                                                                                                                                      |
+| `tools/og-card-asset-budget.spec.ts` (6)                                                                        | Dimensions read out of the file's own JPEG header, weight under the self-imposed 500,000-byte budget, and no `next/og` import or `new ImageResponse(` in the route. The last two are what a future "just put the text back through Satori" runs into. |
+
+A test asserting the card DOES carry text would need OCR; this repository has no
+image library at all (the budget spec hand-rolls a JPEG marker walk rather than
+add `sharp`), and a dependency installed on every machine to read two words off
+a thumbnail is not a trade worth making. A test comparing the alt string to the
+`COUPLE_NAMES` constant would assert a constant against itself while proving
+nothing about the pixels — which is precisely why `alt` is written as a literal
+here, with a comment saying that interpolating the constant would let an edit
+move the description off the image it claims to describe.
+
+**THE STALE CLAIMS FOUND AND CORRECTED.** Five files asserted the card was
+text-free, in four different wordings:
+`app/i/[slug]/opengraph-image.ts` (the header, the cache-control rationale, the
+`alt`, and the return comment), `openspec/specs/invitation-page/spec.md` (two
+requirements), `lib/domain/og-card.ts`, `lib/domain/og-card.spec.ts` and
+`e2e/invitation-page-og.spec.ts` (two block comments). The budget spec's "the
+265,052 bytes the card weighs today" was present tense and is now 243,748;
+historical measurements elsewhere keep their own numbers, attributed to the cut
+they were taken from, because rewriting them would falsify the record rather
+than update it.
+
+**AND U31's THREE STALE SENTENCES IN `lib/domain/wedding-day.ts`, WHICH THAT
+UNIT DELIBERATELY DID NOT TOUCH.** The header said `ceremony_date` is `text`
+(the column is gone, dropped by `0018`), that the end state is a `timestamptz`
+on that row (U31 decided the opposite — the day lives in `WEDDING_INSTANT` and
+moving the wedding is a deploy), and that there was nothing to drift from
+because the row still held its seeded placeholder, untouched (the couple had
+filled it in; `0018`'s `raise notice` printed a real date and a real hour on the
+way out, so for a while the database and this constant both stated the day with
+nothing keeping them equal). All three corrected. No behaviour in that file
+changed: `WEDDING_INSTANT` and everything derived from it is byte-for-byte what
+it was.
+
+**GREEN.** `npm test` 2321 unit and component tests, `npm run typecheck`,
+`npm run lint` (0 errors, the same 9 pre-existing warnings), `npm run format:check`,
+`npm run build`, and `PORT=3100 npx playwright test` 222 browser tests. Same
+counts as the baseline at `b913743`: this unit adds no test and removes none.
+
+**ONE THING FOUND AND NOT TOUCHED, BECAUSE IT NEEDS THE COUPLE.**
+`lib/domain/message-preview.ts:38` tells the operator, in the console's preview
+pane, that «la imagen de la tarjeta dibuja los emoji con el juego Twemoji». That
+stopped being true at U29, when Satori left — the card has drawn no emoji since,
+and it draws none now. It is operator-facing Spanish copy with an approved
+snapshot (`components/console/__snapshots__/WhatsAppBubble.spec.tsx.snap`) and a
+browser assertion (`e2e/console-preview.spec.ts:365`) behind it, so rewording it
+is a copy decision rather than a correction I should make unasked.
 
 ## Next
 

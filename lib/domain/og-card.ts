@@ -11,12 +11,14 @@
  * venue name, no venue address, no phone number.
  *
  * WHERE THAT RULE NOW APPLIES. It used to govern two things: these strings, and
- * a model projected onto the card IMAGE. The image is a photograph now and
- * renders no text whatsoever, so it carries no guest data at all and there is
- * nothing on it left to govern — `buildOgCardModel` and `OgCardModel` were
- * deleted with the last caller. What WhatsApp shows beside the thumbnail is
- * built here and emitted by `app/i/[slug]/page.tsx`, which makes this file the
- * only place a household name reaches a preview.
+ * a model projected onto the card IMAGE. The image is a static photograph now —
+ * `buildOgCardModel` and `OgCardModel` were deleted with their last caller — so
+ * nothing here is projected onto it. The words it does carry, the couple's line,
+ * are painted into `img/og-card.jpg` itself and are the same for every
+ * household; `openspec/specs/invitation-page/spec.md` is where that narrower
+ * rule lives. What WhatsApp shows BESIDE the thumbnail is built here and emitted
+ * by `app/i/[slug]/page.tsx`, which makes this file the only place a HOUSEHOLD's
+ * name reaches a preview.
  */
 
 /**

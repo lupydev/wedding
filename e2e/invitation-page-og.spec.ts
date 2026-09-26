@@ -219,9 +219,10 @@ test.describe("the Open Graph card image", () => {
 
       It was first framed as an ACCENT test — the fixture name carries an enye
       in both cases and an accented o, and the card rasterized that name with
-      Satori. The card renders no text at all now, so nothing here can say
-      anything about accents, and the assertion became "it is a real raster,
-      not an error page".
+      Satori. The card draws no HOUSEHOLD name now — the only words on it are
+      the couple's line, painted into the JPEG and identical for everyone — so
+      nothing here can say anything about this fixture's accents, and the
+      assertion became "it is a real raster, not an error page".
 
       What that could not see is HOW BIG a raster. `ImageResponse` always
       rasterizes to PNG, and a photographic 1200x1200 PNG is enormous: the
@@ -279,16 +280,22 @@ test.describe("the Open Graph card image", () => {
       It compared an accented household's card against a plain-ASCII one and
       required DIFFERENT bytes, because the card rasterized the household name
       and identical bytes would have meant the accents were dropped. The card is
-      a photograph now: it renders no text, reads no invitation and takes no
-      parameter, so every household gets the same image and the old assertion
-      could only fail.
+      a static photograph now: it reads no invitation and takes no parameter, so
+      every household gets the same image and the old assertion could only fail.
 
       What replaces it is a stronger guarantee than the one it retires. "The
       bytes are identical for two different households" is a statement that NO
-      guest data reaches the image at all — not a redaction that could be
-      widened by accident, but an image with no input. That matters because the
-      card is fetched by an unauthenticated crawler from a URL that travels with
-      every forward of the link.
+      household-specific data reaches the image at all — not a redaction that
+      could be widened by accident, but an image with no input. That matters
+      because the card is fetched by an unauthenticated crawler from a URL that
+      travels with every forward of the link.
+
+      AND IT IS THE ONLY THING GUARDING THAT NOW, WHICH IT WAS NOT BEFORE. The
+      card used to be text-free, so "no guest data on it" needed no judgement:
+      there was nothing on it at all. It carries the couple's line today, which
+      is admissible only because it is the same fact for every household. This
+      assertion is what tells the difference between that line and a household
+      name painted beside it, and no other check in the repository can.
 
       And the second half is what keeps the first half from being a way to pass
       by breaking the product: personalization did not disappear, it moved to

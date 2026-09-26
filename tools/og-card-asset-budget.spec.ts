@@ -22,7 +22,9 @@ import { describe, expect, it } from "vitest";
  * image size for WhatsApp link previews from any source available when this was
  * written, so none is claimed and none is cited. 500,000 bytes is a
  * crawler-friendliness budget chosen here, with roughly 2x headroom over the
- * 265,052 bytes the card weighs today.
+ * 243,748 bytes the card weighs today. (It weighed 265,052 when this budget was
+ * set; re-cutting it with the couple's line painted on made it smaller, not
+ * larger — the second pass through the encoder cost less than the words added.)
  *
  * THE REAL, MEASURED REASON THIS GUARD EXISTS IS NOT A LIMIT AT ALL. While the
  * route rendered this same photograph through `ImageResponse`, the PNG it

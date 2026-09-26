@@ -5,17 +5,30 @@
  * FACT ABOUT THIS WEDDING.
  *
  * Every other surface reads `ceremony` (`supabase/migrations/0009_ceremony.sql`,
- * whose own comment says so in as many words). The landing page cannot, and the
- * reason is the column type: `ceremony_date` is `text`, free prose an operator
- * types into the console. A countdown needs an INSTANT, and recovering one from
- * prose means parsing "28 de noviembre de 2026" — a guess that fails silently on
- * the first wording the parser did not anticipate, leaving a page that counts
- * confidently towards the wrong day.
+ * whose own comment says so in as many words) for WHERE the wedding is. Nothing
+ * reads it for WHEN any more. The row used to carry `ceremony_date` and
+ * `ceremony_time` as `text` — free prose an operator typed into the console —
+ * and a countdown needs an INSTANT: recovering one from prose means parsing
+ * "28 de noviembre de 2026", a guess that fails silently on the first wording
+ * the parser did not anticipate, leaving a page that counts confidently towards
+ * the wrong day.
  *
- * The end state is a `timestamptz` on that row, edited in the console, read
- * here. Until it exists this file is the single place to correct, and
- * `odd/tasks/wedding-landing.md` records the trade in full. There is nothing to
- * drift from yet: the row still holds its seeded placeholder, untouched.
+ * THE COLUMNS ARE GONE, AND THAT IS THE DECISION RATHER THAN A STEP TOWARDS
+ * ONE. This comment used to promise a `timestamptz` on that row as the end
+ * state, edited in the console and read here.
+ * `supabase/migrations/0018_drop_ceremony_date_time.sql` settled it the other
+ * way: the wedding's day and hour live in `WEDDING_INSTANT` below and nowhere
+ * else, so moving the wedding is a deploy rather than an `UPDATE`. That answers
+ * `odd/tasks/wedding-landing.md`'s open question in the negative, and
+ * `odd/tasks/invitation-design.md` (U31) records the trade in full.
+ *
+ * THE DRIFT THIS FILE ONCE CALLED HYPOTHETICAL ACTUALLY HAPPENED. It claimed
+ * there was nothing to drift from because the row still held its seeded
+ * placeholder, untouched. By the time 0018 ran, the couple had filled it in —
+ * the migration's own `raise notice` printed a real date and a real hour on the
+ * way out — so for a while the database and this constant both stated the day,
+ * separately, with nothing keeping them equal. One statement of the day is the
+ * point; that is why there is exactly one below.
  *
  * The literal placeholder token is deliberately NOT written above.
  * `tools/no-source-placeholders.spec.ts` scans comments as well as code, and it

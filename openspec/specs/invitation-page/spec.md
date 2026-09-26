@@ -22,13 +22,15 @@ The invitation page at `/i/[slug]` MUST server-render `og:title` and `og:image` 
 - WHEN `/i/k7q2m9xr4t` is fetched with a standard desktop browser User-Agent
 - THEN the raw HTML response body MUST also contain the same `og:title` and `og:image` tags inside `<head>`, not appended near `</body>`
 
-### Requirement: OG preview content is names-only, and the card image carries no guest data at all
+### Requirement: OG preview content is names-only, and the card image carries only what every household shares
 
 The Open Graph preview MUST identify the household by its greeting name and an invitation line only. It MUST NOT include the wedding date, the venue name or address, or any phone number (per A confirmed decision).
 
-That names-only rule governs the METADATA TEXT — `og:title` and `og:description` — which is where WhatsApp draws the household's name, beside the thumbnail. The card IMAGE renders no text whatsoever: it is a photograph, identical for every household, generated from no invitation data. Where the text is a projection that may not be widened, the image is an artefact with no guest input at all, so there is nothing on it to redact.
+That names-only rule governs the METADATA TEXT — `og:title` and `og:description` — which is where WhatsApp draws the household's name, beside the thumbnail.
 
-(This supersedes the earlier form of this requirement, which placed the greeting name inside the rendered image. It is a strengthening, not a relaxation: the private-detail prohibition still holds over everything a forwarded link exposes.)
+The card IMAGE is governed by a second, narrower rule. It MAY carry text, and it does: the couple's line is painted into `img/og-card.jpg`. Whatever it carries MUST be identical for every household — facts about the wedding itself, never about the household reading it. The greeting name, the guest names, the phone numbers, the RSVP state and the slug MUST NOT appear in the image, in any typeface, at any size, whether rasterized at request time or painted into the asset beforehand. The operative test is not "is there text on the card" but "would two different households receive different bytes": if the answer is yes, the rule is broken.
+
+(This is the CURRENT form of a guarantee that has changed shape twice, and the shape matters more than the wording. It first placed the greeting name inside the rendered image. It was then strengthened to "the image renders no text whatsoever" — a STRUCTURAL guarantee, which needed no judgement to enforce, because an image with no text has nothing on it to leak. It is now CONDITIONAL: the image carries text again, so the guarantee has to name what that text may be, and a reader has to apply it. That is strictly weaker to enforce and it is written here so nobody has to rediscover it. A future reader who notices the couple's names on the card and concludes that the household's name may join them is reading it backwards: the couple's names are admissible precisely and only because they are the same for everyone. The private-detail prohibition still holds over everything a forwarded link exposes.)
 
 #### Scenario: Metadata text names the household and omits private details
 
@@ -41,14 +43,14 @@ That names-only rule governs the METADATA TEXT — `og:title` and `og:descriptio
 
 - GIVEN two invitations whose greeting names differ
 - WHEN each invitation's OG image is fetched and each invitation's page is fetched
-- THEN the two image responses MUST be byte-identical, proving no guest data reaches the image
+- THEN the two image responses MUST be byte-identical, proving nothing household-specific reaches the image, whatever the image draws
 - AND their `og:title` values MUST differ, proving the household is still named in the text
 
 ### Requirement: A Spanish household name survives the preview path uncorrupted
 
 A greeting name containing accented vowels or the letter enye MUST reach a WhatsApp preview intact, and the card route MUST answer with a real image rather than an error page.
 
-(This supersedes the earlier form of this requirement, which asserted that the rendered IMAGE drew those glyphs without tofu. The image renders no glyphs now, so the guarantee moved to the surface that carries the name: the metadata text in the first HTML response. The card's own obligation — that it answers with an image at all — is kept here rather than dropped, because a failing card produces a blank preview with no error anywhere.)
+(This supersedes the earlier form of this requirement, which asserted that the rendered IMAGE drew those glyphs without tofu. The image draws no HOUSEHOLD name now — the only glyphs on it are the couple's line, the same for everyone — so the guarantee moved to the surface that carries the name: the metadata text in the first HTML response. Nothing here can come back by putting text on the card again: as long as the image is one shared asset, no household's glyphs are on it to be corrupted. The card's own obligation — that it answers with an image at all — is kept here rather than dropped, because a failing card produces a blank preview with no error anywhere.)
 
 #### Scenario: Name with accents and enye reaches og:title uncorrupted
 

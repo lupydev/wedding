@@ -16,9 +16,12 @@ import {
  * because it is never copied in the first place.
  *
  * The `buildOgCardModel` block that used to open this file went with its only
- * caller. The card IMAGE is a photograph now — it renders no text and reads no
- * invitation — so the projection it was the model for no longer exists, and the
- * names-only rule is enforced entirely on the strings below.
+ * caller. The card IMAGE is a static photograph now — it reads no invitation and
+ * takes no parameter — so the projection it was the model for no longer exists,
+ * and the names-only rule is enforced entirely on the strings below. The card
+ * does carry the couple's line, painted into the asset, but nothing here builds
+ * it: identical bytes for every household is what governs the image, and
+ * `e2e/invitation-page-og.spec.ts` is where that is asserted.
  */
 
 /** A read model deliberately carrying every value the preview must NOT show. */
