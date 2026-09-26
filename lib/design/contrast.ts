@@ -43,6 +43,17 @@ const LUMINANCE_COEFFICIENTS = {
  */
 export const WCAG_AA_NORMAL_TEXT = 4.5;
 
+/**
+ * The WCAG minimum for the parts of a control that are not text.
+ *
+ * The edge of an input, the outline of a checkbox, the boundary that says
+ * "this is where you type". Success criterion 1.4.11 holds them to 3:1 rather
+ * than 4.5:1 — a shape is easier to resolve than a letterform — and that is a
+ * different question from whether the words inside them can be read. A field
+ * whose text passes and whose edge does not is a field nobody finds.
+ */
+export const WCAG_AA_NON_TEXT = 3;
+
 function parseChannel(raw: string): number {
   const trimmed = raw.trim();
   const value = Number(trimmed);

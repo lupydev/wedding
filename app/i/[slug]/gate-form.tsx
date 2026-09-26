@@ -45,28 +45,53 @@ export function GateForm({ action }: { readonly action: GateFormAction }) {
         placeholder disappears the moment somebody types, which on the one
         field this page has is the moment they most want to check they are
         answering the right question.
+
+        IT WAS 60% CREAM AND MEASURED 1.2:1. Small uppercase type at 60%
+        opacity is a perfectly ordinary way to make a label recede on a card;
+        laid over the lit edge of a dress it recedes all the way. It reads
+        against the gate's panel now, and `gate-legibility.spec.tsx` holds it
+        to the same 4.5:1 the two theme tables are held to.
       */}
       <label
-        className="text-xs tracking-[0.18em] text-[#f6efe2]/60 uppercase"
+        className="gate__field-label text-xs tracking-[0.18em] text-[#f6efe2]/90 uppercase"
         htmlFor="gate-phone"
       >
         Número de celular
       </label>
       {/*
-        A VISIBLE EDGE, because an unbordered input on a photograph is an
-        invisible control — and on this screen a guest who cannot tell there is
-        anywhere to type has nothing else to try.
+        A FIELD THAT LOOKS LIKE A FIELD, which is a different failure from a
+        field that cannot be read.
+
+        This was a translucent bar with a 25% edge, and against the photograph
+        that edge measured 1.3:1 — below the 3:1 WCAG holds the boundary of a
+        control to, and below the button underneath it, which did read as a
+        button. A guest who cannot tell where to tap on this screen has
+        nothing else to try.
+
+        SUNK, NOT RAISED, and the language is the console's own: `--muted` is
+        "the SUNK surface: inputs, alternate rows, wells", darker than the card
+        it sits in, while the submit button below is the raised one. Two
+        controls that look alike is how somebody presses the wrong one.
+
+        AND A PLACEHOLDER, which is not the label coming back. It is an example
+        of the thing being asked for — the shape of a Colombian mobile number —
+        and it answers "am I supposed to type in here?" for a guest who has
+        never met a form on a photograph. It disappears on the first keystroke,
+        which is exactly why it could never have been the label.
       */}
       <input
         className="
-          w-full rounded-xl border border-[#f6efe2]/25 bg-black/30 px-4 py-3
-          text-center text-base text-[#f6efe2] backdrop-blur-sm
-          focus-visible:border-[#f6efe2]/60 focus-visible:outline-2
+          gate__field w-full rounded-xl border border-[#f6efe2]/60 bg-black/45
+          px-4 py-3 text-center text-base text-[#f6efe2]
+          shadow-[inset_0_1px_4px_rgba(0,0,0,0.55)] backdrop-blur-sm
+          placeholder:text-[#f6efe2]/45
+          focus-visible:border-[#f6efe2]/90 focus-visible:outline-2
           focus-visible:outline-offset-2 focus-visible:outline-[#f6efe2]
         "
         id="gate-phone"
         name="phone"
         type="tel"
+        placeholder="300 123 4567"
         // `inputMode` raises the numeric keypad on a phone, which is where
         // essentially every guest opens this. `autoComplete` lets the browser
         // offer the number it already knows, so most guests never type at all.
@@ -76,7 +101,8 @@ export function GateForm({ action }: { readonly action: GateFormAction }) {
       />
       <button
         className="
-          w-full rounded-full border border-[#f6efe2]/40 bg-[#f6efe2]/10 px-5
+          gate__submit w-full rounded-full border border-[#f6efe2]/40
+          bg-[#f6efe2]/10 px-5
           py-3 text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
           duration-(--console-motion-fast) ease-(--ease-console-out)
           hover:bg-[#f6efe2]/20
@@ -109,10 +135,16 @@ export function GateForm({ action }: { readonly action: GateFormAction }) {
         one a small scroll is the wrong trade. What the reservation buys is that
         the common refusal does not shove the page; the longest one may still,
         and it degrades to a scroll, which the gate deliberately allows.
+
+        `min-h-5` IS ONE LINE OF `text-sm`, AND IT USED TO BE `min-h-6`. Four
+        pixels of over-reservation that nothing was ever going to fill, and
+        they are now four pixels of the eight the refused gate still overruns.
+        Visible as well as measurable: the reserved line is inside the gate's
+        panel, so an empty one is empty CARD under the button.
       */}
       <div
         role="alert"
-        className="gate__feedback flex min-h-6 flex-col gap-1 text-sm text-[#f6efe2]"
+        className="gate__feedback flex min-h-5 flex-col gap-1 text-sm text-[#f6efe2]"
       >
         {messages.map((message) => (
           <p key={message}>{message}</p>

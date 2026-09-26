@@ -115,16 +115,76 @@ export function InvitationGate({
       <SaveTheDate />
 
       {/*
-        ONE SENTENCE, AND IT WAS TWO. "Tenemos lista su invitación de
-        matrimonio." then "Para abrirla, escribe el número de celular que
-        compartiste con nosotros." — two sentences saying what one says, above
-        the only thing there is to do on the page.
-      */}
-      <p className="gate__ask max-w-sm text-sm text-[#f6efe2]/85">
-        Escribe tu número para abrir la invitación.
-      </p>
+        THE GROUND THE ONLY CONTROL ON THE PAGE STANDS ON.
 
-      {children}
+        MEASURED, AND THE MEASUREMENT IS THE WHOLE REASON THIS EXISTS. The
+        label of the field shipped at 1.2:1 against the pixels behind it and
+        the field's own edge at 1.3:1 — cream on the lit cream of Michell's
+        dress, with nothing in between. Not dim: absent. On the first screen
+        every guest sees, for a couple whose brief was that it work for
+        somebody who is not comfortable with a phone.
+
+        WHY HERE AND NOT IN THE STAGE'S SCRIMS. `PhotoStage` lays a scrim over
+        the top 55% of the photograph and another over the bottom 38%, and they
+        fade towards each other so the couple keep the least veil of anywhere
+        in the frame. That is right for the landing, whose words are at the two
+        ends. This screen's words run down the middle — and the wedding
+        photograph puts the couple in the middle, from 53% to 87% of the frame,
+        where the landing's photograph puts clear sky. The field lands at 60%,
+        in the gap between the two scrims, on the brightest thing in the
+        picture. Deepening the stage's scrims would fix this screen by dimming
+        the couple on the landing they already approved.
+
+        WHY NOT REFRAME THE PHOTOGRAPH INSTEAD, which would be the better fix
+        if it existed. It does not: `components/landing/photos.spec.ts`
+        measures that a `cover` crop of a 0.75:1 picture on a phone is bound by
+        its HEIGHT, so the whole height is on screen and there is no vertical
+        overflow for an `object-position` to redistribute. Where the couple sit
+        vertically is the photograph's, not a value that can be tuned.
+
+        WHY IT COSTS NO HEIGHT. It is painted, not laid out: absolutely
+        positioned behind the words with negative insets, so it reads as the
+        card `RsvpAnswer` already uses for the same reason — a DEEPENING of the
+        ground rather than a sheet of paper on it — while the words keep the
+        full measure. A card with real padding would have narrowed the refusal
+        and wrapped it onto another line, on the one screen whose refusal is
+        already twelve pixels past the fold.
+
+        `isolate` IS LOAD-BEARING, and the failure without it is the one
+        `PhotoStage` documents for its scrims: painting order is not DOM order.
+        Left in the page's own stacking context, a `-z-10` ground paints below
+        every positioned element — including the photograph — and the page
+        renders exactly as it did before, with nothing to see and no error
+        anywhere. The stacking context makes `-z-10` mean "behind these words"
+        instead of "behind everything".
+
+        Deeper than `RsvpAnswer`'s panel, and the difference is measured rather
+        than felt: that one sits at 70%–95%, where the stage's bottom scrim is
+        already carrying 60% to 90% of the load. This one has none of that help.
+      */}
+      <div className="gate__panel relative isolate flex w-full flex-col items-center gap-3 sm:gap-4">
+        <div
+          aria-hidden="true"
+          className="
+            gate__panel-ground pointer-events-none absolute -inset-x-4
+            -inset-y-3 -z-10 rounded-3xl bg-[#0d1114]/70 ring-1 ring-white/10
+            shadow-[0_18px_60px_rgba(0,0,0,0.5)] backdrop-blur-sm
+            lg:hidden
+          "
+        />
+
+        {/*
+          ONE SENTENCE, AND IT WAS TWO. "Tenemos lista su invitación de
+          matrimonio." then "Para abrirla, escribe el número de celular que
+          compartiste con nosotros." — two sentences saying what one says, above
+          the only thing there is to do on the page.
+        */}
+        <p className="gate__ask max-w-sm text-sm text-[#f6efe2]/90">
+          Escribe tu número para abrir la invitación.
+        </p>
+
+        {children}
+      </div>
 
       {/*
         THE WAY OUT, KEPT QUIET AND KEPT PRESENT.
@@ -132,8 +192,21 @@ export function InvitationGate({
         A household whose number is not the one the couple stored has no other
         move on this page, so this link is the only escape — but it must not
         compete with the field, which is what almost everybody needs.
+
+        QUIET IS NOW SIZE AND WEIGHT, NOT OPACITY, and the change is measured.
+        This link sits OUTSIDE the panel, on the bare photograph, and on a
+        Pixel 7 the taller screen puts it at 79% rather than 89% — over the lit
+        leg of Luis's trousers instead of the dark ground below them. At 60%
+        cream that measured 2.9:1 against the brightest pixel under it. It is
+        the one thing on the page a locked-out household can still use, so it
+        is now full cream at `text-xs`, which is 5.1:1 against the same pixel
+        and still the smallest thing on the screen.
+
+        The shadow is the same one `SaveTheDate` and `StreamLink` carry for the
+        same reason. It is not counted in the ratio above: WCAG has no term for
+        it, and a floor that credits an unmeasurable is not a floor.
       */}
-      <p className="gate__recovery text-xs text-[#f6efe2]/60">
+      <p className="gate__recovery text-xs text-[#f6efe2] [text-shadow:0_1px_10px_rgba(0,0,0,0.6)]">
         <a
           className="
             underline underline-offset-4 transition-colors

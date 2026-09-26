@@ -126,6 +126,37 @@ describe("the wedding photograph's crop on a phone", () => {
 
     expect(centred.right).toBeLessThan(COUPLE.right);
   });
+
+  /**
+   * AND THE CROP IS HORIZONTAL ONLY, WHICH IS WHY `overlayFocus` NAMES ONE AXIS.
+   *
+   * `visibleSpan` above asserts this by assuming it — it divides by the
+   * viewport's height and treats the whole picture height as visible — and an
+   * assumption a spec depends on should be a line in the spec rather than a
+   * sentence in a comment.
+   *
+   * It also answers a question that gets asked of this file whenever something
+   * on `/i/[slug]` lands on the couple: can the crop be nudged DOWNWARDS, so
+   * they fall lower in the frame and the words above them get clear sky? No,
+   * and not as a matter of taste. A `cover` crop scales until the shorter
+   * constraint is satisfied; on a picture this much wider in ratio than a
+   * phone, that is the HEIGHT. The scaled width then exceeds the screen and the
+   * scaled height equals it exactly, so there is no vertical overflow for an
+   * `object-position` to distribute and `68% center`, `68% top` and
+   * `68% bottom` are the same picture.
+   *
+   * Where the couple sit vertically is therefore the photograph's own and not a
+   * value anything can tune. Anything that needs a clear ground beneath the
+   * words has to bring one.
+   */
+  it.each(PHONES)("has nothing to crop vertically on a $name", (phone) => {
+    const scale = phone.height / SOURCE.height;
+    const scaledWidth = SOURCE.width * scale;
+
+    // The height binds: covering the box by width alone would leave a gap.
+    expect(scaledWidth).toBeGreaterThan(phone.width);
+    expect(SOURCE.height * scale).toBeCloseTo(phone.height, 10);
+  });
 });
 
 describe("the engagement photograph", () => {
