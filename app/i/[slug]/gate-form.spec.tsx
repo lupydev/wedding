@@ -117,7 +117,13 @@ describe("GateForm", () => {
     const alert = screen.getByRole("alert");
 
     expect(alert.textContent).toBe("");
-    // The space it will need, held rather than taken later.
-    expect(alert.className).toContain("min-h-6");
+    /*
+      ONE LINE OF `text-sm`, HELD RATHER THAN TAKEN LATER — and one line is the
+      whole claim. It reserved `min-h-6` until U35 measured that nothing was
+      ever going to fill the sixth unit: four pixels of empty CARD under the
+      button on every successful visit, bought to spare the refused visitor a
+      small scroll the gate deliberately allows anyway.
+    */
+    expect(alert.className).toContain("min-h-5");
   });
 });
