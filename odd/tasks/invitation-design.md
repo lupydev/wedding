@@ -1518,6 +1518,53 @@ comments naming `opengraph-image.tsx` follow the rename. The historical
 Green: 2335 unit and component tests, 222 browser tests, typecheck, lint,
 format, build. One test added — the no-rasterizer assertion — and none deleted.
 
+Commits `8b9e348` and `7232191`. RDD: assessed **medium** (`executable_change`
+in `app/(public)/page.tsx`), 16 paths, 1363 changed lines, `review_due: true`
+(`slice_budget_reached`). Reviewed as one candidate under lineage
+`review-7798c414d7581ea1`, single lens `review-reliability`, consent **granted**
+by the couple, outcome **approved**.
+
+The assessment first refused with `unassessable` because the untracked
+`.claude-write-probe` — an empty 0-byte tooling artifact, not part of this work —
+requires an explicit declaration. Excluded with `--untracked-scope=exclude` and
+the inventory digest the refusal handed back, rather than deleted: it is not
+this unit's file to remove.
+
+**The acknowledgement receipt was not read, and that is worth writing down
+rather than glossing.** `review acknowledge-approved` exited 0, but the envelope
+it prints was swallowed by a `jq` filter of mine — `//empty` inside an object
+construction discards the whole object, so a successful command looked silent.
+The contract says report the burn from that envelope and never from a later
+status, so this record does not claim the receipt. What is evidenced: the
+command exited 0, no replay was attempted, and the subsequent read-only status
+reports the lineage `unrelated` with `base_tree` advanced to `eef51cf`, this
+candidate's own tree — consistent with a burn, and short of proof of one.
+
+Five advisory findings, all non-blocking and `informational`; per contract they
+are separate later work and never reopen this candidate. Two share a root cause
+worth fixing on its merits, because it is the failure mode this repo already
+names in `components/landing/photos.ts` — two literals that are one fact:
+
+- `R3-declared-size-unbound` (`app/i/[slug]/opengraph-image.ts:72`) — `size`
+  hardcodes 1200x1200 and the budget spec hardcodes it again. Nothing binds
+  either to the JPEG's own frame, so a replaced asset makes `og:image:width`
+  and `og:image:height` advertise a lie while both files still agree with each
+  other.
+- `R3-route-asset-binding-satisfied-by-comment`
+  (`tools/og-card-asset-budget.spec.ts:167`) — only a comment ties the guard to
+  the path the route actually reads, so the guard could measure a file the route
+  has stopped using.
+- `R3-byte-identity-passes-on-error-pages`
+  (`e2e/invitation-page-og.spec.ts:316-318`) — the `> 1_000` floor rules out two
+  empty bodies, which the comment says, but not two identical error pages over
+  1 KB.
+- `R3-module-init-read-unproved` (`app/i/[slug]/opengraph-image.ts:140`) —
+  nothing asserts the module-scope read resolves at init in the built bundle;
+  the build trace and the browser tests cover it only in practice.
+- `R3-jpeg-walk-standalone-markers`
+  (`tools/og-card-asset-budget.spec.ts:132`, SUGGESTION) — the frame-header walk
+  does not account for standalone markers.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
