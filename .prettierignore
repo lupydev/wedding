@@ -6,6 +6,12 @@ coverage/
 playwright-report/
 test-results/
 
+# Written by the Supabase CLI. `supabase/.gitignore` already hides `.temp` from
+# git, but Prettier reads only the ROOT `.gitignore` and this file, never a
+# nested one — so `supabase link` leaves a clean `git status` beside a failing
+# `format:check`, which reads as a broken gate rather than a missing rule.
+supabase/.temp/
+
 # SDD planning artifacts are authored documents, not formatted source.
 openspec/
 .atl/
