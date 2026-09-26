@@ -728,3 +728,99 @@ test.describe("the invitation on a laptop", () => {
     expect(visible).toBeGreaterThan(viewport.height * 0.7);
   });
 });
+
+/**
+ * THE WAY TO A VENUE THAT HAS NO STREET ADDRESS, ON THE DEVICE IT IS READ ON.
+ *
+ * "Salón para Eventos Villa Campestre" has no address to print. `Dirección`
+ * carries whatever the couple put in the row; the MAP is the only thing on this
+ * page a guest can actually navigate by, and the link under it is the only way
+ * to turn it into a route.
+ *
+ * ON A PHONE, BECAUSE THAT IS WHERE IT ARRIVES. Invitations go out over
+ * WhatsApp, so close to every guest opens this on a phone — and a link inside
+ * an ordinary WhatsApp message opens in the phone's DEFAULT BROWSER rather than
+ * an in-app one, so this really is the mobile browser and really does have a
+ * Google Maps application behind it.
+ *
+ * 360px RATHER THAN THE 390 `console-design.spec.ts` USES. That file measures
+ * the console on the couple's own phone; this measures the narrowest screen an
+ * invitation still has to survive, which is where a full-width committed image
+ * overflows first. The assertion is on the DOCUMENT, not on the block: an image
+ * that pushes the page wider is felt as the whole invitation sliding sideways
+ * under the thumb, not as one element sticking out.
+ */
+test.describe("the way to the venue, on a phone", () => {
+  /** Rendered by `next/image`, so the file is carried in the query string. */
+  const MAP_SOURCE = /venue-map/;
+
+  /**
+   * Written out by hand, not read back off the page.
+   *
+   * `dir/?api=1` is the directions form — the couple asked for a button "con
+   * las indicaciones ya listas", so the guest lands on a route rather than on a
+   * card they have to press again. A test that read the href and then asserted
+   * it looked like a URL would pass with the pin anywhere on earth.
+   */
+  const DIRECTIONS_URL =
+    "https://www.google.com/maps/dir/?api=1&destination=3.853778%2C-76.2971633";
+
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  test("appears only after the household accepts, and fits the screen", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await unlock(page, invitation);
+
+    const directions = page.getByRole("link", { name: /Cómo llegar/ });
+
+    // The venue is behind the answer, and the map is the venue. A household
+    // that has not said yes must not be shown where to go.
+    await expect(directions).toHaveCount(0);
+
+    await accept(page);
+
+    await expect(directions).toBeVisible();
+    await expect(directions).toHaveAttribute("href", DIRECTIONS_URL);
+    await expect(directions).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(page.locator("a.rsvp__venue-map img")).toHaveAttribute(
+      "src",
+      MAP_SOURCE,
+    );
+
+    /*
+      THE TAP TARGET, MEASURED RATHER THAN ASSUMED.
+
+      The whole picture is the link, so its height is never in doubt; what can
+      quietly fall under the thumb is the "Cómo llegar" bar that makes the
+      picture read as a control at all. 44px is the smallest target a phone
+      should offer.
+    */
+    const affordance = await page
+      .locator(".rsvp__venue-map__affordance")
+      .boundingBox();
+
+    expect(affordance).not.toBeNull();
+    expect(affordance!.height).toBeGreaterThanOrEqual(44);
+
+    // Scrolled to, because an element below the fold can overflow a page that
+    // measures clean while it is still off screen.
+    await directions.scrollIntoViewIfNeeded();
+
+    const measured = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+
+    expect(measured.scrollWidth).toBeLessThanOrEqual(measured.clientWidth);
+  });
+});

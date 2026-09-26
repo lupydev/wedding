@@ -11,6 +11,7 @@ import {
 } from "@/lib/domain/rsvp-copy";
 
 import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
+import { VenueMap } from "./VenueMap";
 
 /**
  * The RSVP surface.
@@ -474,6 +475,26 @@ export function RsvpAnswer({
               </dd>
             </div>
           </dl>
+
+          {/*
+            AND THE MAP, WHICH IS THE ONLY DIRECTIONS THERE ACTUALLY ARE.
+
+            The venue has NO STREET ADDRESS. Whatever the `ceremony` row holds
+            for `venue_address`, there is no line a guest can type into a maps
+            application — so the list above names the place and this is what
+            tells anybody where it is.
+
+            INSIDE THIS BRANCH, WHICH IS THE WHOLE OF ITS ACCESS CONTROL. The
+            venue is told only to a household that has said it is coming; the
+            map is the venue, so it is exactly as private as the two lines above
+            it. It is easy to get wrong in a way nothing notices — the map is an
+            image and a link, so every existing assertion about the venue reads
+            text and would stay green while a map rendered outside the gate
+            leaked the location to everybody. `RsvpAnswer.spec.tsx` therefore
+            asserts its ABSENCE in all three states a household can reach
+            without accepting.
+          */}
+          <VenueMap />
 
           {soloGuest === undefined ? (
             <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">

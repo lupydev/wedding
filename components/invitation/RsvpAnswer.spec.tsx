@@ -111,6 +111,17 @@ function streamCard(): HTMLElement {
   return screen.getByTestId("stream-details");
 }
 
+/**
+ * The way to the venue, which only an attending household may be offered.
+ *
+ * `queryByRole` rather than `getByRole`: most of what this locator is for is
+ * proving the control is NOT on screen, and `getBy` throws before an assertion
+ * can read it.
+ */
+function mapLink(): HTMLElement | null {
+  return screen.queryByRole("link", { name: /Cómo llegar/ });
+}
+
 function attendeeBoxes() {
   return within(
     screen.getByRole("group", { name: /Quiénes asisten/ }),
@@ -722,6 +733,65 @@ describe("where the wedding is", () => {
     });
 
     expect(screen.getByText(VENUE.name)).toBeInTheDocument();
+  });
+
+  /**
+   * AND THE MAP IS BEHIND THE SAME GATE, WHICH IS THE REAL RISK IN ADDING IT.
+   *
+   * The venue HAS NO STREET ADDRESS, so the map is not an illustration beside
+   * the address — it is the only thing on this page that says where the wedding
+   * is. That makes it exactly as private as the two lines above it, and it
+   * arrives as an IMAGE and a LINK rather than as text: the three assertions
+   * about `VENUE.name` and `VENUE.address` above cannot see it, so a map
+   * rendered outside the `isAttending` branch would leak the location to every
+   * household with every existing check still green.
+   *
+   * Absence is asserted in all three states a household can be in without
+   * having accepted — unanswered, declining now, and declined on a previous
+   * visit — because they are three different code paths: the branch that
+   * renders nothing, the `CeremonyStream` early return, and that same return
+   * reached from the server's row on the first render.
+   */
+  it("offers no directions before the question is answered", () => {
+    renderForm();
+
+    expect(mapLink()).toBeNull();
+  });
+
+  it("offers no directions to a household that has just declined", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(declineRadio());
+    await waitFor(() => expect(streamCard()).toBeInTheDocument());
+
+    expect(mapLink()).toBeNull();
+  });
+
+  it("offers no directions to a household whose decline is already on file", () => {
+    renderForm({ current: DECLINED });
+
+    expect(mapLink()).toBeNull();
+  });
+
+  /**
+   * THE COUPLE'S OWN INSTRUCTION FOR WHAT REPLACES PINCHING A PICTURE: "todo lo
+   * del zoom etc debe realizarse desde la app, por lo tanto deberia existir un
+   * boton de como llegar con las indicaciones ya listas."
+   *
+   * The exact destination is `VenueMap`'s own spec to assert. What belongs here
+   * is that the control reaches the guest at all, and that it is the DIRECTIONS
+   * form rather than a place page they would then have to press again.
+   */
+  it("gives the household the way there once they say they are coming", async () => {
+    renderForm();
+
+    await userEvent.click(acceptRadio());
+
+    const link = mapLink();
+
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toContain("/maps/dir/?api=1");
   });
 
   /**

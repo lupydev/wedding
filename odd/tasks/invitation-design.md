@@ -150,6 +150,13 @@ declined screen given the language `/transmision` already uses.
       byte-identical for every household; what it costs is that those names are
       now inside an asset served `immutable` for a year.
 
+- [x] **U33 — the venue has no address, so the map IS the directions.** A
+      committed OpenStreetMap still under the venue block, behind the same
+      "only if you said yes" gate, and the whole picture is a link that opens
+      Google Maps with the route already laid in. The interactive embed was
+      considered and rejected; the reasons are written down so nobody has to
+      rediscover them.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -1979,11 +1986,194 @@ snapshot (`components/console/__snapshots__/WhatsAppBubble.spec.tsx.snap`) and a
 browser assertion (`e2e/console-preview.spec.ts:365`) behind it, so rewording it
 is a copy decision rather than a correction I should make unasked.
 
+### U33 — done (the venue has no address, so the map is the directions)
+
+**THE FACT THE WHOLE UNIT HANGS ON: "Salón para Eventos Villa Campestre" HAS NO
+STREET ADDRESS.** There is no line a guest can type into anything. `Dirección`
+above this block prints whatever the `ceremony` row holds, and even once the
+couple fill it in it will be a description rather than a navigable address — so
+the map is not an illustration beside the venue's name. It is the only thing on
+this page that says where the wedding is, which is also why it had to go behind
+the same gate as the two lines above it.
+
+**WHAT THE OWNER ASKED FOR, IN THEIR OWN WORDS.** "Todo lo del zoom etc debe
+realizarse desde la app, por lo tanto deberia existir un boton de como llegar
+con las indicaciones ya listas." Zooming happens in the Maps application; the
+page's job is to hand it a route that is already prepared. So the link is
+`https://www.google.com/maps/dir/?api=1&destination=…` — the DIRECTIONS form,
+not a place page. A `?q=` place link lands the guest on a card they then have to
+press "cómo llegar" on, which is the extra step this exists to remove. That URL
+opens the Google Maps application where one is installed and the web map
+otherwise.
+
+**THE INTERACTIVE EMBED WAS CONSIDERED AND DELIBERATELY REJECTED. THREE
+REASONS, RECORDED SO THIS IS NOT RE-LITIGATED.**
+
+1. An embed that can be pinched also swallows the page scroll. The usual fix is
+   to make it inert until tapped — a first tap whose only job is to arm a second
+   one, in the middle of an invitation the guest is still reading.
+2. Pinching a ~320x200 box is worse than what it substitutes for. The Maps
+   application is the whole screen, knows where the guest is standing and gives
+   turn-by-turn directions. The embed is a keyhole onto the same data.
+3. It pulls map tiles over cellular before the guest has decided they care. A
+   still image, lazily loaded below the fold, costs nothing until it is scrolled
+   to.
+
+**MOBILE FIRST, AND THE PART OF IT THAT WAS ACTUALLY VERIFIED RATHER THAN
+ASSUMED.** These invitations go out over WhatsApp, so close to every guest opens
+this on a phone — the owner stressed it, and it is the reason the browser
+assertion runs at 360px rather than on a desktop viewport. The claim that was
+checked rather than repeated: a link inside an ORDINARY WhatsApp message, which
+is how these are sent (a `wa.me` deep link in free-form text), opens in the
+phone's DEFAULT BROWSER. The WhatsApp in-app browser applies to CTA buttons in
+Business API templates, which this is not. So the guest really is in Chrome or
+Safari with a Maps application installed behind it, and the hand-off works.
+
+**WHY OPENSTREETMAP AND NOT A GOOGLE MAPS SCREENSHOT.** Licensing, not taste. A
+Google Maps screenshot cannot be redistributed without licensing; OSM permits it
+and requires attribution, and that attribution is BURNED INTO the bottom-right
+of `img/venue-map.jpg`. The two travel together: recut the picture from Google
+and the attribution goes with the rest of the imagery. No test can read either
+fact off a JPEG, so both are written into `VenueMap.tsx` and into
+`tools/venue-map-asset.spec.ts` instead.
+
+**AND WHY BUGA IS IN THE FRAME.** An earlier, tighter crop was rejected by the
+owner precisely because it showed nothing anybody could place. A map a guest
+cannot locate themselves on is a picture of some roads. The committed file is
+1280x800: z=13 tiles cropped to the extent of z=12, so it is a 2x source and the
+labels stay sharp on a phone at the widths it is actually painted.
+
+**ONE FACT, ONE PLACE, AND THE TRADE THAT COMES WITH IT.** The coordinates the
+image was rendered around and the point the link sends the guest to are the same
+fact, so `VenueMap.tsx` declares `3.853778,-76.2971633` once and DERIVES the
+Maps URL from it. Two copies are two venues the day somebody edits one, and the
+failure is silent: a map of one place beside a route to another, with nothing on
+the page to compare them.
+
+That does put a wedding fact in the source, which is exactly what
+`tools/no-source-placeholders.spec.ts` argues against — and the difference is
+worth stating rather than glossing. That rule exists because the venue's NAME
+and ADDRESS live in the `ceremony` row, where an operator corrects them with an
+UPDATE and no redeploy. A coordinate cannot: moving it in the database would
+move the link while the committed picture went on showing the old place, which
+is a worse version of the drift that rule prevents. So the picture and the point
+are bound to the same commit, and **the price is that changing the venue means
+regenerating the image AND deploying, not editing a row.** Taken knowingly, on a
+wedding whose venue is booked.
+
+**THE RED, QUOTED.**
+
+    FAIL  |component| components/invitation/VenueMap.spec.tsx
+    Error: Failed to resolve import "./VenueMap" from
+      "components/invitation/VenueMap.spec.tsx". Does the file exist?
+
+    FAIL  |unit| tools/venue-map-asset.spec.ts
+    Error: Cannot find module './jpeg-size' imported from
+      /Users/lu/.../tools/venue-map-asset.spec.ts
+
+    FAIL  |component| components/invitation/RsvpAnswer.spec.tsx >
+      where the wedding is > gives the household the way there once they say
+      they are coming
+    AssertionError: expected null not to be null
+
+That last one was re-observed rather than transcribed. Written first as
+`expect(mapLink()?.getAttribute("href")).toContain(…)`, its red was chai's
+"the given combination of arguments (undefined and string) is invalid for this
+assertion" — a true failure that named the wrong thing. The assertion was split
+so the absent link is what the message says; the quote above is that version,
+run again with the component unwired.
+
+And the browser test, which could only go red AFTER `VenueMap.tsx` existed —
+`next build` type-checks the suite, so a spec importing a missing module fails
+the web server rather than the assertion. The component was therefore written
+first and left UNWIRED, which is the honest red for what this test is actually
+about: whether the invitation reaches it.
+
+    ✘ e2e/rsvp.spec.ts › the way to the venue, on a phone › appears only after
+      the household accepts, and fits the screen
+    Error: expect(locator).toBeVisible() failed
+    Locator: getByRole('link', { name: /Cómo llegar/ })
+    Error: element(s) not found
+
+**THE THREE ASSERTIONS THAT PASSED THE MOMENT THEY WERE WRITTEN, AND HOW EACH
+WAS PROVEN ABLE TO FAIL.** The gate assertions are about ABSENCE, so they are
+green against a component that does not exist yet — which is the state
+`3a7f89a` exists to keep out of this repository.
+
+`<VenueMap />` was temporarily rendered above the question AND inside the
+declining branch:
+
+    × offers no directions before the question is answered
+    × offers no directions to a household that has just declined
+    × offers no directions to a household whose decline is already on file
+    AssertionError: expected <a …(5)>…(2)</a> to be null
+
+`img/og-card.jpg` was copied over `img/venue-map.jpg`:
+
+    × the committed map of the venue > is the 2x crop the labels on a phone
+      depend on
+    AssertionError: expected { height: 1200, width: 1200 } to deeply equal
+      { width: 1280, height: 800 }
+
+and a second copy of the latitude was pasted into `CeremonyStream.tsx`:
+
+    × the venue's coordinates > is written down in exactly one source file
+    - Expected: [ "components/invitation/VenueMap.tsx" ]
+    + Received: [ "components/invitation/CeremonyStream.tsx",
+                  "components/invitation/VenueMap.tsx" ]
+
+Every probe was reverted; the asset was restored from a copy taken beforehand
+and verified by hash (`4343a0af…02d6dba5`, 118,041 bytes).
+
+**WHAT IS GUARDED, AND ONE THING DELIBERATELY NOT.**
+`tools/venue-map-asset.spec.ts` measures the file's SHAPE, because the shape is
+the claim: halve those pixels and nothing fails — the page lays out identically
+and every check stays green while the labels a guest needs turn to mush. It does
+NOT weigh the file. `tools/og-card-asset-budget.spec.ts` weighs its asset
+because the card route returns those exact bytes; this one is rendered through
+`next/image`, which re-encodes and resizes per request, so a byte budget here
+would measure bytes nobody downloads.
+
+The JPEG marker walk moved out of that spec into `tools/jpeg-size.ts` rather
+than being copied. Two committed binaries are now measured, and a copied decoder
+is two decoders that agree until somebody fixes a bug in one of them.
+
+**THE GEOMETRY, AND WHY IT IS `fill` RATHER THAN THE DOCUMENTED RESPONSIVE
+PATTERN.** The box is `fill` inside an `aspect-ratio` read off the static
+import, exactly as `PhotoStage` frames the wedding photograph — so the space is
+reserved before the pixels arrive (a lazily-loaded image below the fold must not
+shove the submit button down under somebody reaching for it) and the shape is
+the file's own. `next/image`'s documented `style={{width:'100%',height:'auto'}}`
+form would also have worked in production and would have thrown in Vitest: a
+static import is a bare string there, so `next/image` sees a `src` with no
+dimensions and raises `E451`. That is why the shape is asserted against the
+file's own header and against the rendered page instead of in jsdom.
+
+**GREEN.** `npm test` 2341 unit and component tests (2321 at `14ab9e6`, plus 16
+new and 4 that the two glob-driven guards add for two new source files),
+`npm run typecheck`, `npm run lint` (0 errors, the same 9 pre-existing
+warnings), `npm run format:check`, `npm run build`, and
+`PORT=3100 npx playwright test` 223 browser tests (222 plus one).
+
+**ONE THING FOUND AND NOT TOUCHED, BECAUSE IT IS THE COUPLE'S DATA.**
+`venue_address` still holds the literal `{{VENUE_ADDRESS}}` in production, so
+the `Dirección` line renders that placeholder to every household that accepts.
+Correct behaviour — an unfinished invitation must not pass for a finished one —
+and theirs to fill at `/console/wedding`. Worth saying, though, that once they
+do, `Dirección` and this map will be two answers to the same question and the
+map is the one a guest can act on. Whether the line stays, or becomes a landmark
+("a 10 minutos al sur de Buga") rather than an address, is a copy decision for
+them.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
   renders `{{VENUE_NAME}}` and `{{VENUE_ADDRESS}}`. That is deliberate — the
   placeholders are visible rather than hidden, so an unfinished invitation
   cannot pass for a finished one — and it is theirs to do at `/console/wedding`.
+- Once `venue_address` is filled, `Dirección` and the map answer the same
+  question and only one of them is navigable. A landmark line rather than an
+  address may read better beside the map, but that is the couple's copy to
+  write.
 - The submit button is quiet against the photograph. Legible and unambiguous,
   since it is the only one, but a judgement the couple may want to overrule.
