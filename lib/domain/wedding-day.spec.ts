@@ -4,9 +4,11 @@ import { calendarDateInZone, isRsvpOpen } from "./rsvp-deadline";
 import {
   RSVP_DEADLINE,
   RSVP_DEADLINE_DAYS_BEFORE,
+  WEDDING_DRESS_CODE,
   WEDDING_INSTANT,
   WEDDING_TIME_ZONE,
   formatWeddingDate,
+  formatWeddingTime,
   formatWeddingWeekday,
 } from "./wedding-day";
 
@@ -89,6 +91,53 @@ describe("formatWeddingDate", () => {
 describe("formatWeddingWeekday", () => {
   it("names the day of the week in Spanish, uncapitalised", () => {
     expect(formatWeddingWeekday(WEDDING_INSTANT)).toBe("sábado");
+  });
+});
+
+describe("formatWeddingTime", () => {
+  /**
+   * THE HOUR HAS NEVER BEEN ON A GUEST'S SCREEN BEFORE, WHICH IS WHY IT IS
+   * ASSERTED AS A STRING RATHER THAN AS A SHAPE.
+   *
+   * `WEDDING_INSTANT` has carried five in the afternoon since the couple gave
+   * it, and until now only the countdown read it — a guest saw "0 días, 9
+   * horas", never "5:00 p. m.". The invitation's last screen prints it, so the
+   * exact spelling a guest reads is now a fact worth pinning: `es-CO` renders
+   * the meridiem as `p. m.`, with a space inside it, and a locale swap that
+   * turned it into `PM` or `5:00 p.m.` would be a silent change to the one line
+   * that tells a household when to arrive.
+   */
+  it("reads as the Spanish hour a guest arrives at", () => {
+    expect(formatWeddingTime(WEDDING_INSTANT)).toBe("5:00 p. m.");
+  });
+
+  /**
+   * The zone is applied, not merely accepted — the same guard
+   * `formatWeddingDate` carries, for the same reason.
+   *
+   * An ignored zone would still render "5:00 p. m." for every observer in
+   * Bogota's own offset, which includes the machine this suite usually runs on.
+   * Kiritimati is UTC+14, nineteen hours ahead, so the assertion bites.
+   */
+  it("renders the wall clock of the zone it is given", () => {
+    expect(formatWeddingTime(WEDDING_INSTANT, "Pacific/Kiritimati")).toBe(
+      "12:00 p. m.",
+    );
+  });
+});
+
+describe("WEDDING_DRESS_CODE", () => {
+  /**
+   * A FIXED FACT, LIKE THE DAY, AND NOT A COLUMN.
+   *
+   * The couple accepted the trade this module already makes for the date:
+   * changing it means a deploy rather than an `UPDATE`. It is written here
+   * rather than in the component that prints it so the wedding's own facts stay
+   * in one file, and so the console's wedding-facts form is not quietly the
+   * place a reader expects to find it.
+   */
+  it("is what the couple asked their guests to wear", () => {
+    expect(WEDDING_DRESS_CODE).toBe("Formal elegante");
   });
 });
 

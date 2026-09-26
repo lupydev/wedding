@@ -121,6 +121,22 @@ export const RSVP_DEADLINE_TEXT = formatWeddingDate(
 export const COUPLE_NAMES = "Luis & Michell";
 
 /**
+ * What the couple asked their guests to wear.
+ *
+ * A FIXED FACT, ON THE SAME TERMS AS THE DAY AND THE HOUR ABOVE. It is not a
+ * `ceremony` column and deliberately not one: migration 0018 settled that the
+ * wedding's own unchanging facts live in this module, so moving any of them is
+ * a deploy rather than an `UPDATE`. The couple accepted that price for the date
+ * and accepted it again for this. Adding a column and a console field for a
+ * two-word phrase that will not change before the wedding would buy a form
+ * nobody fills in and a second place a reader has to look.
+ *
+ * It is written capitalised because it is printed as the VALUE under a label,
+ * where a lowercase phrase reads as a fragment rather than as an answer.
+ */
+export const WEDDING_DRESS_CODE = "Formal elegante";
+
+/**
  * The wedding day as Spanish prose: "28 de noviembre de 2026".
  *
  * `es-CO` rather than `es`, for the same reason the zone is named: the locale
@@ -151,6 +167,36 @@ export function formatWeddingWeekday(
 ): string {
   return new Intl.DateTimeFormat("es-CO", {
     weekday: "long",
+    timeZone,
+  }).format(instant);
+}
+
+/**
+ * When the ceremony begins, as a guest reads it: "5:00 p. m.".
+ *
+ * THIS IS THE FIRST TIME THE HOUR REACHES A GUEST, and that is why the couple
+ * were asked to confirm it before this function existed. `WEDDING_INSTANT` has
+ * carried five in the afternoon since they gave it, but nothing ever PRINTED
+ * it: the countdown consumed the instant and rendered "0 días, 9 horas", the
+ * announcement printed only the day, and migration 0018 dropped the
+ * `ceremony_time` column a household would otherwise have read. A wrong hour
+ * was therefore invisible until now — a guest could only have been an hour
+ * early or an hour late by inference. From the invitation's last screen
+ * onwards it is a sentence somebody plans their afternoon around, so it is
+ * their own answer rather than a default this file chose.
+ *
+ * `es-CO` and the zone, for the reason `formatWeddingDate` gives: the locale
+ * that matches where the wedding is renders the forms its guests read, which
+ * here means `5:00 p. m.` rather than `5:00 PM` or a 24-hour clock. The
+ * parameters exist so the spec can prove the zone is applied rather than
+ * decorative.
+ */
+export function formatWeddingTime(
+  instant: Date = WEDDING_INSTANT,
+  timeZone: string = WEDDING_TIME_ZONE,
+): string {
+  return new Intl.DateTimeFormat("es-CO", {
+    timeStyle: "short",
     timeZone,
   }).format(instant);
 }
