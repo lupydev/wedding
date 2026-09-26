@@ -18,7 +18,6 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
     memberCount: 3,
-    rsvpDeadline: null,
     ownerSenderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     ownerDisplayName: "Ana Operadora",
     ownedByViewer: true,

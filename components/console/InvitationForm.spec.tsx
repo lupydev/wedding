@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import type { DirectoryGuest } from "@/lib/domain/guest-directory";
 import { deriveGreetingName } from "@/lib/domain/greeting-name";
 import type { DraftRefusal } from "@/lib/domain/invitation-draft";
 
@@ -65,6 +66,7 @@ function memberActionSpies(): InvitationMemberActions & {
     readonly edit: ReturnType<typeof spyRefusingAction>;
     readonly remove: ReturnType<typeof spyRefusingAction>;
     readonly chooseRecipient: ReturnType<typeof spyRefusingAction>;
+    readonly place: ReturnType<typeof spyRefusingAction>;
   };
 } {
   const calls = {
@@ -72,6 +74,7 @@ function memberActionSpies(): InvitationMemberActions & {
     edit: spyRefusingAction(),
     remove: spyRefusingAction(),
     chooseRecipient: spyRefusingAction(),
+    place: spyRefusingAction(),
   };
 
   return { ...calls, calls };
@@ -99,7 +102,6 @@ function invitation(
     displayName: "Familia Guzmán",
     greetingName: "Luis y Michell",
     greetingNameSource: "derived",
-    rsvpDeadline: null,
     dispatchRecipientGuestId: null,
     dispatched: false,
     members: [
@@ -115,17 +117,34 @@ function invitation(
   };
 }
 
-function renderCreate() {
+function renderCreate(freeGuests: readonly DirectoryGuest[] = []) {
   const action = spyAction();
 
   return {
     action,
     user: userEvent.setup(),
-    ...render(<InvitationForm action={action} />),
+    ...render(<InvitationForm action={action} freeGuests={freeGuests} />),
   };
 }
 
-function renderEdit(overrides: Partial<InvitationFormInvitation> = {}) {
+/** Somebody the directory holds and no household does. */
+function freeGuest(overrides: Partial<DirectoryGuest> = {}): DirectoryGuest {
+  return {
+    id: "free-1",
+    fullName: "Tía Marta",
+    nickname: null,
+    phoneE164: "+573001112233",
+    isChild: false,
+    household: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function renderEdit(
+  overrides: Partial<InvitationFormInvitation> = {},
+  freeGuests: readonly DirectoryGuest[] = [],
+) {
   const action = spyAction();
   const memberActions = memberActionSpies();
 
@@ -136,6 +155,7 @@ function renderEdit(overrides: Partial<InvitationFormInvitation> = {}) {
     ...render(
       <InvitationForm
         action={action}
+        freeGuests={freeGuests}
         invitation={invitation(overrides)}
         memberActions={memberActions}
       />,
@@ -143,9 +163,20 @@ function renderEdit(overrides: Partial<InvitationFormInvitation> = {}) {
   };
 }
 
-/** The row fieldset for one member, by its position in the form. */
+/**
+ * The row fieldset for one member, by its position in the form.
+ *
+ * A pattern rather than a literal: a card for somebody who is not on the
+ * invitation yet is legended "Integrante 3 · sin guardar", so its accessible
+ * name carries the marker too. Anchored at both ends so "Integrante 1" cannot
+ * match "Integrante 10".
+ */
 function row(position: number) {
-  return within(screen.getByRole("group", { name: `Integrante ${position}` }));
+  return within(
+    screen.getByRole("group", {
+      name: new RegExp(`^Integrante ${position}(?: · sin guardar)?$`),
+    }),
+  );
 }
 
 function derivedPreview(): string {
@@ -158,7 +189,7 @@ describe("InvitationForm's live derived group name", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
 
@@ -175,7 +206,7 @@ describe("InvitationForm's live derived group name", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
@@ -283,14 +314,23 @@ describe("InvitationForm's recipient choice", () => {
     expect(submitted?.get("guestId")).toBe(MICHELL);
   });
 
-  it("explains, while creating, that nobody can be chosen yet", () => {
-    // The members do not exist until the invitation is saved, so there is no id
-    // to record a choice against. A radio group rendered here would be a control
-    // whose every answer is discarded.
+  /**
+   * IT USED TO EXPLAIN THAT NOBODY COULD BE CHOSEN YET, AND NOW IT ASKS.
+   *
+   * The explanation was true — members have no ids until they are written, and
+   * a radio group answering with ids would have been a control whose every
+   * answer was discarded. What it cost was that every invitation created in the
+   * console was born in "Sin destinatario elegido", waiting for somebody to
+   * find it and reopen it.
+   *
+   * The answer is a POSITION now, which exists before an id does, and the
+   * server resolves it against the rows it has just inserted.
+   */
+  it("asks who receives the message rather than deferring it", () => {
     renderCreate();
 
-    expect(screen.queryAllByRole("radio")).toHaveLength(0);
-    expect(screen.getByTestId("invitation-recipient-later")).toBeVisible();
+    expect(screen.queryByTestId("invitation-recipient-later")).toBeNull();
+    expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
   });
 });
 
@@ -302,10 +342,6 @@ describe("InvitationForm's refusals, checked before the round trip", () => {
     // browser that refuses to submit an incomplete field would carry the "no
     // invitation was created" assertion below on its own — leaving the refusal
     // this test exists for unproven.
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.click(
       screen.getByRole("button", { name: "Quitar integrante 1" }),
     );
@@ -326,10 +362,6 @@ describe("InvitationForm's refusals, checked before the round trip", () => {
     const { action, user } = renderCreate();
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.click(
       screen.getByRole("button", { name: "Guardar invitación" }),
     );
@@ -370,10 +402,6 @@ describe("InvitationForm's refusals, checked before the round trip", () => {
 
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     // Filled for the same reason: `required` must not be what stops the save.
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.clear(screen.getByLabelText("Nombre del grupo"));
     await user.click(
       screen.getByRole("button", { name: "Guardar invitación" }),
@@ -393,14 +421,10 @@ describe("InvitationForm's advisories, which never block the save", () => {
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Luis Ruiz");
     await user.type(row(2).getByLabelText("Apodo"), "Lucho");
-    await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Guzmán",
-    );
     await user.click(
       screen.getByRole("button", { name: "Guardar invitación" }),
     );
@@ -418,7 +442,7 @@ describe("InvitationForm's advisories, which never block the save", () => {
     await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
     await user.type(row(1).getByLabelText("Apodo"), "Lucho");
     await user.click(
-      screen.getByRole("button", { name: "Agregar integrante" }),
+      screen.getByRole("button", { name: "Agregar una persona nueva" }),
     );
     await user.type(row(2).getByLabelText("Nombre completo"), "Michell Ruiz");
     await user.type(row(2).getByLabelText("Apodo"), "Michu");
@@ -680,7 +704,7 @@ describe("InvitationForm — re-seeding must not eat unsaved typing", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar integrante/i }),
+      screen.getByRole("button", { name: /Agregar una persona nueva/i }),
     );
 
     const added = row(before.members.length + 1);
@@ -791,7 +815,7 @@ describe("InvitationForm — the two writes nobody was watching", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar integrante/i }),
+      screen.getByRole("button", { name: /Agregar una persona nueva/i }),
     );
 
     const position = before.members.length + 1;
@@ -850,10 +874,6 @@ describe("InvitationForm — a double tap is one person, not two", () => {
 
     const user = userEvent.setup();
     await user.type(
-      screen.getByLabelText("Nombre del hogar"),
-      "Familia Aristizábal",
-    );
-    await user.type(
       row(1).getByLabelText("Nombre completo"),
       "Carlos Aristizábal",
     );
@@ -895,7 +915,7 @@ describe("InvitationForm — a double tap is one person, not two", () => {
 
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole("button", { name: /Agregar integrante/i }),
+      screen.getByRole("button", { name: /Agregar una persona nueva/i }),
     );
 
     const position = before.members.length + 1;
@@ -1026,5 +1046,471 @@ describe("InvitationForm — a failed write never leaks what was thrown", () => 
     expect((await screen.findByRole("alert")).textContent).toBe(
       "No pudimos guardar ese cambio. Revisá la conexión y volvé a intentarlo.",
     );
+  });
+
+  /**
+   * THE BUTTON USED TO SAY IT ADDED SOMEBODY, AND IT DID NOT.
+   *
+   * "Agregar otra persona" only opened a blank card; the person reached the
+   * invitation on a SECOND press, on a different button, further down. An
+   * operator who pressed it once and walked away had added nobody, and the
+   * screen had told them otherwise.
+   *
+   * So the card says out loud that it is not saved yet, and the button that
+   * opens it says what it opens.
+   */
+  describe("adding a person to the household", () => {
+    it("names the button for what it actually does", () => {
+      renderEdit();
+
+      expect(
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
+      ).toBeInTheDocument();
+      // The old wording, which claimed the press added somebody.
+      expect(
+        screen.queryByRole("button", { name: "Agregar integrante" }),
+      ).toBeNull();
+    });
+
+    it("marks the new card as not yet saved", async () => {
+      const { user } = renderEdit();
+
+      await user.click(
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
+      );
+
+      expect(screen.getByText(/sin guardar/i)).toBeInTheDocument();
+    });
+
+    /**
+     * And a saved card never claims to be unsaved.
+     *
+     * The marker is the whole signal, so it has to be absent where the person
+     * is already on the invitation — otherwise it is decoration and an operator
+     * learns to ignore it.
+     */
+    it("does not mark the people who are already saved", () => {
+      renderEdit();
+
+      expect(screen.queryByText(/sin guardar/i)).toBeNull();
+    });
+
+    /**
+     * The cursor lands in the new name field.
+     *
+     * Adding somebody is: press, type, save. Without this it is press, AIM,
+     * type, save — and the aiming is on a phone, at a field that just appeared
+     * below the fold.
+     */
+    it("puts the cursor in the new person's name", async () => {
+      const { user } = renderEdit();
+
+      await user.click(
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
+      );
+
+      const names = screen.getAllByLabelText("Nombre completo");
+
+      expect(names.at(-1)).toHaveFocus();
+    });
+  });
+
+  /**
+   * AN INVITATION USED TO BE BORN BLOCKED.
+   *
+   * The create form showed a paragraph where the recipient chooser belongs —
+   * "A quién se le envía el mensaje se elige después de guardar" — because the
+   * members have no ids until they are written. So every household created in
+   * the console landed straight in the readiness panel's "Sin destinatario
+   * elegido", and the operator had to find it again and reopen it to finish
+   * something they thought they had finished.
+   *
+   * The members have POSITIONS even before they have ids, and a position is
+   * all the server needs: it inserts the guests and resolves the choice
+   * against the rows it just created.
+   */
+  describe("choosing who receives the message while creating", () => {
+    it("offers the choice instead of a paragraph about later", () => {
+      renderCreate();
+
+      expect(
+        screen.getByRole("group", { name: /Quién recibe el mensaje/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("invitation-recipient-later")).toBeNull();
+    });
+
+    /**
+     * The first person is chosen to begin with, and the choice is on screen.
+     *
+     * Nothing is defaulted SILENTLY — the operator can see who is marked and
+     * change it in one tap. The alternative was the state this replaces: an
+     * invitation saved, apparently complete, and unsendable.
+     */
+    it("starts with the first person marked", () => {
+      renderCreate();
+
+      const chosen = screen.getAllByRole("radio");
+
+      expect(chosen[0]).toBeChecked();
+    });
+
+    it("follows the operator to another member", async () => {
+      const { user } = renderCreate();
+
+      await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
+      await user.click(
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
+      );
+      await user.type(row(2).getByLabelText("Nombre completo"), "Michell Peña");
+
+      const radios = screen.getAllByRole("radio");
+      await user.click(radios[1]);
+
+      expect(radios[1]).toBeChecked();
+      expect(radios[0]).not.toBeChecked();
+    });
+
+    /**
+     * The choice travels as a POSITION, because that is all that exists yet.
+     *
+     * A guest id would be an invention: the people on this form have not been
+     * written, so there is nothing to name them by except where they sit.
+     */
+    it("submits the position, since there is no id yet", async () => {
+      const { action, user } = renderCreate();
+
+      // `required`, so a browser refuses to submit without it and the
+      // assertion below would never be reached.
+      await user.type(row(1).getByLabelText("Nombre completo"), "Luis Guzmán");
+      await user.click(
+        screen.getByRole("button", { name: "Agregar una persona nueva" }),
+      );
+      await user.type(row(2).getByLabelText("Nombre completo"), "Michell Peña");
+      await user.click(screen.getAllByRole("radio")[1]);
+      await user.click(
+        screen.getByRole("button", { name: "Guardar invitación" }),
+      );
+
+      const submitted = action.mock.calls[0][0] as FormData;
+
+      expect(submitted.get("recipientIndex")).toBe("1");
+    });
+  });
+});
+
+/**
+ * BUILDING A HOUSEHOLD OUT OF PEOPLE WHO ALREADY EXIST.
+ *
+ * Since migration 0015 a guest can be written down in the directory before any
+ * household holds them, which is what the couple asked for: "la creación de
+ * invitaciones donde se pueda agregar un invitado". Picking one MOVES that
+ * person into this household rather than writing a second record with the same
+ * name — and the rule underneath it, "no se debería poder escoger en una
+ * próxima invitación", is why the picker is fed only free guests and why a
+ * person already added here disappears from it.
+ */
+describe("picking somebody who is already in the directory", () => {
+  it("says nothing about a directory that has nobody spare", async () => {
+    renderCreate([]);
+
+    expect(
+      screen.queryByRole("button", { name: /Agregar de la lista/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * SHE TAKES THE EMPTY CARD, SHE DOES NOT LAND UNDER IT.
+   *
+   * A new form opens with one blank member card. Appending after it would
+   * leave an empty "Integrante 1" above the person just added — which the
+   * validator then refuses for having no name, on a form where the operator
+   * did nothing wrong. Their first action was "add Tía Marta", so Tía Marta is
+   * Integrante 1.
+   */
+  it("adds the chosen person as the first member of an empty form", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Nombre completo")).toHaveValue("Tía Marta");
+    expect(screen.queryByRole("group", { name: /^Integrante 2$/ })).toBeNull();
+  });
+
+  /**
+   * AND A CARD SOMEBODY HAS TYPED INTO IS NEVER CONSUMED.
+   *
+   * The rule above exists to swallow an UNTOUCHED card. Swallowing a half-typed
+   * one would delete a person's name because the operator reached for the
+   * directory next, which is the opposite of helpful.
+   */
+  it("keeps a half-typed card and adds her after it", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    // The card is asked for now: with people to pick, the form opens on the
+    // picker and typing is the secondary path.
+    await user.click(
+      screen.getByRole("button", { name: /Agregar una persona nueva/ }),
+    );
+    await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Nombre completo")).toHaveValue("Ana Ruiz");
+    expect(row(2).getByLabelText("Nombre completo")).toHaveValue("Tía Marta");
+  });
+
+  /**
+   * AND HER NICKNAME COMES WITH HER.
+   *
+   * The couple reported the opposite — "le puse apodo, sin embargo en la
+   * creación de la invitación no registró el apodo" — and the nickname is not
+   * cosmetic here: the group's name is DERIVED from nicknames, so a picked
+   * person arriving without hers silently renames the household.
+   */
+  it("carries the chosen person's nickname onto their card", async () => {
+    const { user } = renderCreate([freeGuest({ nickname: "Tita" })]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Apodo")).toHaveValue("Tita");
+  });
+
+  /**
+   * HER DETAILS ARE NOT EDITABLE HERE, and that is not a restriction for its
+   * own sake: the directory owns them. A name corrected in two places drifts,
+   * and the screen where it is corrected for everybody is `/console/guests`.
+   */
+  it("shows her details without offering to rewrite them here", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(row(1).getByLabelText("Nombre completo")).toHaveAttribute(
+      "readonly",
+    );
+  });
+
+  /**
+   * AND SHE LEAVES THE PICKER THE MOMENT SHE IS ADDED.
+   *
+   * Offering her twice would let one form build a household containing the
+   * same person twice — which `duplicate_member_id` would refuse on submit,
+   * after the operator had done the work.
+   */
+  it("stops offering somebody this form has already taken", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /Agregar de la lista: Tía Marta/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * EVERY ROW EMITS THE ID COLUMN, EMPTY OR NOT.
+   *
+   * `readMemberRows` reads the member fields as parallel arrays and refuses a
+   * column whose length disagrees with the names — a rule it holds precisely
+   * because a short column would attach one person's value to another
+   * person's row. A picked row is the only one with an id, so the typed rows
+   * have to send an empty string rather than nothing at all.
+   */
+  it("sends one id column entry per member, so the arrays cannot slip", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: /Agregar una persona nueva/ }),
+    );
+    await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    const form = screen.getByLabelText("Nombre del grupo").closest("form")!;
+    const sent = new FormData(form);
+
+    expect(sent.getAll("memberFullName")).toEqual(["Ana Ruiz", "Tía Marta"]);
+    expect(sent.getAll("memberExistingId")).toEqual(["", "free-1"]);
+  });
+
+  /**
+   * THE EDIT SCREEN OFFERS IT TOO, THROUGH A DIFFERENT WRITE.
+   *
+   * Creating builds a whole household in one submit, so a pick there is a
+   * local row until the form is saved. An invitation that already exists takes
+   * the person IMMEDIATELY — there is nothing to save afterwards, and a pick
+   * that sat waiting for a submit button this screen does not have would
+   * simply be lost.
+   */
+  it("writes the placement straight away while editing", async () => {
+    const { memberActions, user } = renderEdit({}, [freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(memberActions.calls.place.mock.calls).toHaveLength(1);
+
+    const sent = memberActions.calls.place.mock.calls[0][0] as FormData;
+
+    expect(sent.get("guestId")).toBe("free-1");
+    expect(sent.get("invitationId")).toBe(INVITATION_ID);
+  });
+
+  /**
+   * AND IT SAYS SO WHEN SOMEBODY GOT THERE FIRST.
+   *
+   * The refusal travels as a code in the vocabulary this form already
+   * translates, rather than as a thrown message — which Next replaces with an
+   * opaque digest, leaving the operator with the connectivity copy: advice to
+   * retry, for the one case where retrying cannot help.
+   */
+  it("explains a placement the server refused", async () => {
+    const { memberActions, user } = renderEdit({}, [freeGuest()]);
+
+    memberActions.calls.place.mockResolvedValue(["guest_already_invited"]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+
+    expect(
+      await screen.findByText(/ya quedó en otra invitación/i),
+    ).toBeInTheDocument();
+  });
+});
+
+/**
+ * ONE NAME FIELD, AND THERE WERE TWO.
+ *
+ * The form asked for a "Nombre del hogar" and a "Nombre del grupo", each under
+ * its own paragraph explaining how it differs from the other — about ten lines
+ * of prose to distinguish two values, one of which the operator will never see
+ * again. `displayName` is read back on exactly one surface in the whole
+ * console: the sentence that confirms a deletion. Every list, heading and label
+ * shows the greeting.
+ *
+ * The column still exists and the server fills it from the resolved greeting,
+ * so nothing internal changed. What went away is a question asked of somebody
+ * with no way to know the answer does not matter.
+ */
+describe("the household's name", () => {
+  it("asks once, for the name the invitation will actually say", () => {
+    renderCreate();
+
+    expect(screen.getByLabelText("Nombre del grupo")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nombre del hogar")).toBeNull();
+  });
+
+  it("asks once on the edit screen too", () => {
+    renderEdit();
+
+    expect(screen.queryByLabelText("Nombre del hogar")).toBeNull();
+  });
+
+  /**
+   * AND THE FORM STOPS SENDING IT.
+   *
+   * A hidden field carrying a copy of the visible one would be the same two
+   * values with one of them invisible — which is the defect, not the fix. The
+   * server fills the column from the greeting it resolves.
+   */
+  it("sends no household name at all", async () => {
+    const user = userEvent.setup();
+    const { action } = renderCreate();
+
+    await user.type(row(1).getByLabelText("Nombre completo"), "Ana Ruiz");
+    await user.click(
+      screen.getByRole("button", { name: "Guardar invitación" }),
+    );
+
+    const sent = action.mock.calls[0][0] as FormData;
+
+    expect(sent.get("displayName")).toBeNull();
+    expect(sent.get("greetingName")).toBe("Ana Ruiz");
+  });
+});
+
+/**
+ * THE FORM OPENS ON PICKING, NOT ON TYPING.
+ *
+ * "Mucho más simple poder escoger un invitado para la creación de una
+ * invitación." The picker was already above the member cards — but the form
+ * also opened with a blank card, and a blank card with four empty fields is
+ * the loudest instruction on the screen. So the default path stayed "type
+ * somebody in", for people who are already in the directory, on a console
+ * whose whole guest list is built there first.
+ *
+ * Nothing is removed. Typing a new person is one press away, and it is still
+ * the ONLY path when there is nobody to pick — an empty picker cannot be the
+ * primary affordance.
+ */
+describe("what the create form opens with", () => {
+  it("opens with nobody typed in when there are people to pick", () => {
+    renderCreate([freeGuest()]);
+
+    expect(screen.queryByRole("group", { name: /^Integrante 1$/ })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says so, rather than showing an empty box", () => {
+    renderCreate([freeGuest()]);
+
+    expect(
+      screen.getByText(/Todavía no agregaste a nadie/i),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AN EMPTY DIRECTORY STILL OPENS ON A CARD, because picking is impossible
+   * and a screen whose only affordance is one nobody can use is worse than the
+   * blank card ever was.
+   */
+  it("opens with a card when there is nobody to pick", () => {
+    renderCreate([]);
+
+    expect(
+      screen.getByRole("group", { name: /^Integrante 1$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("still offers a card to anybody who wants to type one", async () => {
+    const { user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: /Agregar una persona nueva/ }),
+    );
+
+    expect(
+      screen.getByRole("group", { name: /^Integrante 1$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("saves a household built only by picking", async () => {
+    const { action, user } = renderCreate([freeGuest()]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Agregar de la lista: Tía Marta" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Guardar invitación" }),
+    );
+
+    const sent = action.mock.calls[0][0] as FormData;
+
+    expect(sent.getAll("memberFullName")).toEqual(["Tía Marta"]);
+    expect(sent.getAll("memberExistingId")).toEqual(["free-1"]);
   });
 });

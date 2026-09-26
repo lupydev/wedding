@@ -66,6 +66,14 @@ export function deriveRsvpAnswer(latest: LatestRsvpRef | null): RsvpAnswer {
 export interface ConsoleListGuest {
   readonly id: string;
   readonly fullName: string;
+  /**
+   * What the greeting calls this person, when it is not their full name.
+   *
+   * Carried because the couple reported it missing: it was stored and used to
+   * derive the greeting all along, and simply never reached this screen — a
+   * defect indistinguishable from the data never having been saved.
+   */
+  readonly nickname: string | null;
   readonly isChild: boolean;
   /**
    * The stored E.164 number, or `null` for a guest who has none.
@@ -100,7 +108,6 @@ export interface ConsoleListRow {
    */
   readonly memberCount: number;
   /** ISO calendar day, or `null` for an invitation that never closes. */
-  readonly rsvpDeadline: string | null;
   readonly ownerSenderId: string;
   readonly ownerDisplayName: string;
   /** True when the signed-in operator owns this invitation. */
@@ -406,14 +413,16 @@ export interface ConsoleInvitationInput {
   readonly slug: string;
   readonly greetingName: string;
   readonly displayName: string;
-  readonly rsvpDeadline: string | null;
   readonly ownerSenderId: string;
   readonly ownerDisplayName: string;
   /** The stored `dispatch_recipient_guest_id`, or `null` while unchosen. */
   readonly dispatchRecipientGuestId: string | null;
+  /** When the invitation was written. ISO 8601, as the database returns it. */
+  readonly createdAt: string;
   readonly guests: readonly {
     readonly id: string;
     readonly fullName: string;
+    readonly nickname: string | null;
     readonly isChild: boolean;
     readonly phoneE164: string | null;
   }[];
@@ -468,16 +477,42 @@ export function assembleConsoleRows(input: {
     }
   }
 
-  return input.invitations.map((invitation) => {
+  /*
+    NEWEST FIRST, WITH THE ID AS A TIEBREAK.
+
+    The query ordered by `display_name` — alphabetical by group name, which is
+    a fine order for a finished list and the wrong one for a list being built.
+    Between one entry and the next the only question is "did that one land?",
+    and its answer is on screen only if the newest row is at the top. The
+    couple asked for it in those terms, and the guest directory already works
+    this way.
+
+    DECIDED HERE AND NOT IN THE QUERY, so the rule is unit-testable without a
+    database and there is one place that holds it. Two opinions about an order
+    is how two lists that should agree drift apart.
+
+    The tiebreak is not padding: an import writes a whole file inside one
+    statement and `created_at` defaults to `now()`, so identical timestamps are
+    ordinary — and an untied sort reshuffles between two renders of the same
+    data, which is the flicker that makes a screen feel broken without ever
+    being wrong.
+  */
+  const newestFirst = [...input.invitations].sort(
+    (left, right) =>
+      right.createdAt.localeCompare(left.createdAt) ||
+      right.invitationId.localeCompare(left.invitationId),
+  );
+
+  return newestFirst.map((invitation) => {
     const answer = answers.get(invitation.invitationId) ?? null;
 
     return {
       invitationId: invitation.invitationId,
+      createdAt: invitation.createdAt,
       slug: invitation.slug,
       greetingName: invitation.greetingName,
       displayName: invitation.displayName,
       memberCount: invitation.guests.length,
-      rsvpDeadline: invitation.rsvpDeadline,
       ownerSenderId: invitation.ownerSenderId,
       ownerDisplayName: invitation.ownerDisplayName,
       ownedByViewer: invitation.ownerSenderId === input.viewerSenderId,
@@ -492,6 +527,7 @@ export function assembleConsoleRows(input: {
       guests: invitation.guests.map((guest) => ({
         id: guest.id,
         fullName: guest.fullName,
+        nickname: guest.nickname,
         isChild: guest.isChild,
         phoneE164: guest.phoneE164,
         // A guest with no phone is classified through the same function as one

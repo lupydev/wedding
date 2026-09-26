@@ -1,12 +1,17 @@
 /**
  * RSVP deadline evaluation — pure.
  *
- * `invitations.rsvp_deadline` is a bare `date`, which is the right type: the
- * couple chose a DAY, not an instant. The defect is in reading it. Compared
- * against a timestamp, `2026-05-01` becomes 2026-05-01T00:00:00Z, which is
- * 19:00 on 30 April in Bogota — the form closes five hours before the chosen
- * day has even begun, and a guest answering on the evening of the first is told
- * they are late.
+ * A deadline is a bare `date`, which is the right shape: the couple chose a
+ * DAY, not an instant. The defect is in reading it. Compared against a
+ * timestamp, `2026-05-01` becomes 2026-05-01T00:00:00Z, which is 19:00 on 30
+ * April in Bogota — the form closes five hours before the chosen day has even
+ * begun, and a guest answering on the evening of the first is told they are
+ * late.
+ *
+ * The date now comes from `RSVP_DEADLINE` in `lib/domain/wedding-day.ts`, one
+ * value for the whole wedding. It arrived here as `invitations.rsvp_deadline`
+ * until migration 0016 dropped that column; the reading rule below never
+ * depended on where the day came from, which is why it did not change.
  *
  * The rule here is the one the couple actually meant: the invitation stays open
  * until the end of that calendar day where the wedding is.

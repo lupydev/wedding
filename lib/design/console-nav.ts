@@ -1,5 +1,9 @@
 import { CONSOLE_DEVICE_PATH } from "@/lib/domain/device-declaration";
-import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
+import {
+  CONSOLE_GUESTS_PATH,
+  CONSOLE_NEW_INVITATION_PATH,
+  CONSOLE_ROOT_PATH,
+} from "@/lib/domain/operator-session";
 import { CONSOLE_WEDDING_PATH } from "@/lib/domain/wedding-facts";
 
 /**
@@ -41,7 +45,8 @@ export const CONSOLE_BREAKPOINT_VARIANT = "md";
 export const CONSOLE_TABBAR_BASE_PX = 56;
 
 /** Which lucide icon a tab draws. Resolved in the component, not here. */
-export type ConsoleNavIcon = "list" | "check" | "users" | "phone" | "calendar";
+export type ConsoleNavIcon =
+  "list" | "check" | "users" | "phone" | "calendar" | "plus";
 
 export interface ConsoleNavItem {
   readonly key: string;
@@ -79,8 +84,18 @@ export interface ConsoleNavItem {
  * reached on purpose. The compose and preview routes are per-household and need
  * an invitation id, so they are reached from a row rather than from the bar.
  *
- * Two of the five are fragments of the console root, where those sections already
- * live. They are navigation within a page, not routes of their own.
+ * THREE DESTINATIONS, AND THERE WERE FIVE.
+ *
+ * Two of them — "Revisión" and "Evento" — were FRAGMENTS of the console root,
+ * so three of the five tabs led to the same page. Worse, `isConsoleNavItemActive`
+ * hard-codes a fragment tab never to highlight, which means the bar could not
+ * show where you were whenever you were on one of them. A tab bar whose
+ * majority is one page, and which cannot say so, is not navigation.
+ *
+ * What is left is five real places: the invitations, the way to add one, the
+ * people themselves, the wedding's own facts, and which WhatsApp account this
+ * handset holds. That is the ceiling, reached — and the ceiling is asserted, so
+ * a sixth destination has to argue with a failing test.
  */
 export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
   {
@@ -90,15 +105,45 @@ export const CONSOLE_NAV_ITEMS: readonly ConsoleNavItem[] = [
     icon: "list",
   },
   {
-    key: "preflight",
-    href: `${CONSOLE_ROOT_PATH}#revision`,
-    label: "Revisión",
-    icon: "check",
+    /*
+      CREATION IS A DESTINATION, AND IT BELONGS HERE.
+
+      It lived in the header, which is better than where it started — the foot
+      of a scrolling list, with nothing in the navigation pointing at it — but
+      the couple looked at a sidebar with three entries and found no way to add
+      anybody. On a phone this bar is at the bottom, under the thumb, which is
+      the most reachable place on the screen.
+    */
+    key: "new",
+    href: CONSOLE_NEW_INVITATION_PATH,
+    /*
+      "Agregar" and not "Nueva invitación", which is 16 characters against the
+      14 this bar allows. The limit is not arbitrary: a label that wraps makes
+      the bar taller than the height the content's bottom padding was
+      calculated from, so the last row of the list ends up underneath it.
+      "Boda" carries the same note for the same reason.
+    */
+    label: "Agregar",
+    icon: "plus",
   },
   {
-    key: "event",
-    href: `${CONSOLE_ROOT_PATH}#evento`,
-    label: "Evento",
+    /*
+      THE PEOPLE, WHICH IS NOT THE SAME LIST AS THE HOUSEHOLDS.
+
+      The couple's words were "no veo la lista de invitados por ninguna parte",
+      and they were right twice over: there was no door, and there was nothing
+      behind it either — a guest could not exist outside an invitation until
+      migration 0015. `/console` answers "which households are there"; this
+      answers "who is coming, and who is still in nobody's household".
+
+      THE FIFTH TAB, AND THEREFORE THE LAST. The ceiling above is real: a sixth
+      destination needs an overflow sheet, and that is where a destination goes
+      to be forgotten. Anything further belongs inside one of these five.
+    */
+    key: "guests",
+    href: CONSOLE_GUESTS_PATH,
+    // 9 characters against the 14 this bar allows.
+    label: "Invitados",
     icon: "users",
   },
   {

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { InvitationForm } from "@/components/console/InvitationForm";
 import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
 import { requireOperator } from "@/lib/server/console-session";
+import { listFreeGuests } from "@/lib/server/guest-directory";
+import { createServerSupabaseClient } from "@/lib/server/supabase";
 
 import { createInvitationAction } from "../../actions";
 
@@ -45,6 +47,18 @@ export const metadata: Metadata = {
 export default async function NewInvitationPage() {
   await requireOperator();
 
+  /*
+    THE PEOPLE THE DIRECTORY CAN STILL LEND.
+
+    Read here and not inside the form, because the form is a client component
+    and this is a query. Only the FREE ones travel: offering somebody already
+    in a household is the thing the couple asked to be impossible — "no se
+    debería poder escoger en una próxima invitación" — and the server refuses
+    it a second time on submit, because this list can go stale while the form
+    is open on somebody's phone.
+  */
+  const freeGuests = await listFreeGuests(createServerSupabaseClient());
+
   /**
    * Creates it, then leaves.
    *
@@ -70,11 +84,12 @@ export default async function NewInvitationPage() {
       <p className="max-w-[68ch] text-sm text-muted-foreground">
         Una invitación es un hogar: una persona sola o un grupo que recibe un
         solo mensaje y responde una sola vez. El saludo se arma con los nombres
-        y apodos que se escriban acá, y se puede cambiar a mano. A quién se le
-        manda el mensaje se elige después de guardar.
+        y apodos que se escriban acá, y se puede cambiar a mano. Se puede
+        escribir gente nueva o agregar a quien ya esté en la lista de invitados
+        sin invitación.
       </p>
 
-      <InvitationForm action={create} />
+      <InvitationForm action={create} freeGuests={freeGuests} />
 
       <a
         className="self-start text-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"

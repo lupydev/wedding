@@ -43,6 +43,7 @@ function guest(overrides: Partial<ConsoleListGuest> = {}): ConsoleListGuest {
   return {
     id: "g1",
     fullName: "Ana Muñóz",
+    nickname: null,
     isChild: false,
     phoneE164: "+573001234567",
     lineType: "mobile",
@@ -58,7 +59,6 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
     memberCount: 1,
-    rsvpDeadline: null,
     ownerSenderId: ANA,
     ownerDisplayName: "Ana Operadora",
     ownedByViewer: true,

@@ -39,8 +39,7 @@ export interface WeddingFactValues {
   readonly ceremonyTime: string;
   readonly venueName: string;
   readonly venueAddress: string;
-  readonly streamMeetingId: string;
-  readonly streamPasscode: string;
+  readonly streamUrl: string;
 }
 
 async function connect(): Promise<Client> {
@@ -61,7 +60,7 @@ async function connect(): Promise<Client> {
 
 const SELECT_FACTS = `select couple_names, ceremony_date, ceremony_time,
                              venue_name, venue_address,
-                             stream_meeting_id, stream_passcode
+                             stream_url
                       from ceremony`;
 
 interface FactsRow {
@@ -70,8 +69,7 @@ interface FactsRow {
   ceremony_time: string;
   venue_name: string;
   venue_address: string;
-  stream_meeting_id: string;
-  stream_passcode: string;
+  stream_url: string;
 }
 
 /** Reads the singleton. Throws loudly if the migrations have not run. */
@@ -96,8 +94,7 @@ export async function readWeddingFacts(): Promise<WeddingFactValues> {
       ceremonyTime: row.ceremony_time,
       venueName: row.venue_name,
       venueAddress: row.venue_address,
-      streamMeetingId: row.stream_meeting_id,
-      streamPasscode: row.stream_passcode,
+      streamUrl: row.stream_url,
     };
   } finally {
     await db.end();
@@ -122,7 +119,7 @@ export async function restoreWeddingFacts(
       `update ceremony
           set couple_names = $1, ceremony_date = $2, ceremony_time = $3,
               venue_name = $4, venue_address = $5,
-              stream_meeting_id = $6, stream_passcode = $7
+              stream_url = $6
         where id`,
       [
         facts.coupleNames,
@@ -130,8 +127,7 @@ export async function restoreWeddingFacts(
         facts.ceremonyTime,
         facts.venueName,
         facts.venueAddress,
-        facts.streamMeetingId,
-        facts.streamPasscode,
+        facts.streamUrl,
       ],
     );
   } finally {

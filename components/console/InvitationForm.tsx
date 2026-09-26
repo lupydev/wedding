@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { whyDisabled } from "@/components/ui/why-disabled";
+import type { DirectoryGuest } from "@/lib/domain/guest-directory";
 import {
   deriveGreetingName,
   type GreetingNameSource,
@@ -93,6 +94,8 @@ const REFUSAL_COPY: Readonly<Record<DraftRefusal, string>> = {
     "La persona elegida para recibir el mensaje ya no pertenece a esta invitación. Hay que elegir de nuevo a quién se le envía.",
   custom_name_empty:
     "El nombre del grupo no puede quedar vacío. Si la idea era deshacer el cambio, el botón «Volver al nombre automático» lo devuelve al que sale de los integrantes.",
+  guest_already_invited:
+    "Esa persona ya quedó en otra invitación mientras esta pantalla estaba abierta. Actualizá la página para ver la lista al día.",
 };
 
 /** A fact worth showing. The save happens regardless. */
@@ -166,6 +169,13 @@ export interface InvitationMemberActions {
   readonly edit: InvitationRefusingAction;
   readonly remove: InvitationRefusingAction;
   readonly chooseRecipient: InvitationRefusingAction;
+  /**
+   * Takes somebody the directory holds into THIS invitation, immediately.
+   *
+   * Optional, because the create form has no saved invitation to place anybody
+   * into — there, a pick is a local row until the whole form is submitted.
+   */
+  readonly place?: InvitationRefusingAction;
 }
 
 /** One member as the server currently holds them. */
@@ -186,7 +196,6 @@ export interface InvitationFormInvitation {
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
   /** ISO calendar day, or `null` for an invitation that never closes. */
-  readonly rsvpDeadline: string | null;
   readonly dispatchRecipientGuestId: string | null;
   readonly members: readonly InvitationFormMember[];
   /** True when at least one `dispatch_events` row exists for it. */
@@ -200,6 +209,19 @@ export interface InvitationFormProps {
    */
   readonly action: InvitationFormAction;
   readonly invitation?: InvitationFormInvitation | null;
+  /**
+   * The people the directory holds and no household does.
+   *
+   * Only meaningful while CREATING. Picking one moves that person into this
+   * household instead of writing a second record with the same name — which is
+   * possible at all only since migration 0015, and is what "la creación de
+   * invitaciones donde se pueda agregar un invitado" asked for.
+   *
+   * Adding somebody to an invitation that already exists is a different write
+   * against a saved row, with its own server action, so the edit screen does
+   * not read this.
+   */
+  readonly freeGuests?: readonly DirectoryGuest[];
   /** Required to edit membership; there is none to edit while creating. */
   readonly memberActions?: InvitationMemberActions;
 }
@@ -210,6 +232,15 @@ interface MemberRow {
   readonly key: string;
   /** `null` for a row this form added that has never been written. */
   readonly id: string | null;
+  /**
+   * Set when this card names somebody the DIRECTORY already holds.
+   *
+   * Distinct from `id`, which means "already a member of THIS invitation".
+   * A picked person exists as a row and belongs to nobody, so the submission
+   * moves them rather than writing them; their details are read-only here
+   * because `/console/guests` is where they are corrected for everybody.
+   */
+  readonly existingGuestId: string | null;
   readonly fullName: string;
   readonly nickname: string;
   readonly phone: string;
@@ -226,11 +257,16 @@ interface MemberRow {
 }
 
 const NO_MEMBERS: readonly InvitationFormMember[] = [];
+/** Module scope, so the default prop is not a new array on every render. */
+const NO_FREE_GUESTS: readonly DirectoryGuest[] = [];
 
 function rowOf(member: InvitationFormMember): MemberRow {
   return {
     key: member.id,
     id: member.id,
+    // A saved member is already in this household; the directory's picker is
+    // about people who are in none.
+    existingGuestId: null,
     fullName: member.fullName,
     nickname: member.nickname ?? "",
     phone: member.phoneE164 ?? "",
@@ -239,11 +275,32 @@ function rowOf(member: InvitationFormMember): MemberRow {
   };
 }
 
+/**
+ * A card standing for somebody the directory already holds.
+ *
+ * Their details are COPIED for display and for validation, never re-saved:
+ * `existingGuestId` is what turns this card into a move rather than an insert,
+ * and `/console/guests` remains the one screen where those details change.
+ */
+function pickedRow(guest: DirectoryGuest): MemberRow {
+  return {
+    key: `picked-${guest.id}`,
+    id: null,
+    existingGuestId: guest.id,
+    fullName: guest.fullName,
+    nickname: guest.nickname ?? "",
+    phone: guest.phoneE164 ?? "",
+    isChild: guest.isChild,
+    dispatchable: guest.phoneE164 !== null,
+  };
+}
+
 /** A row nobody has typed into yet — what a new invitation starts as. */
 function blankRow(): MemberRow {
   return {
     key: `new-${globalThis.crypto.randomUUID()}`,
     id: null,
+    existingGuestId: null,
     fullName: "",
     nickname: "",
     phone: "",
@@ -252,8 +309,30 @@ function blankRow(): MemberRow {
   };
 }
 
-function rowsOf(members: readonly InvitationFormMember[]): MemberRow[] {
-  return members.length === 0 ? [blankRow()] : members.map(rowOf);
+/**
+ * The cards a form starts with.
+ *
+ * THE BLANK CARD IS ONLY THERE WHEN NOTHING CAN BE PICKED.
+ *
+ * A blank card with four empty fields is the loudest instruction on the
+ * screen, and it said "type somebody in" — on a console whose guest list is
+ * built in the directory first, to an operator who mostly wants to choose
+ * people who already exist. Opening with none makes picking the default and
+ * leaves typing one press away.
+ *
+ * An empty directory still opens on a card, because picking is impossible
+ * there and a screen whose only affordance is one nobody can use is worse than
+ * the blank card ever was.
+ */
+function rowsOf(
+  members: readonly InvitationFormMember[],
+  canPick = false,
+): MemberRow[] {
+  if (members.length > 0) {
+    return members.map(rowOf);
+  }
+
+  return canPick ? [] : [blankRow()];
 }
 
 /** The row as the pure validator wants it. */
@@ -314,15 +393,15 @@ function derivedNameOf(rows: readonly MemberRow[]): string | null {
 
 export function InvitationForm({
   action,
+  freeGuests = NO_FREE_GUESTS,
   invitation = null,
   memberActions,
 }: InvitationFormProps) {
   const persisted = invitation?.members ?? NO_MEMBERS;
 
   const [rows, setRows] = useState<readonly MemberRow[]>(() =>
-    rowsOf(persisted),
+    rowsOf(persisted, invitation === null && freeGuests.length > 0),
   );
-  const [displayName, setDisplayName] = useState(invitation?.displayName ?? "");
   const [source, setSource] = useState<GreetingNameSource>(
     invitation?.greetingNameSource ?? "derived",
   );
@@ -331,7 +410,6 @@ export function InvitationForm({
       ? ""
       : invitation.greetingName,
   );
-  const [deadline, setDeadline] = useState(invitation?.rsvpDeadline ?? "");
   const [recipientId, setRecipientId] = useState(
     invitation?.dispatchRecipientGuestId ?? null,
   );
@@ -412,17 +490,102 @@ export function InvitationForm({
   // and the seat cap: the couple's guest list, silently wrong.
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set());
 
+  /**
+   * The card whose name field should take the cursor, or `null` for none.
+   *
+   * `null` on the first render, always, which is what keeps this from stealing
+   * focus when the page loads: no card's key can match it, so `autoFocus` is
+   * false everywhere until the operator presses "Agregar una persona nueva".
+   */
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+
+  /**
+   * Which member receives the message, while they are still only positions.
+   *
+   * Zero rather than `null`: the first person is marked to begin with, and the
+   * marking is ON SCREEN where the operator can change it in one tap. Nothing
+   * is defaulted silently — what this replaces is an invitation saved,
+   * apparently complete, and unsendable until somebody reopened it.
+   */
+  const [recipientIndex, setRecipientIndex] = useState(0);
+
   const derivedName = derivedNameOf(rows);
   const shownName = source === "derived" ? (derivedName ?? "") : customName;
 
   const { refusals, advisories } = validateInvitationDraft({
-    displayName,
+    // The validator wants a label for its messages, and the greeting is the
+    // one the operator can see. The server fills the column from it too.
+    displayName: shownName,
     greetingName: shownName,
     greetingNameSource: source,
     members: rows.map(draftMemberOf),
     dispatchRecipientGuestId: recipientId,
-    rsvpDeadline: deadline === "" ? null : deadline,
   });
+
+  /*
+    WHO THE PICKER MAY STILL OFFER.
+
+    Derived rather than kept in state: the answer is a function of the rows on
+    screen, and a second copy of it is a second thing that can be wrong.
+  */
+  const takenHere = new Set(
+    rows
+      .map((row) => row.existingGuestId)
+      .filter((id): id is string => id !== null),
+  );
+  const offerable = freeGuests.filter((guest) => !takenHere.has(guest.id));
+  /*
+    Nothing is rendered when there is nobody to lend. An empty picker reads as
+    "this feature is broken" rather than "the directory is empty", and the
+    directory is empty for most of this wedding's life. While editing it also
+    needs somewhere to send the pick, which is `memberActions.place`.
+  */
+  const picksAreOffered =
+    offerable.length > 0 &&
+    (invitation === null || memberActions?.place !== undefined);
+
+  function pickGuest(guest: DirectoryGuest) {
+    /*
+      AN EXISTING INVITATION TAKES THEM IMMEDIATELY.
+
+      Creating builds a whole household in one submit, so a pick there is a
+      local row waiting for that submit. An invitation that already exists has
+      no submit button for membership — every member write on this screen is
+      its own action — so a pick held locally would simply be lost.
+    */
+    if (invitation !== null && memberActions?.place !== undefined) {
+      const fields = new FormData();
+
+      fields.set("invitationId", invitation.id);
+      fields.set("guestId", guest.id);
+
+      void runWrite(memberActions.place, fields, {
+        rowKey: `place-${guest.id}`,
+      });
+
+      return;
+    }
+
+    setRows((current) => {
+      const picked = pickedRow(guest);
+      /*
+        THE UNTOUCHED BLANK CARD IS CONSUMED, NOT PUSHED DOWN.
+
+        A new form opens with one empty card. Appending after it leaves an
+        empty "Integrante 1" above the person just added — which the validator
+        then refuses for having no name, on a form where the operator did
+        nothing wrong. A card somebody HAS typed into is never consumed.
+      */
+      const onlyBlank =
+        current.length === 1 &&
+        current[0].existingGuestId === null &&
+        current[0].id === null &&
+        current[0].fullName.trim() === "" &&
+        current[0].phone.trim() === "";
+
+      return onlyBlank ? [picked] : [...current, picked];
+    });
+  }
 
   function patchRow(key: string, patch: Partial<MemberRow>) {
     setRows((current) =>
@@ -472,7 +635,7 @@ export function InvitationForm({
 
     const after = rows.filter((candidate) => candidate.key !== row.key);
     const outcome = validateInvitationDraft({
-      displayName,
+      displayName: shownName,
       greetingName: shownName,
       greetingNameSource: source,
       members: after.map(draftMemberOf),
@@ -481,7 +644,6 @@ export function InvitationForm({
       )
         ? recipientId
         : null,
-      rsvpDeadline: deadline === "" ? null : deadline,
     });
 
     return outcome.refusals.includes("no_members")
@@ -643,6 +805,65 @@ export function InvitationForm({
       <fieldset className="invitation-form__members flex flex-col gap-4">
         <legend className="text-sm font-medium">Integrantes</legend>
 
+        {/*
+          THE PEOPLE THE DIRECTORY CAN STILL LEND, and nobody else.
+
+          Offering only free guests is the first half of the couple's rule —
+          "no se debería poder escoger en una próxima invitación". The server
+          holds the other half, because a page that was correct when it loaded
+          can be wrong when it is submitted.
+
+          Somebody already on a card here is withheld too: offering them twice
+          would let one form build a household holding the same person twice,
+          which `duplicate_member_id` refuses on submit — after the operator
+          had done the work.
+
+          Nothing is rendered when there is nobody to lend. An empty picker
+          says "this feature is broken" rather than "the directory is empty",
+          and the directory is empty for most of this wedding's life.
+        */}
+        {picksAreOffered && (
+          <div className="invitation-form__directory flex flex-col gap-2 rounded-lg border border-dashed border-input px-3 py-3">
+            <p className="text-xs text-muted-foreground">
+              Ya en la lista de invitados, sin invitación todavía:
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {offerable.map((guest) => (
+                <Button
+                  disabled={inFlight.has(`place-${guest.id}`)}
+                  key={guest.id}
+                  onClick={() => pickGuest(guest)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {/*
+                    The person's name is IN the label rather than only in an
+                    `aria-label`, because a row of bare "Agregar" buttons is
+                    the thing this console already removed once.
+                  */}
+                  Agregar de la lista: {guest.fullName}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/*
+          SAYS SO, RATHER THAN LEAVING AN EMPTY BOX.
+
+          With nobody added yet the fieldset would otherwise be a legend over
+          nothing, which reads as a screen that failed to load rather than one
+          waiting for a choice.
+        */}
+        {rows.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Todavía no agregaste a nadie. Elegí de la lista de arriba, o agregá
+            una persona nueva.
+          </p>
+        )}
+
         {rows.map((row, index) => {
           const removalRefusal = removalRefusalOf(row);
 
@@ -651,8 +872,17 @@ export function InvitationForm({
               className="invitation-form__member flex flex-col gap-2 rounded-lg border border-input px-3 py-3"
               key={row.key}
             >
+              {/*
+                The marker is only on cards that are NOT on the invitation yet,
+                and that is the whole signal: on every card it would be
+                decoration, and an operator learns to ignore decoration.
+
+                On the create form every card is unsaved — the whole form is one
+                submit — so there is nothing to distinguish and no marker.
+              */}
               <legend className="px-1 text-xs text-muted-foreground">
                 Integrante {index + 1}
+                {invitation !== null && row.id === null ? " · sin guardar" : ""}
               </legend>
 
               <div className="flex flex-col gap-1.5">
@@ -660,6 +890,9 @@ export function InvitationForm({
                   Nombre completo
                 </Label>
                 <Input
+                  // Only ever true for a card the operator just opened: the
+                  // state starts `null`, so nothing is focused on load.
+                  autoFocus={row.key === focusKey}
                   className="h-11"
                   id={`member-${row.key}-full-name`}
                   // The four member columns travel with the CREATE submission and
@@ -669,6 +902,14 @@ export function InvitationForm({
                   onChange={(event) =>
                     patchRow(row.key, { fullName: event.target.value })
                   }
+                  /*
+                    A PICKED PERSON'S DETAILS ARE SHOWN, NOT REWRITTEN HERE.
+
+                    The directory owns them, and `/console/guests` is where a
+                    correction reaches every household at once. Two places to
+                    change one name is two names.
+                  */
+                  readOnly={row.existingGuestId !== null}
                   value={row.fullName}
                 />
               </div>
@@ -682,6 +923,7 @@ export function InvitationForm({
                   onChange={(event) =>
                     patchRow(row.key, { nickname: event.target.value })
                   }
+                  readOnly={row.existingGuestId !== null}
                   value={row.nickname}
                 />
               </div>
@@ -699,6 +941,7 @@ export function InvitationForm({
                       dispatchable: event.target.value.trim() !== "",
                     })
                   }
+                  readOnly={row.existingGuestId !== null}
                   value={row.phone}
                 />
               </div>
@@ -723,6 +966,18 @@ export function InvitationForm({
                   name="memberIsChild"
                   type="hidden"
                   value={row.isChild ? "true" : "false"}
+                />
+              )}
+
+              {/* One entry per member, empty for a person being written for the
+                first time. `readMemberRows` refuses a column whose length
+                disagrees with the names — a rule it holds because a short
+                column attaches one person's value to another person's row. */}
+              {invitation === null && (
+                <input
+                  name="memberExistingId"
+                  type="hidden"
+                  value={row.existingGuestId ?? ""}
                 />
               )}
 
@@ -768,36 +1023,55 @@ export function InvitationForm({
           );
         })}
 
+        {/*
+          IT USED TO SAY "Agregar integrante", AND IT ADDED NOBODY.
+
+          Pressing it opens a blank card; the person reaches the invitation on a
+          SECOND press, on a different button, further down. An operator who
+          pressed this once and walked away had added no one, and the screen had
+          told them otherwise.
+
+          So it says what it opens, the card it opens says it is not saved yet,
+          and the cursor lands in the name — press, type, save, with nothing to
+          aim at in between.
+        */}
         <Button
           className="self-start"
-          onClick={() => setRows((current) => [...current, blankRow()])}
+          onClick={() => {
+            const opened = blankRow();
+
+            setRows((current) => [...current, opened]);
+            setFocusKey(opened.key);
+          }}
           type="button"
           variant="secondary"
         >
-          Agregar integrante
+          {/*
+            ONE LABEL, NOT TWO. It read "Agregar otra persona" once a card
+            existed and "una persona nueva" when none did — the same button
+            calling itself two things depending on state, which is a small
+            puzzle for the reader and an ambiguity for anything locating it.
+            "Nueva" is the word that matters either way: it distinguishes
+            typing somebody in from picking somebody who already exists.
+          */}
+          Agregar una persona nueva
         </Button>
       </fieldset>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="invitation-display-name">Nombre del hogar</Label>
-        <p
-          className="max-w-[68ch] text-xs text-muted-foreground"
-          id="invitation-display-name-hint"
-        >
-          Es el nombre con el que esta invitación aparece en el panel. No es el
-          saludo.
-        </p>
-        <Input
-          aria-describedby="invitation-display-name-hint"
-          className="h-11"
-          id="invitation-display-name"
-          name="displayName"
-          onChange={(event) => setDisplayName(event.target.value)}
-          required
-          value={displayName}
-        />
-      </div>
+      {/*
+        ONE NAME FIELD, AND THERE WERE TWO.
 
+        This asked for a "Nombre del hogar" as well, each field under its own
+        paragraph explaining how it differed from the other — ten lines of
+        prose to separate two values, one of which the operator never sees
+        again. `display_name` surfaces on exactly ONE surface in the whole
+        console: the sentence confirming a deletion. Everything else — every
+        list, heading and label — shows the greeting.
+
+        The column still exists and the server fills it from the greeting it
+        resolves, so nothing internal changed. What went away is a question
+        asked of somebody with no way to know the answer did not matter.
+      */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="invitation-greeting-name">Nombre del grupo</Label>
         <p
@@ -880,60 +1154,103 @@ export function InvitationForm({
         </Button>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="invitation-rsvp-deadline">
-          Fecha límite para confirmar
-        </Label>
-        <Input
-          className="h-11"
-          id="invitation-rsvp-deadline"
-          name="rsvpDeadline"
-          onChange={(event) => setDeadline(event.target.value)}
-          type="date"
-          value={deadline}
-        />
-      </div>
+      {/*
+        THE DEADLINE IS NOT ASKED FOR HERE ANY MORE.
 
-      {invitation === null || memberActions === undefined ? (
-        <p
-          className="max-w-[68ch] text-sm text-muted-foreground"
-          data-testid="invitation-recipient-later"
-        >
-          A quién se le envía el mensaje se elige después de guardar: las
-          personas todavía no existen, así que no hay a quién dejar registrado.
-        </p>
-      ) : (
-        <fieldset className="invitation-form__recipient flex flex-col gap-2">
-          <legend className="text-sm font-medium">
-            ¿Quién recibe el mensaje?
-          </legend>
-          <p className="max-w-[68ch] text-xs text-muted-foreground">
-            Nadie queda elegido por defecto. Mientras no se marque a alguien, el
-            envío de esta invitación queda bloqueado.
-          </p>
+        A "Fecha límite para confirmar" field stood here, on the create form and
+        on the edit form, which meant the couple typed the same date into every
+        household they made — and a household where they forgot was one whose
+        invitation said nothing about confirming and never closed.
 
-          {rows
-            .filter((row): row is MemberRow & { id: string } => row.id !== null)
-            .map((row) => (
+        There is one wedding, so there is one deadline. It is derived from the
+        wedding's own date in `lib/domain/wedding-day.ts`, one week before, and
+        every invitation reads the same value.
+      */}
+
+      {/*
+        AN INVITATION USED TO BE BORN BLOCKED.
+
+        A paragraph stood here on the create form — "A quién se le envía el
+        mensaje se elige después de guardar" — because the members have no ids
+        until they are written. True, and it meant every household created in
+        the console landed straight in "Sin destinatario elegido", and the
+        operator had to find it again and reopen it to finish something they
+        believed they had finished.
+
+        The members have POSITIONS before they have ids, and a position is all
+        the server needs: it inserts the guests and resolves the choice against
+        the rows it has just created. So the same question is asked here, and
+        the only difference is what the answer is spelled with.
+      */}
+      <fieldset className="invitation-form__recipient flex flex-col gap-2">
+        <legend className="text-sm font-medium">
+          ¿Quién recibe el mensaje?
+        </legend>
+
+        {invitation === null || memberActions === undefined ? (
+          <>
+            <p className="max-w-[68ch] text-xs text-muted-foreground">
+              El mensaje va a una sola persona de la invitación. Queda marcada
+              la primera; se puede cambiar acá mismo.
+            </p>
+
+            {rows.map((row, index) => (
               <Label
                 className="gap-2"
-                htmlFor={`recipient-${row.id}`}
-                key={row.id}
+                htmlFor={`recipient-${row.key}`}
+                key={row.key}
               >
                 <input
-                  checked={recipientId === row.id}
-                  id={`recipient-${row.id}`}
-                  name="recipientChoice"
-                  onChange={() => chooseRecipient(row)}
+                  checked={recipientIndex === index}
+                  id={`recipient-${row.key}`}
+                  /*
+                   * The POSITION, because that is all that exists yet. A guest
+                   * id here would be an invention: these people have not been
+                   * written, so there is nothing to name them by except where
+                   * they sit on this form.
+                   */
+                  name="recipientIndex"
+                  onChange={() => setRecipientIndex(index)}
                   type="radio"
-                  value={row.id}
+                  value={index}
                 />
-                {row.fullName === "" ? "Sin nombre" : row.fullName}
+                {row.fullName === "" ? `Integrante ${index + 1}` : row.fullName}
                 {row.phone.trim() === "" ? " — sin número guardado" : ""}
               </Label>
             ))}
-        </fieldset>
-      )}
+          </>
+        ) : (
+          <>
+            <p className="max-w-[68ch] text-xs text-muted-foreground">
+              Nadie queda elegido por defecto. Mientras no se marque a alguien,
+              el envío de esta invitación queda bloqueado.
+            </p>
+
+            {rows
+              .filter(
+                (row): row is MemberRow & { id: string } => row.id !== null,
+              )
+              .map((row) => (
+                <Label
+                  className="gap-2"
+                  htmlFor={`recipient-${row.id}`}
+                  key={row.id}
+                >
+                  <input
+                    checked={recipientId === row.id}
+                    id={`recipient-${row.id}`}
+                    name="recipientChoice"
+                    onChange={() => chooseRecipient(row)}
+                    type="radio"
+                    value={row.id}
+                  />
+                  {row.fullName === "" ? "Sin nombre" : row.fullName}
+                  {row.phone.trim() === "" ? " — sin número guardado" : ""}
+                </Label>
+              ))}
+          </>
+        )}
+      </fieldset>
 
       {writeError !== null && (
         <p

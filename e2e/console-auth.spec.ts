@@ -69,7 +69,12 @@ test.describe("console access control", () => {
     await expect(
       page.getByRole("heading", { name: "Panel de envíos" }),
     ).toBeVisible();
-    await expect(page.getByText("Tus invitaciones")).toHaveCount(0);
+    // The heading, by role: "Invitaciones" on its own is also a nav tab, and a
+    // bare text query would stop distinguishing the console's content from its
+    // chrome. The list heading exists only on the console home.
+    await expect(
+      page.getByRole("heading", { name: "Invitaciones" }),
+    ).toHaveCount(0);
   });
 
   test("an anonymous request for the console renders no console content", async ({
@@ -84,7 +89,9 @@ test.describe("console access control", () => {
 
     expect(response.status()).toBe(307);
     expect(response.headers().location).toContain("/console/login");
-    expect(await response.text()).not.toContain("Tus invitaciones");
+    // A string that exists ONLY on the console home. "Invitaciones" alone is a
+    // nav label as well, so it would no longer prove the content stayed behind.
+    expect(await response.text()).not.toContain("Invitaciones enviadas");
   });
 
   test("a nested console route is protected too", async ({ page }) => {
@@ -186,7 +193,7 @@ test.describe("password sign-in", () => {
 
     await expect(page).toHaveURL(/\/console$/);
     await expect(
-      page.getByRole("heading", { name: "Tus invitaciones" }),
+      page.getByRole("heading", { name: "Invitaciones" }),
     ).toBeVisible();
 
     // The binding the spec demands: exactly one `senders.auth_user_id`, written
@@ -210,7 +217,7 @@ test.describe("password sign-in", () => {
     await page.reload();
     await expect(page).toHaveURL(/\/console$/);
     await expect(
-      page.getByRole("heading", { name: "Tus invitaciones" }),
+      page.getByRole("heading", { name: "Invitaciones" }),
     ).toBeVisible();
 
     // And signing out actually revokes it.

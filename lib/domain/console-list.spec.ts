@@ -18,6 +18,7 @@ function guest(id: string, fullName = `Persona ${id}`): ConsoleListGuest {
   return {
     id,
     fullName,
+    nickname: null,
     isChild: false,
     phoneE164: "+573001234567",
     lineType: "mobile",
@@ -32,7 +33,6 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
     memberCount: 4,
-    rsvpDeadline: null,
     ownerSenderId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     ownerDisplayName: "Ana Operadora",
     ownedByViewer: true,
@@ -379,14 +379,15 @@ describe("assembleConsoleRows", () => {
       slug: "abcdefghijklmn23",
       greetingName: "Familia Muñóz",
       displayName: "Familia Muñóz",
-      rsvpDeadline: null,
       ownerSenderId: ANA,
       ownerDisplayName: "Ana Operadora",
       dispatchRecipientGuestId: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
       guests: [
         {
           id: "g1",
           fullName: "Ana Muñóz",
+          nickname: null,
           isChild: false,
           phoneE164: "+573001234567",
         },
@@ -400,11 +401,15 @@ describe("assembleConsoleRows", () => {
       viewerSenderId: ANA,
       defaultCountry: "CO",
       invitations: [
-        invitation(),
+        // DATED ON PURPOSE. The list is newest first, so a test that reads
+        // its results by position has to say which one is newest instead of
+        // inheriting the order it happened to pass them in.
+        invitation({ createdAt: "2026-01-02T00:00:00.000Z" }),
         invitation({
           invitationId: OTHER_HOUSEHOLD,
           ownerSenderId: BETO,
           ownerDisplayName: "Beto Operador",
+          createdAt: "2026-01-01T00:00:00.000Z",
         }),
       ],
       latestAnswers: [],
@@ -447,19 +452,22 @@ describe("assembleConsoleRows", () => {
       viewerSenderId: ANA,
       defaultCountry: "CO",
       invitations: [
-        invitation(),
+        invitation({ createdAt: "2026-01-02T00:00:00.000Z" }),
         invitation({
+          createdAt: "2026-01-01T00:00:00.000Z",
           invitationId: OTHER_HOUSEHOLD,
           guests: [
             {
               id: "g1",
               fullName: "Ana Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: "+573001234567",
             },
             {
               id: "g2",
               fullName: "Luis Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: null,
             },
@@ -555,8 +563,11 @@ describe("assembleConsoleRows", () => {
       viewerSenderId: ANA,
       defaultCountry: "CO",
       invitations: [
-        invitation(),
-        invitation({ invitationId: OTHER_HOUSEHOLD }),
+        invitation({ createdAt: "2026-01-02T00:00:00.000Z" }),
+        invitation({
+          createdAt: "2026-01-01T00:00:00.000Z",
+          invitationId: OTHER_HOUSEHOLD,
+        }),
       ],
       latestAnswers: [],
       events: [
@@ -585,12 +596,14 @@ describe("assembleConsoleRows", () => {
             {
               id: "g1",
               fullName: "Casa Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: "+576012345678",
             },
             {
               id: "g2",
               fullName: "Ana Muñóz",
+              nickname: null,
               isChild: false,
               phoneE164: "+573001234567",
             },
@@ -621,6 +634,7 @@ describe("assembleConsoleRows", () => {
             {
               id: "g1",
               fullName: "Niña Muñóz",
+              nickname: null,
               isChild: true,
               phoneE164: null,
             },
@@ -636,5 +650,91 @@ describe("assembleConsoleRows", () => {
       lineType: "not_normalizable",
       dispatchable: false,
     });
+  });
+});
+
+/**
+ * NEWEST INVITATION FIRST, FOR THE SAME REASON THE DIRECTORY IS.
+ *
+ * The couple: "las invitaciones también deben estar filtradas por created_at
+ * DESC para que sea mucho más fácil identificar las nuevas creadas de las más
+ * viejas."
+ *
+ * The query ordered by `display_name`, which is alphabetical by group name —
+ * a fine order for a finished list and the wrong one for a list being built,
+ * where the only question between one entry and the next is "did that one
+ * land?". Its answer is on screen only if the newest row is at the top.
+ *
+ * DECIDED HERE AND NOT IN THE QUERY. It is a presentation rule, it is
+ * unit-testable without a database, and the directory already states it in its
+ * own domain module — having Postgres hold a second opinion is how two lists
+ * that should agree drift apart.
+ */
+describe("the order invitations come back in", () => {
+  const ANA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  function at(moment: string, id: string, name: string) {
+    return {
+      invitationId: id,
+      slug: "abcdefghijklmn23",
+      greetingName: name,
+      displayName: name,
+      ownerSenderId: ANA,
+      ownerDisplayName: "Ana Operadora",
+      dispatchRecipientGuestId: null,
+      createdAt: moment,
+      guests: [
+        {
+          id: `${id}-g1`,
+          fullName: `Persona ${id}`,
+          nickname: null,
+          isChild: false,
+          phoneE164: "+573001234567",
+        },
+      ],
+    };
+  }
+
+  const rowsFrom = (invitations: readonly ConsoleInvitationInput[]) =>
+    assembleConsoleRows({
+      invitations,
+      latestAnswers: [],
+      events: [],
+      viewerSenderId: ANA,
+      defaultCountry: "CO",
+    });
+
+  it("puts the most recently created household first", () => {
+    const rows = rowsFrom([
+      at("2026-01-01T10:00:00.000Z", "old", "Familia Primera"),
+      at("2026-01-03T10:00:00.000Z", "new", "Familia Última"),
+      at("2026-01-02T10:00:00.000Z", "mid", "Familia Media"),
+    ]);
+
+    expect(rows.map((row) => row.greetingName)).toEqual([
+      "Familia Última",
+      "Familia Media",
+      "Familia Primera",
+    ]);
+  });
+
+  /**
+   * TWO CREATED IN THE SAME INSTANT STILL GET A STABLE ORDER.
+   *
+   * An import writes a whole file inside one statement and `created_at`
+   * defaults to `now()`, so identical timestamps are ordinary rather than
+   * exotic. Without a tiebreak the list reshuffles between two renders of the
+   * same data — the flicker that makes a screen feel broken without ever being
+   * wrong. The same rule the directory holds.
+   */
+  it("breaks a tie the same way every time", () => {
+    const sameInstant = "2026-01-01T10:00:00.000Z";
+    const build = () =>
+      rowsFrom([
+        at(sameInstant, "bbb", "Familia B"),
+        at(sameInstant, "aaa", "Familia A"),
+      ]).map((row) => row.invitationId);
+
+    expect(build()).toEqual(build());
   });
 });

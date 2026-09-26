@@ -141,7 +141,6 @@ export async function submitRsvpAction(
     {
       invitation: {
         id: record.id,
-        rsvpDeadline: record.rsvpDeadline,
         // Every guest named on this invitation, and nobody else. The array
         // column `attendee_guest_ids` is not a foreign key, so this list is the
         // only thing standing between a forged payload and a stranger being

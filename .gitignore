@@ -55,3 +55,9 @@ next-env.d.ts
 /data/
 data/guests.source.json
 data/operators.source.json
+
+# The couple's original of the wedding photograph. 1.6 MB, decoded by nothing
+# in a browser, and already reduced to `img/boda.jpg` at the shape the layout
+# needs. `odd/tasks/invitation-design.md` records how, and why the orientation
+# tag had to be baked in rather than carried.
+/img/boda.HEIC

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  rsvpChoiceCopy,
   RSVP_CLOSED_MESSAGE,
   currentRsvpSentence,
   rsvpFeedbackMessages,
@@ -137,5 +138,56 @@ describe("currentRsvpSentence", () => {
     // Not an empty-ish placeholder: the form must show no prior answer where
     // there is none, or a guest reads someone else's state into their own page.
     expect(currentRsvpSentence(null)).toBeNull();
+  });
+});
+
+/**
+ * WHO THE INVITATION IS SPEAKING TO, AND THE NUMBER IT SPEAKS IN.
+ *
+ * The couple: "si la invitación es para 1 sola persona deberá decir 'Sí, allá
+ * estaré' y 'No puedo acompañarlos', y si la invitación es para 2 o más debe
+ * decir 'Sí, allá estaremos' y 'No podemos acompañarlos'."
+ *
+ * Every line was plural, because every invitation was assumed to be a
+ * household. A guest invited alone was answering in a voice that was not
+ * theirs, on the one page in the product that is addressed to them by name.
+ *
+ * IN THE DOMAIN, NOT IN THE COMPONENT. This is the third place a count has
+ * decided a Spanish ending — `seatsSelectionSentence` and `currentRsvpSentence`
+ * are the other two — and all three live here, where they can be read against
+ * each other and tested without a DOM.
+ */
+describe("rsvpChoiceCopy", () => {
+  it("speaks to one person in the singular", () => {
+    expect(rsvpChoiceCopy(1)).toEqual({
+      question: "¿Podrás acompañarnos?",
+      yes: "Sí, allá estaré",
+      no: "No puedo acompañarlos",
+    });
+  });
+
+  it("speaks to a household in the plural", () => {
+    expect(rsvpChoiceCopy(2)).toEqual({
+      question: "¿Podrán acompañarnos?",
+      yes: "Sí, allá estaremos",
+      no: "No podemos acompañarlos",
+    });
+  });
+
+  it("keeps the plural for every size above two", () => {
+    for (const memberCount of [3, 4, 9]) {
+      expect(rsvpChoiceCopy(memberCount)).toEqual(rsvpChoiceCopy(2));
+    }
+  });
+
+  /**
+   * AND AN EMPTY INVITATION READS AS A HOUSEHOLD.
+   *
+   * It cannot happen — an invitation with no members is refused long before
+   * this — but a count of zero must not fall into the singular by arithmetic
+   * accident and address a group as one person.
+   */
+  it("treats a count it should never see as a household", () => {
+    expect(rsvpChoiceCopy(0)).toEqual(rsvpChoiceCopy(2));
   });
 });

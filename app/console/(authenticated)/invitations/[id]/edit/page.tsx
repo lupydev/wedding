@@ -10,6 +10,7 @@ import { isWellFormedUuid } from "@/lib/domain/uuid";
 import { requireOperator } from "@/lib/server/console-session";
 import { listDispatchEvents } from "@/lib/server/dispatch";
 import { requiredDefaultPhoneCountry, siteOrigin } from "@/lib/server/env";
+import { listFreeGuests } from "@/lib/server/guest-directory";
 import { findInvitationMembership } from "@/lib/server/invitations";
 import { invitationPageUrl } from "@/lib/server/og-warm";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
@@ -17,6 +18,7 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
 import {
   addMemberAction,
   chooseRecipientAction,
+  placeDirectoryGuestAction,
   deleteInvitationAction,
   editMemberAction,
   removeMemberAction,
@@ -77,9 +79,14 @@ export default async function EditInvitationPage({
   }
 
   const client = createServerSupabaseClient();
-  const [membership, dispatchEvents] = await Promise.all([
+  const [membership, dispatchEvents, freeGuests] = await Promise.all([
     findInvitationMembership(client, id),
     listDispatchEvents(client, id),
+    // The people the directory can still lend. Only the FREE ones travel:
+    // offering somebody already in a household is what the couple asked to be
+    // impossible, and `placeDirectoryGuestAction` refuses it a second time on
+    // submit, because this list goes stale while the page is open.
+    listFreeGuests(client),
   ]);
 
   if (membership === null) {
@@ -186,6 +193,28 @@ export default async function EditInvitationPage({
   }
 
   /**
+   * Takes somebody out of the directory and into this household, immediately.
+   *
+   * There is no submit button for membership on this screen — every member
+   * write is its own action — so the placement happens on the press, and its
+   * refusal travels back through this wrapper the way `chooseRecipient`'s does.
+   * A refusal here means somebody took that person while this page was open.
+   */
+  async function place(formData: FormData) {
+    "use server";
+
+    const refusals = await placeDirectoryGuestAction(formData);
+
+    if (refusals.length > 0) {
+      return refusals;
+    }
+
+    revalidatePath(editPath);
+
+    return refusals;
+  }
+
+  /**
    * Rotates the slug and hands back the ADDRESS, not just the slug.
    *
    * The new slug exists nowhere else after the write — the action returns it and
@@ -215,8 +244,8 @@ export default async function EditInvitationPage({
 
       <p className="max-w-[68ch] text-sm text-muted-foreground">
         Cualquiera de las dos cuentas puede editar esta invitación. Los cambios
-        de integrantes se guardan uno por uno; el nombre del hogar, el saludo y
-        la fecha límite se guardan con el botón del final.
+        de integrantes se guardan uno por uno; el nombre del grupo se guarda con
+        el botón del final.
       </p>
 
       <InvitationForm
@@ -226,7 +255,6 @@ export default async function EditInvitationPage({
           displayName: membership.displayName,
           greetingName: membership.greetingName,
           greetingNameSource: membership.greetingNameSource,
-          rsvpDeadline: membership.rsvpDeadline,
           dispatchRecipientGuestId: membership.dispatchRecipientGuestId,
           // ANY event at all, including an opened link and a marked failure: the
           // warning is about a message that left, and the application cannot
@@ -248,11 +276,13 @@ export default async function EditInvitationPage({
                 .dispatchable,
           })),
         }}
+        freeGuests={freeGuests}
         memberActions={{
           add: addMember,
           edit: editMember,
           remove: removeMember,
           chooseRecipient,
+          place,
         }}
       />
 

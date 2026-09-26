@@ -1,13 +1,11 @@
 import { Suspense } from "react";
 
+import { ConsoleDashboard } from "@/components/console/ConsoleDashboard";
 import { ConsoleSkeleton } from "@/components/console/ConsoleSkeleton";
 import { DispatchPreflight } from "@/components/console/DispatchPreflight";
 import { GuestList } from "@/components/console/GuestList";
-import { ProgressSummary } from "@/components/console/ProgressSummary";
 import {
-  ALL_INVITATIONS_POPULATION,
   ownedPopulation,
-  scopedMetrics,
   summarizeConsoleList,
 } from "@/lib/domain/console-list";
 import { dispatchIsBlockedBy } from "@/lib/domain/device-declaration";
@@ -96,41 +94,64 @@ async function ConsoleLists({
 }) {
   const client = createServerSupabaseClient();
   const defaultCountry = requiredDefaultPhoneCountry();
-  const [mine, everything] = await Promise.all([
-    listConsoleInvitations(client, {
-      viewerSenderId,
-      ownedOnly: true,
-      defaultCountry,
-    }),
-    listConsoleInvitations(client, {
-      viewerSenderId,
-      ownedOnly: false,
-      defaultCountry,
-    }),
-  ]);
-  const theirs = everything.filter((row) => !row.ownedByViewer);
+
+  /*
+    ONE QUERY, WHERE THERE WERE TWO.
+
+    The page used to read the operator's own partition and then every
+    invitation, in parallel, and render a list for each. The second read is a
+    superset of the first, so every owned household was fetched, reduced and
+    rendered twice.
+  */
+  const rows = await listConsoleInvitations(client, {
+    viewerSenderId,
+    ownedOnly: false,
+    defaultCountry,
+  });
+  const mine = rows.filter((row) => row.ownedByViewer);
 
   return (
     // A `div`, not a `main`: `ConsoleShell` above already renders the page's one
-    // `main` landmark. Two of them is invalid markup and makes "skip to content"
-    // ambiguous for a screen reader.
-    //
-    // The two sections keep their original order and their `console__section`
-    // hook. The tab bar's two in-page destinations are fragments of THIS page, so
-    // they are ids on what is already here rather than routes that did not exist.
+    // `main` landmark.
     <div className="console__main flex flex-col gap-8">
+      {/*
+        ONE DASHBOARD, OVER THE WHOLE EVENT, AND THERE WERE TWO SUMMARIES.
+
+        The page rendered `ProgressSummary` twice — ten sentences for this
+        operator's households, then ten more for every household in the event,
+        which INCLUDES the first ten. So "Confirmadas" appeared twice on one
+        screen with different denominators, and a reader had to work out which
+        number answered their question.
+
+        The couple ask two things: how many invitations went out, and how many
+        people are coming. Both are about the wedding, not about a partition of
+        it, so there is one set of figures and it covers everything.
+      */}
+      <ConsoleDashboard summary={summarizeConsoleList(rows)} />
+
+      {/*
+        ONE LIST, AND THERE WERE TWO.
+
+        "Tus invitaciones" and then "Todas las invitaciones del evento", the
+        second a superset of the first, separated by four lines of prose
+        explaining the partition — on a console two people share. Every row
+        already says who manages it ("Gestionas tú" / "Gestiona X"), which is
+        the whole of what the split was communicating.
+
+        Ownership still decides what it always decided, and nothing more: the
+        send affordance, because a WhatsApp message leaves from one account and
+        not the other. `GuestList` now derives that per ROW rather than per
+        list, so a household the viewer does not own offers no send and no
+        editing wherever it appears.
+      */}
       <section className="console__section flex flex-col gap-4">
-        <h2>Tus invitaciones</h2>
+        <h2>Invitaciones</h2>
 
-        <ProgressSummary
-          heading={`Resumen de las invitaciones de ${operatorDisplayName}`}
-          metrics={scopedMetrics(
-            summarizeConsoleList(mine),
-            ownedPopulation(operatorDisplayName),
-          )}
-        />
-
-        {/* `scroll-mt` so the fragment target is not hidden under the header. */}
+        {/*
+          The readiness check stays scoped to what this operator can act on:
+          it exists to say which of THEIR households cannot be sent yet, and
+          the other account's blockers are not theirs to clear.
+        */}
         <div className="scroll-mt-4" id="revision">
           <DispatchPreflight
             preflight={buildDispatchPreflight(
@@ -141,43 +162,10 @@ async function ConsoleLists({
         </div>
 
         <GuestList
-          rows={mine}
+          rows={rows}
           updatePhoneAction={updateGuestPhoneAction}
           dispatchBlocked={dispatchBlocked}
-          emptyMessage="Todavía no hay invitaciones a tu nombre."
-        />
-      </section>
-
-      <section
-        className="console__section flex scroll-mt-4 flex-col gap-4"
-        id="evento"
-      >
-        <h2>Todas las invitaciones del evento</h2>
-
-        <p className="max-w-[68ch] text-sm text-muted-foreground">
-          Este resumen abarca las invitaciones de ambas cuentas. Las filas de
-          abajo son las que gestiona la otra cuenta: se muestran para consulta y
-          no ofrecen acción de envío, porque el mensaje saldría de otra cuenta
-          de WhatsApp.
-        </p>
-
-        <ProgressSummary
-          heading="Resumen del evento completo"
-          metrics={scopedMetrics(
-            summarizeConsoleList(everything),
-            ALL_INVITATIONS_POPULATION,
-          )}
-        />
-
-        <GuestList
-          rows={theirs}
-          updatePhoneAction={updateGuestPhoneAction}
-          // Read-only regardless of the declaration: these households are in the
-          // other operator's partition, and `updateGuestPhoneAction` refuses
-          // them on the server anyway.
-          readOnly={true}
-          dispatchBlocked={true}
-          emptyMessage="La otra cuenta todavía no tiene invitaciones a su nombre."
+          emptyMessage="Todavía no hay invitaciones."
         />
       </section>
     </div>

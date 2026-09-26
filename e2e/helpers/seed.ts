@@ -99,7 +99,6 @@ export async function seedInvitation(options: {
    */
   ownerContactPhone?: string;
   /** ISO calendar day, or omitted for an invitation that never closes. */
-  rsvpDeadline?: string | null;
   guests: readonly SeededGuest[];
 }): Promise<SeededInvitation> {
   const db = await connect();
@@ -122,16 +121,10 @@ export async function seedInvitation(options: {
     const senderId = sender.rows[0].id;
 
     const invitation = await db.query<{ id: string }>(
-      `insert into invitations (slug, owner_sender_id, display_name, greeting_name, rsvp_deadline)
-       values ($1, $2, $3, $4, $5)
+      `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+       values ($1, $2, $3, $4)
        returning id`,
-      [
-        slug,
-        senderId,
-        displayName,
-        options.greetingName,
-        options.rsvpDeadline ?? null,
-      ],
+      [slug, senderId, displayName, options.greetingName],
     );
     const invitationId = invitation.rows[0].id;
 
@@ -175,9 +168,31 @@ export async function seedInvitation(options: {
       cleanup: async () => {
         const cleaner = await connect();
         try {
-          // User triggers are suspended for this session only: the child tables
-          // are append-only by trigger and would refuse their own teardown.
+          /*
+            User triggers are suspended for this session only: the child tables
+            are append-only by trigger and would refuse their own teardown.
+
+            AND THAT SUSPENDS THE FOREIGN KEYS TOO, which is the part that is
+            easy to miss. `session_replication_role = replica` disables EVERY
+            trigger, and referential integrity is implemented as triggers — so
+            nothing cascades while this block runs, and every child row this
+            teardown does not name by hand survives its parent.
+
+            It showed up as 547 `gate_attempts` rows pointing at invitations
+            that no longer existed, on a database where the cascade itself was
+            proven to work. Stale throttle records are not harmless: the gate
+            counts recent attempts per invitation and per IP, so leftovers can
+            rate-limit a real unlock.
+          */
           await cleaner.query("set session_replication_role = replica");
+          await cleaner.query(
+            "delete from gate_attempts where invitation_id = $1",
+            [invitationId],
+          );
+          await cleaner.query(
+            "delete from dispatch_events where invitation_id = $1",
+            [invitationId],
+          );
           await cleaner.query(
             "delete from rsvp_responses where invitation_id = $1",
             [invitationId],
@@ -257,8 +272,7 @@ export async function seededGuestIds(
 export interface SeededCeremony {
   readonly ceremonyDate: string;
   readonly ceremonyTime: string;
-  readonly streamMeetingId: string;
-  readonly streamPasscode: string;
+  readonly streamUrl: string;
 }
 
 /**
@@ -276,11 +290,8 @@ export async function readCeremony(): Promise<SeededCeremony> {
     const result = await db.query<{
       ceremony_date: string;
       ceremony_time: string;
-      stream_meeting_id: string;
-      stream_passcode: string;
-    }>(
-      "select ceremony_date, ceremony_time, stream_meeting_id, stream_passcode from ceremony",
-    );
+      stream_url: string;
+    }>("select ceremony_date, ceremony_time, stream_url from ceremony");
 
     if (result.rows.length !== 1) {
       throw new Error(
@@ -294,8 +305,7 @@ export async function readCeremony(): Promise<SeededCeremony> {
     return {
       ceremonyDate: row.ceremony_date,
       ceremonyTime: row.ceremony_time,
-      streamMeetingId: row.stream_meeting_id,
-      streamPasscode: row.stream_passcode,
+      streamUrl: row.stream_url,
     };
   } finally {
     await db.end();

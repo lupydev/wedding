@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
 import { InvitationBody } from "@/components/invitation/InvitationBody";
+import { PhotoStage } from "@/components/landing/PhotoStage";
+import { WEDDING_PHOTO } from "@/components/landing/photos";
 import { InvitationGate } from "@/components/invitation/InvitationGate";
 import { InvitationUnavailable } from "@/components/invitation/InvitationUnavailable";
 import { RsvpAnswer } from "@/components/invitation/RsvpAnswer";
@@ -85,7 +87,7 @@ export async function generateMetadata({
     description,
     robots,
     // `openGraph.images` is deliberately NOT set here. The
-    // `opengraph-image.tsx` file convention injects the absolute `og:image`
+    // `opengraph-image.ts` file convention injects the absolute `og:image`
     // plus its width and height; hand-writing the URL would be a second source
     // of truth that silently drifts from the route that serves the bytes.
     openGraph: {
@@ -117,7 +119,7 @@ export default async function InvitationPage({ params }: RouteParams) {
     // The deadline decides which surface the body gets, and it decides it on
     // the SERVER. A form rendered past the deadline and refused on submit is a
     // form a household fills in believing they answered.
-    const open = rsvpIsOpenNow(invitation.rsvpDeadline);
+    const open = rsvpIsOpenNow();
     const current = open ? await loadCurrentRsvp(record.id) : null;
     // Every wedding fact this page shows, from the one row that holds them.
     // Read unconditionally inside this branch rather than only when the RSVP is
@@ -128,7 +130,40 @@ export default async function InvitationPage({ params }: RouteParams) {
     const ceremony = await loadCeremony();
 
     return (
-      <main>
+      /*
+        THE SAME STAGE AS `/` AND `/transmision`, WITH THE OTHER PHOTOGRAPH.
+
+        The couple asked for the invitation in the landing's language, and the
+        three pages are read one after another — a guest lands here from a
+        message, and may walk to the stream page from inside it — so the dark
+        ground, the blurred backdrop and the framed print have to be the same
+        object rather than three that happen to match today.
+
+        `band`, NOT `overlay`, and for two independent reasons. The wedding
+        photograph is 0.75:1: filling a phone viewport with it discards about
+        38% of the width and clips both people, who stand left and right of
+        centre. And this page carries a form — a radio group, a checkbox per
+        member and a free-text field — which is far more than can be laid over
+        a photograph, the same measurement that put the stream invitation in a
+        band before it.
+      */
+      <PhotoStage
+        mobilePhoto="band"
+        /*
+          THE GREETING GOES ON THE PHOTOGRAPH, ON A PHONE.
+
+          `InvitationBody` renders the same line for a laptop, where the
+          photograph is a framed print and type over it would be a different
+          design. Passed from here rather than from inside the body, because the
+          stage is what owns the photograph's cell.
+        */
+        overPhoto={
+          <h2 className="font-display text-3xl leading-[1.05] text-balance text-[#f6efe2] [text-shadow:0_2px_24px_rgba(0,0,0,0.65)] sm:text-4xl">
+            ¡Hola, {invitation.greetingName}!
+          </h2>
+        }
+        photo={WEDDING_PHOTO}
+      >
         <InvitationBody
           invitation={invitation}
           wedding={ceremony}
@@ -138,6 +173,16 @@ export default async function InvitationPage({ params }: RouteParams) {
               // supplies it, so a client cannot aim an RSVP at another
               // household.
               <RsvpAnswer
+                /*
+                  The place and its address reach the FORM rather than the
+                  body, because only a household that says it is coming is
+                  told where to go. `InvitationBody` is a Server Component and
+                  cannot see that answer.
+                */
+                venue={{
+                  name: ceremony.venueName,
+                  address: ceremony.venueAddress,
+                }}
                 guests={invitation.guests}
                 current={
                   current === null
@@ -162,7 +207,7 @@ export default async function InvitationPage({ params }: RouteParams) {
             )
           }
         />
-      </main>
+      </PhotoStage>
     );
   }
 
@@ -178,7 +223,19 @@ export default async function InvitationPage({ params }: RouteParams) {
   }
 
   return (
-    <main>
+    /*
+      THE GATE STANDS ON THE SAME STAGE, AND IT HAS TO.
+
+      It is the FIRST thing every guest sees and the invitation is one tap
+      behind it — read a second apart. Undesigned it was black text on white
+      while the page behind it stood on a photograph, which reads as two
+      different weddings.
+
+      `band` here too, for the photograph's sake rather than the word count's:
+      the gate's few lines would have fitted over the picture, but at 0.75:1 a
+      phone-filling crop discards about 38% of the width and clips both people.
+    */
+    <PhotoStage mobilePhoto="band" photo={WEDDING_PHOTO}>
       <InvitationGate
         greetingName={invitation.greetingName}
         recoveryHref={buildGateRecoveryLink(
@@ -190,6 +247,6 @@ export default async function InvitationPage({ params }: RouteParams) {
             client cannot aim the unlock at a different household. */}
         <GateForm action={unlockAction.bind(null, slug)} />
       </InvitationGate>
-    </main>
+    </PhotoStage>
   );
 }

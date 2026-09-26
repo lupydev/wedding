@@ -76,8 +76,7 @@ const INSERT_PAYLOADS: Record<OwnedTable, object> = {
   ceremony: {
     ceremony_date: "fecha intrusa",
     ceremony_time: "hora intrusa",
-    stream_meeting_id: "id intruso",
-    stream_passcode: "clave intrusa",
+    stream_url: "https://meet.google.com/int-ruso-xxx",
   },
 };
 
@@ -89,9 +88,10 @@ const UPDATE_PAYLOADS: Record<OwnedTable, object> = {
   dispatch_events: { kind: "marked_sent" },
   rsvp_responses: { attending: false },
   gate_attempts: { succeeded: true },
-  // The passcode is the value an attacker would actually want to change: a
-  // stream everyone can reach is the same outage as a stream nobody can.
-  ceremony: { stream_passcode: "clave intrusa" },
+  // The stream address is the value an attacker would actually want to change:
+  // a ceremony that opens somewhere else is the same outage as one nobody can
+  // reach, and it is the one field a guest follows without reading.
+  ceremony: { stream_url: "https://meet.google.com/int-ruso-xxx" },
 };
 
 const SLUG_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
@@ -325,13 +325,15 @@ test.describe("RLS invariants held against the publishable key", () => {
       });
 
       // The ceremony row is a singleton nothing above may have touched: still
-      // exactly one row, and still not the passcode the anon key tried to set.
-      const ceremony = await db.query<{ stream_passcode: string }>(
-        "select stream_passcode from ceremony",
+      // exactly one row, and still not the address the anon key tried to set.
+      const ceremony = await db.query<{ stream_url: string }>(
+        "select stream_url from ceremony",
       );
 
       expect(ceremony.rows).toHaveLength(1);
-      expect(ceremony.rows[0].stream_passcode).not.toBe("clave intrusa");
+      expect(ceremony.rows[0].stream_url).not.toBe(
+        "https://meet.google.com/int-ruso-xxx",
+      );
     } finally {
       await db.end();
     }

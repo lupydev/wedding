@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { CONSOLE_GUESTS_PATH } from "@/lib/domain/operator-session";
 import { CONSOLE_WEDDING_PATH } from "@/lib/domain/wedding-facts";
 
 import {
@@ -47,6 +48,26 @@ describe("CONSOLE_NAV_ITEMS", () => {
   it("fits on one bar, so there is no overflow sheet to hide a destination in", () => {
     expect(CONSOLE_NAV_ITEMS.length).toBeGreaterThanOrEqual(3);
     expect(CONSOLE_NAV_ITEMS.length).toBeLessThanOrEqual(5);
+  });
+
+  /**
+   * THE DIRECTORY IS A DESTINATION, AND IT TAKES THE FIFTH SEAT.
+   *
+   * The couple's words were "no veo la lista de invitados por ninguna parte".
+   * It was not hidden — it did not exist, because a guest could not be stored
+   * outside a household until migration 0015. Now that people exist in their
+   * own right they need a door, and a door nothing points at is the defect
+   * this bar was rebuilt to fix.
+   *
+   * This is the fifth tab and therefore the LAST one. The ceiling above is not
+   * decoration: a sixth needs an overflow sheet, and an overflow sheet is
+   * where a destination goes to be forgotten.
+   */
+  it("offers the guest directory, and fills the last seat doing it", () => {
+    expect(CONSOLE_NAV_ITEMS.map((item) => item.href)).toContain(
+      CONSOLE_GUESTS_PATH,
+    );
+    expect(CONSOLE_NAV_ITEMS).toHaveLength(5);
   });
 
   it("labels every destination in the operator's language", () => {

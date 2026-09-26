@@ -43,7 +43,6 @@ export interface InvitationDraft {
   readonly greetingNameSource: GreetingNameSource;
   readonly members: readonly InvitationDraftMember[];
   readonly dispatchRecipientGuestId: string | null;
-  readonly rsvpDeadline: string | null;
 }
 
 /** A state the model does not permit. The save does not happen. */
@@ -52,7 +51,18 @@ export type DraftRefusal =
   | "member_without_name"
   | "duplicate_member_id"
   | "recipient_not_a_member"
-  | "custom_name_empty";
+  | "custom_name_empty"
+  /**
+   * A guest the directory was offering turned out to belong to somebody else.
+   *
+   * Not a field that is wrong — a state that stopped being true while the form
+   * was open. Two operators on two phones look at two renders of the same
+   * list, and `placeGuestInInvitation` refuses the loser inside the UPDATE
+   * itself. It lives in this vocabulary because the form already translates
+   * these codes and a missing translation is a compile error, which is the one
+   * mechanism that stops a refusal reaching an operator as silence.
+   */
+  | "guest_already_invited";
 
 /** A fact worth showing. The save happens regardless. */
 export type DraftAdvisory =

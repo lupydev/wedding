@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ConsoleListRow } from "@/lib/domain/console-list";
+import { CONSOLE_NEW_INVITATION_PATH } from "@/lib/domain/operator-session";
 
 import { GuestList } from "./GuestList";
 
@@ -29,7 +30,6 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
     memberCount: 3,
-    rsvpDeadline: null,
     ownerSenderId: ANA,
     ownerDisplayName: "Ana Operadora",
     ownedByViewer: true,
@@ -43,6 +43,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
       {
         id: "g1",
         fullName: "Ana Muñóz",
+        nickname: "Anita",
         isChild: false,
         phoneE164: "+573001234567",
         lineType: "mobile",
@@ -51,6 +52,7 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
       {
         id: "g2",
         fullName: "Niña Muñóz",
+        nickname: null,
         isChild: true,
         phoneE164: null,
         lineType: "not_normalizable",
@@ -101,7 +103,7 @@ describe("GuestList", () => {
     renderList([row()]);
 
     expect(
-      screen.getByRole("link", { name: /Preparar envío/i }),
+      screen.getByRole("link", { name: /Enviar la invitación/i }),
     ).toBeInTheDocument();
   });
 
@@ -114,7 +116,9 @@ describe("GuestList", () => {
       }),
     ]);
 
-    expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Enviar la invitación/i }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: /enviar/i })).toBeNull();
     expect(screen.getByText("Gestiona Beto Operador")).toBeInTheDocument();
   });
@@ -122,7 +126,9 @@ describe("GuestList", () => {
   it("withdraws the send affordance from every row while the device declaration blocks it", () => {
     renderList([row()], { dispatchBlocked: true });
 
-    expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Enviar la invitación/i }),
+    ).toBeNull();
   });
 
   /**
@@ -175,7 +181,9 @@ describe("GuestList", () => {
   it("keeps the body preview while the device declaration blocks sending", () => {
     renderList([row()], { dispatchBlocked: true });
 
-    expect(screen.queryByRole("link", { name: /Preparar envío/i })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Enviar la invitación/i }),
+    ).toBeNull();
     expect(
       screen.getByRole("link", { name: /Ver la invitación/i }),
     ).toBeInTheDocument();
@@ -269,7 +277,7 @@ describe("GuestList", () => {
 
     expect(container.querySelectorAll("[data-row-menu]")).toHaveLength(0);
     expect(
-      screen.getAllByRole("link", { name: /Preparar envío/i }),
+      screen.getAllByRole("link", { name: /Enviar la invitación/i }),
     ).toHaveLength(3);
   });
 });
@@ -322,7 +330,7 @@ describe("GuestList — who receives the message, and how to change it", () => {
     renderList([row({ dispatchRecipientGuestId: null })]);
 
     expect(
-      screen.getByRole("link", { name: /Editar invitación/i }),
+      screen.getByRole("link", { name: /Editar la invitación/i }),
     ).toHaveAttribute(
       "href",
       "/console/invitations/11111111-1111-4111-8111-111111111111/edit",
@@ -345,7 +353,7 @@ describe("GuestList — who receives the message, and how to change it", () => {
     ]);
 
     expect(
-      screen.queryByRole("link", { name: /Editar invitación/i }),
+      screen.queryByRole("link", { name: /Editar la invitación/i }),
     ).toBeNull();
   });
 
@@ -353,7 +361,7 @@ describe("GuestList — who receives the message, and how to change it", () => {
     renderList([row()], { readOnly: true });
 
     expect(
-      screen.queryByRole("link", { name: /Editar invitación/i }),
+      screen.queryByRole("link", { name: /Editar la invitación/i }),
     ).toBeNull();
   });
 });
@@ -382,6 +390,7 @@ describe("GuestList — an answer the household no longer agrees with", () => {
         {
           id: "g1",
           fullName: "Ana Muñóz",
+          nickname: null,
           isChild: false,
           phoneE164: "+573001234567",
           lineType: "mobile",
@@ -466,12 +475,33 @@ describe("GuestList — an answer the household no longer agrees with", () => {
 describe("GuestList — the console can create an invitation now", () => {
   // The importer is no longer the only door, and the empty state used to say it
   // was. An operator reading that has no reason to look for another way in.
-  it("links to the create form", () => {
-    renderList([row()]);
+  /**
+   * THE CREATE LINK STAYS IN THE EMPTY STATE AND NOWHERE ELSE IN THIS LIST.
+   *
+   * It used to render in both branches, which put two of them on the console
+   * home — one under the operator's own households and one under the read-only
+   * list of the other account's, where every other control had been withdrawn
+   * on purpose. Both sat below a scrolling list, so the more invitations
+   * existed the further the way to make another one scrolled off.
+   *
+   * Creation lives in the console header now, above the fold on every page.
+   * Here it belongs only where the list is empty: that screen's whole job is to
+   * offer the exit, and the operator's eye is already on it.
+   */
+  it("offers the create form from the empty state", () => {
+    renderList([]);
 
     expect(
       screen.getByRole("link", { name: /Crear invitación/i }),
-    ).toHaveAttribute("href", "/console/invitations/new");
+    ).toHaveAttribute("href", CONSOLE_NEW_INVITATION_PATH);
+  });
+
+  it("does not repeat it under a list that already has rows", () => {
+    renderList([row()]);
+
+    expect(
+      screen.queryByRole("link", { name: /Crear invitación/i }),
+    ).toBeNull();
   });
 
   it("points the empty state at creating one instead of at the importer", () => {
@@ -491,5 +521,98 @@ describe("GuestList — the console can create an invitation now", () => {
     expect(
       screen.getByRole("link", { name: /Crear invitación/i }),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * ONE LIST NOW CARRIES BOTH PARTITIONS, SO THE TWO GUARDS MUST AGREE PER ROW.
+   *
+   * The console home used to render two lists: the operator's own, and a second
+   * one over the other account's households passed `readOnly`. The guards for
+   * the edit link and the inline phone editor were therefore never in conflict,
+   * and `GuestList`'s own comment said so — "the only caller passes it together
+   * with rows the viewer does not own… which is exactly why leaving one out
+   * would go unnoticed until they did."
+   *
+   * Merging the lists is when they disagree. A row the viewer does not own must
+   * offer no phone editor even in a list that is not read-only, because
+   * `updateGuestPhoneAction` refuses it on the server — and a control that is
+   * always refused is worse than no control.
+   */
+  describe("a list holding both partitions", () => {
+    it("offers no phone editor on a row the viewer does not own", () => {
+      renderList([row({ ownedByViewer: false, ownerDisplayName: "Beto" })]);
+
+      expect(
+        screen.queryByRole("button", { name: /Editar el número/i }),
+      ).toBeNull();
+    });
+
+    it("still offers it on a row the viewer owns", () => {
+      renderList([row({ ownedByViewer: true })]);
+
+      // One per guest: the fixture household names two of them.
+      expect(
+        screen.getAllByRole("button", { name: /Editar el número/i }),
+      ).toHaveLength(2);
+    });
+
+    it("withdraws both doors together on a row the viewer does not own", () => {
+      renderList([row({ ownedByViewer: false, ownerDisplayName: "Beto" })]);
+
+      expect(
+        screen.queryByRole("link", { name: /Editar la invitación/i }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /Editar el número/i }),
+      ).toBeNull();
+    });
+
+    it("keeps a fully read-only list read-only, even for owned rows", () => {
+      renderList([row({ ownedByViewer: true })], { readOnly: true });
+
+      expect(
+        screen.queryByRole("button", { name: /Editar el número/i }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("link", { name: /Editar la invitación/i }),
+      ).toBeNull();
+    });
+  });
+});
+
+/**
+ * THE NICKNAME, WHICH THIS SCREEN NEVER SHOWED.
+ *
+ * The couple reported "le puse apodo, sin embargo en la creación de la
+ * invitación no registró el apodo". It WAS registered: the member row holds it
+ * and the invitation's greeting is derived from it, both proven against the
+ * database. What was true is that `CONSOLE_GUEST_COLUMNS` never selected the
+ * column and this component never rendered it — so on the one screen they spend
+ * their time on, a nickname they had typed was invisible, which from the
+ * outside cannot be told apart from not having been saved.
+ *
+ * It is shown beside the full name rather than instead of it. The nickname is
+ * what the greeting says; the full name is who the person is, and a list that
+ * showed only "Anita" would stop being a list you can check against reality.
+ */
+describe("a member's nickname", () => {
+  it("is shown beside the name it belongs to", () => {
+    renderList([row()]);
+
+    const member = screen
+      .getByText("Ana Muñóz", { selector: ".guest-list__guest-name" })
+      .closest("li")!;
+
+    expect(within(member).getByText(/Anita/)).toBeInTheDocument();
+  });
+
+  it("shows nothing extra for a member who has none", () => {
+    renderList([row()]);
+
+    const member = screen
+      .getByText("Niña Muñóz", { selector: ".guest-list__guest-name" })
+      .closest("li")!;
+
+    expect(within(member).queryByText(/Anita/)).toBeNull();
   });
 });

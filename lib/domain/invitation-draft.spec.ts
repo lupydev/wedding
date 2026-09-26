@@ -49,7 +49,6 @@ function draft(overrides: Partial<InvitationDraft> = {}): InvitationDraft {
     greetingNameSource: "derived",
     members: [member()],
     dispatchRecipientGuestId: null,
-    rsvpDeadline: null,
     ...overrides,
   };
 }

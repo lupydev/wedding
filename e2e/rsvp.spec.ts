@@ -77,7 +77,7 @@ function submit(page: Page) {
  * test that relies on the behaviour fails together.
  */
 function decline(page: Page) {
-  return page.getByRole("radio", { name: /No podremos acompañarlos/ }).check();
+  return page.getByRole("radio", { name: /No podemos acompañarlos/ }).check();
 }
 
 function accept(page: Page) {
@@ -85,7 +85,14 @@ function accept(page: Page) {
 }
 
 function streamCard(page: Page) {
-  return page.getByRole("group", { name: /transmisión/i });
+  /*
+    BY TEST HOOK, NOT BY A NAMED GROUP.
+
+    It WAS a `dl role="group"` called "Detalles de la transmisión", because it
+    held a meeting id and a passcode with their labels. It holds one link now,
+    which carries its own accessible name and needs no grouping.
+  */
+  return page.getByTestId("stream-details");
 }
 
 function rsvpAlert(page: Page) {
@@ -111,11 +118,10 @@ test.describe("answering the invitation", () => {
     await unlock(page, invitation);
 
     await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
-    await attendeeBox(page, GUEST_ONE).check();
-    await attendeeBox(page, GUEST_TWO).check();
-    await page
-      .getByLabel(/Restricciones alimentarias/)
-      .fill("Sara no come mariscos.");
+    // Everybody starts checked, so two seats means UNCHECKING the third. The
+    // property under test is unchanged: the count is derived from the names,
+    // never typed.
+    await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);
 
     await expect(rsvpAlert(page)).toContainText(
@@ -129,7 +135,16 @@ test.describe("answering the invitation", () => {
     // Never typed, always counted: two names, two seats.
     expect(history[0].seatsConfirmed).toBe(2);
     expect(history[0].attendeeGuestIds).toHaveLength(2);
-    expect(history[0].dietaryNotes).toBe("Sara no come mariscos.");
+    /*
+      NULL, BECAUSE THERE IS NOTHING LEFT TO TYPE.
+
+      The dietary field was removed on the couple's instruction. The COLUMN
+      stays: `formData.get` yields null for a field the form no longer has, the
+      payload schema accepts that, and the row records it as null. Asserted
+      rather than dropped, so a field quietly reappearing — or the column
+      starting to store the empty string instead — is reported here.
+    */
+    expect(history[0].dietaryNotes).toBeNull();
   });
 
   test("shows the household what they already answered", async ({ page }) => {
@@ -187,11 +202,33 @@ test.describe("answering the invitation", () => {
 
     // Nothing preselected: a mis-tap must not be one tap from repeating itself.
     await expect(
-      page.getByRole("radio", { name: /No podremos acompañarlos/ }),
+      page.getByRole("radio", { name: /No podemos acompañarlos/ }),
     ).not.toBeChecked();
 
     await accept(page);
-    await attendeeBox(page, GUEST_ONE).check();
+    /*
+      ONE SEAT, SO THE OTHER TWO COME OFF.
+
+      Reconsidering opens with the whole household coming. A recorded decline
+      names NOBODY — it confirms zero seats by construction — so seeding the
+      boxes from it used to leave them empty, which is the friction this default
+      removes in exactly the case where somebody is changing their mind.
+    */
+    /*
+      ASSERTED POSITIVELY, BEFORE ANYTHING IS TOUCHED.
+
+      `uncheck()` is satisfied by the state it wants, so on a box that is
+      already off it is a silent no-op. Left to the two calls below, a default
+      that regressed to empty would pass both of them and fail only later and
+      indirectly, through the seat count — which is the shape of a test that
+      cannot say what broke.
+    */
+    for (const guest of [GUEST_ONE, GUEST_TWO, GUEST_THREE]) {
+      await expect(attendeeBox(page, guest)).toBeChecked();
+    }
+
+    await attendeeBox(page, GUEST_TWO).uncheck();
+    await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);
 
     await expect(rsvpAlert(page)).toContainText(
@@ -265,10 +302,54 @@ test.describe("declining and the ceremony stream", () => {
 
     const card = streamCard(page);
 
-    await expect(card).toContainText(ceremony.ceremonyDate);
-    await expect(card).toContainText(ceremony.ceremonyTime);
-    await expect(card).toContainText(ceremony.streamMeetingId);
-    await expect(card).toContainText(ceremony.streamPasscode);
+    /*
+      THE WAY IN, AND DELIBERATELY NOT THE DAY OR THE HOUR.
+
+      The block sits inside the invitation, under an announcement that names
+      the day and counts down to it and a details list that states it again: a
+      third statement is noise, not reassurance.
+
+      The address is not printed either, since the couple removed it once this
+      control existed. Where the control POINTS is the assertion — and it is
+      the stronger one, because a button labelled correctly and aimed at the
+      wrong address would have passed a text check.
+    */
+    /*
+      WHAT THE BLOCK SHOWS FOR THE ROW AS IT STANDS, WHICH IS THE SEEDED
+      MARKER.
+
+      This asserted the address as TEXT and passed for a reason that was not
+      about the product: the seeded value is an unfinished marker, and the
+      marker was printed. It never exercised a real address at all.
+
+      Nothing here sets one, deliberately — the comment above this describe
+      block explains that this file does not touch the singleton. The real
+      address IS exercised, in the two places that can: `StreamDetails.spec.tsx`
+      renders a joinable value directly, and `console-wedding.spec.ts` edits the
+      row and then reads the control's `href` from a guest's page.
+    */
+    /*
+      EITHER FORM, BECAUSE THIS FILE DOES NOT OWN THE ROW.
+
+      The block shows the address as a CONTROL when the row holds a real one and
+      as TEXT while it still holds the seeded marker. This test asserted the text
+      form only, which made it pass or fail on whether somebody had filled the
+      row in — and an aborted `wedding-facts` run, which edits that row, is
+      enough to leave a real address behind.
+
+      What is true either way: the way in is on the card, carrying the value the
+      row holds.
+    */
+    const joinable = ceremony.streamUrl.startsWith("https://");
+
+    if (joinable) {
+      await expect(
+        card.getByRole("link", { name: /Entrar a la transmisión/ }),
+      ).toHaveAttribute("href", ceremony.streamUrl);
+    } else {
+      await expect(card).toContainText(ceremony.streamUrl);
+    }
+    await expect(card).not.toContainText(ceremony.ceremonyTime);
 
     // Not a form beside the card, and not a disabled copy of it. No form.
     await expect(page.locator("form.rsvp__form")).toHaveCount(0);
@@ -330,11 +411,23 @@ test.describe("the seat cap", () => {
 
     // Nor a message box. The guest reached this page from their own WhatsApp
     // thread with the couple, so a free-text field here competes with the chat
-    // they are already in — and loses. `dietary_notes` stays, because that is
-    // operational data the catering needs rather than a message.
+    // they are already in — and loses.
+    //
+    // NOR ANY OTHER BOX TO TYPE IN. The dietary field was the last one, and the
+    // couple removed it; asserting no textbox at all is stronger than naming
+    // the two that used to be absent.
     await expect(page.getByLabel(/Mensaje/i)).toHaveCount(0);
+    await expect(page.getByRole("textbox")).toHaveCount(0);
+    /*
+      AND NOT AS A HIDDEN FIELD EITHER.
+
+      `getByRole("textbox")` covers what a guest can see and type into, and the
+      named-field check was dropped when it replaced it — but a `message` field
+      smuggled in as `type="hidden"` has no role and would have passed. It is
+      the shape a free-text field would most plausibly come back in.
+    */
     await expect(page.locator('[name="message"]')).toHaveCount(0);
-    await expect(page.getByLabel(/Restricciones alimentarias/)).toBeVisible();
+    await expect(page.locator('[name="dietaryNotes"]')).toHaveCount(0);
   });
 
   test("refuses a submission naming somebody from another household", async ({
@@ -351,6 +444,17 @@ test.describe("the seat cap", () => {
 
       await unlock(page, invitation);
       await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+      /*
+        ROOM IS MADE FIRST, AND THAT IS WHAT KEEPS THIS TEST ABOUT OWNERSHIP.
+
+        A fresh answer now opens with every member checked, so appending a
+        stranger would put the payload OVER the household's allowance — and the
+        seat cap would refuse it before ownership was ever considered, with a
+        different message. Unchecking one member leaves a payload that is
+        well-formed and within the cap, and still names somebody this
+        invitation does not.
+      */
+      await attendeeBox(page, GUEST_THREE).uncheck();
       await page.evaluate((guestId) => {
         const injected = document.createElement("input");
         injected.type = "hidden";
@@ -372,61 +476,64 @@ test.describe("the seat cap", () => {
 });
 
 test.describe("the RSVP deadline", () => {
-  test("shows a contact message instead of the form once it has passed", async ({
+  /*
+    THE CLOSED SURFACE CANNOT BE REACHED FROM A BROWSER TEST ANY MORE, AND THAT
+    IS A REAL LOSS, RECORDED RATHER THAN HIDDEN.
+
+    This test seeded a household with `rsvpDeadline: "2020-01-01"` and asserted
+    the page showed "Ya cerramos las confirmaciones" and no form. There is one
+    deadline for the whole wedding now — the couple asked for exactly that, so
+    they would stop typing the same date into every invitation — and it is one
+    week before a date in the future. No fixture can be past it, and the browser
+    cannot help: the decision is made on the SERVER, from the server's own
+    clock, so `page.clock` reaches nothing.
+
+    What survives, and where: the closed surface itself is asserted in
+    `components/invitation/RsvpClosed.spec.tsx` — the message, and that there is
+    nothing to fill in and nothing to submit. The decision is asserted in
+    `lib/domain/rsvp-deadline.spec.ts` and `lib/server/rsvp.spec.ts`, over
+    explicit instants either side of the deadline, including the Bogota
+    end-of-day boundary this project exists to get right.
+
+    What is NOT covered any more is the wiring between them: that
+    `app/i/[slug]/page.tsx` picks the closed branch. One `if`, reachable again
+    the week of the wedding, and the honest thing is to say so here rather than
+    leave a reader to notice the gap.
+  */
+
+  /*
+    AND NOW THE OTHER TWO PREMISES ARE GONE TOO, FOR THE SAME REASON.
+
+    This block held two more tests: one seeding a household whose deadline was
+    TODAY, and one seeding a household with NO deadline. Migration 0016 dropped
+    `invitations.rsvp_deadline`, so neither state can be constructed any more —
+    an invitation cannot carry its own date, and it cannot lack one either. The
+    wedding has exactly one deadline and every invitation reads it.
+
+    The Bogota end-of-day rule those tests were really about is asserted over
+    explicit instants either side of the boundary in
+    `lib/domain/rsvp-deadline.spec.ts` and `lib/server/rsvp.spec.ts`, which is
+    where a clock can actually be controlled.
+
+    What is left here is the one thing only a browser proves: that
+    `app/i/[slug]/page.tsx` reads that constant and takes the OPEN branch. The
+    closed branch stays unreachable from this suite — the decision is made on
+    the server, from the server's own clock, so `page.clock` reaches nothing.
+  */
+  test("accepts an answer while the wedding's deadline is still ahead", async ({
     page,
   }) => {
-    const invitation = await household({ rsvpDeadline: "2020-01-01" });
-
-    try {
-      await unlock(page, invitation);
-
-      await expect(
-        page.getByText(/Ya cerramos las confirmaciones/),
-      ).toBeVisible();
-      // Not a disabled form. No form.
-      await expect(page.locator("form.rsvp__form")).toHaveCount(0);
-      await expect(
-        page.getByRole("button", { name: "Enviar respuesta" }),
-      ).toHaveCount(0);
-    } finally {
-      await invitation.cleanup();
-    }
-  });
-
-  test("accepts an answer on the deadline day itself", async ({ page }) => {
-    // The Bogota day-end rule, end to end: the invitation stays open through
-    // the whole of the chosen day where the wedding is.
-    const today = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Bogota",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
-    const invitation = await household({ rsvpDeadline: today });
-
-    try {
-      await unlock(page, invitation);
-
-      await decline(page);
-
-      await expect(streamCard(page)).toBeVisible();
-      await expect(invitation.responseHistory()).resolves.toHaveLength(1);
-    } finally {
-      await invitation.cleanup();
-    }
-  });
-
-  test("accepts an answer when the invitation has no deadline at all", async ({
-    page,
-  }) => {
-    const invitation = await household({ rsvpDeadline: null });
+    const invitation = await household();
 
     try {
       await unlock(page, invitation);
 
       await expect(page.locator("form.rsvp__form")).toBeVisible();
       await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
-      await attendeeBox(page, GUEST_ONE).check();
+      // One seat, so the other two come off: a fresh answer opens with the whole
+      // household coming.
+      await attendeeBox(page, GUEST_TWO).uncheck();
+      await attendeeBox(page, GUEST_THREE).uncheck();
       await submit(page);
 
       await expect(rsvpAlert(page)).toContainText(
@@ -472,5 +579,142 @@ test.describe("answering without a session", () => {
     } finally {
       await invitation.cleanup();
     }
+  });
+});
+
+/**
+ * THE INVITATION STANDS ON THE SAME STAGE AS THE LANDING.
+ *
+ * The couple: "podemos seguir manejando el mismo estilo de la landing pero
+ * utilicemos ahora la imagen de la boda dentro de img."
+ *
+ * `/` and `/transmision` already share `PhotoStage` — the dark ground, the
+ * blurred backdrop, the framed print. This is the third page to stand on it,
+ * and the first with a different photograph, which is what made the stage take
+ * one as a parameter rather than contain it.
+ */
+test.describe("the invitation's own stage", () => {
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  test("shows the wedding photograph, framed", async ({ page }) => {
+    await unlock(page, invitation);
+
+    const print = page.locator("figure.photo-stage__frame img").first();
+
+    await expect(print).toBeVisible();
+    // Through the optimizer, so the query string is what carries the file.
+    await expect(print).toHaveAttribute("src", /boda/);
+  });
+
+  /**
+   * AND THE FRAME IS SHAPED BY THE FILE, NOT BY A LITERAL.
+   *
+   * 1800×2400. A frame drawn at the engagement photograph's 737×1600 would not
+   * fail loudly — it would crop this picture to fit and look deliberate, with
+   * the two people cut off at the sides.
+   *
+   * A SINGLE DECIMAL, NOT `1800 / 2400`, and the difference is load-bearing.
+   * The same number caps the frame's width inside a `calc()` — `min(100%,
+   * 86dvh × ratio)` — and a fraction cannot be multiplied there. It used to be
+   * the fraction, back when the height was the given and the ratio only ever
+   * reached `aspect-ratio`.
+   */
+  test("frames it at its own shape", async ({ page }) => {
+    await unlock(page, invitation);
+
+    await expect(page.locator("figure.photo-stage__frame")).toHaveCSS(
+      "--photo-stage-ratio",
+      "0.75",
+    );
+  });
+
+  /**
+   * THE WORDS ARE ON THE DARK GROUND, NOT ON A PAGE OF THEIR OWN.
+   *
+   * The stage paints `#0d1114` behind everything — its own comment calls a
+   * white flash "the only visible failure" on a page this dark. If the
+   * invitation rendered outside it, this would come back white.
+   */
+  test("stands on the dark ground the landing uses", async ({ page }) => {
+    await unlock(page, invitation);
+
+    await expect(page.locator("main.photo-stage")).toHaveCSS(
+      "background-color",
+      "rgb(13, 17, 20)",
+    );
+  });
+});
+
+/**
+ * ON A LAPTOP THE PHOTOGRAPH STAYS WITH THE READER.
+ *
+ * The couple: "hay que organizar el ui para que no colapsen y se vea feo en
+ * desktop en ambas pantallas de la invitación."
+ *
+ * What was ugly was measurable. On a 760px-tall window the invitation is about
+ * 1190px long, and the grid centred a 86dvh print inside that taller row — so
+ * the picture floated in the middle with roughly 270px of black above and
+ * below it, and on arrival a guest saw the top of the words and only the top
+ * third of the photograph. The two people in it were below the fold on the one
+ * page that is about them.
+ *
+ * The print sticks now. It cannot simply be `position: sticky`: the stage's
+ * `main` carried `overflow-hidden` to clip the scaled backdrop, and an
+ * `overflow` ancestor makes a sticky element stick to a container that does not
+ * scroll — which is to say, to nothing. The clip moved onto the backdrop, which
+ * is the only thing that ever needed it.
+ */
+test.describe("the invitation on a laptop", () => {
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  test("keeps the photograph in view while the form is read", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 760 });
+    await unlock(page, invitation);
+
+    const print = page.locator("figure.photo-stage__frame");
+    const viewport = page.viewportSize()!;
+
+    /*
+      ACCEPTED FIRST, WHICH IS ALSO THE FORM AT ITS LONGEST.
+
+      The question opens the rest of the form now, so the submit button does
+      not exist until somebody answers it — and this test wants the far end of
+      the longest version, which is the one with the attendee list on screen.
+    */
+    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+
+    // Down to the submit button, which is the far end of the form.
+    await page
+      .getByRole("button", { name: "Enviar respuesta" })
+      .scrollIntoViewIfNeeded();
+
+    const box = await print.boundingBox();
+
+    expect(box).not.toBeNull();
+    // Still on screen: its top is above the fold and its bottom below the top.
+    expect(box!.y).toBeLessThan(viewport.height);
+    expect(box!.y + box!.height).toBeGreaterThan(0);
+    // And most of it is visible, not a sliver.
+    const visible =
+      Math.min(box!.y + box!.height, viewport.height) - Math.max(box!.y, 0);
+    expect(visible).toBeGreaterThan(viewport.height * 0.7);
   });
 });

@@ -17,7 +17,6 @@ describe("ConsoleHeader", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        devicePath="/console/device"
         signOutPath="/console/auth/sign-out"
       />,
     );
@@ -31,7 +30,6 @@ describe("ConsoleHeader", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        devicePath="/console/device"
         signOutPath="/console/auth/sign-out"
       />,
     );
@@ -41,27 +39,55 @@ describe("ConsoleHeader", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers the device declaration as a link, so it survives without JavaScript", () => {
+  /**
+   * CREATION IS A DESTINATION, NOT A BUTTON AT THE FOOT OF A LIST.
+   *
+   * It used to exist only inside `GuestList`, below every household already on
+   * screen, and nothing in the navigation pointed at it — so the more
+   * invitations an operator had, the further the way to make another one
+   * scrolled off. Here it is above the fold on every console page.
+   *
+   * A link rather than a button, so it works with no JavaScript, like every
+   * other destination in this header.
+   */
+  it("leaves creating an invitation to the navigation", () => {
     render(
       <ConsoleHeader
-        operatorDisplayName="Ana Operadora"
-        devicePath="/console/device"
+        operatorDisplayName="Michell"
         signOutPath="/console/auth/sign-out"
       />,
     );
 
-    expect(
-      screen.getByRole("link", {
-        name: "Cambiar la cuenta de WhatsApp de este dispositivo",
-      }),
-    ).toHaveAttribute("href", "/console/device");
+    // It lived here for one commit, between the foot of a scrolling list and
+    // the nav. Two doors to one screen is the pattern this console is losing
+    // everywhere else.
+    expect(screen.queryByRole("link", { name: "Nueva invitación" })).toBeNull();
+  });
+
+  /**
+   * AND THE DEVICE LINK IS GONE, WHICH WAS THE FOURTH DOOR TO ONE SCREEN.
+   *
+   * `/console/device` still has a nav tab, a forced redirect when no
+   * declaration exists, and a red interstitial above every page when the
+   * declaration does not match. A permanent header link asking the operator to
+   * change their WhatsApp account, on every page, was one door too many for a
+   * question answered once per handset.
+   */
+  it("no longer asks about the WhatsApp account on every page", () => {
+    render(
+      <ConsoleHeader
+        operatorDisplayName="Michell"
+        signOutPath="/console/auth/sign-out"
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: /dispositivo/i })).toBeNull();
   });
 
   it("offers sign-out as a link with the name the rest of the suite depends on", () => {
     render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        devicePath="/console/device"
         signOutPath="/console/auth/sign-out"
       />,
     );
@@ -79,7 +105,6 @@ describe("ConsoleHeader", () => {
     const { container } = render(
       <ConsoleHeader
         operatorDisplayName="Ana Operadora"
-        devicePath="/console/device"
         signOutPath="/console/auth/sign-out"
       />,
     );

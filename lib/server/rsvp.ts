@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import type { RsvpFailureReason } from "@/lib/domain/rsvp-copy";
+import { RSVP_DEADLINE } from "@/lib/domain/wedding-day";
 import { isRsvpOpen } from "@/lib/domain/rsvp-deadline";
 import { validateRsvpSelection } from "@/lib/domain/seats";
 
@@ -123,7 +124,6 @@ export interface RsvpStore {
 export interface RsvpTarget {
   readonly id: string;
   /** ISO calendar day, or `null` for an invitation that never closes. */
-  readonly rsvpDeadline: string | null;
   /** Every guest named on this invitation. Nobody else may be seated. */
   readonly guestIds: readonly string[];
 }
@@ -197,7 +197,15 @@ export async function submitRsvp(
     return { status: "not_authorized" };
   }
 
-  if (!isRsvpOpen(invitation.rsvpDeadline, now)) {
+  /*
+    ONE DEADLINE FOR THE WHOLE WEDDING, NOT ONE PER HOUSEHOLD.
+
+    It used to read `invitation.rsvpDeadline`, which meant the couple typed the
+    same date into every invitation they created — and a household where they
+    forgot was a household that never closed. There is one wedding, so there is
+    one deadline, and it lives beside the wedding's other facts.
+  */
+  if (!isRsvpOpen(RSVP_DEADLINE, now)) {
     return { status: "closed" };
   }
 
@@ -343,6 +351,6 @@ export async function getCurrentRsvp(
  * `lib/domain/rsvp-deadline.ts` for why a loud failure beats silently opening
  * or closing a household nobody is watching.
  */
-export function rsvpIsOpenNow(deadline: string | null): boolean {
-  return isRsvpOpen(deadline, new Date());
+export function rsvpIsOpenNow(): boolean {
+  return isRsvpOpen(RSVP_DEADLINE, new Date());
 }

@@ -60,8 +60,7 @@ const COMPLETE: Record<string, string> = {
   ceremonyTime: "4:00 p. m.",
   venueName: "Hacienda La Ñapa",
   venueAddress: "Calle 12 #34-56, Barrio Centro",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "clave-de-prueba",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 function form(entries: Record<string, string> = {}): FormData {
@@ -133,8 +132,7 @@ describe("saveWeddingFactsAction's server-side validation", () => {
         ceremonyTime: "4:00 p. m.",
         venueName: "Hacienda La Ñapa",
         venueAddress: "Calle 12 #34-56, Barrio Centro",
-        streamMeetingId: "123 4567 8901",
-        streamPasscode: "clave-de-prueba",
+        streamUrl: "https://meet.google.com/abc-defg-hij",
       },
     );
   });
@@ -154,11 +152,11 @@ describe("saveWeddingFactsAction's server-side validation", () => {
 
   it("refuses a field the browser never sent, rather than storing the word null", async () => {
     const data = form();
-    data.delete("streamPasscode");
+    data.delete("streamUrl");
 
     const state = await saveWeddingFactsAction(IDLE_WEDDING_FACTS_STATE, data);
 
-    expect(state.errors.streamPasscode).toBeDefined();
+    expect(state.errors.streamUrl).toBeDefined();
     expect(updateCeremony).not.toHaveBeenCalled();
   });
 

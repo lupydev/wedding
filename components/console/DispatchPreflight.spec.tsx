@@ -28,6 +28,7 @@ function guest(overrides: Partial<ConsoleListGuest> = {}): ConsoleListGuest {
   return {
     id: "g1",
     fullName: "Ana Muñóz",
+    nickname: null,
     isChild: false,
     phoneE164: "+573001234567",
     lineType: "mobile",
@@ -43,7 +44,6 @@ function row(overrides: Partial<ConsoleListRow> = {}): ConsoleListRow {
     greetingName: "Familia Muñóz",
     displayName: "Familia Muñóz",
     memberCount: 2,
-    rsvpDeadline: null,
     ownerSenderId: "sender-ana",
     ownerDisplayName: "Ana Operadora",
     ownedByViewer: true,
@@ -169,29 +169,51 @@ describe("DispatchPreflight", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders an empty group as empty rather than leaving it out", () => {
-    // A check that silently omits its clean sections cannot be read as "nothing
-    // is wrong here" — it reads as "this check did not run".
+  /**
+   * THE RULE SURVIVED; THE FIVE PANELS DID NOT.
+   *
+   * This used to assert that a clean group still rendered, with the word
+   * "Ninguna" under it, so the panel could never be read as "this check did not
+   * run". The reasoning was right and is kept — it just does not take five
+   * headings, five badges and five paragraphs to say that nothing is wrong.
+   *
+   * A clean check now says so in one line, which cannot be mistaken for silence
+   * either, and is the only thing on screen when there is nothing to do.
+   */
+  it("says nothing is pending rather than leaving the reader to infer it", () => {
     render(<DispatchPreflight preflight={preflight([row()])} />);
-    const section = groupSection("Con destinatario sin número");
 
-    expect(within(section).getByText("Ninguna")).toBeInTheDocument();
+    expect(screen.getByText(/no hay nada pendiente/i)).toBeInTheDocument();
+    expect(screen.queryByText("Ninguna")).toBeNull();
   });
 
-  it("shows all five checks on every render, whatever the data says", () => {
-    render(<DispatchPreflight preflight={preflight([])} />);
+  /**
+   * ALL FIVE CHECKS STILL RUN. Only the ones with something to report appear.
+   *
+   * The distinction matters and is the reason this test kept its place rather
+   * than being deleted: the checks are computed by `buildDispatchPreflight`,
+   * which is unit-tested over rows, and what changed is purely what the panel
+   * puts on screen. An operator with five clean checks sees one line; an
+   * operator with two problems sees two panels, and neither has to read past
+   * what applies to them.
+   */
+  it("shows a check only when it has something to report", () => {
+    render(
+      <DispatchPreflight
+        preflight={preflight([
+          row({ dispatchRecipientGuestId: null }),
+          row({
+            invitationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            greetingName: "Familia Ya Enviada",
+            dispatchState: "marked_sent",
+          }),
+        ])}
+      />,
+    );
 
-    for (const heading of [
-      "Sin destinatario elegido",
-      "Con destinatario sin número",
-      "Con destinatario que no recibe WhatsApp",
-      "Con destinatario que ya no pertenece",
-      "Ya enviadas",
-    ]) {
-      expect(
-        screen.getByRole("heading", { name: heading }),
-      ).toBeInTheDocument();
-    }
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
+    ).toEqual(["Sin destinatario elegido", "Ya enviadas"]);
   });
 
   /**
@@ -220,5 +242,62 @@ describe("DispatchPreflight", () => {
 
     expect(container.textContent).toContain("Casa Muñóz");
     expect(container.innerHTML).not.toMatch(/\+?\d{7,}/);
+  });
+
+  /**
+   * A CHECK WITH NOTHING TO REPORT SAYS SO IN ONE LINE.
+   *
+   * Every group used to render always, each with a heading, a badge, a
+   * paragraph of explanation and the word "Ninguna" — five panels and about
+   * nine hundred pixels of mostly-empty boxes above the list an operator came
+   * to read. The reasoning was sound and is kept: a check that omits its clean
+   * sections reads as "this check did not run", and those are not tellable
+   * apart. It just does not need five panels to say it.
+   */
+  describe("when nothing is blocked", () => {
+    it("says so once, instead of five empty panels", () => {
+      render(
+        <DispatchPreflight
+          preflight={preflight([row({ dispatchRecipientGuestId: "g1" })])}
+        />,
+      );
+
+      expect(screen.getByText(/no hay nada pendiente/i)).toBeInTheDocument();
+      expect(screen.queryByText("Ninguna")).toBeNull();
+      expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+    });
+  });
+
+  describe("when something is blocked", () => {
+    /**
+     * Only the groups that have something in them, and each still explains
+     * itself — that is the moment the explanation is worth reading, and the
+     * only moment it earns its space.
+     */
+    it("shows only the group that has households, with its explanation", () => {
+      render(
+        <DispatchPreflight
+          preflight={preflight([row({ dispatchRecipientGuestId: null })])}
+        />,
+      );
+
+      const headings = screen
+        .getAllByRole("heading", { level: 3 })
+        .map((h) => h.textContent);
+
+      expect(headings).toEqual(["Sin destinatario elegido"]);
+      expect(screen.queryByText("Ninguna")).toBeNull();
+      expect(screen.getByText(/Todavía nadie eligió/i)).toBeInTheDocument();
+    });
+
+    it("still leads with how many can go out", () => {
+      render(
+        <DispatchPreflight
+          preflight={preflight([row({ dispatchRecipientGuestId: null })])}
+        />,
+      );
+
+      expect(screen.getByText(/^Listas para enviar:/)).toBeInTheDocument();
+    });
   });
 });

@@ -27,7 +27,10 @@ import {
   type DeletionOutcome,
 } from "@/lib/domain/invitation-deletion";
 import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
+
+import { placeGuestInInvitation } from "./guest-directory";
 import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
+import { nextFreeSlug, slugifyName } from "@/lib/domain/slug-from-name";
 import { isWellFormedUuid } from "@/lib/domain/uuid";
 import { warmOgCard } from "@/lib/server/og-warm";
 
@@ -58,7 +61,6 @@ export interface ImportRow {
   readonly ownerEmail: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline?: string | null;
   /**
    * Optional stable identity of this household in the source file.
    *
@@ -77,6 +79,17 @@ export type SenderDirectory = Readonly<Record<string, string>>;
 
 export interface NewInvitationGuest {
   readonly fullName: string;
+  /**
+   * Set when this member is somebody the DIRECTORY already holds.
+   *
+   * Since migration 0015 a guest can be written down before any household
+   * exists, so creating an invitation is no longer only "type these people".
+   * A member carrying an id is MOVED into the new household; one without is
+   * written for the first time. The name still travels either way, for
+   * validation and for the error messages, but for a picked member it is
+   * display only — the directory owns their details.
+   */
+  readonly existingGuestId?: string | null;
   /** How this member is addressed. Absent for most guests. */
   readonly nickname?: string | null;
   readonly phoneE164: string | null;
@@ -92,7 +105,15 @@ export interface NewInvitation {
    * without a key to be idempotent on.
    */
   readonly sourceKey?: string | null;
-  readonly displayName: string;
+  /**
+   * The console's own label for this household.
+   *
+   * OPTIONAL, because the form stopped asking for it. Left out, it becomes the
+   * greeting the invitation resolved to — which is what every screen shows
+   * anyway. The importer still supplies one, because its file is the source of
+   * truth for the households it describes.
+   */
+  readonly displayName?: string;
   readonly greetingName: string;
   /**
    * Why `greetingName` says what it says. Defaults to `imported`, the column's
@@ -100,7 +121,14 @@ export interface NewInvitation {
    * nothing may overwrite it. A console draft states `derived` or `custom`.
    */
   readonly greetingNameSource?: GreetingNameSource;
-  readonly rsvpDeadline: string | null;
+  /**
+   * Who receives the message, given as a POSITION in `guests`.
+   *
+   * A position and not an id, because at the moment the console's form is
+   * submitted there are no ids: these people are written by this very call.
+   * Left out by the importer, which has no opinion about who to write to.
+   */
+  readonly dispatchRecipientIndex?: number;
   readonly guests: readonly NewInvitationGuest[];
 }
 
@@ -115,7 +143,6 @@ export interface InvitationRecord {
   readonly ownerSenderId: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline: string | null;
   readonly guests: readonly InvitationGuestRecord[];
 }
 
@@ -130,7 +157,6 @@ export interface GuestFacingInvitation {
   readonly slug: string;
   readonly displayName: string;
   readonly greetingName: string;
-  readonly rsvpDeadline: string | null;
   readonly guests: readonly GuestFacingGuest[];
 }
 
@@ -236,7 +262,6 @@ export function validateImportRow(
       row.sourceKey?.trim() || deriveSourceKey(ownerEmail, displayName),
     displayName,
     greetingName,
-    rsvpDeadline: row.rsvpDeadline?.trim() || null,
     guests,
   };
 }
@@ -282,10 +307,21 @@ export function validateImportRows(
       );
     }
 
-    seen.set(key, invitation.displayName);
+    seen.set(key, nameOf(invitation));
   }
 
   return validated;
+}
+
+/**
+ * What to call an invitation in a message about it.
+ *
+ * `displayName` became optional when the console stopped asking for it, and an
+ * error naming "undefined" is worse than one naming the greeting. Every import
+ * row carries a display name, but the type cannot know that.
+ */
+function nameOf(invitation: NewInvitation): string {
+  return invitation.displayName?.trim() || invitation.greetingName;
 }
 
 /**
@@ -303,7 +339,6 @@ export function toGuestFacingInvitation(
     slug: record.slug,
     displayName: record.displayName,
     greetingName: record.greetingName,
-    rsvpDeadline: record.rsvpDeadline,
     guests: record.guests.map((guest) => ({
       id: guest.id,
       fullName: guest.fullName,
@@ -329,16 +364,68 @@ export function mintSlug(): string {
   return encodeSlug(randomBytes(SLUG_BYTE_LENGTH));
 }
 
+/**
+ * The address a new invitation is created at, derived from its own name.
+ *
+ * `/i/familia-guzman-pena` rather than `/i/k22eth3lvkzptcco`, because that is a
+ * link two people send to their families over WhatsApp.
+ *
+ * DERIVED ONCE, HERE, AND NEVER AGAIN. Nothing recomputes it when the name is
+ * edited: an address that followed the name would die the moment somebody
+ * corrected a typo, and it would die SILENTLY — the console shows nothing
+ * wrong, and only the guest meets "no encontramos esta invitación".
+ * `rotateInvitationSlug` stays random, which is what an address should be once
+ * it has had to be changed at all.
+ *
+ * One indexed query for the names already taken, then pure arithmetic in
+ * `nextFreeSlug`. A name that spells nothing a URL can carry — emoji, say —
+ * falls back to a random slug: uglier, and working.
+ */
+export async function readableSlugFor(
+  client: SupabaseClient,
+  name: string,
+  alsoTaken: ReadonlySet<string> = new Set(),
+): Promise<string> {
+  const base = slugifyName(name);
+
+  if (base === "") {
+    return mintSlug();
+  }
+
+  /*
+   * `eq` OR `like`, because the counter is a suffix: "familia-ruiz" and
+   * "familia-ruiz-2" both belong to this family of names, and "familia-ruiza"
+   * does not. The base holds only `[a-z0-9-]`, so it carries no `like`
+   * wildcards of its own.
+   */
+  const { data, error } = await client
+    .from("invitations")
+    .select("slug")
+    .or(`slug.eq.${base},slug.like.${base}-%`);
+
+  if (error) {
+    throw new Error(`Could not read the addresses in use: ${error.message}`);
+  }
+
+  const taken = new Set<string>(alsoTaken);
+
+  for (const row of (data ?? []) as readonly { slug: string }[]) {
+    taken.add(row.slug);
+  }
+
+  return nextFreeSlug(base, taken);
+}
+
 interface InvitationRow {
   id: string;
   slug: string;
   owner_sender_id: string;
   display_name: string;
   greeting_name: string;
-  rsvp_deadline: string | null;
   invitation_guests: {
     id: string;
     full_name: string;
+    nickname: string | null;
     phone_e164: string | null;
     phone_last8: string | null;
     is_primary: boolean;
@@ -352,8 +439,18 @@ interface InvitationRow {
 // PostgREST refuses an ambiguous embed with "more than one relationship was
 // found". Naming the constraint says which direction this read means.
 const INVITATION_SELECT =
-  "id, slug, owner_sender_id, display_name, greeting_name, rsvp_deadline, " +
-  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, phone_last8, is_primary, is_child)";
+  "id, slug, owner_sender_id, display_name, greeting_name, " +
+  /*
+    THE NICKNAME IS IN HERE NOW, AND ITS ABSENCE WAS A REAL DEFECT.
+
+    The couple reported "le puse apodo, sin embargo en la creación de la
+    invitación no registró el apodo". It WAS registered — the member row holds
+    it and the greeting is derived from it, both proven against the database.
+    This projection simply never asked for it, so the one screen they spend
+    their time on could not show it, which from the outside is
+    indistinguishable from not having been saved.
+  */
+  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, phone_last8, is_primary, is_child)";
 
 function toRecord(row: InvitationRow): InvitationRecord {
   return {
@@ -362,10 +459,10 @@ function toRecord(row: InvitationRow): InvitationRecord {
     ownerSenderId: row.owner_sender_id,
     displayName: row.display_name,
     greetingName: row.greeting_name,
-    rsvpDeadline: row.rsvp_deadline,
     guests: row.invitation_guests.map((guest) => ({
       id: guest.id,
       fullName: guest.full_name,
+      nickname: guest.nickname,
       phoneE164: guest.phone_e164,
       phoneLast8: guest.phone_last8,
       isPrimary: guest.is_primary,
@@ -441,37 +538,55 @@ export async function createInvitation(
 ): Promise<InvitationRecord> {
   const members = input.guests.map(toDraftMember);
   const source = input.greetingNameSource ?? "imported";
+  /*
+    ONE NAME, NOT TWO.
+
+    The console used to ask for a "nombre del hogar" AND a "nombre del grupo".
+    Only the second is ever shown — every list, heading and label reads
+    `greeting_name`, and `display_name` surfaces on exactly one screen, in the
+    sentence confirming a deletion. So the form asked a non-technical operator
+    to invent a value she would never see again, with nothing on screen saying
+    so.
+
+    The column stays: it is what error messages and that sentence name. It just
+    stops being asked for, and falls back to the greeting the invitation
+    actually resolved to, so the internal label and the name on screen can no
+    longer disagree. A caller that supplies one on purpose — the importer,
+    whose file is the source of truth for the households it describes — keeps
+    it.
+  */
+  const naming = greetingNameColumns({
+    source,
+    stored: input.greetingName,
+    members,
+  });
+  const displayName = input.displayName?.trim() || naming.greeting_name;
   const { refusals } = validateInvitationDraft({
-    displayName: input.displayName,
+    displayName,
     greetingName: input.greetingName,
     greetingNameSource: source,
     members,
     // A member that has never been written cannot have been chosen to receive
     // the message, so creation never carries a recipient.
     dispatchRecipientGuestId: null,
-    rsvpDeadline: input.rsvpDeadline,
   });
 
   if (refusals.length > 0) {
     throw new Error(
-      `Could not create invitation "${input.displayName}": ${refusalMessage(refusals)}. Nothing was written.`,
+      `Could not create invitation "${displayName}": ${refusalMessage(refusals)}. Nothing was written.`,
     );
   }
 
-  const slug = mintSlug();
+  // Derived from the household's own name, and frozen from here on.
+  const slug = await readableSlugFor(client, input.greetingName);
 
   const { data: invitation, error: invitationError } = await client
     .from("invitations")
     .insert({
       slug,
       owner_sender_id: input.ownerSenderId,
-      display_name: input.displayName,
-      ...greetingNameColumns({
-        source,
-        stored: input.greetingName,
-        members,
-      }),
-      rsvp_deadline: input.rsvpDeadline,
+      display_name: displayName,
+      ...naming,
       source_key: input.sourceKey ?? null,
     })
     .select("id")
@@ -483,16 +598,69 @@ export async function createInvitation(
     );
   }
 
-  const { error: guestsError } = await client.from("invitation_guests").insert(
-    input.guests.map((guest) => ({
-      invitation_id: invitation.id,
-      full_name: guest.fullName,
-      nickname: guest.nickname ?? null,
-      phone_e164: guest.phoneE164,
-      is_primary: guest.isPrimary,
-      is_child: guest.isChild,
-    })),
-  );
+  /*
+    PICKED PEOPLE ARE MOVED FIRST, TYPED PEOPLE ARE WRITTEN SECOND.
+
+    The order is the whole reason a refusal leaves nothing behind. A member
+    already in the directory can be taken by the other operator between the
+    moment this form rendered and the moment it was submitted — the picker only
+    offers free guests, but a page that was correct when it loaded can be wrong
+    when it is sent. If that happens, the compensation below deletes the
+    invitation, which RELEASES every member already moved back into the
+    directory where they came from (0015: `on delete set null`), and no typed
+    person has been written yet, so nothing is created and nothing leaks.
+
+    Doing it the other way round would leave the typed names stranded in the
+    directory as people nobody meant to put there.
+  */
+  for (const guest of input.guests) {
+    if (!guest.existingGuestId) {
+      continue;
+    }
+
+    const placed = await placeGuestInInvitation(
+      client,
+      guest.existingGuestId,
+      invitation.id,
+    );
+
+    if (placed) {
+      continue;
+    }
+
+    await client.from("invitations").delete().eq("id", invitation.id);
+
+    throw new Error(
+      `No se pudo crear «${input.displayName}»: ${guest.fullName} ya pertenece a otra invitación. Actualizá la lista y volvé a intentarlo.`,
+    );
+  }
+
+  const typedGuests = input.guests.filter((guest) => !guest.existingGuestId);
+
+  /*
+    THE INSERTED ROWS COME BACK, BECAUSE A POSITION HAS TO BECOME A PERSON.
+
+    The form answers "who receives the message" with a position — it has no ids
+    to offer for somebody being written right now — and `RETURNING` hands the
+    rows back in the order they were given, which is what turns that position
+    into the id recorded below.
+  */
+  const { data: insertedGuests, error: guestsError } =
+    typedGuests.length === 0
+      ? { data: [] as { id: string }[], error: null }
+      : await client
+          .from("invitation_guests")
+          .insert(
+            typedGuests.map((guest) => ({
+              invitation_id: invitation.id,
+              full_name: guest.fullName,
+              nickname: guest.nickname ?? null,
+              phone_e164: guest.phoneE164,
+              is_primary: guest.isPrimary,
+              is_child: guest.isChild,
+            })),
+          )
+          .select("id");
 
   if (guestsError) {
     // D21. The compensation's OWN result is captured, not discarded. A failed
@@ -519,6 +687,48 @@ export async function createInvitation(
     );
   }
 
+  /*
+    THE CHOICE, RESOLVED AND RECORDED.
+
+    A separate statement, because the invitation row exists before its members
+    do and there was no id to point at until the insert above returned. The
+    composite foreign key on `(id, dispatch_recipient_guest_id)` refuses anyone
+    outside this household, which is what makes resolving by position safe.
+
+    Without this every invitation born in the console arrived unchosen — listed
+    under "Sin destinatario elegido", waiting for somebody to reopen it and
+    finish what they thought they had already finished.
+
+    A failure here leaves the invitation created and unchosen: exactly that old
+    state, recoverable from the edit screen, and not worth deleting a household
+    somebody just typed in. So it is reported, not compensated.
+  */
+  /*
+    THE FORM'S ORDER, REBUILT — because the index means a position in the list
+    the operator was looking at, and that list interleaves the two kinds. An
+    index resolved against only the freshly inserted rows would name the wrong
+    person whenever a picked member sits earlier in the list, which is a defect
+    that looks exactly like a working one.
+  */
+  let nextInserted = 0;
+  const memberIds = input.guests.map(
+    (guest) => guest.existingGuestId ?? insertedGuests?.[nextInserted++]?.id,
+  );
+  const chosen = memberIds[input.dispatchRecipientIndex ?? -1];
+
+  if (chosen) {
+    const { error: recipientError } = await client
+      .from("invitations")
+      .update({ dispatch_recipient_guest_id: chosen })
+      .eq("id", invitation.id);
+
+    if (recipientError) {
+      throw new Error(
+        `Invitation "${input.displayName}" was created, but nobody could be recorded as the recipient: ${recipientError.message}. Choose one from the edit screen.`,
+      );
+    }
+  }
+
   const created = await findInvitationBySlug(client, slug);
 
   if (!created) {
@@ -532,10 +742,10 @@ export async function createInvitation(
 
 /** The invitation's OWN fields an operator may rewrite from the edit form. */
 export interface InvitationEdit {
-  readonly displayName: string;
+  /** Optional for the same reason as on creation: the form stopped asking. */
+  readonly displayName?: string;
   readonly greetingName: string;
   readonly greetingNameSource: GreetingNameSource;
-  readonly rsvpDeadline: string | null;
 }
 
 /**
@@ -552,19 +762,110 @@ export interface InvitationEdit {
  * form and the Server Action call, so a refusal costs nothing and leaves the
  * stored name exactly as it was.
  */
+/**
+ * One guest, their own invitation, in one press.
+ *
+ * The couple asked for it in those terms: "enviar la invitación individual… sin
+ * necesidad de pertenecer a una invitación, estas son para grupos familiares de
+ * 2 o más personas". An invitation is still the thing that gets sent — it
+ * carries the address, the phone gate and the audit trail — so this mints a
+ * ONE-PERSON one rather than inventing a second kind of send that would need
+ * its own copy of every guard.
+ *
+ * THE ADDRESS IS THEIR FULL NAME AND THE GREETING IS THEIR NICKNAME, which is
+ * not an inconsistency: `greetingName` feeds the slug, and a `derived` source
+ * makes the STORED greeting come from the member instead. So Marta Ruiz, known
+ * as Tita, lives at `/i/marta-ruiz` and is greeted as "Tita" — the couple's own
+ * rule, "el slug sea… el de la persona individual el nombre completo".
+ *
+ * It composes `createInvitation` rather than writing rows of its own, so the
+ * refusal for a guest somebody else already took, the compensation that leaves
+ * nothing behind, and the recipient being recorded all come for free.
+ */
+export async function createSoloInvitation(
+  client: SupabaseClient,
+  ownerSenderId: string,
+  guestId: string,
+): Promise<InvitationRecord> {
+  const { data, error } = await client
+    .from("invitation_guests")
+    .select("id, full_name, nickname, phone_e164, is_child, invitation_id")
+    .eq("id", guestId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not read guest ${guestId}: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error(`Guest ${guestId} does not exist.`);
+  }
+
+  const guest = data as {
+    full_name: string;
+    nickname: string | null;
+    phone_e164: string | null;
+    is_child: boolean;
+    invitation_id: string | null;
+  };
+
+  /*
+    CHECKED HERE AND AGAIN INSIDE, AND BOTH EARN THEIR PLACE.
+
+    This one exists to give the operator a sentence they can act on. The other
+    is `placeGuestInInvitation`'s `invitation_id is null`, which travels inside
+    the UPDATE and is what actually makes a race impossible — this read could
+    go stale between the two statements, and the second one cannot.
+  */
+  if (guest.invitation_id !== null) {
+    throw new Error(
+      `${guest.full_name} ya pertenece a una invitación, así que no se le puede crear una individual. Actualizá la lista.`,
+    );
+  }
+
+  return createInvitation(client, {
+    ownerSenderId,
+    displayName: guest.full_name,
+    // Feeds the SLUG. The stored greeting is derived from the member below.
+    greetingName: guest.full_name,
+    greetingNameSource: "derived",
+    guests: [
+      {
+        fullName: guest.full_name,
+        nickname: guest.nickname,
+        phoneE164: guest.phone_e164,
+        isPrimary: true,
+        isChild: guest.is_child,
+        existingGuestId: guestId,
+      },
+    ],
+    // The only member, and therefore the only possible recipient. An invitation
+    // arriving unchosen would land the operator on a dispatch screen that
+    // refuses — the exact defect the create form already had once.
+    dispatchRecipientIndex: 0,
+  });
+}
+
 export async function updateInvitation(
   client: SupabaseClient,
   invitationId: string,
   edit: InvitationEdit,
 ): Promise<void> {
   const membership = await readMembership(client, invitationId);
+  // The same fallback creation uses, for the same reason: the form no longer
+  // asks for a separate label, and the console shows the greeting everywhere.
+  const naming = greetingNameColumns({
+    source: edit.greetingNameSource,
+    stored: edit.greetingName,
+    members: membership.members,
+  });
+  const displayName = edit.displayName?.trim() || naming.greeting_name;
   const { refusals } = validateInvitationDraft({
-    displayName: edit.displayName,
+    displayName,
     greetingName: edit.greetingName,
     greetingNameSource: edit.greetingNameSource,
     members: membership.members,
     dispatchRecipientGuestId: membership.dispatchRecipientGuestId,
-    rsvpDeadline: edit.rsvpDeadline,
   });
 
   if (refusals.length > 0) {
@@ -575,15 +876,7 @@ export async function updateInvitation(
 
   const { error } = await client
     .from("invitations")
-    .update({
-      display_name: edit.displayName,
-      rsvp_deadline: edit.rsvpDeadline,
-      ...greetingNameColumns({
-        source: edit.greetingNameSource,
-        stored: edit.greetingName,
-        members: membership.members,
-      }),
-    })
+    .update({ display_name: displayName, ...naming })
     .eq("id", invitationId);
 
   if (error) {
@@ -627,6 +920,7 @@ const REFUSAL_EXPLANATION: Readonly<Record<DraftRefusal, string>> = {
     "an invitation must keep at least one member, so delete the invitation itself instead",
   member_without_name: "every member needs a name",
   duplicate_member_id: "the same member is listed twice",
+  guest_already_invited: "that guest already belongs to another invitation",
   recipient_not_a_member:
     "the chosen recipient does not belong to this invitation",
   custom_name_empty: "a custom group name cannot be blank",
@@ -644,7 +938,6 @@ export interface InvitationMembership {
   readonly greetingNameSource: GreetingNameSource;
   readonly dispatchRecipientGuestId: string | null;
   readonly displayName: string;
-  readonly rsvpDeadline: string | null;
   readonly members: readonly (InvitationDraftMember & {
     readonly id: string;
   })[];
@@ -654,7 +947,6 @@ interface MembershipRow {
   display_name: string;
   greeting_name: string;
   greeting_name_source: GreetingNameSource;
-  rsvp_deadline: string | null;
   dispatch_recipient_guest_id: string | null;
   invitation_guests: {
     id: string;
@@ -669,7 +961,7 @@ interface MembershipRow {
 const GUESTS = "invitation_guests";
 
 const MEMBERSHIP_SELECT =
-  "display_name, greeting_name, greeting_name_source, rsvp_deadline, " +
+  "display_name, greeting_name, greeting_name_source, " +
   "dispatch_recipient_guest_id, " +
   "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, is_child)";
 
@@ -721,7 +1013,6 @@ export async function findInvitationMembership(
     displayName: data.display_name,
     greetingName: data.greeting_name,
     greetingNameSource: data.greeting_name_source,
-    rsvpDeadline: data.rsvp_deadline,
     dispatchRecipientGuestId: data.dispatch_recipient_guest_id,
     members: data.invitation_guests.map((guest) => ({
       id: guest.id,
@@ -781,7 +1072,6 @@ function membershipRefusals(
     )
       ? membership.dispatchRecipientGuestId
       : null,
-    rsvpDeadline: membership.rsvpDeadline,
   });
 
   return refusals;
@@ -1222,7 +1512,15 @@ export async function deleteInvitation(
     return outcome;
   }
 
-  // `invitation_guests.invitation_id` cascades, so the members go with it.
+  /*
+    THE MEMBERS SURVIVE THIS. `invitation_guests.invitation_id` was `on delete
+    cascade` until migration 0015 and is now `on delete set null`, so deleting
+    the household RELEASES its people into the directory rather than deleting
+    them. Asked and answered by the couple: "vuelven a la libreta".
+
+    The invitation's answers and dispatch events still cascade away with it —
+    they belong to the invitation, not to the people.
+  */
   const { error: deleteError } = await client
     .from("invitations")
     .delete()
@@ -1246,8 +1544,12 @@ export interface RotateSlugOptions {
 /**
  * Gives one invitation a NEW slug — the exit for "dispatched by mistake".
  *
- * The slug is minted by `mintSlug()`, the same function creation uses, so
- * randomness stays in the adapter and the database keeps no randomness policy
+ * THE NEW SLUG IS RANDOM, AND IT IS THE ONLY PATH THAT STILL IS. Creating an
+ * invitation derives a readable address from the household's name, and since
+ * this commit so does importing one. Rotation deliberately does not: it is the
+ * exit for an address that has already had to change, and deriving the same
+ * name again would hand back a neighbour of the address being abandoned.
+ * Randomness stays in the adapter, so the database keeps no randomness policy
  * (design D2/D16). Rotation is a new ADDRESS for the same invitation: its
  * members, its greeting name, its RSVP history and its dispatch history are all
  * untouched, which is precisely why a rotated invitation is still undeletable
@@ -1346,7 +1648,19 @@ export async function importInvitations(
     return [];
   }
 
-  const payload = invitations.map((invitation) => {
+  /*
+    THE ADDRESSES DECIDED IN THIS BATCH, WHICH THE DATABASE CANNOT SEE.
+
+    Every household here is written by ONE `import_invitations` call, so none
+    of them is visible to another's lookup. Two families called Ruiz in one
+    file would therefore both be handed "familia-ruiz" — where the unique index
+    refuses the second and the whole import fails, naming a constraint instead
+    of the two families that share a surname.
+  */
+  const mintedHere = new Set<string>();
+  const payload = [];
+
+  for (const invitation of invitations) {
     const sourceKey = invitation.sourceKey?.trim();
 
     if (!sourceKey) {
@@ -1355,13 +1669,36 @@ export async function importInvitations(
       );
     }
 
-    return {
+    /*
+      READABLE, EXACTLY AS THE CONSOLE'S ARE.
+
+      This minted random base32 while `createInvitation` had been deriving
+      `/i/familia-guzman-pena` from the household's name since migration 0014.
+      Two ways in and two kinds of address, with the difference visible to the
+      guest: families typed into the console got a link that reads like their
+      name, families loaded from a file got sixteen characters that read like a
+      mistake.
+
+      SAFE ON A RE-RUN because of `on conflict (source_key) do nothing` in
+      `import_invitations` (0006). A second run computes a NEW address — the
+      first one is taken, so the counter advances — and that value is discarded
+      rather than written, leaving the link already in a family's WhatsApp
+      exactly where it was.
+    */
+    const slug = await readableSlugFor(
+      client,
+      invitation.greetingName,
+      mintedHere,
+    );
+
+    mintedHere.add(slug);
+
+    payload.push({
       source_key: sourceKey,
-      slug: mintSlug(),
+      slug,
       owner_sender_id: invitation.ownerSenderId,
       display_name: invitation.displayName,
       greeting_name: invitation.greetingName,
-      rsvp_deadline: invitation.rsvpDeadline,
       guests: invitation.guests.map((guest) => ({
         full_name: guest.fullName,
         // `import_invitations` reads this key (migration 0012). Omitted from
@@ -1372,8 +1709,8 @@ export async function importInvitations(
         is_primary: guest.isPrimary,
         is_child: guest.isChild,
       })),
-    };
-  });
+    });
+  }
 
   const { data, error } = await client.rpc("import_invitations", { payload });
 
@@ -1527,12 +1864,13 @@ interface ConsoleInvitationRow {
   owner_sender_id: string;
   display_name: string;
   greeting_name: string;
-  rsvp_deadline: string | null;
   dispatch_recipient_guest_id: string | null;
+  created_at: string;
   senders: { display_name: string } | null;
   invitation_guests: {
     id: string;
     full_name: string;
+    nickname: string | null;
     phone_e164: string | null;
     is_child: boolean;
     is_primary: boolean;
@@ -1540,9 +1878,12 @@ interface ConsoleInvitationRow {
 }
 
 const CONSOLE_INVITATION_SELECT =
-  "id, slug, owner_sender_id, display_name, greeting_name, rsvp_deadline, " +
+  "id, slug, owner_sender_id, display_name, greeting_name, created_at, " +
   "dispatch_recipient_guest_id, senders(display_name), " +
-  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, phone_e164, is_child, is_primary)";
+  // `nickname` is here because the couple reported it missing from the console.
+  // It was stored and used to derive the greeting all along; this projection
+  // simply never asked for it.
+  "invitation_guests!invitation_guests_invitation_id_fkey(id, full_name, nickname, phone_e164, is_child, is_primary)";
 
 export interface ConsoleListOptions {
   /** The SESSION's sender id. Never a value the browser supplied. */
@@ -1587,10 +1928,21 @@ export async function listConsoleInvitations(
   let query = client
     .from("invitations")
     .select(CONSOLE_INVITATION_SELECT)
+    /*
+      THE MEMBERS ARE ORDERED HERE; THE HOUSEHOLDS ARE NOT.
+
+      A member's position inside a household is a stable fact about that
+      household — primary first, then by when they were added — and the
+      database is the cheapest place to settle it.
+
+      The order of the HOUSEHOLDS themselves used to be `display_name` here.
+      It is now `assembleConsoleRows`' business, newest first, stated once in
+      the domain alongside the directory's identical rule. Two opinions about
+      an order is how two lists that should agree drift apart.
+    */
     .order("is_primary", { referencedTable: GUESTS, ascending: false })
     .order("created_at", { referencedTable: GUESTS, ascending: true })
-    .order("id", { referencedTable: GUESTS, ascending: true })
-    .order("display_name");
+    .order("id", { referencedTable: GUESTS, ascending: true });
 
   if (options.ownedOnly) {
     query = query.eq("owner_sender_id", options.viewerSenderId);
@@ -1611,7 +1963,6 @@ export async function listConsoleInvitations(
     slug: row.slug,
     greetingName: row.greeting_name,
     displayName: row.display_name,
-    rsvpDeadline: row.rsvp_deadline,
     ownerSenderId: row.owner_sender_id,
     // The FK is NOT NULL, so a missing name means the embed failed rather than
     // that an invitation has no owner. Saying so beats rendering "undefined".
@@ -1620,6 +1971,7 @@ export async function listConsoleInvitations(
     // an operator chooses, which is what makes the preflight's
     // `no_recipient_chosen` group mean something on day one.
     dispatchRecipientGuestId: row.dispatch_recipient_guest_id,
+    createdAt: row.created_at,
     guests: [...row.invitation_guests]
       .sort((left, right) => {
         if (left.is_primary !== right.is_primary) {
@@ -1630,6 +1982,7 @@ export async function listConsoleInvitations(
       .map((guest) => ({
         id: guest.id,
         fullName: guest.full_name,
+        nickname: guest.nickname,
         isChild: guest.is_child,
         phoneE164: guest.phone_e164,
       })),
@@ -1657,22 +2010,61 @@ export async function listConsoleInvitations(
 }
 
 /** The current answers, from `rsvp_latest` and NEVER from `rsvp_responses`. */
+/**
+ * How many invitation ids may travel in one `in` filter.
+ *
+ * WHY THERE IS A LIMIT AT ALL. PostgREST puts a filter in the GET query
+ * string, and a uuid costs about 39 characters there once the comma and the
+ * quoting are counted. A few hundred households therefore push the URL past
+ * the server's own cap, and the read comes back "URI too long" — which, for
+ * two reads sitting behind the console's main screen, means the whole list
+ * answers a 500 rather than degrading.
+ *
+ * 100 keeps a batch's filter near 4 KB, comfortably inside the 8 KB most
+ * servers allow for a request line, with room for the rest of the URL. It is
+ * a number chosen to be obviously safe rather than maximal: the cost of a
+ * second round trip is nothing next to the screen going down.
+ *
+ * Found by the browser suite against a database holding 204 invitations. This
+ * wedding will not reach that — which is exactly why it needed a test rather
+ * than a note, because nobody meets this until they do.
+ */
+const IDS_PER_READ = 100;
+
+/** The ids in batches small enough for a query string. */
+function inBatches(ids: readonly string[]): readonly string[][] {
+  const batches: string[][] = [];
+
+  for (let start = 0; start < ids.length; start += IDS_PER_READ) {
+    batches.push([...ids.slice(start, start + IDS_PER_READ)]);
+  }
+
+  return batches;
+}
+
 async function readLatestAnswers(
   client: SupabaseClient,
   invitationIds: readonly string[],
 ): Promise<readonly ConsoleLatestAnswer[]> {
-  const { data, error } = await client
-    .from("rsvp_latest")
-    .select(
-      "invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at",
-    )
-    .in("invitation_id", invitationIds);
+  const batches = await Promise.all(
+    inBatches(invitationIds).map(async (batch) => {
+      const { data, error } = await client
+        .from("rsvp_latest")
+        .select(
+          "invitation_id, attending, seats_confirmed, attendee_guest_ids, submitted_at",
+        )
+        .in("invitation_id", batch);
 
-  if (error) {
-    throw new Error(`Could not read the current RSVPs: ${error.message}`);
-  }
+      if (error) {
+        throw new Error(`Could not read the current RSVPs: ${error.message}`);
+      }
 
-  return (data ?? []).map((row) => ({
+      return data ?? [];
+    }),
+  );
+  const data = batches.flat();
+
+  return data.map((row) => ({
     invitationId: row.invitation_id as string,
     attending: row.attending as boolean,
     seatsConfirmed: row.seats_confirmed as number,
@@ -1699,16 +2091,22 @@ async function readDispatchEvents(
   client: SupabaseClient,
   invitationIds: readonly string[],
 ): Promise<readonly ConsoleDispatchEvent[]> {
-  const { data, error } = await client
-    .from("dispatch_events")
-    .select("invitation_id, kind, occurred_at")
-    .in("invitation_id", invitationIds);
+  const batches = await Promise.all(
+    inBatches(invitationIds).map(async (batch) => {
+      const { data, error } = await client
+        .from("dispatch_events")
+        .select("invitation_id, kind, occurred_at")
+        .in("invitation_id", batch);
 
-  if (error) {
-    throw new Error(`Could not read the dispatch log: ${error.message}`);
-  }
+      if (error) {
+        throw new Error(`Could not read the dispatch log: ${error.message}`);
+      }
 
-  return (data ?? []).map((row) => ({
+      return data ?? [];
+    }),
+  );
+
+  return batches.flat().map((row) => ({
     invitationId: row.invitation_id as string,
     kind: row.kind as ConsoleDispatchEvent["kind"],
     occurredAt: row.occurred_at as string,

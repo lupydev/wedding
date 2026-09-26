@@ -150,7 +150,7 @@ test.describe("the per-device WhatsApp declaration", () => {
 
     await expect(page).toHaveURL(/\/console$/);
     await expect(
-      page.getByRole("heading", { name: "Tus invitaciones" }),
+      page.getByRole("heading", { name: "Invitaciones" }),
     ).toBeVisible();
     await expect(MISMATCH_NOTICE(page)).toHaveCount(0);
   });
@@ -170,10 +170,14 @@ test.describe("the per-device WhatsApp declaration", () => {
     ).toBeVisible();
     // But nothing can be dispatched from this handset.
     await expect(
-      page.getByRole("link", { name: /Preparar envío/i }),
+      page.getByRole("link", { name: /Enviar la invitación/i }),
     ).toHaveCount(0);
     // And the read-only progress view stays available, as the design requires.
-    await expect(page.getByText(/^Confirmadas: /).first()).toBeVisible();
+    // It is the dashboard now rather than a `ProgressSummary` sentence, but the
+    // invariant is the one that mattered: a blocked device withdraws the SEND
+    // affordance and nothing else, so the operator can still read where the
+    // event stands while they go and fix the handset.
+    await expect(page.getByText("Invitaciones enviadas")).toBeVisible();
   });
 
   test("the block offers two exits and nothing that dismisses it", async () => {
@@ -212,21 +216,37 @@ test.describe("the per-device WhatsApp declaration", () => {
 });
 
 test.describe("the partitioned guest list", () => {
-  test("the default view lists the operator's own invitations", async () => {
+  /**
+   * THE LIST IS NO LONGER PARTITIONED, AND THAT IS THE POINT.
+   *
+   * There used to be two: the operator's own households, then a second list of
+   * the other account's, separated by four lines of prose explaining the split.
+   * On a console two people share, the split was communicating one thing — who
+   * manages each household — that every row already says on its own face.
+   *
+   * So this test asserts the opposite of what it used to: both partitions are
+   * here, in one list. What ownership still decides is asserted by the tests
+   * below it, and it is only what it ever decided — the send affordance, and
+   * the editing that would be refused by the server anyway.
+   */
+  test("one list holds every household in the event", async () => {
     await page.goto("/console");
-    const mine = page.locator("section.console__section").first();
+    const list = page.locator("section.console__section").first();
 
     // By heading, not by text: the greeting name also appears inside the send
     // link, so a bare text query is ambiguous.
     await expect(
-      mine.getByRole("heading", { name: "Familia Muñóz Aristizábal" }),
+      list.getByRole("heading", { name: "Familia Muñóz Aristizábal" }),
     ).toBeVisible();
     await expect(
-      mine.getByRole("heading", { name: "Familia Cambió de Idea" }),
+      list.getByRole("heading", { name: "Familia Cambió de Idea" }),
     ).toBeVisible();
     await expect(
-      mine.getByRole("heading", { name: "Familia Peña Betancur" }),
-    ).toHaveCount(0);
+      list.getByRole("heading", { name: "Familia Peña Betancur" }),
+    ).toBeVisible();
+
+    // And there is exactly one list, not two.
+    await expect(page.locator("section.console__section")).toHaveCount(1);
   });
 
   test("each owned row carries a send affordance and names its owner", async () => {
@@ -239,14 +259,13 @@ test.describe("the partitioned guest list", () => {
       row.getByText(`Gestionas tú (${ana.displayName})`),
     ).toBeVisible();
     await expect(
-      row.getByRole("link", { name: /Preparar envío/i }),
+      row.getByRole("link", { name: /Enviar la invitación/i }),
     ).toBeVisible();
   });
 
   test("the shared dashboard covers both partitions and offers no send button on the other's rows", async () => {
     await page.goto("/console");
-    const shared = page.locator("section.console__section").nth(1);
-    const theirRow = shared
+    const theirRow = page
       .locator("li.guest-list__row")
       .filter({ hasText: "Familia Peña Betancur" });
 
@@ -257,31 +276,32 @@ test.describe("the partitioned guest list", () => {
       theirRow.getByText(`Gestiona ${beto.displayName}`),
     ).toBeVisible();
     await expect(
-      theirRow.getByRole("link", { name: /Preparar envío/i }),
+      theirRow.getByRole("link", { name: /Enviar la invitación/i }),
     ).toHaveCount(0);
 
     /*
-      The shared counts cover every invitation, and say so in words.
+      The dashboard's figures cover every invitation, both partitions included.
 
-      The denominator is asserted as an INVARIANT rather than as a literal. The
-      shared scope is genuinely every invitation in the database, and the E2E
-      suite runs its spec files in parallel against one database — so the exact
-      total depends on which other fixtures happen to be alive. What must hold is
-      that the shared scope is strictly wider than the owned one and that its
-      label names the population it counted.
+      There is ONE set of figures now, over the whole event, where there used to
+      be two `ProgressSummary` blocks — the operator's own and the event's —
+      whose denominators a reader had to compare to know which answered their
+      question.
+
+      The denominator is asserted as an INVARIANT rather than as a literal, for
+      the reason the previous version already gave: the scope is genuinely every
+      invitation in the database, and the suite runs its spec files in parallel
+      against one database, so the exact total depends on which other fixtures
+      happen to be alive. What must hold is that it counts at least this file's
+      four households — three of Ana's and one of Beto's — which is what proves
+      it reaches across the partition at all.
     */
-    const sharedLine = await shared
-      .getByText(/^Confirmadas: /)
+    const figure = await page
+      .locator("dl[data-slot='stat-bar'] dd")
       .first()
       .innerText();
-    const sharedTotal = Number(
-      /^Confirmadas: \d+ de (\d+) todas las invitaciones del evento$/.exec(
-        sharedLine,
-      )?.[1],
-    );
+    const total = Number(/^\d+ de (\d+)$/.exec(figure)?.[1]);
 
-    expect(sharedTotal).toBeGreaterThanOrEqual(4);
-    expect(sharedTotal).toBeGreaterThan(3);
+    expect(total).toBeGreaterThanOrEqual(4);
   });
 
   test("the named guests, the member count and the phone numbers are all on the row", async () => {
@@ -323,19 +343,21 @@ test.describe("the partitioned guest list", () => {
     await expect(row.getByText("No asiste")).toBeVisible();
     await expect(row.getByText("Confirmada")).toHaveCount(0);
 
-    // Three owned invitations, one declined, none confirmed — not two answers
-    // from one household.
-    await expect(
-      mine.getByText(`Confirmadas: 0 de 3 invitaciones de ${ana.displayName}`),
-    ).toBeVisible();
-    await expect(
-      mine.getByText(`No asisten: 1 de 3 invitaciones de ${ana.displayName}`),
-    ).toBeVisible();
-    await expect(
-      mine.getByText(
-        `Sin respuesta: 2 de 3 invitaciones de ${ana.displayName}`,
-      ),
-    ).toBeVisible();
+    /*
+      THE COUNT IS NO LONGER ASSERTED HERE, AND THAT IS NOT A LOSS OF COVERAGE.
+
+      It used to read the per-operator `ProgressSummary` sentences. The console
+      now shows ONE set of figures over the whole event, and an event-wide total
+      cannot be asserted from here: this database is shared with every other
+      spec in the suite, so a fixture seeded elsewhere moves the number. That is
+      precisely why these assertions were scoped to Ana's partition originally.
+
+      The invariant itself — one household that answered twice counts ONCE —
+      lives in `summarizeConsoleList` and is asserted directly in
+      `lib/domain/console-list.spec.ts`, over rows, with no database in the way.
+      What this test still proves, and only this test can, is that the chain
+      from `rsvp_latest` to the badge on the row reaches a real page.
+    */
   });
 
   /**
@@ -355,26 +377,29 @@ test.describe("the partitioned guest list", () => {
     ).toBeVisible();
     await expect(row.getByText("Marcada como enviada")).toHaveCount(0);
 
-    await expect(
-      mine.getByText(
-        `Marcadas como enviadas: 0 de 3 invitaciones de ${ana.displayName}`,
-      ),
-    ).toBeVisible();
-    await expect(
-      mine.getByText(
-        `Enlace abierto, envío sin confirmar: 1 de 3 invitaciones de ${ana.displayName}`,
-      ),
-    ).toBeVisible();
+    /*
+      The count moved to the event-wide dashboard, which cannot carry an exact
+      assertion from a shared database — see the note in the test above. That an
+      opened link is never counted as a send is asserted over rows in
+      `lib/domain/console-list.spec.ts` and over the tiles themselves in
+      `components/console/ConsoleDashboard.spec.tsx`.
+    */
   });
 
   test("no count is rendered without the population it was taken over", async () => {
     await page.goto("/console");
 
-    for (const item of await page
-      .locator("section.progress-summary li")
-      .allInnerTexts()) {
-      expect(item).toMatch(/ de \d+ /);
-      expect(item).toMatch(/invitaciones/);
+    // The rule outlived the component that used to carry it. `ProgressSummary`
+    // enforced it by rendering whole sentences; the dashboard is four tiles, so
+    // the population rides inside each figure — "17 de 30", never "17".
+    const figures = await page
+      .locator("dl[data-slot='stat-bar'] dd")
+      .allInnerTexts();
+
+    expect(figures.length).toBeGreaterThan(0);
+
+    for (const figure of figures) {
+      expect(figure).toMatch(/^\d+ de \d+$/);
     }
   });
 });
@@ -472,8 +497,6 @@ test.describe("the console never becomes a way past the guest gate", () => {
  * Ana's partition, and the count assertions above are written against three.
  */
 test.describe("creating a group through the console", () => {
-  /** The household name shown in the panel. Never the greeting. */
-  let householdName: string;
   /** The greeting an operator writes over the derived one. */
   let customGreeting: string;
 
@@ -487,13 +510,32 @@ test.describe("creating a group through the console", () => {
   test.beforeAll(() => {
     // Suffixed per run for the same reason the operators are: this file shares
     // one database with every other spec and with whatever an aborted run left.
-    householdName = `Restrepo Vélez ${run}`;
     customGreeting = `Los Restrepo de siempre ${run}`;
   });
 
   /** One member's own fieldset. Scoped, because every row repeats the labels. */
   const member = (index: number) =>
     page.locator("fieldset.invitation-form__member").nth(index);
+
+  /**
+   * Opens a blank member card.
+   *
+   * The create form opens on the PICKER when the directory has anybody free,
+   * and on a blank card when it does not — and this file does not own the
+   * directory, which is shared with every other spec. So a test that needs a
+   * card asks for one.
+   */
+  const addPerson = () =>
+    page.getByRole("button", { name: "Agregar una persona nueva" }).click();
+
+  /** A member card exists to type into, however the form opened. */
+  const ensureCard = async () => {
+    if (
+      (await page.locator("fieldset.invitation-form__member").count()) === 0
+    ) {
+      await addPerson();
+    }
+  };
 
   /** What the form says the members currently derive to. */
   const derivedLine = () => page.getByTestId("invitation-derived-name");
@@ -504,13 +546,18 @@ test.describe("creating a group through the console", () => {
   const createdRow = () =>
     mine().locator("li.guest-list__row").filter({ hasText: customGreeting });
 
-  test("the create affordance on the list opens the form without leaving the console", async () => {
+  test("creating an invitation is one click from the navigation", async () => {
     await page.goto("/console");
 
-    // Scoped to the owned partition: the shared dashboard below renders its own
-    // `GuestList` and therefore its own create link, and an unscoped query is
-    // ambiguous exactly because the door is offered in both places.
-    await mine().getByRole("link", { name: "Crear invitación" }).click();
+    // From the navigation, which is where creation lives now. It started at
+    // the foot of the guest list — offered in BOTH lists, so this query had to
+    // be scoped to the owned partition to be unambiguous at all — then spent
+    // one commit in the header. The sidebar is where a destination belongs, and
+    // on a phone that bar is at the bottom of the screen under the thumb.
+    //
+    // `.first()` because the bar renders twice, once as a sidebar and once as
+    // the bottom tabs, with CSS deciding which is on screen.
+    await page.getByRole("link", { name: "Agregar" }).first().click();
 
     await expect(page).toHaveURL(/\/console\/invitations\/new$/);
     await expect(
@@ -522,6 +569,7 @@ test.describe("creating a group through the console", () => {
     // Nothing named yet: the preview says so instead of rendering an empty name.
     await expect(derivedLine()).toContainText("todavía sin integrantes");
 
+    await ensureCard();
     await member(0).getByLabel("Nombre completo").fill(LUCIA);
     // One member alone keeps their FULL name: addressing one person by their
     // first name reads as clipped rather than warm.
@@ -534,7 +582,7 @@ test.describe("creating a group through the console", () => {
 
     await member(0).getByLabel("Teléfono").fill(LUCIA_PHONE_TYPED);
 
-    await page.getByRole("button", { name: "Agregar integrante" }).click();
+    await addPerson();
     await member(1).getByLabel("Nombre completo").fill(MATEO);
     await member(1).getByLabel("Apodo").fill("Teo");
 
@@ -547,7 +595,6 @@ test.describe("creating a group through the console", () => {
   });
 
   test("an override survives a member added after it", async () => {
-    await page.getByLabel("Nombre del hogar").fill(householdName);
     await page.getByLabel("Nombre del grupo").fill(customGreeting);
 
     // Touching the field IS the decision, so the hidden source flips with it —
@@ -562,7 +609,7 @@ test.describe("creating a group through the console", () => {
     await expect(derivedLine()).toContainText("Lucha y Teo");
     await expect(derivedLine()).toContainText("escrito a mano");
 
-    await page.getByRole("button", { name: "Agregar integrante" }).click();
+    await addPerson();
     await member(2).getByLabel("Nombre completo").fill(SARA);
     await member(2).getByLabel("Apodo").fill("Sarita");
 
@@ -596,20 +643,38 @@ test.describe("creating a group through the console", () => {
     await expect(row.getByText(LUCIA_PHONE_STORED)).toBeVisible();
   });
 
-  test("a group nobody has been chosen for says so on its row", async () => {
-    // WRITTEN OUT, not left blank. Nothing infers a recipient — not the first
-    // member, not the only one with a number — so a row that rendered no
-    // indicator would look exactly like a row whose choice is further down, and
-    // the operator would learn the difference when the send refused.
+  /**
+   * THIS TEST ASSERTED THE OPPOSITE, AND THE OPPOSITE WAS THE DEFECT.
+   *
+   * It used to prove that a group created here arrived with nobody chosen, on
+   * the reasoning that nothing may INFER a recipient — not the first member,
+   * not the only one with a number. That reasoning still holds, and nothing
+   * infers one. What changed is that the form now ASKS, with the first member
+   * already selected and visibly so, so the answer is the operator's.
+   *
+   * The old behaviour meant every household born in the console appeared under
+   * "Sin destinatario elegido" and needed somebody to reopen it and finish what
+   * they thought they had already finished.
+   */
+  test("the group arrives with the person the form chose already recorded", async () => {
     await expect(
       createdRow().getByText("Nadie elegido para recibir el mensaje."),
-    ).toBeVisible();
-    await expect(createdRow().getByText("Recibe el mensaje")).toHaveCount(0);
+    ).toHaveCount(0);
+
+    // On Lucía's own line, and on nobody else's: she is the row the form had
+    // selected when it was submitted.
+    const line = (fullName: string) =>
+      createdRow()
+        .locator("ul.guest-list__guests > li")
+        .filter({ hasText: fullName });
+
+    await expect(line(LUCIA).getByText("Recibe el mensaje")).toBeVisible();
+    await expect(line(MATEO).getByText("Recibe el mensaje")).toHaveCount(0);
   });
 
   test("the row's edit affordance reaches the form with the stored override intact", async () => {
     await createdRow()
-      .getByRole("link", { name: `Editar invitación de ${customGreeting}` })
+      .getByRole("link", { name: `Editar la invitación de ${customGreeting}` })
       .click();
 
     await expect(page).toHaveURL(
@@ -621,22 +686,18 @@ test.describe("creating a group through the console", () => {
     await expect(page.getByLabel("Nombre del grupo")).toHaveValue(
       customGreeting,
     );
-    await expect(page.getByLabel("Nombre del hogar")).toHaveValue(
-      householdName,
-    );
     await expect(page.getByTestId("invitation-greeting-source")).toHaveValue(
       "custom",
     );
   });
 
-  test("choosing a member on the edit screen moves the indicator onto their row", async () => {
+  test("changing the recipient on the edit screen moves the indicator onto their row", async () => {
     const recipients = page.locator("fieldset.invitation-form__recipient");
 
-    // Nobody is preselected here either, on a household whose only stored number
-    // belongs to one member — the one an auto-pick would have taken.
-    for (const option of await recipients.getByRole("radio").all()) {
-      await expect(option).not.toBeChecked();
-    }
+    // The stored choice arrives selected, which is what an edit screen owes:
+    // Lucía was chosen at creation, and the form opens saying so rather than
+    // asking again as if nothing had been decided.
+    await expect(recipients.getByLabel(LUCIA)).toBeChecked();
 
     // WAITED FOR, NOT MERELY CLICKED. The radio is checked optimistically and
     // the Server Action is a POST to this route; navigating away before it
@@ -647,7 +708,7 @@ test.describe("creating a group through the console", () => {
         response.request().method() === "POST" &&
         response.url().includes("/console/invitations/"),
     );
-    await recipients.getByLabel(LUCIA).check();
+    await recipients.getByLabel(MATEO).check();
     await write;
 
     // Asserted on the LIST, which is server-rendered: the radio going checked is
@@ -655,10 +716,14 @@ test.describe("creating a group through the console", () => {
     // is what proves the write landed.
     await page.goto("/console");
 
-    const row = createdRow();
-    await expect(row.getByText("Recibe el mensaje")).toBeVisible();
-    await expect(
-      row.getByText("Nadie elegido para recibir el mensaje."),
-    ).toHaveCount(0);
+    const line = (fullName: string) =>
+      createdRow()
+        .locator("ul.guest-list__guests > li")
+        .filter({ hasText: fullName });
+
+    // MOVED, not merely present: the indicator has to leave the member it was
+    // on, or a write that added a second recipient would pass this test.
+    await expect(line(MATEO).getByText("Recibe el mensaje")).toBeVisible();
+    await expect(line(LUCIA).getByText("Recibe el mensaje")).toHaveCount(0);
   });
 });

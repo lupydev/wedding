@@ -292,16 +292,22 @@ test.describe("the send preflight", () => {
 
     /*
       Permanently empty by construction — the composite foreign key refuses to
-      store a choice that names a non-member (design D23) — and rendered anyway.
-      A group that appeared only when it was non-empty would be indistinguishable
-      from a group that had stopped being computed, so what is asserted here is
-      that the section exists and says it is empty.
+      store a choice that names a non-member (design D23) — and NOT rendered.
+
+      It used to render anyway, with the word "Ninguna" under it, on the
+      reasoning that a group appearing only when non-empty is indistinguishable
+      from a group that stopped being computed. That reasoning is kept and is
+      now carried by the one clear line this panel shows when nothing is
+      blocked. What it cost was five always-expanded panels, each with a badge
+      and a paragraph, above the list an operator came to read — and this group
+      in particular is a panel explaining, in four lines, why it can never have
+      contents.
     */
-    const stale = group("Con destinatario que ya no pertenece");
-    await expect(stale.locator(".dispatch-preflight__empty")).toBeVisible();
-    await expect(stale.locator(".dispatch-preflight__household")).toHaveCount(
-      0,
-    );
+    await expect(
+      preflight.getByRole("heading", {
+        name: "Con destinatario que ya no pertenece",
+      }),
+    ).toHaveCount(0);
 
     const sent = group("Ya enviadas");
     await expect(sent).toContainText("Familia Ya Enviada Osorio");
@@ -330,15 +336,27 @@ test.describe("the send preflight", () => {
    * most of the list and choosing is the cheapest fix, `already_dispatched` last
    * because "do not send this again" is the one finding that needs no work.
    */
-  test("re-derives every readiness count, in the order the five groups are shown", async () => {
+  test("re-derives every readiness count, in the order the groups are shown", async () => {
     await page.goto("/console");
+
+    /*
+      ONLY THE GROUPS WITH SOMETHING TO REPORT ARE ON SCREEN, IN CANONICAL
+      ORDER.
+
+      All five are still COMPUTED — `buildDispatchPreflight` is unit-tested over
+      rows and `EXPECTED_GROUPS` below still carries the count for every one of
+      them — and the panel renders the ones that have households. The order they
+      appear in is the invariant this asserts, because a reader learns where to
+      look and a shuffled panel costs them that.
+    */
+    const shown = EXPECTED_GROUPS.filter(([, count]) => count > 0);
 
     const headings = await page
       .locator("section.dispatch-preflight__group h3")
       .allInnerTexts();
 
     expect(headings.map((heading) => heading.trim())).toEqual(
-      EXPECTED_GROUPS.map(([heading]) => heading),
+      shown.map(([heading]) => heading),
     );
 
     const counts = await page
@@ -349,7 +367,7 @@ test.describe("the send preflight", () => {
     // does: a number whose denominator is not on screen is a number nobody can
     // check.
     expect(counts.map((count) => count.trim())).toEqual(
-      EXPECTED_GROUPS.map(
+      shown.map(
         ([heading, count]) =>
           `${heading}: ${count} de ${ANA_OWNED} invitaciones de ${ana.displayName}`,
       ),
@@ -375,7 +393,16 @@ test.describe("the send preflight", () => {
       await page.locator("p.dispatch-preflight__ready").innerText(),
     );
 
-    expect(counted).toHaveLength(5);
+    /*
+      One entry per group ON SCREEN, which is the groups that have households.
+      A group of zero contributes nothing to the sum below, so the partition it
+      proves is unaffected — and the sum IS the invariant here: a household
+      counted twice, or dropped from every group, shows up there and nowhere
+      else.
+    */
+    expect(counted).toHaveLength(
+      EXPECTED_GROUPS.filter(([, count]) => count > 0).length,
+    );
     expect(counted.reduce((sum, [count]) => sum + count, 0) + readyShown).toBe(
       total,
     );
@@ -643,13 +670,17 @@ test.describe("the recipient a household is waiting for", () => {
       .locator("p.dispatch-preflight__count")
       .allInnerTexts();
 
+    /*
+      The two groups that fell to zero are not listed, because they are no
+      longer on screen. "Sin destinatario elegido" emptying is exactly what
+      choosing a recipient was supposed to do, and a group vanishing is a
+      sharper proof of it than a group that says "Ninguna".
+    */
     expect(counts.map((count) => count.trim())).toEqual(
       (
         [
-          ["Sin destinatario elegido", 0],
           ["Con destinatario sin número", 1],
           ["Con destinatario que no recibe WhatsApp", 1],
-          ["Con destinatario que ya no pertenece", 0],
           ["Ya enviadas", 2],
         ] as const
       ).map(
@@ -658,14 +689,16 @@ test.describe("the recipient a household is waiting for", () => {
       ),
     );
 
-    // The household that was just chosen for is named nowhere in the blocked
-    // groups any more, and the empty group says it is empty rather than vanishing.
-    const unchosen = page
-      .locator("section.dispatch-preflight__group")
-      .filter({ hasText: "Sin destinatario elegido" });
-
-    await expect(unchosen).not.toContainText("Familia Sin Elegir Quintero");
-    await expect(unchosen.locator(".dispatch-preflight__empty")).toBeVisible();
+    // And the household that was just chosen for is named nowhere at all in the
+    // blocked groups, because the group that held it is gone.
+    await expect(
+      page
+        .locator("section.dispatch-preflight__group")
+        .filter({ hasText: "Sin destinatario elegido" }),
+    ).toHaveCount(0);
+    await expect(page.locator("section.dispatch-preflight")).not.toContainText(
+      "Familia Sin Elegir Quintero",
+    );
   });
 });
 
@@ -689,7 +722,7 @@ test.describe("the device declaration gate", () => {
 
     await expect(MISMATCH_NOTICE(page)).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Preparar envío/ }),
+      page.getByRole("link", { name: /Enviar la invitación/ }),
     ).toHaveCount(0);
 
     // Carlos is the member the readiness check is naming right now: he is the

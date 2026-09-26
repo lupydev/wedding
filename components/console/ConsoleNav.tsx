@@ -1,5 +1,6 @@
 import {
   CalendarHeart,
+  UserPlus,
   CheckCheck,
   ListOrdered,
   Smartphone,
@@ -46,6 +47,7 @@ const ICONS: Record<ConsoleNavIcon, ComponentType<{ className?: string }>> = {
   users: Users,
   phone: Smartphone,
   calendar: CalendarHeart,
+  plus: UserPlus,
 };
 
 /**

@@ -7,12 +7,19 @@ import { consoleOrigin, siteOrigin } from "@/lib/server/env";
 /**
  * Open Graph card warming.
  *
- * `next/og` answers with `cache-control: public, immutable, max-age=31536000`,
- * so only the FIRST fetch of a card pays for a cold Satori + Resvg generation.
- * That first fetch is exactly the one WhatsApp's crawler makes, while a human
- * waits with the message composed and their thumb on send. Requesting the card
- * once, right after the invitation row lands, moves that cost off the critical
- * path for a fraction of a second of import time.
+ * The card route answers with `cache-control: public, immutable,
+ * max-age=31536000`, so only the FIRST fetch of a card reaches the origin at
+ * all. That first fetch is exactly the one WhatsApp's crawler makes, while a
+ * human waits with the message composed and their thumb on send. Requesting the
+ * card once, right after the invitation row lands, moves that cost off the
+ * critical path for a fraction of a second of import time.
+ *
+ * WHAT THAT COST IS HAS SHRUNK, AND THE WARM IS STILL WORTH IT. It used to be a
+ * cold Satori + Resvg rasterization; the route serves the JPEG's own bytes now,
+ * so the origin work is a disk read. The warm is no longer about generation
+ * time — it is about the CDN edge holding the object before the crawler asks,
+ * which is the same reason it existed and the part that never depended on how
+ * the bytes were produced.
  *
  * WHICH url is warmed is as load-bearing as warming at all. Next.js appends a
  * build-scoped hash to the `og:image` it emits — `.../opengraph-image?88f8dd53`

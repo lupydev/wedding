@@ -13,6 +13,7 @@ import {
   addMember,
   chooseRecipient,
   createInvitation,
+  createSoloInvitation,
   deleteInvitation,
   editMember,
   removeMember,
@@ -169,7 +170,6 @@ describe("toGuestFacingInvitation — phones never leave the server", () => {
     ownerSenderId: SENDERS["ana@example.test"],
     displayName: "Familia Restrepo",
     greetingName: "Familia Restrepo",
-    rsvpDeadline: "2026-05-01",
     guests: [
       {
         id: "44444444-4444-4444-8444-444444444444",
@@ -197,7 +197,6 @@ describe("toGuestFacingInvitation — phones never leave the server", () => {
       slug: "abcdefghijklmnop",
       greetingName: "Familia Restrepo",
       displayName: "Familia Restrepo",
-      rsvpDeadline: "2026-05-01",
       guests: [
         {
           id: "44444444-4444-4444-8444-444444444444",
@@ -253,7 +252,6 @@ describe("invitations repository (local Supabase)", () => {
         ownerSenderId: senderId,
         displayName: "Familia Restrepo",
         greetingName: "Familia Restrepo",
-        rsvpDeadline: null,
         guests: [
           {
             fullName: "Ana Restrepo",
@@ -270,7 +268,16 @@ describe("invitations repository (local Supabase)", () => {
         ],
       });
 
-      expect(created.slug).toMatch(/^[a-z2-7]{16}$/);
+      /*
+        THE ADDRESS IS THE HOUSEHOLD'S OWN NAME, NOT SIXTEEN RANDOM CHARACTERS.
+
+        This asserted `/^[a-z2-7]{16}$/` until migration 0014. An invitation is
+        a link two people send over WhatsApp, and `/i/k22eth3lvkzptcco` reads as
+        a mistake. A counter may be appended when a second household shares the
+        name, and this suite shares a database, so the name is a prefix rather
+        than the whole string.
+      */
+      expect(created.slug).toMatch(/^familia-restrepo(-\d+)?$/);
 
       const found = await findInvitationBySlug(client, created.slug);
 
@@ -319,7 +326,6 @@ describe("invitations repository (local Supabase)", () => {
         ownerSenderId: "99999999-9999-4999-8999-999999999999",
         displayName: "Sin Dueño",
         greetingName: "Sin Dueño",
-        rsvpDeadline: null,
         guests: [
           {
             fullName: "Guest",
@@ -340,6 +346,311 @@ describe("invitations repository (local Supabase)", () => {
     });
 
     expect(orphans).toBe(0);
+  });
+  /**
+   * THE CHOICE TRAVELS AS A POSITION AND ARRIVES AS A PERSON.
+   *
+   * The console's create form has no guest ids to offer — the people are
+   * written by this very call — so it answers "who receives the message" with a
+   * position. This is the half that turns it back into somebody: the guests are
+   * inserted, the rows come back, and the one at that index is recorded.
+   *
+   * Three distinct names, with the MIDDLE one chosen, so an off-by-one and an
+   * insertion order that did not match the form would both be visible rather
+   * than accidentally right.
+   */
+  it("records the member the form chose by position", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.recipient.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const name = `Familia Elegida ${Date.now().toString(36)}`;
+
+    const created = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: "Primera Persona",
+          phoneE164: "+573002220001",
+          isPrimary: true,
+          isChild: false,
+        },
+        {
+          fullName: "Segunda Persona",
+          phoneE164: "+573002220002",
+          isPrimary: false,
+          isChild: false,
+        },
+        {
+          fullName: "Tercera Persona",
+          phoneE164: "+573002220003",
+          isPrimary: false,
+          isChild: false,
+        },
+      ],
+      dispatchRecipientIndex: 1,
+    });
+
+    const chosen = await withDb(async (db) => {
+      const result = await db.query<{ full_name: string }>(
+        `select g.full_name
+         from invitations i
+         join invitation_guests g on g.id = i.dispatch_recipient_guest_id
+         where i.id = $1`,
+        [created.id],
+      );
+      return result.rows[0]?.full_name ?? null;
+    });
+
+    expect(chosen).toBe("Segunda Persona");
+  });
+
+  /**
+   * A HOUSEHOLD BUILT PARTLY FROM PEOPLE WHO ALREADY EXISTED.
+   *
+   * Since migration 0015 a guest can be written down before any household
+   * holds them, so creating an invitation is no longer only "type these
+   * people": some of them are already in the directory, and picking one must
+   * MOVE that row rather than write a second person with the same name.
+   *
+   * The two kinds of member are distinguished by one optional field, and the
+   * ORDER of `guests` is preserved across both — which is what keeps
+   * `dispatchRecipientIndex` meaning what the form meant by it. That is
+   * asserted here by choosing the PICKED member, position 1, so an
+   * implementation that resolved the index against only the newly inserted
+   * rows would name the wrong person rather than nobody.
+   */
+  it("takes a guest who already existed instead of writing a second one", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.picked.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const stamp = Date.now().toString(36);
+    const pickedName = `Persona Del Directorio ${stamp}`;
+
+    // Already in the directory, belonging to nobody — the state 0015 created.
+    const pickedId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into invitation_guests (invitation_id, full_name, phone_e164)
+         values (null, $1, '+573002230001')
+         returning id`,
+        [pickedName],
+      );
+      return result.rows[0].id;
+    });
+
+    const name = `Familia Mixta ${stamp}`;
+    const created = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: "Persona Tecleada",
+          phoneE164: "+573002230002",
+          isPrimary: true,
+          isChild: false,
+        },
+        {
+          // The name travels for validation and display; the ID is what
+          // decides this is a move and not an insert.
+          fullName: pickedName,
+          existingGuestId: pickedId,
+          phoneE164: null,
+          isPrimary: false,
+          isChild: false,
+        },
+      ],
+      dispatchRecipientIndex: 1,
+    });
+
+    const members = await withDb(async (db) => {
+      const result = await db.query<{ id: string; full_name: string }>(
+        `select id, full_name from invitation_guests
+          where invitation_id = $1 order by full_name`,
+        [created.id],
+      );
+      return result.rows;
+    });
+
+    // TWO members, not three: the picked person was moved, not duplicated.
+    expect(members).toHaveLength(2);
+    expect(members.map((member) => member.id)).toContain(pickedId);
+
+    const chosen = await withDb(async (db) => {
+      const result = await db.query<{ full_name: string }>(
+        `select g.full_name
+         from invitations i
+         join invitation_guests g on g.id = i.dispatch_recipient_guest_id
+         where i.id = $1`,
+        [created.id],
+      );
+      return result.rows[0]?.full_name ?? null;
+    });
+
+    expect(chosen).toBe(pickedName);
+  });
+
+  /**
+   * AND IT REFUSES SOMEBODY WHO WAS TAKEN WHILE THE FORM WAS OPEN.
+   *
+   * Two operators, two phones, two renders of the same list. The picker only
+   * offers free guests, but a page that was correct when it loaded can be
+   * wrong when it is submitted — so the write refuses, and it refuses by
+   * leaving NOTHING behind: no half-built household, and the other family
+   * untouched.
+   */
+  it("creates nothing when a chosen guest already belongs to somebody else", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.taken.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const stamp = Date.now().toString(36);
+    const theirName = `Familia Primera ${stamp}`;
+
+    const theirs = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: theirName,
+      greetingName: theirName,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: `Ya Tomada ${stamp}`,
+          phoneE164: "+573002240001",
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    });
+    const takenId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        "select id from invitation_guests where invitation_id = $1",
+        [theirs.id],
+      );
+      return result.rows[0].id;
+    });
+
+    const ourName = `Familia Segunda ${stamp}`;
+    const message = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: ourName,
+      greetingName: ourName,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: `Ya Tomada ${stamp}`,
+          existingGuestId: takenId,
+          phoneE164: null,
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    }).then(
+      () => null,
+      (error: Error) => error.message,
+    );
+
+    expect(message).toMatch(/ya (está|pertenece)/i);
+
+    const after = await withDb(async (db) => {
+      const guest = await db.query<{ invitation_id: string }>(
+        "select invitation_id from invitation_guests where id = $1",
+        [takenId],
+      );
+      const leftovers = await db.query<{ id: string }>(
+        "select id from invitations where display_name = $1",
+        [ourName],
+      );
+
+      return {
+        stillTheirs: guest.rows[0].invitation_id === theirs.id,
+        leftovers: leftovers.rows.length,
+      };
+    });
+
+    expect(after.stillTheirs).toBe(true);
+    // Nothing half-built left behind for somebody to find later.
+    expect(after.leftovers).toBe(0);
+  });
+
+  /**
+   * TWO HOUSEHOLDS OF THE SAME NAME GET DIFFERENT ADDRESSES.
+   *
+   * `nextFreeSlug` decides the counter and is tested over a set, with no
+   * database in the way. What only this test can prove is the query that
+   * fills that set: `readableSlugFor` asks the table which addresses in this
+   * family of names are taken, and a wrong filter there would silently hand
+   * the same address to both households — where the unique constraint would
+   * refuse the second one and creation would fail for a reason nobody could
+   * read.
+   */
+  it("numbers a second household that shares a name", async () => {
+    const senderId = await withDb(async (db) => {
+      const result = await db.query<{ id: string }>(
+        `insert into senders (display_name, role, allowlisted_email, contact_wa_phone_e164)
+         values ('Ana', 'partner_a', $1, '+573001110000')
+         returning id`,
+        [`ana.repetida.${Date.now()}@example.test`],
+      );
+      return result.rows[0].id;
+    });
+    const client = createServerSupabaseClient();
+    const name = `Familia Repetida ${Date.now().toString(36)}`;
+
+    const first = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: "Primera Persona",
+          phoneE164: "+573001110001",
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    });
+
+    const second = await createInvitation(client, {
+      ownerSenderId: senderId,
+      displayName: name,
+      greetingName: name,
+      greetingNameSource: "custom",
+      guests: [
+        {
+          fullName: "Segunda Persona",
+          phoneE164: "+573001110002",
+          isPrimary: true,
+          isChild: false,
+        },
+      ],
+    });
+
+    expect(second.slug).toBe(`${first.slug}-2`);
+    expect(await findInvitationBySlug(client, second.slug)).not.toBeNull();
   });
 });
 
@@ -472,7 +783,6 @@ describe("importInvitations — atomic and idempotent (local Supabase)", () => {
       sourceKey,
       displayName,
       greetingName: displayName,
-      rsvpDeadline: null,
       guests: [
         {
           fullName: "Ana Restrepo",
@@ -1135,7 +1445,7 @@ function member(
 /** One call the repository made through the Supabase client. */
 interface RecordedCall {
   readonly table: string;
-  readonly operation: "from" | "select" | "insert" | "update" | "delete";
+  readonly operation: "from" | "select" | "or" | "insert" | "update" | "delete";
   readonly payload?: unknown;
 }
 
@@ -1165,6 +1475,19 @@ function makeFakeClient(script: Readonly<Record<string, FakeResult>> = {}): {
         calls.push({ table, operation: "select", payload: columns });
         // A trailing `.select()` on an insert or update is a RETURNING clause,
         // not a read: it must not steal the mutation's scripted outcome.
+        if (key === table) {
+          key = `${table}.select`;
+        }
+        return chain;
+      },
+      /*
+        `or` is how `readableSlugFor` asks which addresses in a family of names
+        are already taken. Unscripted it answers `{ data: null }`, which the
+        caller reads as "none taken" — so a fake client with no script gets the
+        plain derived address, which is what these tests want.
+      */
+      or(filter: string) {
+        calls.push({ table, operation: "or", payload: filter });
         if (key === table) {
           key = `${table}.select`;
         }
@@ -1260,7 +1583,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
         displayName: "Luis Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1274,7 +1596,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
         displayName: "Familia Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             nickname: "Lucho",
@@ -1324,7 +1645,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
         displayName: "Familia Guzmán",
         greetingName: "Los del salón",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1359,7 +1679,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
           displayName: "Sin Nadie",
           greetingName: "Sin Nadie",
           greetingNameSource: "custom",
-          rsvpDeadline: null,
           guests: [],
         }),
       ).rejects.toThrow(/no_members/);
@@ -1386,7 +1705,6 @@ describe("createInvitation — validated before any write (local Supabase)", () 
           displayName: "Familia Anónima",
           greetingName: "Familia Anónima",
           greetingNameSource: "custom",
-          rsvpDeadline: null,
           guests: [member("   ", { isPrimary: true })],
         }),
       ).rejects.toThrow(/member_without_name/);
@@ -1436,7 +1754,6 @@ describe("createInvitation — D21, a compensation that itself fails", () => {
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1475,7 +1792,6 @@ describe("createInvitation — D21, a compensation that itself fails", () => {
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1503,7 +1819,6 @@ describe("member management — add, edit, remove (local Supabase)", () => {
       displayName: "Familia Guzmán",
       greetingName: "",
       greetingNameSource: "derived",
-      rsvpDeadline: null,
       guests: names.map((name, index) => ({
         fullName: name.fullName,
         nickname: name.nickname,
@@ -1621,7 +1936,6 @@ describe("member management — add, edit, remove (local Supabase)", () => {
         displayName: "Familia Guzmán",
         greetingName: "Los del salón",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1805,7 +2119,6 @@ describe("moveMemberToInvitation — a permitted move (local Supabase)", () => {
         displayName: "Familia Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             nickname: "Lucho",
@@ -1820,7 +2133,6 @@ describe("moveMemberToInvitation — a permitted move (local Supabase)", () => {
         displayName: "Familia Peña",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
         ],
@@ -1888,7 +2200,6 @@ describe("chooseRecipient — the composite FK does the refusing (local Supabase
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -1901,7 +2212,6 @@ describe("chooseRecipient — the composite FK does the refusing (local Supabase
         displayName: "Familia Peña",
         greetingName: "Familia Peña",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
         ],
@@ -1940,7 +2250,6 @@ describe("deleteInvitation — refused by ANY dispatch history (local Supabase)"
       displayName: "Familia Guzmán",
       greetingName: "Familia Guzmán",
       greetingNameSource: "custom",
-      rsvpDeadline: null,
       guests: [
         member("Luis Guzmán", { phoneE164: "+573001234567", isPrimary: true }),
       ],
@@ -2052,7 +2361,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Orden",
         greetingName: "Familia Orden",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Ana Orden", { isPrimary: true }),
           member("Beto Orden"),
@@ -2093,7 +2401,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Rojas",
         greetingName: "Familia Rojas",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [member("Ana Rojas", { phoneE164: "+573001234567" })],
       });
 
@@ -2127,7 +2434,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Rojas",
         greetingName: "Familia Rojas",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [member("Ana Rojas", { phoneE164: "+573001234567" })],
       });
 
@@ -2148,7 +2454,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Guzmán",
         greetingName: "Familia Guzmán",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             phoneE164: "+573001234567",
@@ -2228,7 +2533,6 @@ describe("rotateInvitationSlug — a new address for the same invitation (local 
         displayName: "Familia Peña",
         greetingName: "Familia Peña",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
         guests: [
           member("Ana Peña", { phoneE164: "+573001234569", isPrimary: true }),
         ],
@@ -2273,7 +2577,6 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
       displayName: "Familia Guzmán",
       greetingName: "Familia Guzmán",
       greetingNameSource: "custom",
-      rsvpDeadline: null,
       guests: [
         member("Luis Guzmán", { nickname: "Lucho", isPrimary: true }),
         member("Ana Guzmán", { nickname: null }),
@@ -2289,10 +2592,8 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
             display_name: string;
             greeting_name: string;
             greeting_name_source: string;
-            rsvp_deadline: string | null;
           }>(
-            "select display_name, greeting_name, greeting_name_source, " +
-              "to_char(rsvp_deadline, 'YYYY-MM-DD') as rsvp_deadline " +
+            "select display_name, greeting_name, greeting_name_source " +
               "from invitations where id = $1",
             [invitationId],
           )
@@ -2300,7 +2601,7 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
     );
   }
 
-  it("stores a custom name exactly as typed, with its source and deadline", async () => {
+  it("stores a custom name exactly as typed, with its source", async () => {
     await withSenderFixture(async (senderId) => {
       const invitation = await seed(senderId);
 
@@ -2308,14 +2609,12 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
         displayName: "Familia Guzmán Peña",
         greetingName: "Los Guzmán de siempre",
         greetingNameSource: "custom",
-        rsvpDeadline: "2026-05-01",
       });
 
       const stored = await readNaming(invitation.id);
       expect(stored.display_name).toBe("Familia Guzmán Peña");
       expect(stored.greeting_name).toBe("Los Guzmán de siempre");
       expect(stored.greeting_name_source).toBe("custom");
-      expect(stored.rsvp_deadline).toBe("2026-05-01");
     });
   });
 
@@ -2329,7 +2628,6 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
         // from the copy the form round-tripped.
         greetingName: "lo que sea",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
       });
 
       const stored = await readNaming(invitation.id);
@@ -2347,7 +2645,6 @@ describe("updateInvitation — the invitation's own fields (local Supabase)", ()
           displayName: "Familia Guzmán",
           greetingName: "   ",
           greetingNameSource: "custom",
-          rsvpDeadline: null,
         }),
       );
 
@@ -2378,7 +2675,6 @@ describe("importInvitations — the nickname reaches the row (local Supabase)", 
           sourceKey,
           displayName: "Familia Guzmán",
           greetingName: "Familia Guzmán",
-          rsvpDeadline: null,
           guests: [
             member("Luis Guzmán", { nickname: "Lucho", isPrimary: true }),
             member("Ana Guzmán"),
@@ -2409,6 +2705,371 @@ describe("importInvitations — the nickname reaches the row (local Supabase)", 
   });
 });
 
+/**
+ * THE IMPORTER MINTS THE SAME READABLE ADDRESSES THE CONSOLE DOES.
+ *
+ * It minted random base32 while `createInvitation` had been giving households
+ * `/i/familia-guzman-pena` since migration 0014. Two ways in, two kinds of
+ * address, and the difference visible to a guest: the families typed into the
+ * console got a link that reads like their name, and the ones loaded from a
+ * file got sixteen characters that read like a mistake.
+ *
+ * WHAT MAKES THIS SAFE TO CHANGE AT ALL is `on conflict (source_key) do
+ * nothing` in `import_invitations` (0006): a re-import leaves the stored slug
+ * untouched and reads it back, so a derived address computed on a second run
+ * is discarded rather than rotating a link already in somebody's WhatsApp.
+ */
+describe("importInvitations — the address it mints (local Supabase)", () => {
+  it("derives the address from the household's name", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const name = `Familia Importada ${stamp}`;
+
+      const [imported] = await importInvitations(createServerSupabaseClient(), [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `readable-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          guests: [member("Ana Importada", { isPrimary: true })],
+        },
+      ]);
+
+      expect(imported.slug).toBe(`familia-importada-${stamp}`);
+    });
+  });
+
+  /**
+   * TWO HOUSEHOLDS OF ONE NAME IN THE SAME FILE.
+   *
+   * The database cannot help here: both rows are written by a single RPC call,
+   * so neither is visible to the other's lookup. `readableSlugFor` takes the
+   * addresses already decided in THIS batch, and without threading them the
+   * second household would be handed the first one's slug — where the unique
+   * index refuses it and the whole import fails, naming a constraint rather
+   * than the two families that share a surname.
+   */
+  it("numbers a second household of the same name inside one file", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const name = `Familia Repetida ${stamp}`;
+
+      const imported = await importInvitations(createServerSupabaseClient(), [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `dup-a-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          guests: [member("Ana Repetida", { isPrimary: true })],
+        },
+        {
+          ownerSenderId: senderId,
+          sourceKey: `dup-b-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          guests: [member("Beto Repetido", { isPrimary: true })],
+        },
+      ]);
+
+      expect(imported.map((row) => row.slug)).toEqual([
+        `familia-repetida-${stamp}`,
+        `familia-repetida-${stamp}-2`,
+      ]);
+    });
+  });
+
+  /**
+   * AND A RE-IMPORT DOES NOT MOVE THE ADDRESS.
+   *
+   * This is the one that would hurt: the link is already in a family's
+   * WhatsApp. A second run computes a NEW address — the first one is taken, so
+   * the counter advances — and that computed value has to be discarded rather
+   * than written. `on conflict (source_key) do nothing` is what discards it,
+   * and this test is what keeps that clause honest.
+   */
+  it("leaves the address alone when the same file is imported again", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const name = `Familia Reimportada ${stamp}`;
+      const rows = [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `rerun-${stamp}`,
+          displayName: name,
+          greetingName: name,
+          guests: [member("Ana Reimportada", { isPrimary: true })],
+        },
+      ];
+
+      const first = await importInvitations(createServerSupabaseClient(), rows);
+      const second = await importInvitations(
+        createServerSupabaseClient(),
+        rows,
+      );
+
+      expect(first[0].created).toBe(true);
+      expect(second[0].created).toBe(false);
+      expect(second[0].slug).toBe(first[0].slug);
+    });
+  });
+
+  /**
+   * A NAME NO URL CAN CARRY STILL GETS AN ADDRESS.
+   *
+   * `slugifyName` answers the empty string for a household written entirely in
+   * emoji, and the column refuses an empty slug. Falling back to a random one
+   * is uglier and works, which is the right trade for an import that would
+   * otherwise fail on one odd row and write none of the others.
+   */
+  it("falls back to a random address when the name spells nothing", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+
+      const [imported] = await importInvitations(createServerSupabaseClient(), [
+        {
+          ownerSenderId: senderId,
+          sourceKey: `emoji-${stamp}`,
+          displayName: "💍💍",
+          greetingName: "💍💍",
+          guests: [member("Ana Emoji", { isPrimary: true })],
+        },
+      ]);
+
+      expect(imported.slug).toMatch(/^[a-z2-7]{16}$/);
+    });
+  });
+});
+
+/**
+ * ONE NAME, NOT TWO.
+ *
+ * The console asked for a "nombre del hogar" and a "nombre del grupo". Only the
+ * second is ever shown: every list, heading and aria-label reads
+ * `greetingName`, and `displayName` surfaces on exactly one screen, in the
+ * sentence that confirms a deletion. So the form asked a non-technical operator
+ * to invent a value she will never see again, with nothing on screen to tell
+ * her that.
+ *
+ * The column stays — it is what error messages and the deletion sentence name —
+ * and simply stops being asked for. When it is not supplied it becomes the
+ * greeting the invitation resolved to, so the console's internal label and the
+ * name on screen can no longer disagree.
+ */
+describe("createInvitation — the name it falls back to", () => {
+  it("names the invitation after its resolved greeting when none is given", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const created = await createInvitation(createServerSupabaseClient(), {
+        ownerSenderId: senderId,
+        // Not supplied. The form no longer asks.
+        greetingName: "",
+        greetingNameSource: "derived",
+        guests: [
+          member(`Lucha Guzmán ${stamp}`, {
+            nickname: "Lucha",
+            isPrimary: true,
+          }),
+          member(`Teo Guzmán ${stamp}`, { nickname: "Teo" }),
+        ],
+      });
+
+      const stored = await withDb(async (db) => {
+        const r = await db.query<{
+          display_name: string;
+          greeting_name: string;
+        }>(
+          "select display_name, greeting_name from invitations where id = $1",
+          [created.id],
+        );
+        return r.rows[0];
+      });
+
+      // The two can no longer disagree, which is the whole point.
+      expect(stored.greeting_name).toBe("Lucha y Teo");
+      expect(stored.display_name).toBe("Lucha y Teo");
+    });
+  });
+
+  /**
+   * A NAME THAT IS SUPPLIED IS STILL HONOURED.
+   *
+   * The importer supplies one, and a file is the source of truth for the
+   * households it describes. This is a fallback, not a replacement.
+   */
+  it("keeps a display name that was given on purpose", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const created = await createInvitation(createServerSupabaseClient(), {
+        ownerSenderId: senderId,
+        displayName: `Hogar Explícito ${stamp}`,
+        greetingName: `Los Guzmán ${stamp}`,
+        greetingNameSource: "custom",
+        guests: [member(`Ana Guzmán ${stamp}`, { isPrimary: true })],
+      });
+
+      const stored = await withDb(async (db) => {
+        const r = await db.query<{ display_name: string }>(
+          "select display_name from invitations where id = $1",
+          [created.id],
+        );
+        return r.rows[0].display_name;
+      });
+
+      expect(stored).toBe(`Hogar Explícito ${stamp}`);
+    });
+  });
+});
+
+/**
+ * SENDING TO ONE PERSON, WITHOUT BUILDING A HOUSEHOLD FIRST.
+ *
+ * The couple: "se le debe de poder mediante un botón o algo enviar la
+ * invitación individual si se quiere al invitado sin necesidad de pertenecer a
+ * una invitación, estas son para grupos familiares de 2 o más personas."
+ *
+ * An invitation is still the thing that gets sent — it carries the address, the
+ * phone gate and the audit trail — so this mints a ONE-PERSON one rather than
+ * inventing a second kind of send with its own copy of those guards. What goes
+ * away is the part that was busywork: nobody has to assemble a household to
+ * write to a cousin who is coming alone.
+ */
+describe("createSoloInvitation — one guest, their own invitation", () => {
+  it("mints an invitation addressed to that person, at their own name", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+      const fullName = `Marta Sola ${stamp}`;
+
+      const guestId = await withDb(async (db) => {
+        const r = await db.query<{ id: string }>(
+          `insert into invitation_guests (invitation_id, full_name, nickname, phone_e164)
+           values (null, $1, 'Tita', '+573002250001') returning id`,
+          [fullName],
+        );
+        return r.rows[0].id;
+      });
+
+      const created = await createSoloInvitation(client, senderId, guestId);
+
+      const stored = await withDb(async (db) => {
+        const r = await db.query<{
+          slug: string;
+          greeting_name: string;
+          members: number;
+          recipient: string | null;
+        }>(
+          `select i.slug, i.greeting_name,
+                  count(g.id)::int as members,
+                  max(case when g.id = i.dispatch_recipient_guest_id then g.full_name end) as recipient
+             from invitations i join invitation_guests g on g.invitation_id = i.id
+            where i.id = $1 group by i.slug, i.greeting_name`,
+          [created.id],
+        );
+        return r.rows[0];
+      });
+
+      // THE ADDRESS IS THEIR FULL NAME, which is the couple's own rule: "el
+      // slug sea el nombre del grupo familiar y el de la persona individual el
+      // nombre completo".
+      expect(stored.slug).toBe(`marta-sola-${stamp}`);
+      // The GREETING is derived, so it speaks the nickname — the address and
+      // the salutation answer different questions and need not match.
+      expect(stored.greeting_name).toBe("Tita");
+      // Moved, not copied: one member, and it is them.
+      expect(stored.members).toBe(1);
+      expect(stored.recipient).toBe(fullName);
+    });
+  });
+
+  /**
+   * IT IS SENDABLE THE MOMENT IT EXISTS.
+   *
+   * The whole point is one press. An invitation arriving with no recipient
+   * chosen would land the operator on a dispatch screen that refuses, which is
+   * the defect this project already fixed once for the create form.
+   */
+  it("leaves nothing for the operator to finish before sending", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+
+      const guestId = await withDb(async (db) => {
+        const r = await db.query<{ id: string }>(
+          `insert into invitation_guests (invitation_id, full_name, phone_e164)
+           values (null, $1, '+573002250002') returning id`,
+          [`Solo Listo ${stamp}`],
+        );
+        return r.rows[0].id;
+      });
+
+      const created = await createSoloInvitation(client, senderId, guestId);
+      const record = await findInvitationMembership(client, created.id);
+
+      expect(record?.dispatchRecipientGuestId).toBe(guestId);
+    });
+  });
+
+  /**
+   * AND IT REFUSES SOMEBODY WHO IS ALREADY IN A HOUSEHOLD.
+   *
+   * Not defensive padding: the button is only offered on a free guest, but the
+   * page it is offered from can go stale while the other operator places that
+   * person. Minting a second invitation for them would leave one household
+   * short a member and two links in circulation for one person.
+   */
+  it("refuses a guest who already belongs to an invitation", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+      const name = `Ya En Hogar ${stamp}`;
+
+      const household = await createInvitation(client, {
+        ownerSenderId: senderId,
+        displayName: `Familia Tomada ${stamp}`,
+        greetingName: `Familia Tomada ${stamp}`,
+        greetingNameSource: "custom",
+        guests: [
+          {
+            fullName: name,
+            phoneE164: "+573002250003",
+            isPrimary: true,
+            isChild: false,
+          },
+        ],
+      });
+      const takenId = await withDb(async (db) => {
+        const r = await db.query<{ id: string }>(
+          "select id from invitation_guests where invitation_id = $1",
+          [household.id],
+        );
+        return r.rows[0].id;
+      });
+
+      const message = await createSoloInvitation(
+        client,
+        senderId,
+        takenId,
+      ).then(
+        () => null,
+        (error: Error) => error.message,
+      );
+
+      expect(message).toMatch(/ya (pertenece|está)/i);
+
+      const invitations = await withDb(async (db) => {
+        const r = await db.query<{ n: string }>(
+          "select count(*) as n from invitation_guests where id = $1 and invitation_id = $2",
+          [takenId, household.id],
+        );
+        return r.rows[0].n;
+      });
+
+      // Untouched, and no second invitation left lying around for them.
+      expect(invitations).toBe("1");
+    });
+  });
+});
+
 describe("findInvitationMembership — what the invitation editor loads", () => {
   it("returns the nicknames and the name source the form must not invent", async () => {
     // The console list projection carries neither: it has no `nickname` column
@@ -2423,7 +3084,6 @@ describe("findInvitationMembership — what the invitation editor loads", () => 
         displayName: "Familia Guzmán",
         greetingName: "",
         greetingNameSource: "derived",
-        rsvpDeadline: null,
         guests: [
           member("Luis Guzmán", {
             nickname: "Lucho",
@@ -2458,6 +3118,49 @@ describe("findInvitationMembership — what the invitation editor loads", () => 
           "00000000-0000-4000-8000-000000000000",
         ),
       ).resolves.toBeNull();
+    });
+  });
+});
+
+/**
+ * THE CONSOLE MUST SURVIVE A LONG GUEST LIST.
+ *
+ * `readLatestAnswers` and `readDispatchEvents` pass EVERY invitation id into a
+ * PostgREST `in` filter, which travels in the GET query string. A uuid costs
+ * about 39 characters there, so a few hundred households push the URL past the
+ * server's limit and the read fails with "URI too long" — and because both
+ * reads sit behind the console's main screen, the whole list answers a 500
+ * rather than degrading.
+ *
+ * Found by the browser suite against a database that had accumulated 204
+ * invitations. The wedding itself will not reach that, which is exactly why
+ * this is a test and not a story: nobody would meet it until they did, and
+ * what they would meet is the console going down.
+ */
+describe("listConsoleInvitations — a list long enough to break a URL", () => {
+  it("reads back every household when there are hundreds of them", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+      const client = createServerSupabaseClient();
+
+      // 300 households, which is past the threshold that broke it and still
+      // small enough to write in one statement.
+      await withDb(async (db) => {
+        await db.query(
+          `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+           select 'long-${stamp}-' || i, $1, 'Larga ' || i, 'Larga ' || i
+             from generate_series(1, 300) as i`,
+          [senderId],
+        );
+      });
+
+      const rows = await listConsoleInvitations(client, {
+        viewerSenderId: senderId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+      });
+
+      expect(rows.length).toBeGreaterThanOrEqual(300);
     });
   });
 });

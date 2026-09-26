@@ -707,3 +707,105 @@ test.describe("an unknown slug compared with a wrong phone", () => {
     );
   });
 });
+
+/**
+ * THE GATE IS THE FIRST THING EVERY GUEST SEES, AND IT WAS UNDESIGNED.
+ *
+ * The couple sent a screenshot of it: black text on white, crammed at the top
+ * left, a bare field and a bare button — while the invitation one tap behind it
+ * stands on a photograph. The gate and the invitation are read a second apart,
+ * so they cannot be two different weddings.
+ *
+ * `band` here too, and for the photograph's sake rather than the word count's:
+ * the wedding photograph is 0.75:1, so a phone-filling crop discards about 38%
+ * of the width and clips both people. The gate's words would have fitted over
+ * it; the picture would not have survived it.
+ */
+test.describe("the gate's own surface", () => {
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  test("stands on the same stage as the invitation behind it", async ({
+    page,
+  }) => {
+    await page.goto(`/i/${invitation.slug}`);
+
+    await expect(page.locator("main.photo-stage")).toHaveCSS(
+      "background-color",
+      "rgb(13, 17, 20)",
+    );
+    await expect(
+      page.locator("figure.photo-stage__frame img").first(),
+    ).toHaveAttribute("src", /boda/);
+  });
+
+  /**
+   * AND THE FIELD LOOKS LIKE A FIELD.
+   *
+   * An unbordered input on a photograph is an invisible control, which on this
+   * screen means a guest who cannot tell there is anywhere to type — with
+   * nothing else on the page to try.
+   */
+  test("gives the number field a visible edge", async ({ page }) => {
+    await page.goto(`/i/${invitation.slug}`);
+
+    const field = page.getByLabel(/Número de celular/);
+
+    await expect(field).toHaveCSS("border-top-width", "1px");
+  });
+});
+
+/**
+ * THE PRINT MUST STAY INSIDE ITS OWN COLUMN, AT EVERY WINDOW HEIGHT.
+ *
+ * It did not, and the arithmetic is why: the frame was `86dvh` tall and takes
+ * its width from the photograph's 0.75 ratio, so its width GROWS with the
+ * window's height — 654px at 760px tall, 697px at 1080px. The grid column is
+ * half of `max-w-6xl`, which is 576px. So above roughly 900px of viewport the
+ * picture spilled into the second column and the number field and the button
+ * were drawn on top of the photograph.
+ *
+ * Invisible at 1440×760, which is where it was being checked; plain on the
+ * couple's own monitor, which is where they saw it.
+ *
+ * The width is capped at the column now, and the height follows from the
+ * ratio rather than the other way round.
+ */
+test.describe("the print's width on a tall window", () => {
+  let invitation: SeededInvitation;
+
+  test.beforeAll(async () => {
+    invitation = await household();
+  });
+
+  test.afterAll(async () => {
+    await invitation.cleanup();
+  });
+
+  for (const height of [760, 1080, 1440] as const) {
+    test(`does not reach the words at 1920×${height}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1920, height });
+      await page.goto(`/i/${invitation.slug}`);
+      await expect(page.getByLabel(/Número de celular/)).toBeVisible();
+
+      const print = (await page
+        .locator("figure.photo-stage__frame")
+        .boundingBox())!;
+      const words = (await page
+        .locator("div.photo-stage__column")
+        .boundingBox())!;
+
+      // The picture ends before the column of words begins.
+      expect(print.x + print.width).toBeLessThanOrEqual(words.x + 1);
+      // And it is still a photograph rather than a sliver.
+      expect(print.width).toBeGreaterThan(300);
+    });
+  }
+});

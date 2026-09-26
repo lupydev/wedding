@@ -284,8 +284,9 @@ export function InvitationLifecycle({
                 data-testid="invitation-deletion-confirm"
               >
                 <p className="max-w-[68ch] text-sm">
-                  Se va a eliminar «{invitation.displayName}» con todas las
-                  personas que tiene dentro. No se puede deshacer.
+                  Se va a eliminar «{invitation.displayName}». Las personas que
+                  tiene dentro vuelven a la lista de invitados: no se borran. No
+                  se puede deshacer.
                 </p>
 
                 <div className="flex flex-wrap gap-2">

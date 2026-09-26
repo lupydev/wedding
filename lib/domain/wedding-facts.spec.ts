@@ -34,8 +34,7 @@ const COMPLETE: Readonly<Record<string, string>> = {
   ceremonyTime: "4:00 p. m.",
   venueName: "Hacienda La Ñapa",
   venueAddress: "Calle 12 #34-56, Barrio Centro, Ciudad",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "clave-de-prueba",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
 function parsed(overrides: Readonly<Record<string, unknown>> = {}) {
@@ -72,8 +71,7 @@ describe("the wedding facts' field list", () => {
       "ceremonyDate",
       "ceremonyTime",
       "coupleNames",
-      "streamMeetingId",
-      "streamPasscode",
+      "streamUrl",
       "venueAddress",
       "venueName",
     ]);
@@ -111,8 +109,7 @@ describe("parseWeddingFacts on a complete submission", () => {
       ceremonyTime: "11:30 a. m.",
       venueName: "Casa del Río",
       venueAddress: "Vereda El Alto, kilómetro 4",
-      streamMeetingId: "998 8776 6554",
-      streamPasscode: "otra-clave",
+      streamUrl: "https://meet.google.com/zzz-yyyy-xxx",
     };
     const result = parseWeddingFacts(other);
 
@@ -176,10 +173,10 @@ describe("parseWeddingFacts on a field that is missing", () => {
   });
 
   it("names the field in its own words, so the operator knows which box", () => {
-    const result = parsed({ streamPasscode: "" });
+    const result = parsed({ streamUrl: "" });
 
-    expect(refusalFor(result, "streamPasscode")).toContain(
-      WEDDING_FACT_LABELS.streamPasscode,
+    expect(refusalFor(result, "streamUrl")).toContain(
+      WEDDING_FACT_LABELS.streamUrl,
     );
   });
 
@@ -199,7 +196,7 @@ describe("parseWeddingFacts on a field that is missing", () => {
     const result = parsed({ coupleNames: "" });
 
     expect(refusalFor(result, "venueName")).toBeUndefined();
-    expect(refusalFor(result, "streamPasscode")).toBeUndefined();
+    expect(refusalFor(result, "streamUrl")).toBeUndefined();
   });
 });
 
@@ -288,5 +285,66 @@ describe("the parsed facts as the write's input", () => {
     const facts: WeddingFacts | null = result.ok ? result.facts : null;
 
     expect(facts).not.toBeNull();
+  });
+});
+
+/**
+ * THE LINK IS THE ONE FACT THAT IS NOT PROSE.
+ *
+ * Every other value on this form is something a human reads: a name, a date, a
+ * street. This one is an address a BROWSER follows, and a typo in it does not
+ * look like a typo — it looks like a button that does nothing on the morning of
+ * the wedding.
+ *
+ * Zoom needed no such check: an operator typed a meeting id and a passcode, and
+ * a guest transcribed them into an app that said so if they were wrong. A Meet
+ * link is pressed, not read, so the only place the mistake can surface is here.
+ *
+ * THE HOST IS DELIBERATELY NOT PINNED. Requiring `meet.google.com` would catch
+ * a wrong-provider paste and would also make the next change of provider a
+ * migration rather than an edit. `https` and a real absolute URL is the part
+ * that is about correctness rather than about today's choice.
+ */
+describe("parseWeddingFacts on the stream link", () => {
+  it("accepts an absolute https address", () => {
+    // NOT through `refusalFor`, whose whole job is to pin `ok === false`. Its
+    // own comment warns about exactly this: an acceptance asserted with the
+    // refusal helper is a test that cannot mean what it says.
+    const result = parsed({
+      streamUrl: "https://meet.google.com/abc-defg-hij",
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses something that is not a URL at all", () => {
+    const result = parsed({ streamUrl: "meet.google.com/abc-defg-hij" });
+
+    expect(refusalFor(result, "streamUrl")).toContain(
+      WEDDING_FACT_LABELS.streamUrl,
+    );
+  });
+
+  /**
+   * AND REFUSES `http`, WHICH IS NOT PEDANTRY.
+   *
+   * The link is opened from a page served over https, and a plain-http
+   * destination is both blocked as mixed content by some browsers and a
+   * downgrade nobody chose. A guest meeting either is a guest who cannot join.
+   */
+  it("refuses an insecure address", () => {
+    const result = parsed({ streamUrl: "http://meet.google.com/abc-defg-hij" });
+
+    expect(refusalFor(result, "streamUrl")).toContain(
+      WEDDING_FACT_LABELS.streamUrl,
+    );
+  });
+
+  it("refuses a link to somewhere that is not the web", () => {
+    const result = parsed({ streamUrl: "javascript:alert(1)" });
+
+    expect(refusalFor(result, "streamUrl")).toContain(
+      WEDDING_FACT_LABELS.streamUrl,
+    );
   });
 });

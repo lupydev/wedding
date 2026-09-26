@@ -41,8 +41,7 @@ export const WEDDING_FACT_FIELDS = [
   "ceremonyTime",
   "venueName",
   "venueAddress",
-  "streamMeetingId",
-  "streamPasscode",
+  "streamUrl",
 ] as const;
 
 export type WeddingFactField = (typeof WEDDING_FACT_FIELDS)[number];
@@ -78,8 +77,7 @@ export const WEDDING_FACT_MAX_LENGTHS: Readonly<
   ceremonyTime: 200,
   venueName: 200,
   venueAddress: 300,
-  streamMeetingId: 200,
-  streamPasscode: 200,
+  streamUrl: 500,
 };
 
 /** What each field is called on the operator's screen and in its own errors. */
@@ -89,8 +87,7 @@ export const WEDDING_FACT_LABELS: Readonly<Record<WeddingFactField, string>> = {
   ceremonyTime: "Hora",
   venueName: "Lugar",
   venueAddress: "Dirección",
-  streamMeetingId: "ID de la reunión de Zoom",
-  streamPasscode: "Clave de acceso de Zoom",
+  streamUrl: "Enlace de Google Meet",
 };
 
 /** One message per broken field. A valid field is absent, not empty. */
@@ -135,6 +132,44 @@ function characterCount(value: string): number {
  * carrying a line break is reported as such rather than being trimmed into
  * something that passes.
  */
+/**
+ * Is this an address a guest's browser can actually open?
+ *
+ * THE ONE FACT ON THIS FORM THAT IS NOT PROSE. Every other value is something a
+ * human reads — a name, a date, a street — and a typo in it looks like a typo.
+ * This one is followed by a browser, so a mistake looks like a button that does
+ * nothing, discovered on the morning of the wedding.
+ *
+ * Zoom needed no such check: an operator typed a meeting id and a passcode and
+ * the guest transcribed them into an app that said so when they were wrong. A
+ * Meet link is pressed, not read, so this is the only place the mistake can
+ * surface.
+ *
+ * `https` ONLY, and that is not pedantry: the page doing the linking is served
+ * over https, a plain-http destination is blocked as mixed content by some
+ * browsers, and it is a downgrade nobody chose. Rejecting every other scheme
+ * also rules out `javascript:` — which is the one that turns an operator's
+ * paste into script running on a guest's page.
+ *
+ * THE HOST IS DELIBERATELY NOT PINNED. Requiring `meet.google.com` would catch
+ * a wrong-provider paste, and would make the next change of provider a
+ * migration rather than an edit. This checks what is about correctness, not
+ * what is about today's choice.
+ */
+function isJoinableAddress(value: string): boolean {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    // Not absolute, or not a URL at all — "meet.google.com/abc" among them,
+    // which is exactly what somebody pastes from an address bar.
+    return false;
+  }
+
+  return parsed.protocol === "https:";
+}
+
 function fieldError(field: WeddingFactField, raw: unknown): string | null {
   const label = WEDDING_FACT_LABELS[field];
 
@@ -161,6 +196,10 @@ function fieldError(field: WeddingFactField, raw: unknown): string | null {
 
   if (characterCount(value) > max) {
     return `${label} no puede pasar de ${max} caracteres.`;
+  }
+
+  if (field === "streamUrl" && !isJoinableAddress(value)) {
+    return `${label} debe ser un enlace que empiece por https://`;
   }
 
   return null;

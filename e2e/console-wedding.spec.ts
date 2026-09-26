@@ -69,8 +69,7 @@ const EDITED = {
   ceremonyTime: "5:30 p. m.",
   venueName: "Salón de Prueba Ñandú",
   venueAddress: "Carrera de Prueba 45 #67-89, Barrio Prueba",
-  streamMeetingId: "555 6667 7788",
-  streamPasscode: "clave-de-prueba-e2e",
+  streamUrl: "https://meet.google.com/e2e-test-abc",
 } as const;
 
 let operator: SeededOperator;
@@ -93,8 +92,7 @@ async function fillEveryFact(target: Page, values: typeof EDITED) {
   await field(target, "Hora").fill(values.ceremonyTime);
   await field(target, "Lugar").fill(values.venueName);
   await field(target, "Dirección").fill(values.venueAddress);
-  await field(target, "ID de la reunión de Zoom").fill(values.streamMeetingId);
-  await field(target, "Clave de acceso de Zoom").fill(values.streamPasscode);
+  await field(target, "Enlace de Google Meet").fill(values.streamUrl);
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -126,17 +124,19 @@ test.afterAll(async () => {
 });
 
 test.describe("the wedding-facts editor", () => {
-  test("offers all seven facts on one page with one save", async () => {
+  test("offers all six facts on one page with one save", async () => {
     await page.goto("/console/wedding");
 
+    // SIX, not seven. The two Zoom credentials became one Meet address when the
+    // ceremony moved: an id and a passcode are what a guest transcribes into an
+    // app, and a link is what they press.
     for (const label of [
       "Nombres de la pareja",
       "Fecha",
       "Hora",
       "Lugar",
       "Dirección",
-      "ID de la reunión de Zoom",
-      "Clave de acceso de Zoom",
+      "Enlace de Google Meet",
     ]) {
       await expect(field(page, label)).toBeVisible();
     }
@@ -153,8 +153,8 @@ test.describe("the wedding-facts editor", () => {
     // that restated the seeded text would be the second copy this whole change
     // exists to remove.
     await expect(field(page, "Lugar")).toHaveValue(stored.venueName);
-    await expect(field(page, "Clave de acceso de Zoom")).toHaveValue(
-      stored.streamPasscode,
+    await expect(field(page, "Enlace de Google Meet")).toHaveValue(
+      stored.streamUrl,
     );
   });
 
@@ -164,7 +164,7 @@ test.describe("the wedding-facts editor", () => {
    * They describe consequences the operator cannot see from here, and each one
    * has already happened by the time it is visible anywhere else: the delivered
    * Open Graph cards are cached immutably per URL, and every household that
-   * declined has already read the old Zoom passcode. Neither is a tooltip.
+   * declined has already read the old stream link. Neither is a tooltip.
    */
   test("warns that already-sent invitations keep the old names", async () => {
     await page.goto("/console/wedding");
@@ -176,22 +176,22 @@ test.describe("the wedding-facts editor", () => {
     await expect(warning).toContainText(/enlace nuevo/i);
   });
 
-  test("warns that the old Zoom passcode is already out", async () => {
+  test("warns that the old stream link is already out", async () => {
     await page.goto("/console/wedding");
 
-    const warning = page.getByTestId("wedding-passcode-warning");
+    const warning = page.getByTestId("wedding-stream-link-warning");
 
     await expect(warning).toBeVisible();
     await expect(warning).toContainText(/invitación/i);
   });
 
-  test("does not offer the passcode to the browser's password manager", async () => {
+  test("does not offer the stream link to the browser's password manager", async () => {
     await page.goto("/console/wedding");
 
-    const passcode = field(page, "Clave de acceso de Zoom");
+    const streamLink = field(page, "Enlace de Google Meet");
 
-    await expect(passcode).toHaveAttribute("type", "text");
-    await expect(passcode).toHaveAttribute("autocomplete", "off");
+    await expect(streamLink).toHaveAttribute("type", "text");
+    await expect(streamLink).toHaveAttribute("autocomplete", "off");
     await expect(
       page.locator('form.wedding-facts input[type="password"]'),
     ).toHaveCount(0);
@@ -243,7 +243,23 @@ test.describe("saving an edit", () => {
 
       await expect(body).toBeVisible();
       await expect(body).toContainText(EDITED.coupleNames);
-      await expect(body).toContainText(EDITED.ceremonyDate);
+
+      /*
+        THE VENUE NEEDS A YES FIRST, AND THAT IS THE PRODUCT RULE.
+
+        The couple asked for the place and its address to appear "solamente
+        cuando al confirmar la asistencia es positiva": a household that cannot
+        come does not need a street. So the assertion this test exists for —
+        that an edit in the console reaches the guest — now has to answer the
+        question the way a guest going to the wedding would.
+
+        `ceremonyDate` is no longer asserted here: the body states the day from
+        `WEDDING_INSTANT` in its announcement, not from the row, since the two
+        screens were made to open alike. That gap is recorded in
+        `odd/tasks/invitation-design.md`.
+      */
+      await guestPage.getByRole("radio", { name: /Sí, allá estar/ }).check();
+
       await expect(body).toContainText(EDITED.venueName);
       await expect(body).toContainText(EDITED.venueAddress);
     } finally {
@@ -279,14 +295,36 @@ test.describe("saving an edit", () => {
         .getByRole("button", { name: "Ver la invitación" })
         .click();
       await guestPage
-        .getByRole("radio", { name: /No podremos acompañarlos/ })
+        .getByRole("radio", { name: /No podemos acompañarlos/ })
         .check();
 
-      const card = guestPage.getByRole("group", { name: /transmisión/i });
+      /*
+        THE CONTROL'S DESTINATION, WHICH IS STRONGER THAN THE OLD ASSERTION.
 
-      await expect(card).toContainText(EDITED.streamMeetingId);
-      await expect(card).toContainText(EDITED.streamPasscode);
-      await expect(card).toContainText(EDITED.ceremonyTime);
+        This read the address as TEXT on the card. The address is not printed
+        any more — the couple removed it once the button existed — so the
+        evidence that an edit made in the console reaches the guest is where
+        that button actually points.
+      */
+      await expect(
+        guestPage.getByRole("link", { name: /Entrar a la transmisión/ }),
+      ).toHaveAttribute("href", EDITED.streamUrl);
+
+      /*
+        `ceremonyTime` IS NO LONGER ASSERTED HERE, AND THAT IS A REAL LOSS
+        RATHER THAN A TIDY-UP.
+
+        This card stopped stating the day and the hour when it was rewritten in
+        the invitation's own voice: it sits under an announcement that names the
+        day and counts down to it, so a third statement was noise. But the
+        invitation's details list names Fecha, Lugar and Dirección and no hour —
+        which means the `ceremony_time` an operator can edit is now rendered on
+        no guest-facing surface at all.
+
+        The two credentials still prove what this test is for: an edit made in
+        the console reaches the guest. The missing hour is recorded in
+        `odd/tasks/invitation-design.md` and belongs to the couple to decide.
+      */
     } finally {
       await guest.close();
     }
@@ -357,7 +395,7 @@ test.describe("the editor's own access control", () => {
       await expect(strangerPage).toHaveURL(/\/console\/login/);
       // Nothing about the wedding may be readable from the redirect target.
       await expect(strangerPage.locator("body")).not.toContainText(
-        EDITED.streamPasscode,
+        EDITED.streamUrl,
       );
     } finally {
       await stranger.close();

@@ -26,7 +26,24 @@ const ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
 const BITS_PER_CHARACTER = 5;
 
-const SLUG_PATTERN = /^[a-z2-7]{16}$/;
+/**
+ * The shape the `invitations.slug` column accepts, and nothing wider.
+ *
+ * It was `/^[a-z2-7]{16}$/` — exactly the random base32 `encodeSlug` produces.
+ * Migration 0014 widened the column to readable addresses derived from the
+ * household's name, so this widened with it: lowercase letters, digits, single
+ * hyphens between them, 1 to 48 characters.
+ *
+ * THE TWO MUST AGREE, AND THE FAILURES ARE OPPOSITE. A guard looser than the
+ * constraint sends junk to the database. A guard TIGHTER than it turns stored
+ * invitations into 404s — which is what leaving this at sixteen base32
+ * characters would have done to every readable link, reported as a missing
+ * invitation rather than as a rejected path.
+ */
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** The column's own bound, restated here so the guard cannot outgrow it. */
+const SLUG_MAX_LENGTH = 48;
 
 /**
  * Encodes exactly `SLUG_BYTE_LENGTH` random bytes as an unpadded base32 slug.
@@ -65,5 +82,5 @@ export function encodeSlug(bytes: Uint8Array): string {
  * and so an unknown slug and a malformed one take the same code path.
  */
 export function isWellFormedSlug(value: string): boolean {
-  return SLUG_PATTERN.test(value);
+  return value.length <= SLUG_MAX_LENGTH && SLUG_PATTERN.test(value);
 }

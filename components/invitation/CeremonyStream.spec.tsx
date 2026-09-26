@@ -21,37 +21,36 @@ import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
 const CEREMONY: CeremonyStreamDetails = {
   ceremonyDate: "sábado 14 de noviembre",
   ceremonyTime: "4:00 p. m.",
-  streamMeetingId: "123 4567 8901",
-  streamPasscode: "boda2026",
+  streamUrl: "https://meet.google.com/abc-defg-hij",
 };
 
-function renderCard(onReconsider = vi.fn()) {
-  render(<CeremonyStream ceremony={CEREMONY} onReconsider={onReconsider} />);
+function renderCard(onReconsider = vi.fn(), memberCount = 2) {
+  render(
+    <CeremonyStream
+      ceremony={CEREMONY}
+      memberCount={memberCount}
+      onReconsider={onReconsider}
+    />,
+  );
 
   return onReconsider;
 }
 
 describe("CeremonyStream", () => {
-  it("shows all four stream details, each beside its own label", () => {
+  /**
+   * THE WAY IN, WHICH IS A CONTROL RATHER THAN A LIST OF VALUES.
+   *
+   * This asserted label/value pairs in a description list, because the block
+   * held a meeting id and a passcode to transcribe. It holds one link now,
+   * and the thing worth asserting is where that link GOES — a label rendered
+   * beside the wrong address would have passed the old test and fails this.
+   */
+  it("offers a way in that points at the stored address", () => {
     renderCard();
 
-    const details = screen.getByRole("group", { name: /transmisión/i });
-    const terms = within(details).getAllByRole("term");
-
-    // Each label is read WITH the value that follows it, so a passcode
-    // rendered where the meeting id belongs fails this test. Asserting the
-    // four texts were merely "somewhere on the card" would not.
     expect(
-      terms.map((term) => [
-        term.textContent,
-        term.nextElementSibling?.textContent,
-      ]),
-    ).toEqual([
-      ["Fecha", CEREMONY.ceremonyDate],
-      ["Hora", CEREMONY.ceremonyTime],
-      ["ID de la reunión", CEREMONY.streamMeetingId],
-      ["Clave de acceso", CEREMONY.streamPasscode],
-    ]);
+      screen.getByRole("link", { name: /Entrar a la transmisión/ }),
+    ).toHaveAttribute("href", CEREMONY.streamUrl);
   });
 
   it("renders whatever the row holds, including an unfinished placeholder", () => {
@@ -63,15 +62,14 @@ describe("CeremonyStream", () => {
         ceremony={{
           ceremonyDate: "{{CEREMONY_DATE}}",
           ceremonyTime: "{{CEREMONY_TIME}}",
-          streamMeetingId: "{{ZOOM_MEETING_ID}}",
-          streamPasscode: "{{ZOOM_PASSCODE}}",
+          streamUrl: "{{MEET_URL}}",
         }}
+        memberCount={2}
         onReconsider={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("{{ZOOM_MEETING_ID}}")).toBeInTheDocument();
-    expect(screen.getByText("{{ZOOM_PASSCODE}}")).toBeInTheDocument();
+    expect(screen.getByText("{{MEET_URL}}")).toBeInTheDocument();
   });
 
   it("tells the household their answer is not final", () => {
@@ -100,5 +98,150 @@ describe("CeremonyStream", () => {
     const onReconsider = renderCard();
 
     expect(onReconsider).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * THE WORDS A HOUSEHOLD READS AFTER SAYING THEY CANNOT COME.
+ *
+ * The couple: "en caso de no poder asistir entonces se les muestra la
+ * información de Zoom con un mejor copy como 'los esperamos por Zoom', similar
+ * a lo que aparece en /transmision."
+ *
+ * It said "Los acompañamos por transmisión" over two lines explaining what a
+ * stream is. `/transmision` had already been rewritten to one sentence — "La
+ * ceremonia se va a transmitir a través de Zoom. Te esperamos." — and this card
+ * is the same offer, made to a household that has just declined.
+ */
+describe("the words on the card", () => {
+  it("invites the household to the stream in one line", () => {
+    renderCard();
+
+    expect(
+      screen.getByRole("heading", { name: "Los esperamos por Google Meet" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Vamos a transmitir la ceremonia en vivo/),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND IN THE NUMBER THEY ANSWERED IN.
+   *
+   * The form above asks one person "¿Podrás acompañarnos?" since U18. A card
+   * that then says "pueden acompañarnos" to that same person is the product
+   * changing voice between one screen and the next.
+   */
+  it("speaks to one person in the singular", () => {
+    renderCard(vi.fn(), 1);
+
+    expect(screen.getByText(/puedas acompañarnos/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Si cambias de opinión, puedes volver a responder cuando quieras.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * THE DAY AND THE HOUR ARE NOT STATED A THIRD TIME.
+   *
+   * This card sits inside the invitation, below an announcement that names the
+   * day and counts down to it and a details list that states it again. The
+   * same reasoning `/transmision` already applied to its own copy of this
+   * block.
+   */
+  it("leaves the day and the hour to the page around it", () => {
+    renderCard();
+
+    expect(screen.queryByText(CEREMONY.ceremonyDate)).not.toBeInTheDocument();
+    expect(screen.queryByText(CEREMONY.ceremonyTime)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * THE WORDS A HOUSEHOLD READS AFTER SAYING NO, AND HOW THEY READ.
+ *
+ * The couple: "un mensaje más ameno como 'comprendemos que no puedan asistir,
+ * la ceremonia se transmitirá en vivo así pueden acompañarnos' o algo similar
+ * que sea cercano."
+ *
+ * It opened with "Gracias por contarnos" and then explained the stream. Thanks
+ * is not the same as understanding: a household telling the couple they cannot
+ * come to their wedding has usually just decided something they are sorry
+ * about, and the screen that answers them should say so before it says anything
+ * practical.
+ */
+describe("how the card answers a decline", () => {
+  it("understands first, and offers the stream second", () => {
+    renderCard();
+
+    expect(screen.getByText(/Comprendemos/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Gracias por contarnos/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says it to one person in the singular", () => {
+    renderCard(vi.fn(), 1);
+
+    expect(screen.getByText(/no puedas acompañarnos/i)).toBeInTheDocument();
+  });
+
+  /**
+   * AND THE WAY BACK FILLS ITS COLUMN.
+   *
+   * "El botón debe ocupar todo el espacio, el de volver a responder." It sat
+   * centred at its own text width under a block whose other control is full
+   * width, which is the same mismatch `/transmision` already had between its
+   * two buttons.
+   */
+  it("gives the way back the width of the block", () => {
+    renderCard();
+
+    const back = screen.getByRole("button", { name: /Volver a responder/ });
+
+    expect(back.className).toContain("w-full");
+  });
+});
+
+/**
+ * THE TWO CONTROLS ARE THE SAME WIDTH, AND ONE ELEMENT DECIDES IT.
+ *
+ * The couple, with a screenshot of them stacked: "los botones tienen diferentes
+ * anchos, deben quedar del mismo ancho."
+ *
+ * They were. "Entrar a la transmisión" lives inside the stream block, which
+ * this card was capping at `max-w-sm`; "Volver a responder" is a sibling of
+ * that block and inherited the card's full width. Both were `w-full` — of two
+ * different things.
+ *
+ * THE MEASURE BELONGS TO THE CARD, not to one child of it. With the cap on the
+ * container, every control inside is `w-full` of the same box and they cannot
+ * drift apart again — which is what "same width" has to mean if it is to
+ * survive somebody adding a third button.
+ */
+describe("how wide the controls are", () => {
+  function card(): HTMLElement {
+    return document.querySelector<HTMLElement>(".rsvp__stream")!;
+  }
+
+  it("puts the measure on the card itself", () => {
+    renderCard();
+
+    expect(card().className).toMatch(/max-w-/);
+  });
+
+  it("caps nothing inside it a second time", () => {
+    renderCard();
+
+    const details = screen.getByTestId("stream-details");
+    const back = screen.getByRole("button", { name: /Volver a responder/ });
+    const join = screen.getByRole("link", { name: /Entrar a la transmisión/ });
+
+    for (const inside of [details, back, join]) {
+      expect(inside.className).toContain("w-full");
+      expect(inside.className).not.toMatch(/max-w-/);
+    }
   });
 });

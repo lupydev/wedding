@@ -10,7 +10,10 @@ import {
   type MembershipChangeImpact,
 } from "@/lib/domain/invitation-draft";
 import type { DeletionOutcome } from "@/lib/domain/invitation-deletion";
-import { CONSOLE_ROOT_PATH } from "@/lib/domain/operator-session";
+import {
+  CONSOLE_GUESTS_PATH,
+  CONSOLE_ROOT_PATH,
+} from "@/lib/domain/operator-session";
 import { normalizeForStorage } from "@/lib/domain/phone";
 import {
   readDeviceDeclaration,
@@ -19,9 +22,16 @@ import {
 import { requiredDefaultPhoneCountry } from "@/lib/server/env";
 import { markFailed, markSent } from "@/lib/server/dispatch";
 import {
+  createDirectoryGuest,
+  deleteDirectoryGuest,
+  placeGuestInInvitation,
+  updateDirectoryGuest,
+} from "@/lib/server/guest-directory";
+import {
   addMember,
   chooseRecipient,
   createInvitation,
+  createSoloInvitation,
   deleteInvitation,
   editMember,
   findConsoleInvitation,
@@ -261,6 +271,8 @@ function readMemberRows(formData: FormData): readonly {
   readonly nickname: string | null;
   readonly phoneE164: string | null;
   readonly isChild: boolean;
+  /** Set when this row names somebody the directory already holds. */
+  readonly existingGuestId: string | null;
 }[] {
   const names = formData.getAll("memberFullName").map((value) => String(value));
 
@@ -283,12 +295,22 @@ function readMemberRows(formData: FormData): readonly {
   const nicknames = column("memberNickname");
   const phones = column("memberPhone");
   const children = column("memberIsChild");
+  /*
+    THE TWO KINDS OF MEMBER TRAVEL IN THE SAME ARRAYS.
+
+    A row either names somebody the directory already holds — an id — or a
+    person being written for the first time — the empty string. Sending the
+    picked ids as a separate list would lose the interleaved ORDER, and the
+    order is exactly what `recipientIndex` refers to.
+  */
+  const existing = column("memberExistingId");
 
   return names.map((fullName, index) => ({
     fullName: fullName.trim(),
     nickname: (nicknames[index] ?? "").trim() || null,
     phoneE164: storedPhone(phones[index] ?? ""),
     isChild: flag(children[index] ?? ""),
+    existingGuestId: (existing[index] ?? "").trim() || null,
   }));
 }
 
@@ -328,11 +350,19 @@ export async function createInvitationAction(
     // which partition the invitation appears in and who may dispatch it; it no
     // longer decides who may edit it.
     ownerSenderId: operator.id,
-    displayName: requiredText(formData, "displayName", "el nombre del hogar"),
+    /*
+      NOT READ, AND NOT MISSING. The form stopped asking for a separate
+      "nombre del hogar" — the console shows the greeting everywhere and that
+      column surfaces only in the sentence confirming a deletion — so the
+      repository fills it from the greeting it resolves.
+    */
     greetingName: text(formData, "greetingName"),
     greetingNameSource:
       text(formData, "greetingNameSource") === "custom" ? "custom" : "derived",
-    rsvpDeadline: optionalText(formData, "rsvpDeadline"),
+    // Which of the rows below receives the WhatsApp message. The form answers
+    // with a position because it has no ids to answer with — these people are
+    // written by this very call.
+    dispatchRecipientIndex: chosenPosition(formData),
     guests: members.map((member, index) => ({
       fullName: member.fullName,
       nickname: member.nickname,
@@ -341,10 +371,36 @@ export async function createInvitationAction(
       // control for it, because a form that asks twice gets two answers.
       isPrimary: index === 0,
       isChild: member.isChild,
+      // An id here turns the row from an insert into a MOVE: the person exists
+      // and the directory owns their details, so the fields above are display
+      // only for that row.
+      existingGuestId: member.existingGuestId,
     })),
   });
 
   revalidatePath(CONSOLE_ROOT_PATH);
+}
+
+/**
+ * The member position the form chose to write to, defaulting to the first.
+ *
+ * WHY THE FALLBACK IS ZERO AND NOT "NOBODY". The household's first row is its
+ * primary contact — `createInvitationAction` writes it with `isPrimary: true`
+ * by the same rule — so the absence of an answer has an obvious right answer.
+ * Every invitation created before this field existed arrived with no recipient
+ * at all, which is the thing being fixed; defaulting to nobody would keep
+ * exactly that defect for any caller that is not the form.
+ *
+ * Text where a position belongs is not an answer either, and is treated as
+ * none. An out-of-range NUMBER needs no guard: the repository looks the
+ * position up among the rows it just wrote, finds nobody, and leaves the
+ * invitation unchosen — recoverable from the edit screen.
+ */
+function chosenPosition(formData: FormData): number {
+  const raw = text(formData, "recipientIndex");
+  const position = Number.parseInt(raw, 10);
+
+  return Number.isInteger(position) && position >= 0 ? position : 0;
 }
 
 /** Rewrites the invitation's own fields. Membership has its own actions. */
@@ -356,11 +412,9 @@ export async function updateInvitationAction(
   const invitationId = requiredInvitationId(formData);
 
   await updateInvitation(createServerSupabaseClient(), invitationId, {
-    displayName: requiredText(formData, "displayName", "el nombre del hogar"),
     greetingName: text(formData, "greetingName"),
     greetingNameSource:
       text(formData, "greetingNameSource") === "custom" ? "custom" : "derived",
-    rsvpDeadline: optionalText(formData, "rsvpDeadline"),
   });
 
   revalidatePath(CONSOLE_ROOT_PATH);
@@ -667,4 +721,190 @@ export async function rotateSlugAction(formData: FormData): Promise<string> {
   revalidatePath(consoleDispatchPath(invitationId));
 
   return slug;
+}
+
+/**
+ * Takes somebody the directory holds into an invitation that already exists.
+ *
+ * The create form builds a whole household in one submit; this is the other
+ * half, and a different write — a saved invitation taking one more person who
+ * is already written down. That is why it is its own action rather than a
+ * branch inside `addMemberAction`, which writes a NEW person.
+ *
+ * THE REFUSAL IS RETURNED, NOT THROWN. `placeGuestInInvitation` answers `false`
+ * when somebody was taken first, which is news rather than a fault. Throwing
+ * would reach the browser as an opaque digest and the form would show its
+ * connectivity copy — advice to retry, for the one situation where retrying
+ * cannot help.
+ */
+export async function placeDirectoryGuestAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
+  await requireOperator();
+
+  const placed = await placeGuestInInvitation(
+    createServerSupabaseClient(),
+    requiredGuestId(formData),
+    requiredInvitationId(formData),
+  );
+
+  // A refused placement changed nothing, so there is nothing to revalidate —
+  // and revalidating would re-seed the form over whatever is being typed. The
+  // same rule `addMemberAction` follows.
+  if (!placed) {
+    return ["guest_already_invited"];
+  }
+
+  revalidatePath(CONSOLE_ROOT_PATH);
+  revalidatePath(CONSOLE_GUESTS_PATH);
+
+  return [];
+}
+
+/*
+  THE DIRECTORY'S THREE WRITES.
+
+  NOT OWNER-SCOPED, and deliberately so — the same confirmed decision 4 the
+  invitation writes follow. Two people administer one wedding between them, and
+  a guest is a person at that wedding rather than a possession of whoever typed
+  them in first. There is no `owner_sender_id` on `invitation_guests` to scope
+  by even if we wanted one.
+
+  NOT DEVICE-GATED either. That gate exists to stop a dispatch being recorded
+  from the wrong handset; writing a name down sends no message.
+
+  A session is still required, as it is for every write in this file.
+*/
+
+/**
+ * Mints a one-person invitation for a guest who belongs to nobody, and answers
+ * with where to send it.
+ *
+ * WHY IT RETURNS A PATH INSTEAD OF REDIRECTING. A `redirect()` here would throw
+ * a control-flow signal through the caller, which on this screen is a button
+ * inside a list rather than a page-level form — the caller wants to know where
+ * to go, not to be thrown out of. The directory navigates once it has the path.
+ *
+ * NOT DEVICE-GATED, though it leads to a screen that is. Nothing here records a
+ * dispatch; the gate belongs to the confirmation, and it is applied there. The
+ * button is nevertheless hidden on a mismatched handset, because walking
+ * somebody to a screen that will refuse them is not help.
+ */
+export async function inviteGuestAloneAction(
+  formData: FormData,
+): Promise<string> {
+  const operator = await requireOperator();
+
+  const created = await createSoloInvitation(
+    createServerSupabaseClient(),
+    // The SESSION's operator owns what the session creates, so this invitation
+    // lands in their own partition and they are the one who may dispatch it.
+    operator.id,
+    requiredGuestId(formData),
+  );
+
+  revalidatePath(CONSOLE_GUESTS_PATH);
+  revalidatePath(CONSOLE_ROOT_PATH);
+
+  return consoleDispatchPath(created.id);
+}
+
+/** A guest's own fields, as the directory's forms submit them. */
+function readDirectoryGuest(formData: FormData): {
+  readonly fullName: string;
+  readonly nickname: string | null;
+  readonly phone: string;
+  readonly isChild: boolean;
+} {
+  return {
+    fullName: text(formData, "fullName"),
+    nickname: optionalText(formData, "nickname"),
+    /*
+      AS TYPED, ON PURPOSE. Normalising to E.164 is the repository's job, using
+      the same strict function the importer and the inline editor use. Doing it
+      here as well would be a second place for that rule to live, and two places
+      is how a rule drifts.
+    */
+    phone: text(formData, "phone"),
+    /*
+      An unchecked checkbox submits NOTHING — the browser's own rule — so the
+      absence of the field is the answer "no", not a missing value to guess at.
+    */
+    isChild: flag(text(formData, "isChild")),
+  };
+}
+
+/** Writes a person down who belongs to no invitation yet. */
+export async function createDirectoryGuestAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
+  await requireOperator();
+
+  const { refusals } = await createDirectoryGuest(
+    createServerSupabaseClient(),
+    readDirectoryGuest(formData),
+    requiredDefaultPhoneCountry(),
+  );
+
+  revalidatePath(CONSOLE_GUESTS_PATH);
+
+  return refusals;
+}
+
+/**
+ * Corrects a guest's own details.
+ *
+ * No invitation is named, and none is touched: correcting a typo from the
+ * directory must never move somebody out of the household they are in.
+ */
+export async function updateDirectoryGuestAction(
+  formData: FormData,
+): Promise<readonly DraftRefusal[]> {
+  await requireOperator();
+
+  const refusals = await updateDirectoryGuest(
+    createServerSupabaseClient(),
+    requiredGuestId(formData),
+    readDirectoryGuest(formData),
+    requiredDefaultPhoneCountry(),
+  );
+
+  // Both screens: a name shown on a household's row is this same guest.
+  revalidatePath(CONSOLE_GUESTS_PATH);
+  revalidatePath(CONSOLE_ROOT_PATH);
+
+  return refusals;
+}
+
+/**
+ * Removes a person from the wedding entirely.
+ *
+ * BOTH SCREENS ARE REVALIDATED, and that is not belt and braces. The person may
+ * have been a member of a household, whose row shows its members and its count
+ * — refreshing only the directory would leave the invitations screen rendering
+ * somebody who no longer exists, which reads as the deletion having silently
+ * failed.
+ */
+export async function deleteDirectoryGuestAction(
+  formData: FormData,
+): Promise<void> {
+  await requireOperator();
+
+  await deleteDirectoryGuest(
+    createServerSupabaseClient(),
+    requiredGuestId(formData),
+  );
+
+  revalidatePath(CONSOLE_GUESTS_PATH);
+  revalidatePath(CONSOLE_ROOT_PATH);
+}
+
+function requiredGuestId(formData: FormData): string {
+  const guestId = text(formData, "guestId");
+
+  if (guestId === "") {
+    throw new Error("No se indicó sobre qué invitado se está actuando.");
+  }
+
+  return guestId;
 }

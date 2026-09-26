@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  CONSOLE_GUESTS_PATH,
+  CONSOLE_ROOT_PATH,
+} from "@/lib/domain/operator-session";
+
 /**
  * The console Server Actions — specifically, the GUARDS in front of the writes.
  *
@@ -75,6 +80,20 @@ vi.mock("@/lib/server/invitations", () => ({
   rotateInvitationSlug: (...args: unknown[]) => rotateInvitationSlug(...args),
 }));
 
+const createDirectoryGuest = vi.fn();
+const updateDirectoryGuest = vi.fn();
+const deleteDirectoryGuest = vi.fn();
+const placeGuestInInvitation = vi.fn();
+vi.mock("@/lib/server/guest-directory", () => ({
+  createDirectoryGuest: (...args: unknown[]) => createDirectoryGuest(...args),
+  updateDirectoryGuest: (...args: unknown[]) => updateDirectoryGuest(...args),
+  deleteDirectoryGuest: (...args: unknown[]) => deleteDirectoryGuest(...args),
+  placeGuestInInvitation: (...args: unknown[]) =>
+    placeGuestInInvitation(...args),
+  listGuestDirectory: vi.fn(),
+  listFreeGuests: vi.fn(),
+}));
+
 const getCurrentRsvp = vi.fn();
 vi.mock("@/lib/server/rsvp", () => ({
   getCurrentRsvp: (...args: unknown[]) => getCurrentRsvp(...args),
@@ -94,14 +113,18 @@ process.env.DEFAULT_PHONE_COUNTRY = "CO";
 const {
   addMemberAction,
   chooseRecipientAction,
+  createDirectoryGuestAction,
   createInvitationAction,
+  deleteDirectoryGuestAction,
   deleteInvitationAction,
+  placeDirectoryGuestAction,
   editMemberAction,
   markDispatchFailedAction,
   markDispatchSentAction,
   moveMemberAction,
   removeMemberAction,
   rotateSlugAction,
+  updateDirectoryGuestAction,
   updateGuestPhoneAction,
   updateInvitationAction,
 } = await import("./actions");
@@ -140,6 +163,10 @@ beforeEach(() => {
     greetingName: "Familia Muñóz",
   });
   findGuestInvitationOwner.mockResolvedValue(ANA.id);
+  createDirectoryGuest.mockResolvedValue({ refusals: [], guest: { id: "g9" } });
+  updateDirectoryGuest.mockResolvedValue([]);
+  deleteDirectoryGuest.mockResolvedValue(undefined);
+  placeGuestInInvitation.mockResolvedValue(true);
   markSent.mockResolvedValue(undefined);
   markFailed.mockResolvedValue(undefined);
   updateGuestPhone.mockResolvedValue(undefined);
@@ -446,9 +473,11 @@ describe("console writes are not owner-scoped (confirmed decision 4)", () => {
     );
 
     expect(createInvitation).toHaveBeenCalledTimes(1);
+    // No `displayName`: the form stopped asking for a second name, and the
+    // repository fills that column from the greeting it resolves. What this
+    // test is about is the OWNER, which is the session's and not the form's.
     expect(createInvitation.mock.calls[0][1]).toMatchObject({
       ownerSenderId: BETO.id,
-      displayName: "Familia Restrepo",
       greetingNameSource: "derived",
       guests: [
         {
@@ -472,13 +501,15 @@ describe("console writes are not owner-scoped (confirmed decision 4)", () => {
     );
 
     expect(updateInvitation).toHaveBeenCalledTimes(1);
+    // The form's own `displayName` is ignored now, wherever it came from: the
+    // repository fills that column from the greeting. Asserting the whole
+    // argument rather than a subset is deliberate — a field creeping back in
+    // should fail here rather than pass unnoticed.
     expect(updateInvitation.mock.calls[0].slice(1)).toEqual([
       INVITATION_ID,
       {
-        displayName: "Familia Restrepo Gómez",
         greetingName: "Los Restrepo",
         greetingNameSource: "custom",
-        rsvpDeadline: null,
       },
     ]);
   });
@@ -1008,6 +1039,121 @@ describe("the three member writes answer with the refusal instead of throwing pr
   });
 });
 
+/**
+ * THE FORM ANSWERS "WHO RECEIVES THE MESSAGE" NOW, AND ANSWERS IT WITH A
+ * POSITION.
+ *
+ * It cannot answer with an id: at the moment it is submitted none of these
+ * people exist, so there is nothing to point at. Until this existed, every
+ * invitation created in the console was born unchosen — listed under "Sin
+ * destinatario elegido" and needing somebody to reopen it and finish what they
+ * thought they had already finished.
+ *
+ * `chooseRecipientAction` below is the OTHER half, and stays: it takes a real
+ * id and is what an operator uses to change their mind afterwards.
+ */
+describe("createInvitationAction — who receives the message", () => {
+  function household(recipientIndex?: string): FormData {
+    const data = new FormData();
+
+    data.set("displayName", "Familia Restrepo");
+    data.set("greetingName", "Familia Restrepo");
+    data.set("greetingNameSource", "derived");
+
+    for (const fullName of ["Ana Restrepo", "Beto Restrepo"]) {
+      data.append("memberFullName", fullName);
+      data.append("memberNickname", "");
+      data.append("memberPhone", "3001234567");
+    }
+
+    if (recipientIndex !== undefined) {
+      data.set("recipientIndex", recipientIndex);
+    }
+
+    return data;
+  }
+
+  it("carries the chosen position through to the repository", async () => {
+    await createInvitationAction(household("1"));
+
+    expect(createInvitation.mock.calls[0][1]).toMatchObject({
+      dispatchRecipientIndex: 1,
+      guests: [
+        expect.objectContaining({ fullName: "Ana Restrepo" }),
+        expect.objectContaining({ fullName: "Beto Restrepo" }),
+      ],
+    });
+  });
+
+  /**
+   * A caller that is not the form still gets a recipient, and gets the one the
+   * household itself designates: row zero is written with `isPrimary: true`
+   * five lines away, by the same rule and for the same reason.
+   */
+  /**
+   * A ROW THAT NAMES SOMEBODY THE DIRECTORY ALREADY HOLDS.
+   *
+   * The two kinds of member travel in the SAME parallel arrays, distinguished
+   * by one column: an id, or the empty string for a person being written for
+   * the first time. That is deliberate — a separate list of picked ids would
+   * lose the interleaved ORDER, and the order is what the recipient position
+   * refers to.
+   */
+  it("marks the rows that name somebody already in the directory", async () => {
+    const data = new FormData();
+
+    data.set("displayName", "Familia Mixta");
+    data.set("greetingName", "Familia Mixta");
+    data.set("greetingNameSource", "derived");
+
+    for (const [fullName, existingId] of [
+      ["Persona Tecleada", ""],
+      ["Persona Del Directorio", GUEST_ID],
+    ]) {
+      data.append("memberFullName", fullName);
+      data.append("memberNickname", "");
+      data.append("memberPhone", "");
+      data.append("memberExistingId", existingId);
+    }
+
+    await createInvitationAction(data);
+
+    expect(createInvitation.mock.calls[0][1].guests).toEqual([
+      expect.objectContaining({
+        fullName: "Persona Tecleada",
+        existingGuestId: null,
+      }),
+      expect.objectContaining({
+        fullName: "Persona Del Directorio",
+        existingGuestId: GUEST_ID,
+      }),
+    ]);
+  });
+
+  it("falls back to the household's first member when nothing was chosen", async () => {
+    await createInvitationAction(household());
+
+    expect(createInvitation.mock.calls[0][1]).toMatchObject({
+      dispatchRecipientIndex: 0,
+    });
+  });
+
+  /**
+   * Text where a position belongs is not a choice, so it is treated as none
+   * rather than silently resolving to somebody. Out-of-range numbers need no
+   * guard here: the repository looks the position up among the rows it just
+   * wrote and finds nobody, which leaves the invitation unchosen — the old
+   * state, and recoverable from the edit screen.
+   */
+  it("treats an unreadable position as no choice at all", async () => {
+    await createInvitationAction(household("segunda"));
+
+    expect(createInvitation.mock.calls[0][1]).toMatchObject({
+      dispatchRecipientIndex: 0,
+    });
+  });
+});
+
 describe("chooseRecipientAction — the member must belong to the invitation", () => {
   it("accepts a guest the invitation currently names", async () => {
     await chooseRecipientAction(
@@ -1120,5 +1266,209 @@ describe("rotateSlugAction", () => {
     await expect(rotateSlugAction(form({}))).rejects.toThrow(/no se indicó/i);
 
     expect(rotateInvitationSlug).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * THE DIRECTORY'S THREE WRITES.
+ *
+ * They are NOT owner-scoped, for the same reason the invitation writes are not
+ * (confirmed decision 4): there are two operators and they administer one
+ * wedding between them. A guest is a person at that wedding, not a possession
+ * of whoever typed them in first — there is no `owner_sender_id` on
+ * `invitation_guests` to scope by even if we wanted to.
+ *
+ * What they DO require is a session, which is proved for every action in the
+ * block above this one.
+ */
+describe("the guest directory actions", () => {
+  function guestForm(entries: Record<string, string>): FormData {
+    const data = new FormData();
+
+    for (const [key, value] of Object.entries(entries)) {
+      data.set(key, value);
+    }
+
+    return data;
+  }
+
+  it("creates a guest belonging to nobody, with the details as typed", async () => {
+    const refusals = await createDirectoryGuestAction(
+      guestForm({
+        fullName: "Nueva Persona",
+        nickname: "Nue",
+        phone: "300 555 1234",
+        isChild: "on",
+      }),
+    );
+
+    expect(refusals).toEqual([]);
+    expect(createDirectoryGuest.mock.calls[0][1]).toEqual({
+      fullName: "Nueva Persona",
+      nickname: "Nue",
+      // Handed over AS TYPED. Normalising to E.164 is the repository's job and
+      // it is the same strict function the importer uses; doing it here too
+      // would be a second place for the rule to drift.
+      phone: "300 555 1234",
+      isChild: true,
+    });
+  });
+
+  /**
+   * An unchecked checkbox submits NOTHING, which is the browser's own rule and
+   * the reason this is asserted rather than assumed: reading the field as a
+   * string and testing it for truthiness would make every adult a minor the
+   * moment somebody rewrote `flag`.
+   */
+  it("reads an unticked box as an adult rather than as a missing field", async () => {
+    await createDirectoryGuestAction(
+      guestForm({ fullName: "Persona Adulta", nickname: "", phone: "" }),
+    );
+
+    expect(createDirectoryGuest.mock.calls[0][1]).toMatchObject({
+      isChild: false,
+    });
+  });
+
+  it("hands the refusal back instead of throwing prose nobody can read", async () => {
+    createDirectoryGuest.mockResolvedValue({
+      refusals: ["member_without_name"],
+      guest: null,
+    });
+
+    await expect(
+      createDirectoryGuestAction(
+        guestForm({ fullName: "  ", nickname: "", phone: "" }),
+      ),
+    ).resolves.toEqual(["member_without_name"]);
+  });
+
+  it("rewrites a guest by id, without naming any invitation", async () => {
+    const refusals = await updateDirectoryGuestAction(
+      guestForm({
+        guestId: GUEST_ID,
+        fullName: "Nombre Corregido",
+        nickname: "",
+        phone: "3005551234",
+      }),
+    );
+
+    expect(refusals).toEqual([]);
+    expect(updateDirectoryGuest.mock.calls[0][1]).toBe(GUEST_ID);
+    expect(updateDirectoryGuest.mock.calls[0][2]).toEqual({
+      fullName: "Nombre Corregido",
+      nickname: null,
+      phone: "3005551234",
+      isChild: false,
+    });
+  });
+
+  it("deletes a guest by id", async () => {
+    await deleteDirectoryGuestAction(guestForm({ guestId: GUEST_ID }));
+
+    expect(deleteDirectoryGuest.mock.calls[0][1]).toBe(GUEST_ID);
+  });
+
+  /**
+   * DELETING A PERSON CHANGES THE INVITATIONS SCREEN TOO.
+   *
+   * They may have been a member of a household, and that household's row shows
+   * its members and its count. Revalidating only the directory would leave the
+   * other screen rendering somebody who no longer exists, which reads as the
+   * delete having silently failed.
+   */
+  it("refreshes the invitations screen as well, because a guest may be in one", async () => {
+    await deleteDirectoryGuestAction(guestForm({ guestId: GUEST_ID }));
+
+    const paths = revalidatePath.mock.calls.map((call) => call[0]);
+
+    expect(paths).toContain(CONSOLE_GUESTS_PATH);
+    expect(paths).toContain(CONSOLE_ROOT_PATH);
+  });
+
+  it("refuses to act at all without a session", async () => {
+    requireOperator.mockRejectedValue(new Error("no session"));
+
+    await expect(
+      createDirectoryGuestAction(
+        guestForm({ fullName: "Colada", nickname: "", phone: "" }),
+      ),
+    ).rejects.toThrow();
+    expect(createDirectoryGuest).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ADDING SOMEBODY FROM THE DIRECTORY TO AN INVITATION THAT ALREADY EXISTS.
+ *
+ * The create form builds its household in one submit; this is the other half —
+ * an invitation that is already saved, taking one more person who is already
+ * written down. A different write against a saved row, which is why it is its
+ * own action rather than a branch inside `addMemberAction`.
+ */
+describe("placeDirectoryGuestAction", () => {
+  function placement(entries: Record<string, string>): FormData {
+    const data = new FormData();
+
+    for (const [key, value] of Object.entries(entries)) {
+      data.set(key, value);
+    }
+
+    return data;
+  }
+
+  it("moves the chosen guest into the invitation that asked for them", async () => {
+    const refusals = await placeDirectoryGuestAction(
+      placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(refusals).toEqual([]);
+    expect(placeGuestInInvitation.mock.calls[0].slice(1)).toEqual([
+      GUEST_ID,
+      INVITATION_ID,
+    ]);
+    expect(revalidatePath.mock.calls.map((call) => call[0])).toContain(
+      CONSOLE_ROOT_PATH,
+    );
+  });
+
+  /**
+   * SOMEBODY GOT THERE FIRST, AND THE OPERATOR IS TOLD SO.
+   *
+   * The repository answers `false` rather than throwing, and this hands that
+   * back as a refusal code. It cannot be a thrown message: Next replaces one
+   * with an opaque digest before it crosses to the browser, and the form would
+   * then show its connectivity copy — advice to retry, for the one situation
+   * where retrying cannot help.
+   */
+  it("answers with a refusal when the guest was taken first", async () => {
+    placeGuestInInvitation.mockResolvedValue(false);
+
+    await expect(
+      placeDirectoryGuestAction(
+        placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+      ),
+    ).resolves.toEqual(["guest_already_invited"]);
+  });
+
+  it("revalidates nothing when the placement was refused", async () => {
+    placeGuestInInvitation.mockResolvedValue(false);
+
+    await placeDirectoryGuestAction(
+      placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+    );
+
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("refuses to act without a session", async () => {
+    requireOperator.mockRejectedValue(new Error("no session"));
+
+    await expect(
+      placeDirectoryGuestAction(
+        placement({ invitationId: INVITATION_ID, guestId: GUEST_ID }),
+      ),
+    ).rejects.toThrow();
+    expect(placeGuestInInvitation).not.toHaveBeenCalled();
   });
 });

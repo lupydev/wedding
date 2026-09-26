@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+import { STREAM_PATH } from "@/lib/domain/stream-window";
+
 /**
  * The prefix every per-guest invitation lives under.
  *
@@ -28,12 +30,33 @@ export const OG_IMAGE_ALLOW_PATTERN = "/i/*/opengraph-image";
  */
 export const CONSOLE_PATH_PREFIX = "/console";
 
+/**
+ * The public stream invitation.
+ *
+ * It has no gate, on purpose: it is the one invitation the couple can send to
+ * everybody joining over Zoom, without a household record for each of them. But
+ * it carries a live meeting id and its passcode, and PUBLIC and INDEXED are not
+ * the same thing. In a search index those credentials are findable by anyone
+ * searching for anything, which is how a ceremony gets crashed by strangers.
+ *
+ * THIS IS NOT SECURITY AND MUST NOT BE READ AS ANY. Any guest can forward the
+ * link, and what actually protects the call is Zoom's waiting room. The rule
+ * below only keeps the credentials out of search results.
+ *
+ * The landing at `/` stays crawlable, which is the whole reason the credentials
+ * were given their own path: `/` is the link that gets shared, and the card
+ * WhatsApp renders is built by fetching it and reading its `og:` tags. A
+ * `Disallow: /` would stop that fetch, and by prefix it would disallow every
+ * other path on the site as well.
+ */
+export { STREAM_PATH } from "@/lib/domain/stream-window";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
       allow: [OG_IMAGE_ALLOW_PATTERN],
-      disallow: [INVITATION_PATH_PREFIX, CONSOLE_PATH_PREFIX],
+      disallow: [INVITATION_PATH_PREFIX, CONSOLE_PATH_PREFIX, STREAM_PATH],
     },
   };
 }
