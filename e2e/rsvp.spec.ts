@@ -214,6 +214,19 @@ test.describe("answering the invitation", () => {
       boxes from it used to leave them empty, which is the friction this default
       removes in exactly the case where somebody is changing their mind.
     */
+    /*
+      ASSERTED POSITIVELY, BEFORE ANYTHING IS TOUCHED.
+
+      `uncheck()` is satisfied by the state it wants, so on a box that is
+      already off it is a silent no-op. Left to the two calls below, a default
+      that regressed to empty would pass both of them and fail only later and
+      indirectly, through the seat count — which is the shape of a test that
+      cannot say what broke.
+    */
+    for (const guest of [GUEST_ONE, GUEST_TWO, GUEST_THREE]) {
+      await expect(attendeeBox(page, guest)).toBeChecked();
+    }
+
     await attendeeBox(page, GUEST_TWO).uncheck();
     await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);

@@ -813,8 +813,20 @@ describe("how many taps it takes to say yes", () => {
 
     await userEvent.click(acceptRadio());
 
-    for (const box of screen.getAllByRole("checkbox")) {
-      expect(box).toBeChecked();
+    /*
+      BY NAME, AND THE COUNT PINNED.
+
+      "every checkbox I happened to find is checked" is a weaker claim than it
+      reads as: it also passes when only one box rendered, and it says nothing
+      about WHICH guests those boxes belong to. The whole point of this default
+      is that the household arrives COMPLETE, so the assertion names them.
+    */
+    expect(screen.getAllByRole("checkbox")).toHaveLength(GUESTS.length);
+
+    for (const guest of GUESTS) {
+      expect(
+        screen.getByRole("checkbox", { name: guest.fullName }),
+      ).toBeChecked();
     }
     expect(screen.getByText("Ya seleccionaron las 3.")).toBeInTheDocument();
   });
@@ -854,8 +866,20 @@ describe("how many taps it takes to say yes", () => {
     );
     await userEvent.click(acceptRadio());
 
-    for (const box of screen.getAllByRole("checkbox")) {
-      expect(box).toBeChecked();
+    /*
+      BY NAME, AND THE COUNT PINNED.
+
+      "every checkbox I happened to find is checked" is a weaker claim than it
+      reads as: it also passes when only one box rendered, and it says nothing
+      about WHICH guests those boxes belong to. The whole point of this default
+      is that the household arrives COMPLETE, so the assertion names them.
+    */
+    expect(screen.getAllByRole("checkbox")).toHaveLength(GUESTS.length);
+
+    for (const guest of GUESTS) {
+      expect(
+        screen.getByRole("checkbox", { name: guest.fullName }),
+      ).toBeChecked();
     }
   });
 
