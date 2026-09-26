@@ -44,8 +44,57 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      // Everything except the one spec that writes the shared singleton.
-      testIgnore: /console-wedding\.spec\.ts/,
+      // Everything except the one spec that writes the shared singleton, and
+      // the one that is about phone geometry — see the two projects below.
+      testIgnore: [
+        /console-wedding\.spec\.ts/,
+        /invitation-one-screen\.spec\.ts/,
+      ],
+    },
+    /*
+      THE TWO PHONES THE INVITATION IS ACTUALLY READ ON.
+
+      Close to every guest opens `/i/[slug]` from a WhatsApp link, on a phone,
+      and the redesign's whole acceptance criterion is a measurement: each step
+      is one screen and no step scrolls. A desktop project cannot make that
+      claim — at 1280×720 every one of these screens fits with room to spare,
+      which is exactly why the invitation was allowed to grow to two and a half
+      viewports without a single test noticing.
+
+      TWO SHAPES RATHER THAN ONE. An iPhone 14 is 390×664 and a Pixel 7 is
+      412×839: the taller, narrower one crops the photograph more tightly and
+      leaves more room for type, the shorter one the reverse. A layout tuned on
+      either alone is a layout that has been checked once.
+
+      They run ONE spec. Pointing them at the whole suite would re-run the
+      console at phone width, which is a surface nobody administers from a
+      phone and which would fail for reasons that say nothing about the
+      invitation.
+
+      The presets come from Playwright's own device registry rather than a pair
+      of hand-written viewports, so the device scale factor, the user agent and
+      `isMobile` come with them — `isMobile` is the one that matters, because
+      it is what makes `dvh` and the visual viewport behave like a phone's.
+
+      BOTH RUN ON CHROMIUM, INCLUDING THE IPHONE, AND THAT IS A LIMITATION
+      RATHER THAN AN OVERSIGHT. The `iPhone 14` preset asks for WebKit, which
+      this project does not install: the whole suite is Chromium, and adding a
+      second engine to everybody's `playwright install` for one file is a bigger
+      decision than this unit. What is being measured is geometry — a viewport,
+      a device pixel ratio and how `dvh` resolves — and Chromium gives all
+      three. What it does NOT give is Safari's own layout, and it gives no
+      software keyboard at all; `e2e/invitation-one-screen.spec.ts` says so
+      where it matters, in the one test that is about the keyboard.
+    */
+    {
+      name: "iphone-14",
+      use: { ...devices["iPhone 14"], browserName: "chromium" },
+      testMatch: /invitation-one-screen\.spec\.ts/,
+    },
+    {
+      name: "pixel-7",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /invitation-one-screen\.spec\.ts/,
     },
     {
       /*
@@ -73,7 +122,16 @@ export default defineConfig({
       name: "wedding-facts",
       use: { ...devices["Desktop Chrome"] },
       testMatch: /console-wedding\.spec\.ts/,
-      dependencies: ["chromium"],
+      /*
+        EVERY PROJECT THAT READS THE ROW, NOT ONLY THE FIRST ONE.
+
+        This was `["chromium"]` while chromium was the whole suite. The two
+        phone projects read the same singleton — the screen a household reaches
+        by accepting names the venue — so an edit landing between one of their
+        renders and its assertion would fail them with a value nothing in that
+        file ever wrote.
+      */
+      dependencies: ["chromium", "iphone-14", "pixel-7"],
     },
   ],
   // The highest-value E2E assertions inspect the raw HTML of the first
