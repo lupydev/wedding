@@ -1,4 +1,5 @@
 import type { RsvpRejectionReason } from "./seats";
+import { RSVP_DEADLINE_TEXT } from "./wedding-day";
 
 /**
  * What the RSVP says to a guest, as pure text.
@@ -179,6 +180,41 @@ export interface RsvpChoiceCopy {
  * that somehow arrived as zero would address a group in the singular. The cost
  * of being wrong in the other direction is nothing.
  */
+/**
+ * The last day to answer, said where the question is asked.
+ *
+ * IT WAS A GREY FOOTNOTE AT THE BOTTOM OF A SCROLLING PAGE, and on a phone that
+ * meant most households never reached it: the invitation was two and a half
+ * screens tall and this was the last line of the third. The couple asked for
+ * the date to be part of the question — a household reading "¿Podrán
+ * acompañarnos?" should be able to see, without moving, how long they have to
+ * decide.
+ *
+ * In the reader's own number, like the question above it. A guest invited alone
+ * being told "confirmen" is the same small wrongness `rsvpChoiceCopy` exists to
+ * fix.
+ *
+ * The date itself comes from `RSVP_DEADLINE_TEXT`, which is derived from the
+ * wedding instant — so this sentence and the server-side gate in
+ * `lib/server/rsvp.ts` cannot name different days.
+ */
+export function rsvpDeadlineSentence(memberCount: number): string {
+  return memberCount === 1
+    ? `Confirma antes del ${RSVP_DEADLINE_TEXT}.`
+    : `Confirmen antes del ${RSVP_DEADLINE_TEXT}.`;
+}
+
+/**
+ * What the screen after an acceptance opens with.
+ *
+ * The household has just said they are coming, so the answer is not "thank
+ * you" — it is where to go. This line says the couple are expecting them and
+ * hands over to the venue, the map and the hour beneath it.
+ */
+export function rsvpConfirmedHeading(memberCount: number): string {
+  return memberCount === 1 ? "Te esperamos" : "Los esperamos";
+}
+
 export function rsvpChoiceCopy(memberCount: number): RsvpChoiceCopy {
   return memberCount === 1
     ? {

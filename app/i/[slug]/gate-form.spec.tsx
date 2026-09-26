@@ -96,9 +96,28 @@ describe("GateForm", () => {
     expect(alert.textContent ?? "").not.toContain("3005551234");
   });
 
+  /**
+   * NOTHING IS SAID BEFORE THE FIRST SUBMISSION — AND THE ROOM TO SAY IT IS
+   * ALREADY THERE.
+   *
+   * This used to assert the alert element was absent, which was the same
+   * assertion in stronger clothes and cost the gate a jump: the region mounted
+   * on the first refusal and the page grew by 106 pixels, measured on an
+   * iPhone 14, pushing the recovery link — the only other thing a refused guest
+   * can do — off the bottom of a screen that is meant to be exactly one
+   * viewport tall.
+   *
+   * So the region is in the document from the first paint, holding nothing and
+   * reserving one line. What matters to a guest is unchanged and is what is
+   * asserted: before they have tried, the gate says nothing.
+   */
   it("says nothing at all before the first submission", () => {
     render(<GateForm action={actionReturning({ status: "idle" })} />);
 
-    expect(screen.queryByRole("alert")).toBeNull();
+    const alert = screen.getByRole("alert");
+
+    expect(alert.textContent).toBe("");
+    // The space it will need, held rather than taken later.
+    expect(alert.className).toContain("min-h-6");
   });
 });

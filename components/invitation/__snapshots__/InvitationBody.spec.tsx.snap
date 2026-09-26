@@ -2,17 +2,17 @@
 
 exports[`InvitationBody > matches its approved markup 1`] = `
 "<article class="
-        invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
+        invitation mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 px-6
+        pt-[max(1.25rem,env(safe-area-inset-top))]
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
-        sm:pt-12 sm:pb-10
-        lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
-      "><header class="flex flex-col items-center gap-6 text-center"><h2 class="
-            invitation__greeting hidden font-display text-3xl
-            leading-[1.05] text-balance text-[#f6efe2]
+        sm:gap-6
+        lg:min-h-0 lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
+      "><header class="flex shrink-0 flex-col items-center px-10 text-center lg:px-0"><h2 class="
+            invitation__greeting font-display text-2xl leading-[1.05]
+            text-balance text-[#f6efe2]
             [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
-            lg:block
-            sm:text-4xl
-          ">¡Hola, Ñoño, Aurelia y Tomás!</h2><div class="flex flex-col items-center gap-6 text-center sm:gap-8"><p class="
+            sm:text-3xl
+          ">¡Hola, Ñoño, Aurelia y Tomás!</h2></header><div class="flex flex-col items-center gap-5 text-center"><div class="invitation__announcement flex flex-col items-center text-center"><div class="flex flex-col items-center gap-6 text-center sm:gap-8"><p class="
           font-script text-3xl text-[#f6efe2]/90
           [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
           sm:text-4xl
@@ -24,26 +24,22 @@ exports[`InvitationBody > matches its approved markup 1`] = `
           text-xs tracking-[0.18em] text-[#f6efe2]/85 uppercase
           [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
           sm:text-sm sm:tracking-[0.25em]
-        ">sábado, 28 de noviembre de 2026</time><span aria-hidden="true" class="block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><div class="flex flex-col items-center gap-3"><p class="sr-only" data-testid="countdown-summary">Faltan 67 días para la boda.</p><ol aria-hidden="true" data-testid="countdown-figures" class="flex items-start justify-center gap-5 sm:gap-8"><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">67</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">días</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">6</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">horas</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">minutos</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">segundos</span></div></li></ol></div></div><p class="
-            invitation__lead max-w-sm text-sm text-[#f6efe2]/85
-            [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
-            sm:text-base
-          ">Nos alegra mucho invitarlos a celebrar nuestro matrimonio.</p></header><section class="invitation__household"><span aria-hidden="true" class="mx-auto mb-5 block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><ul class="m-0 flex list-none flex-col items-center gap-1.5 p-0"><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Ñoño Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Aurelia Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Tomás Muñóz <span class="text-[#f6efe2]/60">(niño o niña)</span></li></ul></section><p class="invitation__deadline text-center text-xs text-[#f6efe2]/70">Confirmen su asistencia antes del 21 de noviembre de 2026.</p></article>"
+        ">sábado, 28 de noviembre de 2026</time><span aria-hidden="true" class="block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><div class="flex flex-col items-center gap-3"><p class="sr-only" data-testid="countdown-summary">Faltan 67 días para la boda.</p><ol aria-hidden="true" data-testid="countdown-figures" class="flex items-start justify-center gap-5 sm:gap-8"><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">67</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">días</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">6</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">horas</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">minutos</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">segundos</span></div></li></ol></div></div></div><p class="invitation__deadline text-sm text-[#f6efe2]">Confirmen antes del 21 de noviembre de 2026.</p></div></article>"
 `;
 
 exports[`InvitationBody's RSVP slot > renders exactly as before when the route supplies nothing 1`] = `
 "<article class="
-        invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
+        invitation mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 px-6
+        pt-[max(1.25rem,env(safe-area-inset-top))]
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
-        sm:pt-12 sm:pb-10
-        lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
-      "><header class="flex flex-col items-center gap-6 text-center"><h2 class="
-            invitation__greeting hidden font-display text-3xl
-            leading-[1.05] text-balance text-[#f6efe2]
+        sm:gap-6
+        lg:min-h-0 lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
+      "><header class="flex shrink-0 flex-col items-center px-10 text-center lg:px-0"><h2 class="
+            invitation__greeting font-display text-2xl leading-[1.05]
+            text-balance text-[#f6efe2]
             [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
-            lg:block
-            sm:text-4xl
-          ">¡Hola, Ñoño, Aurelia y Tomás!</h2><div class="flex flex-col items-center gap-6 text-center sm:gap-8"><p class="
+            sm:text-3xl
+          ">¡Hola, Ñoño, Aurelia y Tomás!</h2></header><div class="flex flex-col items-center gap-5 text-center"><div class="invitation__announcement flex flex-col items-center text-center"><div class="flex flex-col items-center gap-6 text-center sm:gap-8"><p class="
           font-script text-3xl text-[#f6efe2]/90
           [text-shadow:0_1px_14px_rgba(0,0,0,0.6)]
           sm:text-4xl
@@ -55,9 +51,5 @@ exports[`InvitationBody's RSVP slot > renders exactly as before when the route s
           text-xs tracking-[0.18em] text-[#f6efe2]/85 uppercase
           [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
           sm:text-sm sm:tracking-[0.25em]
-        ">sábado, 28 de noviembre de 2026</time><span aria-hidden="true" class="block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><div class="flex flex-col items-center gap-3"><p class="sr-only" data-testid="countdown-summary">Faltan 67 días para la boda.</p><ol aria-hidden="true" data-testid="countdown-figures" class="flex items-start justify-center gap-5 sm:gap-8"><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">67</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">días</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">6</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">horas</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">minutos</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">segundos</span></div></li></ol></div></div><p class="
-            invitation__lead max-w-sm text-sm text-[#f6efe2]/85
-            [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
-            sm:text-base
-          ">Nos alegra mucho invitarlos a celebrar nuestro matrimonio.</p></header><section class="invitation__household"><span aria-hidden="true" class="mx-auto mb-5 block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><ul class="m-0 flex list-none flex-col items-center gap-1.5 p-0"><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Ñoño Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Aurelia Muñóz</li><li class="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base">Tomás Muñóz <span class="text-[#f6efe2]/60">(niño o niña)</span></li></ul></section><p class="invitation__deadline text-center text-xs text-[#f6efe2]/70">Confirmen su asistencia antes del 21 de noviembre de 2026.</p></article>"
+        ">sábado, 28 de noviembre de 2026</time><span aria-hidden="true" class="block h-px w-16 bg-[#f6efe2]/30 sm:w-24"></span><div class="flex flex-col items-center gap-3"><p class="sr-only" data-testid="countdown-summary">Faltan 67 días para la boda.</p><ol aria-hidden="true" data-testid="countdown-figures" class="flex items-start justify-center gap-5 sm:gap-8"><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">67</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">días</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">6</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">horas</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">minutos</span></div></li><li data-testid="countdown-unit"><div class="flex min-w-14 flex-col items-center gap-1 sm:min-w-20"><span data-testid="countdown-figure" class="font-display text-3xl leading-none tabular-nums text-[#f6efe2] sm:text-5xl">0</span><span data-testid="countdown-label" class="text-[0.65rem] uppercase tracking-[0.18em] text-[#f6efe2]/65 sm:text-xs">segundos</span></div></li></ol></div></div></div><p class="invitation__deadline text-sm text-[#f6efe2]">Confirmen antes del 21 de noviembre de 2026.</p></div></article>"
 `;

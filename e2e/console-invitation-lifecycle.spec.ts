@@ -51,8 +51,20 @@ const GUEST = "Ramiro Ciclo";
 const GUEST_PHONE = "+573005556001";
 /** What the guest types at the gate: the last eight digits are what is compared. */
 const GUEST_PHONE_TYPED = "3005556001";
-/** A sentence only the unlocked body says. */
-const GATED_TEXT = "Nos alegra mucho invitarlos";
+/**
+ * A sentence only the unlocked body says.
+ *
+ * The invitation's opening line of prose used to serve here and is gone: it
+ * repeated the WhatsApp message that brought the guest to the page. The
+ * question is the better sentinel — it is the point of the page, and it
+ * appears nowhere else in the product.
+ *
+ * SINGULAR, because this file's invitation names ONE guest and the question is
+ * asked in the reader's own number. The plural spelling would be a sentinel
+ * that never matches, which is a test that proves the gate works by never
+ * getting through it.
+ */
+const GATED_TEXT = "¿Podrás acompañarnos?";
 
 let ana: SeededOperator;
 let invitation: ConsoleInvitationSeed;

@@ -247,23 +247,37 @@ test.describe("saving an edit", () => {
       await expect(body).toContainText(EDITED.coupleNames);
 
       /*
-        THE VENUE NEEDS A YES FIRST, AND THAT IS THE PRODUCT RULE.
+        THE VENUE NEEDS A RECORDED YES FIRST, AND THAT IS THE PRODUCT RULE.
 
-        The couple asked for the place and its address to appear "solamente
-        cuando al confirmar la asistencia es positiva": a household that cannot
-        come does not need a street. So the assertion this test exists for —
-        that an edit in the console reaches the guest — now has to answer the
-        question the way a guest going to the wedding would.
+        The couple asked for the place to appear "solamente cuando al confirmar
+        la asistencia es positiva": a household that cannot come does not need
+        directions. So the assertion this test exists for — that an edit in the
+        console reaches the guest — has to answer the question the way a guest
+        going to the wedding would, and then SEND it: the directions are the
+        screen after the answer, not the tap.
+
+        `click`, NOT `check`. Answering replaces the screen, so the radio is
+        unmounted a frame after it is pressed and `check`'s wait for it to
+        report itself checked can never be satisfied.
 
         THE DAY IS NOT ASSERTED HERE BECAUSE THE ROW NO LONGER HOLDS ONE. The
         body states the day from `WEDDING_INSTANT` in its announcement, and
         migration 0018 dropped `ceremony_date` and `ceremony_time` outright —
         nothing rendered either, and the console form promised otherwise.
-      */
-      await guestPage.getByRole("radio", { name: /Sí, allá estar/ }).check();
 
+        AND NEITHER IS THE ADDRESS, BECAUSE NO GUEST-FACING SURFACE RENDERS ONE
+        ANY MORE. The venue has no street a guest could type into a maps
+        application — `components/invitation/VenueMap.tsx` opens with that fact
+        — so `Dirección` was a second answer to the question the committed map
+        already answers, and the one a guest cannot act on. The column stays,
+        the console still edits it, and this test still proves an edit reaches
+        the guest: `venueName` is the value that does.
+      */
+      await guestPage.getByRole("radio", { name: /Sí, allá estar/ }).click();
+      await guestPage.getByRole("button", { name: "Enviar respuesta" }).click();
+
+      await expect(guestPage.locator(".rsvp__confirmed")).toBeVisible();
       await expect(body).toContainText(EDITED.venueName);
-      await expect(body).toContainText(EDITED.venueAddress);
     } finally {
       await guest.close();
     }
@@ -296,9 +310,25 @@ test.describe("saving an edit", () => {
       await guestPage
         .getByRole("button", { name: "Ver la invitación" })
         .click();
+      /*
+        THROUGH THE WAY BACK, because the test above left an ACCEPTANCE on this
+        household's file and an accepted household now lands on the directions
+        rather than on the question. These two tests are one story told in two
+        halves, which is what `mode: "serial"` on this file is for.
+      */
+      await guestPage
+        .getByRole("button", { name: "Volver a responder" })
+        .click();
+
+      /*
+        `click`, NOT `check`. A decline auto-submits and the stream screen
+        replaces the form, so the radio is unmounted a frame after it is
+        pressed — and `check` waits for it to report itself checked, which it
+        never gets the chance to do.
+      */
       await guestPage
         .getByRole("radio", { name: /No podemos acompañarlos/ })
-        .check();
+        .click();
 
       /*
         THE CONTROL'S DESTINATION, WHICH IS STRONGER THAN THE OLD ASSERTION.

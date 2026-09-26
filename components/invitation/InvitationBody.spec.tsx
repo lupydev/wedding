@@ -149,24 +149,36 @@ describe("InvitationBody", () => {
     ).toBeInTheDocument();
   });
 
-  it("names every guest of the household", () => {
-    render(<InvitationBody invitation={household} wedding={wedding} />);
+  /**
+   * THE MEMBERS ARE NOT LISTED HERE ANY MORE, AND THAT IS A DELETION RATHER
+   * THAN A MOVE.
+   *
+   * `.invitation__household` printed all three names in the body, and
+   * `.rsvp__attendees` printed the same three as checkboxes inside the form.
+   * Both rendered on the same screen once a household accepted — 93 pixels and
+   * 194 pixels of the same information — on a page that was already two and a
+   * half viewports tall on an iPhone.
+   *
+   * The checkboxes won because they are the ones a guest can act on: the
+   * question the couple actually need answered is which of those people are
+   * coming, and the list is the answer sheet. What the body keeps is the
+   * greeting, which names the household without naming everybody in it.
+   */
+  it("lists no members of its own", () => {
+    const { container } = render(
+      <InvitationBody invitation={household} wedding={wedding} />,
+    );
 
-    const names = screen
-      .getAllByRole("listitem")
-      .map((item) => item.textContent);
-
-    expect(names).toHaveLength(3);
-    expect(names[0]).toContain("Ñoño Muñóz");
-    expect(names[1]).toContain("Aurelia Muñóz");
-    expect(names[2]).toContain("Tomás Muñóz");
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    for (const guest of household.guests) {
+      expect(container.textContent).not.toContain(guest.fullName);
+    }
   });
 
   it("names the household once, and never restates it", () => {
-    // The greeting already names this household and the list below already
-    // names every member. A count sentence and a second heading each said the
-    // same fact a third and fourth time, which is how the section grew four
-    // lines that all answer "who is this for?".
+    // The greeting names this household. A count sentence, a second heading
+    // and a list of members each said the same fact again, which is how the
+    // section grew four lines that all answer "who is this for?".
     render(<InvitationBody invitation={household} wedding={wedding} />);
 
     expect(
@@ -179,33 +191,35 @@ describe("InvitationBody", () => {
       screen.queryByText("La invitación es para vos."),
     ).not.toBeInTheDocument();
 
-    // What survives: the greeting, and the members by name.
+    // What survives: the greeting, and nothing that repeats it.
     expect(
       screen.getByText(`¡Hola, ${household.greetingName}!`),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
 
-  it("still names every member of a one-person household", () => {
-    // The count sentence is gone, so a one-member invitation is carried by the
-    // greeting and the single name — with no "1 persona" ration to get wrong.
-    //
-    // Deliberately guests[1] and not guests[0]: this fixture's first guest
-    // shares the household's greeting name, which is the real shape of a solo
-    // guest with no nickname. The list then repeats the greeting verbatim. That
-    // is a live copy question for the visual design and NOT something to paper
-    // over with a string comparison here — the list is the authoritative record
-    // of who is invited, so it renders either way.
-    render(
-      <InvitationBody
-        invitation={{ ...household, guests: [household.guests[1]] }}
-        wedding={wedding}
-      />,
+  /**
+   * THE GREETING CLEARS THE MUSIC CONTROL, AND THE NUMBER IS MEASURED.
+   *
+   * The control is fixed at `right-5` and is 44px across, so it owns the last
+   * 64px of the row. The stage used to apply that gutter itself, to the
+   * `overPhoto` slot this greeting replaced; with the slot gone the
+   * measurement has to live somewhere, and the element that would run under
+   * the control is this one.
+   *
+   * `px-10` on top of the article's `px-6` is exactly 64px, and it is
+   * symmetric so a centred line stays centred.
+   */
+  it("keeps the greeting clear of the music control on a phone", () => {
+    const { container } = render(
+      <InvitationBody invitation={household} wedding={wedding} />,
     );
 
-    expect(screen.queryByText(/personas?/)).not.toBeInTheDocument();
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
-    expect(screen.getByText("Aurelia Muñóz")).toBeInTheDocument();
+    const header = container.querySelector("header")!;
+
+    expect(header.className).toContain("px-10");
+    // And gives the gutter back above the breakpoint, where the words are in
+    // their own column and the control is nowhere near them.
+    expect(header.className).toContain("lg:px-0");
   });
 
   /**

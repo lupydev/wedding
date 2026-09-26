@@ -284,57 +284,21 @@ describe("how a photograph fills a phone viewport", () => {
 });
 
 /**
- * SOMETHING THE STAGE WILL LAY OVER THE PHOTOGRAPH, ON A PHONE ONLY.
+ * THE SLOT THAT LAID A LINE OVER THE PHOTOGRAPH IS GONE, AND SO ARE ITS TESTS.
  *
- * The couple, looking at the invitation on a phone: "el 'Hola, nombre de la
- * persona' que quede en la parte superior de la fotografía."
+ * `overPhoto` existed for one caller and one layout: the invitation's greeting,
+ * in `band`, where the photograph is a strip at the top and a line rendered
+ * beneath it sat under the picture with a stripe of empty ground above. It
+ * rendered the line in the print's own cell with a scrim and a 64px gutter to
+ * clear the music control.
  *
- * In `band` the photograph is a strip and the words start beneath it, so the
- * greeting sat under the picture with a band of empty ground above it. Over the
- * strip it reads as a caption on their own photograph.
+ * The invitation stands in `overlay` now. The photograph is behind everything,
+ * so the greeting is already on it without a slot, and the second copy of that
+ * element — hidden on the side it did not belong to — went with it. What
+ * remains of the measurement is the gutter, which `InvitationBody.spec.tsx` and
+ * `InvitationGate.spec.tsx` now assert where it is applied.
  *
- * ONLY ON A PHONE, AND THAT IS THE WHOLE CONSTRAINT. At `lg` the photograph is
- * a framed print in its own column, and type laid over a framed print is a
- * different design — the one `overlay` exists for, on a picture chosen for it.
+ * Deleted rather than kept green against no caller: an unused capability with
+ * four tests reads as something the stage offers, and the next reader would
+ * reach for it.
  */
-describe("what the stage lays over the photograph", () => {
-  function overlaid(): HTMLElement | null {
-    return document.querySelector<HTMLElement>(".photo-stage__over-photo");
-  }
-
-  it("renders nothing extra when the caller offers nothing", () => {
-    render(
-      <PhotoStage photo={WEDDING}>
-        <p>Las palabras</p>
-      </PhotoStage>,
-    );
-
-    expect(overlaid()).toBeNull();
-  });
-
-  it("puts what it is given in the photograph's own cell", () => {
-    render(
-      <PhotoStage overPhoto={<h2>¡Hola, Mimi!</h2>} photo={WEDDING}>
-        <p>Las palabras</p>
-      </PhotoStage>,
-    );
-
-    const over = overlaid()!;
-
-    expect(over).not.toBeNull();
-    expect(over.textContent).toContain("¡Hola, Mimi!");
-    // The print's cell, not the words': one row, one column, two layers.
-    expect(over.className).toContain("col-start-1");
-    expect(over.className).toContain("row-start-1");
-  });
-
-  it("takes it away again above the breakpoint", () => {
-    render(
-      <PhotoStage overPhoto={<h2>¡Hola, Mimi!</h2>} photo={WEDDING}>
-        <p>Las palabras</p>
-      </PhotoStage>,
-    );
-
-    expect(overlaid()!.className).toContain("lg:hidden");
-  });
-});

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
+import { InvitationAnnouncement } from "@/components/invitation/InvitationAnnouncement";
 import { InvitationBody } from "@/components/invitation/InvitationBody";
 import { PhotoStage } from "@/components/landing/PhotoStage";
 import { WEDDING_PHOTO } from "@/components/landing/photos";
@@ -139,31 +140,25 @@ export default async function InvitationPage({ params }: RouteParams) {
         ground, the blurred backdrop and the framed print have to be the same
         object rather than three that happen to match today.
 
-        `band`, NOT `overlay`, and for two independent reasons. The wedding
-        photograph is 0.75:1: filling a phone viewport with it discards about
-        38% of the width and clips both people, who stand left and right of
-        centre. And this page carries a form — a radio group, a checkbox per
-        member and a free-text field — which is far more than can be laid over
-        a photograph, the same measurement that put the stream invitation in a
-        band before it.
-      */
-      <PhotoStage
-        mobilePhoto="band"
-        /*
-          THE GREETING GOES ON THE PHOTOGRAPH, ON A PHONE.
+        `overlay`, WHERE THIS SAID `band` AND GAVE TWO REASONS FOR IT.
 
-          `InvitationBody` renders the same line for a laptop, where the
-          photograph is a framed print and type over it would be a different
-          design. Passed from here rather than from inside the body, because the
-          stage is what owns the photograph's cell.
-        */
-        overPhoto={
-          <h2 className="font-display text-3xl leading-[1.05] text-balance text-[#f6efe2] [text-shadow:0_2px_24px_rgba(0,0,0,0.65)] sm:text-4xl">
-            ¡Hola, {invitation.greetingName}!
-          </h2>
-        }
-        photo={WEDDING_PHOTO}
-      >
+        The first was the photograph: 0.75:1, and "filling a phone viewport with
+        it discards about 38% of the width and clips both people, who stand left
+        and right of centre". True of a CENTRED crop and of no other. The
+        photograph now says where its crop should fall — see `photos.ts`, where
+        the 68% is measured — and both of them are held with room to spare on
+        every phone the invitation is checked on.
+
+        The second was the form: "a radio group, a checkbox per member and a
+        free-text field", too much to lay over a picture. Two of those three are
+        gone. What is left is one question at a time, on one screen at a time,
+        on the panel `RsvpAnswer` already gives its controls.
+
+        And the band is what the single screen cost. A `h-[38dvh]` strip with
+        every block stacked beneath it is 2.5 viewports on an iPhone once a
+        household accepts; behind the words it is nothing at all.
+      */
+      <PhotoStage mobilePhoto="overlay" photo={WEDDING_PHOTO}>
         <InvitationBody
           invitation={invitation}
           wedding={ceremony}
@@ -174,15 +169,29 @@ export default async function InvitationPage({ params }: RouteParams) {
               // household.
               <RsvpAnswer
                 /*
-                  The place and its address reach the FORM rather than the
-                  body, because only a household that says it is coming is
-                  told where to go. `InvitationBody` is a Server Component and
-                  cannot see that answer.
+                  THE ANNOUNCEMENT IS HANDED TO THE FORM, WHICH SHOWS IT ON THE
+                  FIRST SCREEN AND ON NO OTHER.
+
+                  It is 250 pixels, and the couple asked for it on the question
+                  screen — "debería ser igual a la primera pantalla" — where it
+                  is the reason a household is being asked anything. On the two
+                  screens after that it is 250 pixels of something they have
+                  already read twice.
+
+                  Which screen is showing is client state, so only `RsvpAnswer`
+                  can make that call; composed HERE so the block stays a Server
+                  Component and does not cross the client boundary to do it.
                 */
-                venue={{
-                  name: ceremony.venueName,
-                  address: ceremony.venueAddress,
-                }}
+                announcement={
+                  <InvitationAnnouncement coupleNames={ceremony.coupleNames} />
+                }
+                /*
+                  The place reaches the FORM rather than the body, because only
+                  a household that says it is coming is told where to go.
+                  `InvitationBody` is a Server Component and cannot see that
+                  answer.
+                */
+                venue={{ name: ceremony.venueName }}
                 guests={invitation.guests}
                 current={
                   current === null
@@ -231,11 +240,12 @@ export default async function InvitationPage({ params }: RouteParams) {
       while the page behind it stood on a photograph, which reads as two
       different weddings.
 
-      `band` here too, for the photograph's sake rather than the word count's:
-      the gate's few lines would have fitted over the picture, but at 0.75:1 a
-      phone-filling crop discards about 38% of the width and clips both people.
+      `overlay` here too, and here it was always the right answer: the gate's
+      few lines would have fitted over the picture from the start. What stopped
+      them was the crop — at 0.75:1 a centred phone-filling crop clips both
+      people — and the photograph says where to crop now.
     */
-    <PhotoStage mobilePhoto="band" photo={WEDDING_PHOTO}>
+    <PhotoStage mobilePhoto="overlay" photo={WEDDING_PHOTO}>
       <InvitationGate
         greetingName={invitation.greetingName}
         recoveryHref={buildGateRecoveryLink(

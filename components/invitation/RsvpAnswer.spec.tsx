@@ -2,7 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { RsvpFeedback } from "@/lib/domain/rsvp-copy";
+import {
+  rsvpDeadlineSentence,
+  type RsvpFeedback,
+} from "@/lib/domain/rsvp-copy";
+import { WEDDING_DRESS_CODE } from "@/lib/domain/wedding-day";
 
 import type { CeremonyStreamDetails } from "./CeremonyStream";
 
@@ -39,10 +43,16 @@ const GUESTS: readonly RsvpAnswerGuest[] = [
   { id: "cccccccc-3333-4333-8333-333333333333", fullName: "Sara Aguirre" },
 ];
 
-/** Where the wedding happens, which only an attending household is told. */
+/**
+ * Where the wedding happens, which only an attending household is told.
+ *
+ * NO STREET, AND THAT IS THE PROP TYPE RATHER THAN THE FIXTURE. The venue has
+ * no address anybody can type into a maps application — `VenueMap` opens with
+ * that fact — so `RsvpConfirmed` names the place and shows the map, and the
+ * `Dirección` line that used to sit between them is gone.
+ */
 const VENUE = {
   name: "Hacienda La Ñapa",
-  address: "Calle 12 #34-56, Barrio Centro",
 };
 
 const CEREMONY: CeremonyStreamDetails = {
@@ -65,6 +75,7 @@ function renderForm(
     guests?: readonly RsvpAnswerGuest[];
     current?: RsvpAnswerCurrent | null;
     ceremony?: CeremonyStreamDetails;
+    announcement?: React.ReactNode;
   } = {},
 ) {
   const action = options.action ?? actionReturning({ status: "recorded" });
@@ -72,6 +83,7 @@ function renderForm(
   render(
     <RsvpAnswer
       action={action}
+      announcement={options.announcement ?? <p>{ANNOUNCEMENT}</p>}
       guests={options.guests ?? GUESTS}
       current={options.current ?? null}
       ceremony={options.ceremony ?? CEREMONY}
@@ -80,6 +92,30 @@ function renderForm(
   );
 
   return action;
+}
+
+/**
+ * A stand-in for the block the route actually passes.
+ *
+ * The real one is `InvitationAnnouncement` — a Server Component tree with a
+ * live countdown in it. What this component owns is not its content but WHICH
+ * SCREEN it appears on, so the fixture is a sentence that is easy to look for.
+ */
+const ANNOUNCEMENT = "Nos casamos, Ana y Bruno";
+
+/** The way back from a recorded answer, on either ending. */
+function reconsiderButton() {
+  return screen.getByRole("button", { name: /Volver a responder/ });
+}
+
+/** The way back from the who-is-coming screen, where nothing is recorded yet. */
+function backToQuestion() {
+  return screen.getByRole("button", { name: /Volver a la pregunta/ });
+}
+
+/** The last screen: where to go, when, and what to wear. */
+function confirmedScreen(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(".rsvp__confirmed");
 }
 
 function declineRadio() {
@@ -309,19 +345,46 @@ describe("RsvpAnswer submission", () => {
     expect(action.mock.calls[0][1].get("mensaje")).toBeNull();
   });
 
-  it("shows what came back from the action", async () => {
+  /**
+   * A RECORDED ANSWER IS A NEW SCREEN, NOT A SENTENCE UNDER THE FORM.
+   *
+   * "¡Listo! Guardamos su respuesta." used to appear below the controls the
+   * household had just used, which was the only acknowledgement there was.
+   * Those controls are replaced now by the screen that says where to go, and
+   * that screen says the answer was saved in its own words.
+   *
+   * The alert region still exists and still carries REFUSALS — see the test
+   * below — because a refusal leaves the household exactly where they were.
+   */
+  it("hands over to the screen that says where to go", async () => {
     const user = userEvent.setup();
     renderForm({ action: actionReturning({ status: "recorded" }) });
 
     await user.click(acceptRadio());
-    await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
     await user.click(submitButton());
 
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "¡Listo! Guardamos su respuesta.",
-      ),
-    );
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(
+      screen.getByText("Su respuesta quedó guardada."),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND THE REGION THAT CARRIES A REFUSAL IS THERE BEFORE THERE IS ONE.
+   *
+   * An alert that mounts on submit adds height with no warning — 82 pixels,
+   * measured — on a screen whose whole promise is that it is exactly one
+   * viewport tall. The slot is in the document from the first paint, holding
+   * nothing.
+   */
+  it("holds the space a refusal will need before there is one", () => {
+    renderForm();
+
+    const alert = screen.getByRole("alert");
+
+    expect(alert).toBeInTheDocument();
+    expect(alert.textContent).toBe("");
+    expect(alert.className).toContain("min-h-10");
   });
 
   it("shows a rejection in words rather than failing silently", async () => {
@@ -352,8 +415,27 @@ describe("RsvpAnswer with an answer already on file", () => {
     dietaryNotes: "Sin mariscos",
   };
 
-  it("tells the household what they answered last time", () => {
+  /**
+   * AN ACCEPTED HOUSEHOLD LANDS ON THE DIRECTIONS, NOT ON THE FORM.
+   *
+   * They answered. What somebody reopening their invitation wants is where to
+   * go and at what hour — the question is settled, and re-offering it is how a
+   * household ends up answering twice and wondering which one counted. The way
+   * back is on that screen, beside the consequence, exactly as it is for a
+   * decline.
+   */
+  it("shows a household that already accepted the directions, not the form", () => {
     renderForm({ current: CURRENT });
+
+    expect(confirmedScreen()).not.toBeNull();
+    expect(screen.getByText(VENUE.name)).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /allá estaremos/ })).toBeNull();
+  });
+
+  it("tells the household what they answered last time", async () => {
+    renderForm({ current: CURRENT });
+
+    await userEvent.click(reconsiderButton());
 
     expect(
       screen.getByText("Tu respuesta actual: asisten 2 personas."),
@@ -366,12 +448,16 @@ describe("RsvpAnswer with an answer already on file", () => {
     expect(screen.queryByText(/Tu respuesta actual/)).toBeNull();
   });
 
-  it("pre-fills the form so changing one thing does not retype everything", () => {
+  it("pre-fills the form so changing one thing does not retype everything", async () => {
+    const user = userEvent.setup();
     renderForm({ current: CURRENT });
 
-    expect(
-      screen.getByRole("radio", { name: /Sí, allá estaremos/ }),
-    ).toBeChecked();
+    // Through the way back, because an accepted answer opens on the
+    // directions. Nothing is preselected there on purpose — see
+    // `reconsider` — so the affirmative is chosen again to reach the list.
+    await user.click(reconsiderButton());
+    await user.click(acceptRadio());
+
     expect(
       screen.getByRole("checkbox", { name: "Camila Aguirre" }),
     ).toBeChecked();
@@ -392,6 +478,7 @@ describe("RsvpAnswer with an answer already on file", () => {
     const user = userEvent.setup();
     const action = renderForm({ current: CURRENT });
 
+    await user.click(reconsiderButton());
     await user.click(declineRadio());
 
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
@@ -451,6 +538,10 @@ describe("RsvpAnswer declining", () => {
     await user.click(acceptRadio());
     await user.click(screen.getByRole("checkbox", { name: "Camila Aguirre" }));
     await user.click(screen.getByRole("checkbox", { name: "Rodrigo Aguirre" }));
+    // Back through the question, which is the only way to reach "no" now that
+    // the two screens are separate — and the path a mis-tapping household
+    // takes.
+    await user.click(backToQuestion());
     await user.click(declineRadio());
 
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
@@ -519,13 +610,11 @@ describe("RsvpAnswer declining", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("records an acceptance after reconsidering, and stays on the form", async () => {
+  it("records an acceptance after reconsidering, and leaves the stream behind", async () => {
     const user = userEvent.setup();
     const action = renderForm({ current: DECLINED });
 
-    await user.click(
-      screen.getByRole("button", { name: /Volver a responder/ }),
-    );
+    await user.click(reconsiderButton());
     await user.click(acceptRadio());
     // Nothing is ticked afterwards: reconsidering opens with the whole
     // household coming, which is the fix this test now stands beside — a
@@ -540,11 +629,7 @@ describe("RsvpAnswer declining", () => {
     expect(formData.getAll("attendee")).toEqual(
       GUESTS.map((guest) => guest.id),
     );
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "¡Listo! Guardamos su respuesta.",
-      ),
-    );
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
     expect(screen.queryByText(CEREMONY.streamUrl)).toBeNull();
   });
 
@@ -651,11 +736,10 @@ describe("what the form asks, and when", () => {
 
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     expect(screen.queryByText(/Quiénes asisten/i)).not.toBeInTheDocument();
-    // What DOES open for one person: the place, and the way to send it.
+    // There is nothing left to ask, so the tap IS the answer and the next
+    // thing on screen is where to go.
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
     expect(screen.getByText(VENUE.name)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Enviar respuesta" }),
-    ).toBeInTheDocument();
   });
 
   /**
@@ -669,11 +753,11 @@ describe("what the form asks, and when", () => {
   it("names the one guest in the payload even though nothing was ticked", async () => {
     const action = renderForm({ guests: SOLO });
 
+    // One tap is the whole answer for a solo invitation, so there is no send
+    // button to press afterwards — see "submits on the first tap when the
+    // invitation names one person".
     await userEvent.click(
       screen.getByRole("radio", { name: "Sí, allá estaré" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Enviar respuesta" }),
     );
 
     await waitFor(() => expect(action).toHaveBeenCalled());
@@ -704,16 +788,55 @@ describe("where the wedding is", () => {
     renderForm();
 
     expect(screen.queryByText(VENUE.name)).not.toBeInTheDocument();
-    expect(screen.queryByText(VENUE.address)).not.toBeInTheDocument();
   });
 
-  it("gives the household the place once they say they are coming", async () => {
+  /**
+   * AND NOTHING WHILE THEY ARE STILL CHOOSING WHO IS COMING.
+   *
+   * The venue and the map used to open the instant the affirmative was
+   * chosen, ABOVE the checkboxes that still had to be ticked — which pushed
+   * the send button 322 pixels down the page and is why this component once
+   * needed a `scrollIntoView`. The answer is not on file until it is sent, and
+   * directions before that are directions to a household the couple are not
+   * expecting yet.
+   */
+  it("says nothing about the venue while they are still choosing who comes", async () => {
     renderForm();
 
     await userEvent.click(acceptRadio());
 
-    expect(screen.getByText(VENUE.name)).toBeInTheDocument();
-    expect(screen.getByText(VENUE.address)).toBeInTheDocument();
+    expect(attendeeBoxes()).toHaveLength(GUESTS.length);
+    expect(screen.queryByText(VENUE.name)).not.toBeInTheDocument();
+    expect(mapLink()).toBeNull();
+  });
+
+  it("gives the household the place once the acceptance is recorded", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(acceptRadio());
+    await user.click(submitButton());
+
+    await waitFor(() => expect(screen.getByText(VENUE.name)).toBeVisible());
+  });
+
+  /**
+   * AND THE HOUR, AND WHAT TO WEAR — the two facts this screen exists to add.
+   *
+   * The hour had never reached a guest before: `WEDDING_INSTANT` fed the
+   * countdown and migration 0018 dropped the column a household would have
+   * read. The dress code did not exist at all.
+   */
+  it("states the hour and the dress code once the acceptance is recorded", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(acceptRadio());
+    await user.click(submitButton());
+
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(confirmedScreen()!.textContent).toContain("5:00 p. m.");
+    expect(confirmedScreen()!.textContent).toContain(WEDDING_DRESS_CODE);
   });
 
   /**
@@ -783,10 +906,14 @@ describe("where the wedding is", () => {
    * is that the control reaches the guest at all, and that it is the DIRECTIONS
    * form rather than a place page they would then have to press again.
    */
-  it("gives the household the way there once they say they are coming", async () => {
+  it("gives the household the way there once the acceptance is recorded", async () => {
+    const user = userEvent.setup();
     renderForm();
 
-    await userEvent.click(acceptRadio());
+    await user.click(acceptRadio());
+    await user.click(submitButton());
+
+    await waitFor(() => expect(mapLink()).not.toBeNull());
 
     const link = mapLink();
 
@@ -951,7 +1078,8 @@ describe("how many taps it takes to say yes", () => {
     }
   });
 
-  it("keeps the answer already on file rather than selecting everybody", () => {
+  it("keeps the answer already on file rather than selecting everybody", async () => {
+    const user = userEvent.setup();
     renderForm({
       current: {
         attending: true,
@@ -960,6 +1088,9 @@ describe("how many taps it takes to say yes", () => {
         dietaryNotes: null,
       },
     });
+
+    await user.click(reconsiderButton());
+    await user.click(acceptRadio());
 
     expect(
       screen.getByRole("checkbox", { name: GUESTS[0].fullName }),
@@ -970,80 +1101,183 @@ describe("how many taps it takes to say yes", () => {
   });
 
   /**
-   * AND WHAT OPENS IS BROUGHT INTO VIEW.
+   * NOTHING SCROLLS ANY MORE, AND THREE TESTS WENT WITH THE CODE THAT DID.
    *
-   * On a phone the revealed block lands below the fold, so the household taps
-   * yes and the screen appears not to change. Asserted against a stub because
-   * jsdom has no layout and no scrolling — what is being checked is that the
-   * component ASKS, which is the part a browser cannot be relied on to do by
-   * itself.
+   * They asserted that answering "yes" called `scrollIntoView`, that merely
+   * reopening an accepted invitation did not, and that changing one's mind
+   * scrolled again. All three were right about a page that opened a block
+   * below the fold — "se abre y se pierde la información, toca hacer un
+   * scroll", which is what the couple saw.
+   *
+   * Choosing an answer REPLACES the screen now. There is nothing below the
+   * fold to bring into view, and a page that is exactly one viewport tall
+   * cannot be scrolled to anything. Kept as one assertion rather than three,
+   * because "the component asks the browser to move the page" is now a defect
+   * rather than a feature — and it is the kind that comes back the next time
+   * somebody adds a block to a screen.
    */
-  it("brings what it opened into view", async () => {
+  it("never asks the browser to move the page", async () => {
+    const user = userEvent.setup();
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
 
     renderForm();
-    await userEvent.click(acceptRadio());
 
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    await user.click(acceptRadio());
+    await user.click(submitButton());
+
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ONE SCREEN AT A TIME, WHICH IS THE WHOLE OF THIS UNIT.
+ *
+ * The invitation used to be one document: the announcement, the household's
+ * names, the question, the venue, the map, the checkboxes, the send button and
+ * a deadline footnote, stacked. 1663 pixels on an iPhone 14 against 664 of
+ * screen. Close to every guest opens this from a WhatsApp message on a phone,
+ * so everything past the first 664 pixels was content most households never
+ * saw — including the deadline.
+ *
+ * What each screen carries is therefore a property worth asserting directly,
+ * because "it still renders somewhere in the document" is exactly the check
+ * that let the page grow to two and a half viewports in the first place.
+ */
+describe("what each screen carries, and what it refuses to", () => {
+  it("opens with the announcement and the question", () => {
+    renderForm();
+
+    expect(screen.getByText(ANNOUNCEMENT)).toBeInTheDocument();
+    expect(acceptRadio()).toBeInTheDocument();
+    expect(declineRadio()).toBeInTheDocument();
   });
 
   /**
-   * AND DOES NOT MOVE THE PAGE FOR SOMEBODY WHO JUST ARRIVED.
+   * THE DEADLINE IS PART OF THE QUESTION NOW.
    *
-   * `attending` is read from the row on the first render, so a household that
-   * already accepted mounts with the block ALREADY open. An effect keyed on
-   * that value alone fires on mount and smooth-scrolls the page under somebody
-   * who has done nothing but reopen their invitation.
-   *
-   * The test above cannot tell the two apart: it clicks first, so a scroll on
-   * load satisfies it just as well as a scroll on answering. The review found
-   * this, and this is the assertion it was missing.
+   * It was the last line of the third screenful, `text-xs` at 70% opacity. The
+   * couple asked for it where the decision is made.
    */
-  it("does not move the page for a household that merely reopens it", () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
+  it("says how long they have to answer, beside the question", () => {
+    renderForm();
 
-    renderForm({
-      current: {
-        attending: true,
-        seatsConfirmed: 1,
-        attendeeGuestIds: [GUESTS[0].id],
-        dietaryNotes: null,
-      },
-    });
+    expect(
+      screen.getByText(rsvpDeadlineSentence(GUESTS.length)),
+    ).toBeInTheDocument();
+  });
 
-    // The block IS open — this is not a test about it being closed.
-    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
-    expect(scrollIntoView).not.toHaveBeenCalled();
+  it("asks one guest for their own deadline, in the singular", () => {
+    renderForm({ guests: [GUESTS[0]] });
+
+    expect(screen.getByText(rsvpDeadlineSentence(1))).toBeInTheDocument();
   });
 
   /**
-   * AND STILL SCROLLS WHEN THAT SAME HOUSEHOLD CHANGES ITS MIND AND COMES BACK.
+   * AND THE ANNOUNCEMENT IS NOT REPEATED ON THE SCREENS AFTER IT.
    *
-   * A guard that simply remembered "we already mounted as yes" would also
-   * silence the scroll for a household that declines and then accepts again in
-   * the same visit, which is a real answer given in front of us.
+   * It is 250 pixels of a 664-pixel screen. The gate makes it, the question
+   * screen makes it again because the couple asked for the two to match, and a
+   * household choosing who is coming has now read it twice.
    */
-  it("scrolls again when an answer changes back to yes", async () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-
-    renderForm({
-      action: actionReturning({ status: "not_authorized" }),
-      current: {
-        attending: true,
-        seatsConfirmed: 1,
-        attendeeGuestIds: [GUESTS[0].id],
-        dietaryNotes: null,
-      },
-    });
-
-    await userEvent.click(declineRadio());
-    expect(scrollIntoView).not.toHaveBeenCalled();
+  it("does not repeat the announcement while they choose who is coming", async () => {
+    renderForm();
 
     await userEvent.click(acceptRadio());
 
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    expect(screen.queryByText(ANNOUNCEMENT)).not.toBeInTheDocument();
+    expect(attendeeBoxes()).toHaveLength(GUESTS.length);
+  });
+
+  it("does not repeat the announcement on the directions", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(acceptRadio());
+    await user.click(submitButton());
+
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(screen.queryByText(ANNOUNCEMENT)).not.toBeInTheDocument();
+  });
+
+  it("does not repeat the announcement on the stream", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(declineRadio());
+
+    await waitFor(() => expect(streamCard()).toBeInTheDocument());
+    expect(screen.queryByText(ANNOUNCEMENT)).not.toBeInTheDocument();
+  });
+
+  /**
+   * THE QUESTION IS NOT ON THE SCREEN THAT ASKS WHO IS COMING, SO THE ANSWER
+   * HAS TO TRAVEL AS A HIDDEN FIELD.
+   *
+   * An unmounted radio contributes nothing to a payload. Without this the
+   * server would receive a submission with no `attending` at all — and the
+   * schema would refuse it, which is the good outcome; the bad one is a
+   * default somewhere deciding it meant "no".
+   */
+  it("still says yes in the payload once the radios are off screen", async () => {
+    const user = userEvent.setup();
+    const action = renderForm();
+
+    await user.click(acceptRadio());
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+
+    await user.click(submitButton());
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    expect(action.mock.calls[0][1].get("attending")).toBe("yes");
+  });
+
+  /**
+   * AND A MIS-TAP ON "YES" HAS A WAY BACK.
+   *
+   * The radio group used to stay on screen above the checkboxes, so changing
+   * a wrong "yes" into "no" was one tap. With the two screens separated that
+   * escape disappeared, and a household with no way back would have to close
+   * the invitation and open it again.
+   */
+  it("lets a household that tapped yes by mistake go back to the question", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(acceptRadio());
+    await user.click(backToQuestion());
+
+    expect(acceptRadio()).not.toBeChecked();
+    expect(declineRadio()).not.toBeChecked();
+    expect(screen.getByText(ANNOUNCEMENT)).toBeInTheDocument();
+  });
+
+  /**
+   * A FIVE-PERSON HOUSEHOLD IS THE SIZE THAT DECIDES WHETHER THIS FITS.
+   *
+   * Each extra member is about 54 pixels of checkbox. The screen that asks who
+   * is coming is therefore the one that grows with the household, and it is the
+   * reason the announcement and the deadline are not on it.
+   * `e2e/invitation-one-screen.spec.ts` measures the real thing; this asserts
+   * the shape it depends on.
+   */
+  it("gives a household of five nothing but the list and the send button", async () => {
+    const five: readonly RsvpAnswerGuest[] = [
+      ...GUESTS,
+      { id: "dddddddd-4444-4444-8444-444444444444", fullName: "Tomás Aguirre" },
+      {
+        id: "eeeeeeee-5555-4555-8555-555555555555",
+        fullName: "Emilia Aguirre",
+      },
+    ];
+    renderForm({ guests: five });
+
+    await userEvent.click(acceptRadio());
+
+    expect(attendeeBoxes()).toHaveLength(5);
+    expect(screen.queryByText(ANNOUNCEMENT)).not.toBeInTheDocument();
+    expect(screen.queryByText(rsvpDeadlineSentence(5))).not.toBeInTheDocument();
+    expect(submitButton()).toBeInTheDocument();
   });
 });

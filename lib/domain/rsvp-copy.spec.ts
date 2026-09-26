@@ -4,9 +4,12 @@ import {
   rsvpChoiceCopy,
   RSVP_CLOSED_MESSAGE,
   currentRsvpSentence,
+  rsvpConfirmedHeading,
+  rsvpDeadlineSentence,
   rsvpFeedbackMessages,
   seatsSelectionSentence,
 } from "./rsvp-copy";
+import { RSVP_DEADLINE_TEXT } from "./wedding-day";
 
 /**
  * What the RSVP says to a guest, as pure text.
@@ -189,5 +192,59 @@ describe("rsvpChoiceCopy", () => {
    */
   it("treats a count it should never see as a household", () => {
     expect(rsvpChoiceCopy(0)).toEqual(rsvpChoiceCopy(2));
+  });
+});
+
+/**
+ * THE DEADLINE, MOVED OUT OF THE FOOTNOTES AND INTO THE QUESTION.
+ *
+ * It used to be one `text-xs` line at `70%` opacity, at the bottom of a page
+ * two and a half screens tall on a phone. A household that never scrolled never
+ * saw it, and the couple asked for it to be part of what a guest is being
+ * asked: "confirmen antes del 21 de noviembre".
+ */
+describe("rsvpDeadlineSentence", () => {
+  it("asks a household in the plural", () => {
+    expect(rsvpDeadlineSentence(3)).toBe(
+      "Confirmen antes del 21 de noviembre de 2026.",
+    );
+  });
+
+  it("asks one guest in the singular", () => {
+    expect(rsvpDeadlineSentence(1)).toBe(
+      "Confirma antes del 21 de noviembre de 2026.",
+    );
+  });
+
+  /**
+   * THE DATE IS DERIVED, NOT SPELLED HERE.
+   *
+   * The assertions above name the day so a reader can see the whole Spanish
+   * sentence in one place, which is what this file is for — but naming it is
+   * also how a second source of truth starts. This binds the sentence to the
+   * constant, so moving the wedding moves both the sentence and the server-side
+   * gate together or fails here.
+   */
+  it("carries the deadline the rest of the product enforces", () => {
+    expect(rsvpDeadlineSentence(3)).toContain(RSVP_DEADLINE_TEXT);
+    expect(rsvpDeadlineSentence(1)).toContain(RSVP_DEADLINE_TEXT);
+  });
+
+  it("treats a count it should never see as a household", () => {
+    expect(rsvpDeadlineSentence(0)).toBe(rsvpDeadlineSentence(2));
+  });
+});
+
+describe("rsvpConfirmedHeading", () => {
+  it("expects a household", () => {
+    expect(rsvpConfirmedHeading(4)).toBe("Los esperamos");
+  });
+
+  it("expects one guest", () => {
+    expect(rsvpConfirmedHeading(1)).toBe("Te esperamos");
+  });
+
+  it("treats a count it should never see as a household", () => {
+    expect(rsvpConfirmedHeading(0)).toBe(rsvpConfirmedHeading(2));
   });
 });

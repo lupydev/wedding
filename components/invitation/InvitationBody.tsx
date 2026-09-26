@@ -1,10 +1,35 @@
 /**
- * The invitation itself, as a guest reads it.
+ * The frame every screen of the invitation stands in.
  *
  * ONE component, rendered by two routes: the public `/i/[slug]` page (after the
  * phone gate lets the guest through) and the operator preview at
  * `/console/preview/[invitationId]`. Two implementations would drift, and the
  * operator would approve copy that no guest ever sees.
+ *
+ * IT USED TO BE THE WHOLE INVITATION AND IS NOW THE FRAME AROUND ONE SCREEN OF
+ * IT.
+ *
+ * It held the announcement, the household's names, the RSVP slot and a deadline
+ * footnote, stacked into a single document. On an iPhone 14 that document was
+ * 1663 pixels tall once a household accepted, against 664 of screen. The
+ * invitation is a sequence of screens now — the question, who is coming, and
+ * where to go — and which one is showing is CLIENT state, owned by `RsvpAnswer`
+ * and unknowable to a Server Component. So what is left here is what every
+ * screen shares: the measure, the padding, and the household's own name at the
+ * top of it.
+ *
+ * WHAT THE CONSOLE PREVIEW GETS, AND WHY IT IS NOT THE SAME PICTURE ANY MORE.
+ *
+ * The preview passes no RSVP, because answering there would answer on a
+ * household's behalf. With the invitation stepped, that leaves it the standing
+ * content: the greeting, the announcement and the deadline — which is the first
+ * screen a guest reads, minus the two controls. The household's names moved
+ * into the form's own checkboxes, so the preview no longer lists them; the
+ * console already shows an operator who is on an invitation, in three places
+ * built for it.
+ *
+ * `e2e/console-preview.spec.ts` compared the two documents byte for byte and
+ * now compares the announcement, which is the block they still both render.
  *
  * Synchronous and props-only, deliberately. It performs no data access, so it
  * cannot be handed a phone number by accident: its prop type has no field for
@@ -13,8 +38,9 @@
  * Guest-facing copy is Spanish. Identifiers and comments stay English.
  */
 
-import { RSVP_DEADLINE_TEXT } from "@/lib/domain/wedding-day";
-import { SaveTheDate } from "@/components/landing/SaveTheDate";
+import { rsvpDeadlineSentence } from "@/lib/domain/rsvp-copy";
+
+import { InvitationAnnouncement } from "./InvitationAnnouncement";
 
 export interface InvitationBodyGuest {
   readonly id: string;
@@ -61,9 +87,9 @@ export interface InvitationBodyWedding {
   /*
     THE DAY, THE VENUE AND ITS ADDRESS USED TO BE DECLARED HERE TOO.
 
-    The venue and its address reach `RsvpAnswer` directly, because only a
-    household that says it is coming is told where to go. A prop this component
-    no longer renders is a lie about where a value comes from.
+    The venue reaches `RsvpAnswer` directly, because only a household that says
+    it is coming is told where to go. A prop this component no longer renders is
+    a lie about where a value comes from.
 
     THE DAY IS NOT A PROP BECAUSE IT IS NO LONGER A COLUMN. A doc comment stood
     here calling it `ceremony_date` — "one day, one column, one place to correct
@@ -82,15 +108,17 @@ export function InvitationBody({
   /** The one row every surface reads. Never restated here. */
   wedding: InvitationBodyWedding;
   /**
-   * The RSVP surface, composed by the route.
+   * The current screen, composed by the route.
    *
    * A slot rather than the form itself, for the reason this component is
    * props-only in the first place: the RSVP needs a bound Server Action and the
    * household's current answer, and `components/**` may not reach into
-   * `lib/server/**`. The body decides only WHERE an answer belongs — after the
-   * guest list, before the deadline line — and the public route fills it with
-   * the form or the closed message. The operator preview passes nothing, and
-   * then nothing renders: a preview must not show a control no guest can use.
+   * `lib/server/**`.
+   *
+   * It is the whole of the invitation below the greeting now. The operator
+   * preview passes nothing and gets the standing content instead: a preview
+   * must not show a control no guest can use, and must not show an empty page
+   * either.
    */
   rsvp?: React.ReactNode;
 }) {
@@ -103,177 +131,106 @@ export function InvitationBody({
       one after another, so a guest arriving here from a message and walking to
       the stream page from inside it should not cross three visual identities.
 
-      The classes the browser suite and the console preview point at —
-      `invitation__rsvp`, `invitation__household` — are kept exactly. They are
-      how those tests tell one section from another, and a rename here is a
-      silent failure over there.
+      ONE VIEWPORT, AND NOT ONE PIXEL MORE — that is what `min-h-dvh` plus a
+      column that pushes its content to the foot buys, and it is the whole
+      purpose of the unit this file was rewritten in.
+
+      `min-h-dvh` RATHER THAN `h-dvh`, AND THE DIFFERENCE IS NOT COSMETIC. A
+      locked height clips whatever does not fit; an unlocked one that happens to
+      fit is identical on every screen it was measured on and degrades to
+      scrolling on the one it was not — a household of nine, a guest who has
+      raised their system font. Clipping the send button is a dead end. Scrolling
+      to reach it is a worse screen than the couple asked for, and still a screen
+      that works.
+
+      `dvh`, NEVER `vh`: on a phone `100vh` is the viewport with the browser
+      chrome HIDDEN, so the last line sits under the address bar until the
+      visitor scrolls. `PhotoStage` carries the long version of that note.
 
       `lg:py-[7dvh]` MATCHES THE PRINT'S OWN OFFSET. The framed photograph
-      sticks at `top-[7dvh]`, so the same measure here puts the couple's line
-      level with the top of the picture instead of against the browser chrome.
-      One number, used twice, rather than two that drift.
+      sticks at `top-[7dvh]`, so the same measure here puts the greeting level
+      with the top of the picture instead of against the browser chrome.
     */
     <article
       /*
-        THE MEASURE IS THE PHONE'S, AND IT LIFTS AT `lg` FOR THE SAME REASON
-        THE GATE'S DOES.
+        THE MEASURE IS THE PHONE'S, AND IT LIFTS AT `lg`.
 
-        `max-w-md` — 448px — keeps the lines readable on a narrow screen. Now
-        that this page carries the announcement, the names are set at
-        `text-6xl` above the breakpoint, and "Luis & Michell" at that size does
-        not fit in 448px: it broke after the ampersand, which reads as a
-        mistake in the middle of the couple's own names. Exactly the defect
-        `InvitationGate` records and fixes the same way; the grid column has
-        the room.
+        `max-w-md` — 448px — keeps the lines readable on a narrow screen and is
+        wrong above the breakpoint: the announcement's names are set at
+        `text-6xl` there, and "Luis & Michell" at that size does not fit in
+        448px — it broke after the ampersand, which reads as a mistake in the
+        middle of the couple's own names. The grid column has the room.
       */
       className="
-        invitation mx-auto flex w-full max-w-md flex-col gap-8 px-6 pt-8
+        invitation mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 px-6
+        pt-[max(1.25rem,env(safe-area-inset-top))]
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-[#f6efe2]
-        sm:pt-12 sm:pb-10
-        lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
+        sm:gap-6
+        lg:min-h-0 lg:max-w-none lg:justify-center lg:px-4 lg:py-[7dvh]
       "
     >
       {/*
-        THE ANNOUNCEMENT THE GATE MAKES, KEPT ON THE PAGE BEHIND IT.
+        THE HOUSEHOLD'S OWN NAME, AT THE TOP OF EVERY SCREEN.
 
-        The couple, having read both a tap apart: "quisiera que en esta última
-        página se conserve". The gate opened with the greeting, "Nos casamos",
-        the names, the day and the counter; this page opened with a household's
-        name and a line of prose. A guest who answers the question is the one
-        person guaranteed to read this page, so it is the last place the
-        announcement should be the thinner of the two.
+        ONE ELEMENT NOW, WHERE THERE WERE TWO. This greeting used to be rendered
+        twice — hidden below `lg` here, and again through the stage's
+        `overPhoto` slot for phones — because the photograph was a band across
+        the top and a line rendered beneath it sat under the picture with a
+        stripe of empty ground above. The photograph fills the screen now, so
+        the words are already on it and the duplicate has gone with the slot
+        that needed it.
 
-        SHARED RATHER THAN REPRODUCED, for the reason `SaveTheDate` gives for
-        its own existence: four copies of those elements would match today and
-        drift on the first tweak to any of them.
-
-        THE SCRIPT COUPLE LINE THAT USED TO BE HERE IS GONE, AND THAT IS NOT A
-        DELETION. `SaveTheDate` renders the same names, larger, and now from
-        this page's own `ceremony` row rather than from the constant — so the
-        fact is still here, said once instead of twice, and still the one an
-        operator can correct.
+        `px-10` ON TOP OF THE ARTICLE'S `px-6` IS 64 PIXELS, AND IT IS MEASURED.
+        The music control is fixed at `right-5` and is 44px across, so it
+        occupies the last 64px of the row; a centred line reaching further would
+        run underneath it. `PhotoStage` applied the same gutter to the slot this
+        replaces, for the same reason. Symmetric, so the line stays centred.
       */}
-      <header className="flex flex-col items-center gap-6 text-center">
-        {/*
-          ON A LAPTOP ONLY, BECAUSE ON A PHONE IT IS ON THE PHOTOGRAPH.
-
-          The couple asked for the greeting to sit over the picture on a phone:
-          in `band` the photograph is a strip and the words start beneath it, so
-          this line sat under the picture with a band of empty ground above it.
-          The route passes the same greeting to the stage's `overPhoto` slot,
-          which renders it over the strip and hides itself at `lg`.
-
-          TWO ELEMENTS, ONE STRING, AND ONLY ONE IS EVER ANNOUNCED. Both are
-          `display: none` on the side they do not belong to, which assistive
-          technology honours — so a reader meets the greeting once, wherever
-          they are. Placing ONE element in both cells is not something a grid
-          can do.
-        */}
+      <header className="flex shrink-0 flex-col items-center px-10 text-center lg:px-0">
         <h2
           className="
-            invitation__greeting hidden font-display text-3xl
-            leading-[1.05] text-balance text-[#f6efe2]
+            invitation__greeting font-display text-2xl leading-[1.05]
+            text-balance text-[#f6efe2]
             [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
-            lg:block
-            sm:text-4xl
+            sm:text-3xl
           "
         >
           ¡Hola, {invitation.greetingName}!
         </h2>
-
-        {/*
-          THE WHOLE BLOCK, DATE LINE INCLUDED, EXACTLY AS THE GATE SHOWS IT.
-
-          The couple read the two screens side by side: "debería ser igual a la
-          primera pantalla… para tener una misma consistencia."
-
-          IT USED TO PASS `showDate={false}`, and the reversal is the right way
-          round. The line was hidden because a details list below stated the day
-          too, from the `ceremony` row rather than from `WEDDING_INSTANT` —
-          hiding the one the guest reads FIRST to protect the one beneath it got
-          the priority backwards. The list is the part that went.
-        */}
-        <SaveTheDate coupleNames={wedding.coupleNames} />
-
-        <p
-          className="
-            invitation__lead max-w-sm text-sm text-[#f6efe2]/85
-            [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
-            sm:text-base
-          "
-        >
-          Nos alegra mucho invitarlos a celebrar nuestro matrimonio.
-        </p>
       </header>
 
-      {/*
-        THE DETAILS LIST STOOD HERE AND HELD THREE LABELLED FACTS.
+      {rsvp === undefined ? (
+        /*
+          THE OPERATOR'S PREVIEW, WHICH IS NOT ONE OF THE GUEST'S SCREENS.
 
-        Fecha, Lugar and Dirección. The day is stated by the announcement above
-        now, so the row repeating it had to go — and the two that remain answer
-        a question this household has not been asked yet. They moved into the
-        RSVP's affirmative branch, where somebody has just said they are coming:
-        a household that cannot come does not need a street, and handing one to
-        everybody before the question is answered buries the question.
-      */}
+          Everything a guest reads before they answer, with the two controls
+          removed. It is deliberately NOT wrapped in `invitation__rsvp`: the
+          browser suite asserts that class is absent here, and that assertion is
+          how "the preview offers no way to answer on a household's behalf" is
+          checked rather than promised.
+        */
+        <div className="flex flex-col items-center gap-5 text-center">
+          <InvitationAnnouncement coupleNames={wedding.coupleNames} />
 
-      {/* WHO THIS IS FOR, SAID ONCE.
-       * The greeting above already names this household and the list below
-       * already names every member. A "Esta invitación es para …" heading and a
-       * "La invitación es para N personas." count each restated that same fact,
-       * so the section carried four lines all answering the same question. The
-       * list is the authoritative record; the greeting is the salutation. */}
-      <section className="invitation__household">
-        {/*
-          A hairline above the names, borrowed from `SaveTheDate`: it separates
-          the salutation from the list of people without a heading that would
-          restate what the greeting already said.
-        */}
-        <span
-          aria-hidden="true"
-          className="mx-auto mb-5 block h-px w-16 bg-[#f6efe2]/30 sm:w-24"
-        />
-        <ul className="m-0 flex list-none flex-col items-center gap-1.5 p-0">
-          {invitation.guests.map((guest) => (
-            <li
-              className="text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)] sm:text-base"
-              key={guest.id}
-            >
-              {guest.fullName}
-              {guest.isChild ? (
-                <>
-                  {" "}
-                  <span className="text-[#f6efe2]/60">(niño o niña)</span>
-                </>
-              ) : (
-                ""
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
+          <p className="invitation__deadline text-sm text-[#f6efe2]">
+            {rsvpDeadlineSentence(invitation.guests.length)}
+          </p>
+        </div>
+      ) : (
+        /*
+          `flex-1` SO THE SCREEN CAN PUSH ITS CONTROLS TO THE FOOT OF ITSELF.
 
-      {rsvp === undefined ? null : (
-        <section className="invitation__rsvp">{rsvp}</section>
+          The section is the whole of the article below the greeting, and what
+          goes in it decides its own vertical arrangement: the question screen
+          puts the announcement at the top and the answers at the bottom, the
+          way the landing page does; the screens with no announcement put their
+          single group at the bottom. Neither can do that without a box the
+          height of the space that is left.
+        */
+        <section className="invitation__rsvp flex flex-1 flex-col">
+          {rsvp}
+        </section>
       )}
-
-      {/*
-        ONE DEADLINE FOR THE WHOLE WEDDING, AND IT IS NOT A PROP.
-
-        It used to arrive per household, which meant the couple typed the same
-        date into every invitation they created — and one they forgot was an
-        invitation that said nothing and never closed. There is one wedding, so
-        it comes from the wedding's own facts.
-
-        And it is spelled the way a person writes a date. The ISO day went
-        straight onto the page before this: "Confirmen su asistencia antes del
-        2026-11-21", a machine's spelling on the one surface written for people.
-        Both this sentence and the gate in `lib/server/rsvp.ts` derive from the
-        same instant, so they cannot name different days.
-      */}
-      <p className="invitation__deadline text-center text-xs text-[#f6efe2]/70">
-        Confirmen su asistencia antes del {RSVP_DEADLINE_TEXT}.
-      </p>
     </article>
   );
 }

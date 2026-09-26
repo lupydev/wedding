@@ -58,7 +58,7 @@ async function unlock(page: Page, invitation: SeededInvitation) {
   await page.goto(`/i/${invitation.slug}`);
   await page.getByLabel(/Número de celular/).fill(PHONE_ONE);
   await page.getByRole("button", { name: "Ver la invitación" }).click();
-  await expect(page.getByText("Nos alegra mucho invitarlos")).toBeVisible();
+  await expect(page.locator("article.invitation")).toBeVisible();
 }
 
 function attendeeBox(page: Page, name: string) {
@@ -76,12 +76,36 @@ function submit(page: Page) {
  * this ever needs a second click again, exactly one place changes and every
  * test that relies on the behaviour fails together.
  */
+/*
+  `click`, NOT `check`, AND THE DIFFERENCE IS THE WHOLE STEPPED DESIGN.
+
+  `check()` clicks and then waits for the input to REPORT itself checked.
+  Answering now replaces the screen — the question gives way to the list of who
+  is coming, or to the stream — so the radio is unmounted a frame after it is
+  pressed and the wait it is still holding can never be satisfied. It times out
+  after thirty seconds having done the thing correctly.
+*/
 function decline(page: Page) {
-  return page.getByRole("radio", { name: /No podemos acompañarlos/ }).check();
+  return page.getByRole("radio", { name: /No podemos acompañarlos/ }).click();
 }
 
 function accept(page: Page) {
-  return page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+  return page.getByRole("radio", { name: /Sí, allá estaremos/ }).click();
+}
+
+/**
+ * An acceptance has landed, which is now a SCREEN rather than a sentence.
+ *
+ * "¡Listo! Guardamos su respuesta." used to appear under the controls the
+ * household had just used. Those controls are replaced now: a recorded
+ * acceptance hands over to the screen that says where to go, when, and what to
+ * wear — and that screen says the answer was saved in its own words. The alert
+ * region still exists and still carries REFUSALS, which leave a household
+ * exactly where they were.
+ */
+async function expectRecorded(page: Page) {
+  await expect(page.locator(".rsvp__confirmed")).toBeVisible();
+  await expect(page.getByText("Su respuesta quedó guardada.")).toBeVisible();
 }
 
 function streamCard(page: Page) {
@@ -117,16 +141,14 @@ test.describe("answering the invitation", () => {
   }) => {
     await unlock(page, invitation);
 
-    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+    await accept(page);
     // Everybody starts checked, so two seats means UNCHECKING the third. The
     // property under test is unchanged: the count is derived from the names,
     // never typed.
     await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);
 
-    await expect(rsvpAlert(page)).toContainText(
-      "¡Listo! Guardamos su respuesta.",
-    );
+    await expectRecorded(page);
 
     const history = await invitation.responseHistory();
 
@@ -150,9 +172,23 @@ test.describe("answering the invitation", () => {
   test("shows the household what they already answered", async ({ page }) => {
     await unlock(page, invitation);
 
+    /*
+      AN ACCEPTED HOUSEHOLD LANDS ON THE DIRECTIONS, NOT ON THE FORM.
+
+      The question is settled. What somebody reopening their invitation wants
+      is where to go and at what hour, and re-offering the form is how a
+      household ends up answering twice and wondering which one counted. What
+      they answered is one tap away, behind the same "Volver a responder" the
+      declining screen has offered all along.
+    */
+    await expect(page.locator(".rsvp__confirmed")).toBeVisible();
+    await page.getByRole("button", { name: "Volver a responder" }).click();
+
     await expect(
       page.getByText("Tu respuesta actual: asisten 2 personas."),
     ).toBeVisible();
+
+    await accept(page);
     await expect(attendeeBox(page, GUEST_ONE)).toBeChecked();
     await expect(attendeeBox(page, GUEST_THREE)).not.toBeChecked();
   });
@@ -165,6 +201,15 @@ test.describe("answering the invitation", () => {
     // because the naive count and the correct one agree until someone changes
     // their mind.
     await unlock(page, invitation);
+
+    /*
+      THROUGH THE WAY BACK, because the previous test left an acceptance on
+      file and an accepted household now lands on the directions rather than on
+      the form. That is the point of this file's serial ordering: these two
+      tests are one story told in two halves.
+    */
+    await expect(page.locator(".rsvp__confirmed")).toBeVisible();
+    await page.getByRole("button", { name: "Volver a responder" }).click();
 
     // One tap. No submit click follows, and the stream card appearing is the
     // proof the answer actually reached the server.
@@ -231,9 +276,7 @@ test.describe("answering the invitation", () => {
     await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);
 
-    await expect(rsvpAlert(page)).toContainText(
-      "¡Listo! Guardamos su respuesta.",
-    );
+    await expectRecorded(page);
 
     const history = await invitation.responseHistory();
     const current = await invitation.currentResponse();
@@ -405,7 +448,7 @@ test.describe("the seat cap", () => {
   }) => {
     await unlock(page, invitation);
 
-    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+    await accept(page);
     await attendeeBox(page, GUEST_ONE).check();
     await attendeeBox(page, GUEST_TWO).check();
     await attendeeBox(page, GUEST_THREE).check();
@@ -453,7 +496,7 @@ test.describe("the seat cap", () => {
       const strangerId = strangerGuests.get(GUEST_ONE)!;
 
       await unlock(page, invitation);
-      await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+      await accept(page);
       /*
         ROOM IS MADE FIRST, AND THAT IS WHAT KEEPS THIS TEST ABOUT OWNERSHIP.
 
@@ -539,16 +582,14 @@ test.describe("the RSVP deadline", () => {
       await unlock(page, invitation);
 
       await expect(page.locator("form.rsvp__form")).toBeVisible();
-      await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+      await accept(page);
       // One seat, so the other two come off: a fresh answer opens with the whole
       // household coming.
       await attendeeBox(page, GUEST_TWO).uncheck();
       await attendeeBox(page, GUEST_THREE).uncheck();
       await submit(page);
 
-      await expect(rsvpAlert(page)).toContainText(
-        "¡Listo! Guardamos su respuesta.",
-      );
+      await expectRecorded(page);
       const history = await invitation.responseHistory();
       expect(history).toHaveLength(1);
       expect(history[0].seatsConfirmed).toBe(1);
@@ -705,11 +746,14 @@ test.describe("the invitation on a laptop", () => {
     /*
       ACCEPTED FIRST, WHICH IS ALSO THE FORM AT ITS LONGEST.
 
-      The question opens the rest of the form now, so the submit button does
+      The question opens the list of who is coming, so the submit button does
       not exist until somebody answers it — and this test wants the far end of
-      the longest version, which is the one with the attendee list on screen.
+      the longest screen, which is the one with the attendee list on it.
     */
-    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).check();
+    await accept(page);
+    await expect(
+      page.getByRole("group", { name: /Quiénes asisten/ }),
+    ).toBeVisible();
 
     // Down to the submit button, which is the far end of the form.
     await page
@@ -787,7 +831,19 @@ test.describe("the way to the venue, on a phone", () => {
     // that has not said yes must not be shown where to go.
     await expect(directions).toHaveCount(0);
 
+    /*
+      AND IT IS BEHIND THE RECORDED ANSWER, NOT BEHIND THE TAP.
+
+      Choosing "yes" now opens the list of who is coming; the directions are
+      the screen AFTER the household sends it. That ordering is the point: a
+      page that hands out the venue the instant a radio is pressed is handing it
+      to a household the couple are not expecting yet, and it is what pushed
+      the send button 322 pixels down the page.
+    */
     await accept(page);
+    await expect(directions).toHaveCount(0);
+
+    await submit(page);
 
     await expect(directions).toBeVisible();
     await expect(directions).toHaveAttribute("href", DIRECTIONS_URL);

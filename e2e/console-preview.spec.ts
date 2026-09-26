@@ -50,15 +50,28 @@ function invitationBody(target: Page) {
 }
 
 /**
- * The body without its RSVP slot, and without React's text separators.
+ * The announcement, normalised — the block both surfaces still render.
+ *
+ * WHAT THIS GUARD USED TO BE, AND WHY IT HAD TO CHANGE.
+ *
+ * It compared the two documents byte for byte, minus the RSVP slot. That worked
+ * while the guest's invitation and the operator's preview WERE the same
+ * document with one hole in it. The invitation is a sequence of screens now —
+ * the question, who is coming, where to go — and which one is showing is client
+ * state the preview cannot have, because the preview renders no form at all.
+ * Comparing "the whole body except the slot" would now compare a greeting
+ * against a greeting and prove nothing.
+ *
+ * What the two surfaces genuinely share is `InvitationAnnouncement`: the
+ * announcement the couple asked to appear identically on the gate and on the
+ * question screen, which the public route hands to the form as a slot and the
+ * preview renders directly. That is the copy an operator is approving, and it
+ * is composed in two places — so it is exactly the thing that can drift.
+ *
+ * The greeting is compared alongside it, because it is the other element the
+ * preview and the guest both draw from the same component.
  *
  * TWO NORMALISATIONS, AND BOTH ARE DELIBERATELY NARROW.
- *
- * The RSVP is a SLOT: the public route fills it with the household's form, and
- * the operator preview passes nothing, because a preview must not offer a
- * control that would write a household's answer on their behalf. Everything
- * outside that slot is shared markup, and comparing it is what proves the two
- * routes cannot drift.
  *
  * The empty `<!-- -->` comments are React's separators between adjacent text
  * nodes. React emits them only where a tree needs to stay hydratable, so the
@@ -69,38 +82,51 @@ function invitationBody(target: Page) {
  *
  * AND THE COUNTDOWN'S FIGURES, WHICH ARE A CLOCK.
  *
- * The invitation now opens with the landing's announcement, counter included.
  * The two surfaces are loaded one after the other, so the seconds figure is
  * simply different by the time the second one renders — 53 against 54 — and a
- * byte comparison of a running clock can never pass. That says nothing about
- * whether the operator is previewing what the guest reads, which is the only
- * thing this test is for.
+ * byte comparison of a running clock can never pass.
  *
  * The figures are emptied rather than the block removed, so the counter's
  * STRUCTURE is still compared: a preview that stopped rendering it, or rendered
  * a different number of units, still fails here.
  *
  * Nothing else is normalised. Element names, attributes, ordering, whitespace
- * and every character of copy are compared exactly, so a genuine divergence
- * between the two surfaces still fails here.
+ * and every character of copy are compared exactly.
  */
-async function bodyWithoutRsvp(target: Page): Promise<string> {
-  const markup = await invitationBody(target).evaluate((article) => {
-    const clone = article.cloneNode(true) as HTMLElement;
-    clone.querySelector(".invitation__rsvp")?.remove();
+/**
+ * The household's own name, as each surface writes it.
+ *
+ * Normalised for React's text separators like the announcement above, and for
+ * the same reason: the public route interpolates the greeting name inside a
+ * client-hydratable tree, so it comes back as
+ * `¡Hola, <!-- -->Familia X<!-- -->!`, while the preview renders the same
+ * string with no separators at all. That is a fact about React, not about the
+ * invitation.
+ */
+async function greeting(target: Page): Promise<string> {
+  const markup = await target.locator(".invitation__greeting").innerHTML();
 
-    for (const figure of clone.querySelectorAll(
-      '[data-testid="countdown-figure"]',
-    )) {
-      figure.textContent = "";
-    }
-    const summary = clone.querySelector('[data-testid="countdown-summary"]');
-    if (summary !== null) {
-      summary.textContent = "";
-    }
+  return markup.replaceAll("<!-- -->", "");
+}
 
-    return clone.innerHTML;
-  });
+async function announcement(target: Page): Promise<string> {
+  const markup = await target
+    .locator(".invitation__announcement")
+    .evaluate((block) => {
+      const clone = block.cloneNode(true) as HTMLElement;
+
+      for (const figure of clone.querySelectorAll(
+        '[data-testid="countdown-figure"]',
+      )) {
+        figure.textContent = "";
+      }
+      const summary = clone.querySelector('[data-testid="countdown-summary"]');
+      if (summary !== null) {
+        summary.textContent = "";
+      }
+
+      return clone.outerHTML;
+    });
 
   return markup.replaceAll("<!-- -->", "");
 }
@@ -160,7 +186,21 @@ test.describe("the admin-only body preview", () => {
 
     await expect(invitationBody(page)).toBeVisible();
     await expect(invitationBody(page)).toContainText("Familia Previa Muñóz");
-    await expect(invitationBody(page)).toContainText("Tomás Previo Muñóz");
+    /*
+      THE MEMBERS ARE NO LONGER LISTED IN THE BODY, and the preview lost them
+      with the guest. `.invitation__household` printed the same names the
+      RSVP's checkboxes print, and the two rendered on the same screen once a
+      household accepted — 93 pixels and 194 pixels of the same information on
+      a page that was already two and a half viewports tall on a phone. The
+      checkboxes stayed, because they are the ones a guest can act on, and the
+      preview deliberately renders no form.
+
+      What an operator approves here is the copy: the household's own name, the
+      announcement, and the day they have to answer by. Who is ON the
+      invitation is what the console's own guest list is for.
+    */
+    await expect(invitationBody(page)).toContainText("Nos casamos");
+    await expect(invitationBody(page)).toContainText("Confirmen antes del");
   });
 
   test("renders exactly what a guest sees after unlocking", async ({
@@ -176,7 +216,8 @@ test.describe("the admin-only body preview", () => {
     // project, sequenced after this one by `dependencies` in
     // `playwright.config.ts`. Exclusion by scheduling, not by locking.
     await page.goto(`/console/preview/${household.invitationId}`);
-    const previewBody = await bodyWithoutRsvp(page);
+    const previewAnnouncement = await announcement(page);
+    const previewGreeting = await greeting(page);
 
     const guest = await browser.newContext();
     const guestPage = await guest.newPage();
@@ -190,7 +231,8 @@ test.describe("the admin-only body preview", () => {
         .click();
       await expect(invitationBody(guestPage)).toBeVisible();
 
-      expect(previewBody).toBe(await bodyWithoutRsvp(guestPage));
+      expect(previewAnnouncement).toBe(await announcement(guestPage));
+      expect(previewGreeting).toBe(await greeting(guestPage));
     } finally {
       await guest.close();
     }

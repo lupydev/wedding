@@ -90,18 +90,34 @@ export function GateForm({ action }: { readonly action: GateFormAction }) {
         Ver la invitación
       </button>
 
-      {messages.length === 0 ? null : (
-        // `role="alert"` so a screen reader announces the outcome; a guest who
-        // cannot see the message has no other way to learn the attempt failed.
-        <div
-          role="alert"
-          className="gate__feedback flex flex-col gap-1 text-sm text-[#f6efe2]"
-        >
-          {messages.map((message) => (
-            <p key={message}>{message}</p>
-          ))}
-        </div>
-      )}
+      {/*
+        THE REFUSAL, AND THE SPACE IT WILL NEED, HELD FROM THE FIRST PAINT.
+
+        `role="alert"` so a screen reader announces the outcome; a guest who
+        cannot see the message has no other way to learn the attempt failed.
+
+        IT USED TO MOUNT ON FAILURE AND THE PAGE GREW BY 106 PIXELS, measured on
+        an iPhone 14. On a screen whose whole promise is that it is one viewport
+        tall, an element that appears and pushes the recovery link off the
+        bottom is the failure mode arriving exactly when the guest is already
+        stuck. The region is now always in the document; when there is nothing
+        to say it holds a single line's worth of nothing.
+
+        RESERVED FOR ONE LINE, NOT FOR THE WORST CASE. A refusal is two
+        sentences and wraps to about four lines on a narrow phone, and holding
+        that much empty ground on every successful visit to spare the unlucky
+        one a small scroll is the wrong trade. What the reservation buys is that
+        the common refusal does not shove the page; the longest one may still,
+        and it degrades to a scroll, which the gate deliberately allows.
+      */}
+      <div
+        role="alert"
+        className="gate__feedback flex min-h-6 flex-col gap-1 text-sm text-[#f6efe2]"
+      >
+        {messages.map((message) => (
+          <p key={message}>{message}</p>
+        ))}
+      </div>
     </form>
   );
 }

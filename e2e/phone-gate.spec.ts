@@ -22,8 +22,22 @@ const CHILD = "Sara Aguirre";
 const PHONE_ONE = "+573005551111";
 const PHONE_TWO = "+573005552222";
 
-/** Everything a household is only allowed to read AFTER the gate lets them in. */
-const GATED_TEXT = ["lugares reservados", "Nos alegra mucho invitarlos"];
+/**
+ * Everything a household is only allowed to read AFTER the gate lets them in.
+ *
+ * IT USED TO BE THE INVITATION'S OPENING LINE OF PROSE, "Nos alegra mucho
+ * invitarlos", and that line is gone: it repeated the WhatsApp message that
+ * brought the guest here and cost the question screen a tenth of its height.
+ *
+ * The question itself is the better sentinel anyway. It is the point of the
+ * page rather than decoration on it, and — unlike that line — it appears
+ * nowhere else in the product, so a test that finds it has genuinely got past
+ * the gate.
+ */
+const GATED_TEXT = ["¿Podrán acompañarnos?", "Confirmen antes del"];
+
+/** The sentence that proves the gate has been passed, in a single query. */
+const UNLOCKED_TEXT = "¿Podrán acompañarnos?";
 
 /** The single failure sentence the gate is allowed to produce. */
 const GENERIC_FAILURE = "No pudimos confirmar ese número";
@@ -59,7 +73,21 @@ async function submitPhone(page: Page, value: string) {
  * household at all, which is exactly what these tests are checking.
  */
 function householdList(page: Page) {
-  return page.locator("section.invitation__household");
+  return page.getByRole("group", { name: /Quiénes asisten/ });
+}
+
+/**
+ * Opens the affirmative, which is the only screen that names every member now.
+ *
+ * `.invitation__household` printed the same three names the RSVP's checkboxes
+ * print, on the same screen, and one of the two had to go: 93 pixels and 194
+ * pixels of the same information on a page that was already two and a half
+ * viewports tall. The checkboxes stayed, because they are the ones a guest can
+ * act on.
+ */
+async function openWhoIsComing(page: Page) {
+  await page.getByRole("radio", { name: /Sí, allá est/ }).click();
+  await expect(householdList(page)).toBeVisible();
 }
 
 /**
@@ -67,9 +95,26 @@ function householdList(page: Page) {
  *
  * Scoped to the form because Next.js renders its own empty `role="alert"` route
  * announcer in every document, and an unscoped query matches both.
+ *
+ * IT IS NOW IN THE DOCUMENT BEFORE THERE IS ANYTHING IN IT, which changed what
+ * a test may ask of it. The region used to mount on the first refusal, so
+ * `toBeVisible()` was a perfectly good way to wait for one; on a screen whose
+ * whole promise is that it is exactly one viewport tall, an element that
+ * appears and adds 106 pixels is the failure mode arriving at the worst moment,
+ * so the space is reserved from the first paint.
+ *
+ * A reserved slot is visible while empty, so `toBeVisible()` now resolves
+ * instantly and waits for nothing. `spoke()` below is what a test should wait
+ * on instead — and the three places that used the old spelling were finding the
+ * PREVIOUS attempt's message, then submitting into a form that had not settled.
  */
 function gateAlert(page: Page) {
   return page.locator("form").getByRole("alert");
+}
+
+/** Waits until the gate has actually said something. */
+function spoke(page: Page) {
+  return expect(gateAlert(page)).not.toBeEmpty();
 }
 
 /** The document without its scripts — what the guest actually sees rendered. */
@@ -121,12 +166,13 @@ test.describe("unlocking with a guest's number", () => {
     // link is opened by whoever has it in hand.
     await page.goto(`/i/${invitation.slug}`);
     await submitPhone(page, "5552222");
-    await expect(gateAlert(page)).toBeVisible();
+    await spoke(page);
 
     // Seven digits is not enough to compare, so that attempt is a rejection.
     await submitPhone(page, "3005552222");
 
-    await expect(page.getByText("Nos alegra mucho invitarlos")).toBeVisible();
+    await expect(page.getByText(UNLOCKED_TEXT)).toBeVisible();
+    await openWhoIsComing(page);
     await expect(householdList(page).getByText(GUEST_TWO)).toBeVisible();
   });
 
@@ -144,9 +190,16 @@ test.describe("unlocking with a guest's number", () => {
       await page.goto(`/i/${other.slug}`);
       await submitPhone(page, "+57 301 555 3333");
 
+      /*
+        A SOLO INVITATION IS NEVER SHOWN A LIST, so the household's name is
+        read from the greeting here. There is nothing to choose — one person,
+        one seat — and the affirmative records itself on the first tap, which
+        is why tapping it to reveal a list would record an answer instead.
+      */
       await expect(
-        householdList(page).getByText("Elena Restrepo"),
+        page.getByRole("heading", { name: /Elena Restrepo|Familia Restrepo/ }),
       ).toBeVisible();
+      await expect(page.getByText("¿Podrás acompañarnos?")).toBeVisible();
     } finally {
       await context.close();
       await other.cleanup();
@@ -172,7 +225,7 @@ test.describe("a wrong number", () => {
     await submitPhone(page, "3005551112");
 
     await expect(gateAlert(page)).toContainText(GENERIC_FAILURE);
-    await expect(page.getByText("Nos alegra mucho invitarlos")).toHaveCount(0);
+    await expect(page.getByText(UNLOCKED_TEXT)).toHaveCount(0);
   });
 
   test("tells the guest how many attempts are left, not just 'try later'", async ({
@@ -189,7 +242,7 @@ test.describe("a wrong number", () => {
   }) => {
     await page.goto(`/i/${invitation.slug}`);
     await submitPhone(page, "3005558888");
-    await expect(gateAlert(page)).toBeVisible();
+    await spoke(page);
 
     // The FULL document this time, scripts included: an inline RSC payload is
     // exactly where a stored digit would be smuggled by accident.
@@ -336,7 +389,7 @@ test.describe("the unlock cookie", () => {
   }) => {
     await page.goto(`/i/${invitation.slug}`);
     await submitPhone(page, "3005551111");
-    await expect(page.getByText("Nos alegra mucho invitarlos")).toBeVisible();
+    await expect(page.getByText(UNLOCKED_TEXT)).toBeVisible();
 
     const cookie = (await context.cookies()).find(
       (candidate) => candidate.name === "inv_unlock",
@@ -357,7 +410,7 @@ test.describe("the unlock cookie", () => {
   }) => {
     await page.goto(`/i/${invitation.slug}`);
     await submitPhone(page, "3005551111");
-    await expect(page.getByText("Nos alegra mucho invitarlos")).toBeVisible();
+    await expect(page.getByText(UNLOCKED_TEXT)).toBeVisible();
 
     const cookie = (await context.cookies()).find(
       (candidate) => candidate.name === "inv_unlock",
@@ -378,10 +431,11 @@ test.describe("the unlock cookie", () => {
   test("lets a return visit skip the gate entirely", async ({ page }) => {
     await page.goto(`/i/${invitation.slug}`);
     await submitPhone(page, "3005551111");
-    await expect(page.getByText("Nos alegra mucho invitarlos")).toBeVisible();
+    await expect(page.getByText(UNLOCKED_TEXT)).toBeVisible();
 
     await page.goto(`/i/${invitation.slug}`);
 
+    await openWhoIsComing(page);
     await expect(householdList(page).getByText(GUEST_ONE)).toBeVisible();
     await expect(page.getByLabel(/Número de celular/)).toHaveCount(0);
   });
@@ -396,7 +450,7 @@ test.describe("the unlock cookie", () => {
     try {
       await page.goto(`/i/${invitation.slug}`);
       await submitPhone(page, "3005551111");
-      await expect(page.getByText("Nos alegra mucho invitarlos")).toBeVisible();
+      await expect(page.getByText(UNLOCKED_TEXT)).toBeVisible();
 
       await page.goto(`/i/${other.slug}`);
 
@@ -454,7 +508,7 @@ test.describe("the lockout", () => {
     await submitPhone(page, "3005551111");
 
     await expect(gateAlert(page)).toContainText("Por seguridad");
-    await expect(page.getByText("Nos alegra mucho invitarlos")).toHaveCount(0);
+    await expect(page.getByText(UNLOCKED_TEXT)).toHaveCount(0);
   });
 
   test("persists across a separate browser context and request", async ({
@@ -680,7 +734,7 @@ test.describe("an unknown slug compared with a wrong phone", () => {
 
     await page.goto(`/i/${invitation.slug}`);
     await submitPhone(page, "3005556666");
-    await expect(gateAlert(page)).toBeVisible();
+    await spoke(page);
     const wrongPhone = await page.content();
 
     for (const forbidden of [GUEST_ONE, GUEST_TWO, "3005551111", "05552222"]) {

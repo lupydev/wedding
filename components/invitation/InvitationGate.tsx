@@ -30,14 +30,46 @@ export function InvitationGate({
   readonly children: ReactNode;
 }) {
   return (
+    /*
+      ONE VIEWPORT, AND CENTRED RATHER THAN SPREAD — WHICH IS THE KEYBOARD
+      DECISION, WRITTEN WHERE IT IS MADE.
+
+      Every other screen of the invitation pushes its controls to the foot of
+      the viewport, the way the landing page does. This one must not, and it is
+      the only screen with a text field.
+
+      On real iOS Safari the software keyboard changes neither
+      `window.innerHeight` nor the `dvh` unit — only `visualViewport.height`.
+      So a gate pinned to the bottom of `100dvh` keeps its full height BEHIND
+      the keyboard, and the field a guest has just tapped is under it. Safari
+      then has to scroll the document to bring the field back, and the further
+      down the screen the field sits, the further it has to move.
+
+      TWO WAYS OUT WERE WEIGHED AND ONLY ONE OF THEM IS FREE. The visual
+      viewport can be read in JavaScript and projected into a custom property,
+      which tracks the keyboard exactly — and makes the height of the one screen
+      every guest must get past depend on a script running. The other is to keep
+      this screen short, put the field in the middle of it, and let the browser
+      do what browsers already do: `min-h-dvh` rather than a locked height, so
+      nothing here forbids a scroll that the keyboard makes necessary, and
+      `justify-center` so there is less to scroll. That is what is written
+      below. The measured cost is nothing when there is no keyboard, and the
+      failure mode with one is an ordinary page that scrolls a little.
+
+      `e2e/invitation-one-screen.spec.ts` checks the gate at a viewport the
+      height of a phone with its keyboard up. Emulation cannot raise a real
+      keyboard, so that test does not pretend to: it asserts the shape of the
+      degradation — the document may scroll, and the submit button is reachable
+      — rather than claiming to have measured iOS.
+    */
     <section
       className="
-        gate mx-auto flex h-full w-full max-w-md flex-col items-center
-        justify-center gap-5 px-6 pt-8 lg:max-w-none
+        gate mx-auto flex min-h-dvh w-full max-w-md flex-col items-center
+        justify-center gap-4 px-6 sm:gap-5
+        pt-[max(1.25rem,env(safe-area-inset-top))] lg:max-w-none
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-center
         text-[#f6efe2]
-        sm:pt-12 sm:pb-10
-        lg:px-4 lg:py-0
+        lg:min-h-0 lg:px-4 lg:py-0
       "
     >
       {/*
@@ -49,13 +81,18 @@ export function InvitationGate({
         it broke after the ampersand, which reads as a mistake in the middle of
         the couple's own names. In its own grid column it has the same room the
         landing gives it.
+
+        `px-10` CLEARS THE MUSIC CONTROL, the same 64px gutter the invitation's
+        own greeting takes for the same reason: the control is fixed at
+        `right-5` and is 44px across, so it owns the last 64px of the row.
       */}
       <h1
         className="
-          gate__greeting font-display text-3xl leading-[1.05] text-balance
-          text-[#f6efe2]
+          gate__greeting px-10 font-display text-2xl leading-[1.05]
+          text-balance text-[#f6efe2]
           [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
-          sm:text-4xl
+          sm:text-3xl
+          lg:px-0 lg:text-4xl
         "
       >
         ¡Hola, {greetingName}!
