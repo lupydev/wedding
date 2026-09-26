@@ -157,6 +157,14 @@ declined screen given the language `/transmision` already uses.
       considered and rejected; the reasons are written down so nobody has to
       rediscover them.
 
+- [x] **U34 — one screen per step, because the invitation was two and a half
+      of them.** Measured on an iPhone 14: the landing page the couple asked
+      this to match is exactly one viewport; a household that had accepted was
+      2.50. The photograph moves behind the words, the question becomes four
+      screens answered one at a time, the hour and the dress code reach a guest
+      for the first time, and two phone-shaped Playwright projects hold the
+      result to 1.00.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -2165,15 +2173,298 @@ map is the one a guest can act on. Whether the line stays, or becomes a landmark
 ("a 10 minutos al sur de Buga") rather than an address, is a copy decision for
 them.
 
+### U34 — done (one screen per step, and the measurement that proves it)
+
+**WHAT WAS WRONG, IN NUMBERS RATHER THAN IN ADJECTIVES.** Measured on an
+iPhone 14 (390×664 visible) and a Pixel 7 (412×839), `document.documentElement.scrollHeight`
+against `window.innerHeight`:
+
+| screen                 | iPhone before   | iPhone after | Pixel before | Pixel after |
+| ---------------------- | --------------- | ------------ | ------------ | ----------- |
+| landing `/`            | 664 — 1.00      | 664 — 1.00   | 839 — 1.00   | 839 — 1.00  |
+| gate                   | 832 — 1.25      | 664 — 1.00   | 899 — 1.07   | 839 — 1.00  |
+| the question           | 1022 — 1.54     | 664 — 1.00   | 1088 — 1.30  | 839 — 1.00  |
+| the question, 5 people | 1074 — 1.62     | 664 — 1.00   | 1140 — 1.36  | 839 — 1.00  |
+| who is coming (3)      | —               | 664 — 1.00   | —            | 839 — 1.00  |
+| who is coming (5)      | —               | 664 — 1.00   | —            | 839 — 1.00  |
+| accepted               | 1663 — **2.50** | 664 — 1.00   | 1743 — 2.08  | 839 — 1.00  |
+| accepted, 5 people     | 1823 — **2.75** | 664 — 1.00   | 1903 — 2.27  | 839 — 1.00  |
+| declined               | 1086 — 1.64     | 664 — 1.00   | 1136 — 1.35  | 839 — 1.00  |
+| not found              | 664 — 1.00      | 664 — 1.00   | 839 — 1.00   | 839 — 1.00  |
+
+Horizontal overflow was false before and is false after, on every screen. A
+1440×900 desktop window went the same way: 1764 to 900 on the accepted screen.
+
+The "before" column is measured against a build of `97a146e`, not remembered.
+
+Close to every guest opens this from a WhatsApp link on a phone, so "past 664
+pixels" means "most households never see it" — and what lived past it on the
+accepted screen was the venue, the map and the send button.
+
+**THE ONE STRUCTURAL CAUSE, AND THE SENTENCE IN THIS REPOSITORY THAT WAS HALF
+WRONG.** `/` fits because the photograph is BEHIND everything: `PhotoStage` in
+`overlay`, one `h-dvh` figure, two scrims, the words in the same grid cell,
+`justify-between`. `/i/[slug]` used `band` — a `h-[38dvh]` strip on top with
+every block stacked beneath it — and `photos.ts` justified that in as many
+words: "filling a phone viewport with it discards about 38% of the width, and
+the two people stand left and right of centre — so a fill crop clips both of
+them."
+
+Half right. A CENTRED fill crop clips Luis. The couple occupy x 485–1545 of an
+1800-pixel-wide file — 1060 pixels, 59% of the width — and a Pixel 7 shows 1178
+of them. They fit with room to spare once the crop is told where to look.
+
+**THE CROP, AND WHY THE FIRST NUMBER FOR IT WAS WRONG.** The brief for this unit
+estimated `object-position: 55%`, from `999/1800 = 55.5%`. `object-position`
+does not name a point in the picture: it distributes the OVERFLOW, so the
+percentage that centres a subject depends on how much is being cropped, and the
+same value lands somewhere different on every phone. At 55% on a Pixel 7 the
+window is 342–1520 and Luis's shoe is 26 source pixels — about nine CSS pixels —
+from the edge; at 50% it is off the frame.
+
+Measured with a pixel ruler laid over the file and checked by eye at both device
+sizes: **68%**. Pixel 7 sees 423–1601, about sixty pixels clear at each end;
+iPhone 14 sees 265–1675, over a hundred. `components/landing/photos.spec.ts`
+does that arithmetic on both phones and asserts a centred crop would clip,
+because a crop that loses somebody does not fail — it renders.
+
+The limit is stated rather than left to be discovered: a phone narrower than
+about 0.41:1 cannot hold both people at any focus, and at 360×800 — the
+narrowest in common use — 68% takes a few pixels off the hem of Michell's dress.
+That is the picture's shape, not a value that can be tuned.
+
+**THE FOUR SCREENS.** `RsvpAnswer` derives which one is showing from the two
+answers it already knew about — the one on file and the one being given — rather
+than storing a fifth piece of state that would have to be kept in step:
+
+1. **Gate** — greeting, announcement, field, submit, the WhatsApp way out.
+2. **The question** — announcement, one question, two answers, and the deadline.
+3. **Who is coming** — the checkboxes and the send button. Nothing else.
+4. **Where to go** — the venue, the map, the day AND the hour, the dress code.
+   A decline reaches the stream screen instead, as before.
+
+**WHERE THE 999 PIXELS WENT.**
+
+- The photograph stopped being a 252-pixel block on an iPhone (319 on a Pixel)
+  and became the background.
+- `SaveTheDate` is 236 pixels and rendered on the gate AND on every unlocked
+  screen. It is a SLOT now, passed from the route to `RsvpAnswer`, which shows
+  it on the question screen and on no other. A slot rather than an import
+  because it is a Server Component tree with a live countdown in it, and the
+  operator preview renders the same block without rendering the form at all —
+  so both surfaces build it from one new component, `InvitationAnnouncement`.
+- `.invitation__household` (93px) listed the same names `.rsvp__attendees`
+  (194px) lists as checkboxes, and both were on screen at once. The checkboxes
+  won: they are the ones a guest can act on.
+- `.rsvp__venue` and the map (322px together) opened the instant the affirmative
+  was chosen, above the boxes that still had to be ticked. They are the screen
+  AFTER the answer is sent, which is also better: nobody is told where to go
+  before they have said they are coming.
+- `RsvpAnswer`'s `scrollIntoView` and the ref it needed are gone. They existed
+  because the venue opened below the fold — "se abre y se pierde la información,
+  toca hacer un scroll". Nothing opens below the fold now, and a page that is
+  exactly one viewport tall cannot be scrolled to anything.
+- The invitation's opening line of prose went with them: "Nos alegra mucho
+  invitarlos a celebrar nuestro matrimonio." It is 68 pixels — a tenth of an
+  iPhone screen — spent on the only line on the question screen that neither
+  states a fact nor asks anything, and the guest read it seconds earlier: the
+  WhatsApp message that brings them here opens with the same sentence
+  (`lib/domain/dispatch-message.ts`). **A copy decision the couple can reverse,
+  at the price of the question screen no longer fitting.**
+- `Dirección` went too. The venue HAS no street a guest can type into a maps
+  application — `VenueMap` opens with that fact — so the line was a second
+  answer to the question the map already answers, and the one a guest cannot
+  act on. In production it printed `{{VENUE_ADDRESS}}` verbatim. The column
+  stays and the console still edits it; `e2e/console-wedding.spec.ts` now proves
+  an edit reaches the guest through `venueName`, which is the value that does.
+
+**THE HOUR AND THE DRESS CODE, WHICH ARE NEW FACTS ON A GUEST'S SCREEN.**
+`WEDDING_INSTANT` has carried five in the afternoon since the couple gave it,
+and nothing ever PRINTED it: the countdown consumed the instant and migration
+0018 dropped the column a household would otherwise have read. So a wrong hour
+was invisible until this screen existed, which is why the couple were asked to
+confirm it. `formatWeddingTime` renders `5:00 p. m.` in `es-CO`; the spelling is
+asserted exactly, because a locale swap that turned it into `PM` would change
+the one line that tells a household when to arrive.
+
+`WEDDING_DRESS_CODE` is a constant beside it, on the terms migration 0018 set
+for the date: changing it is a deploy rather than an `UPDATE`. A column and a
+console field for a two-word phrase that will not change before the wedding
+buys a form nobody fills in and a second place a reader has to look.
+
+**THE GATE IS THE ONE SCREEN THAT IS DELIBERATELY NOT HELD TO A HEIGHT, AND
+HERE IS WHY.** On real iOS Safari the software keyboard changes neither
+`window.innerHeight` nor the `dvh` unit — only `visualViewport.height`. A gate
+pinned to the bottom of `100dvh` keeps its full height BEHIND the keyboard, and
+the field a guest has just tapped is under it.
+
+Two ways out were weighed. The visual viewport can be read in JavaScript and
+projected into a custom property, which tracks the keyboard exactly — and makes
+the height of the one screen every guest must get past depend on a script
+running. The other is to keep the screen short, put the field in the MIDDLE of
+it rather than at its foot, and let the browser do what browsers already do:
+`min-h-dvh` rather than a locked height, so nothing forbids a scroll the
+keyboard makes necessary, and `justify-center` so there is less of it. That is
+what shipped. It costs nothing when there is no keyboard and degrades to an
+ordinary page that scrolls a little when there is one.
+
+Nothing in this unit is height-LOCKED, in fact, and that is the same decision
+one level up. `min-h-dvh` everywhere, never `h-dvh`: a locked screen clips what
+does not fit, and a clipped send button is a dead end, while a household of nine
+or a guest who has raised their system font gets a screen that scrolls — worse
+than the couple asked for, and still a screen that works. There is no `100vh`,
+no `h-screen` and no `min-h-screen` anywhere in the repository, and no
+`overflow-hidden` on `<main>`: `PhotoStage` records that an overflow ancestor
+kills `position: sticky` on the desktop framed print.
+
+**THE ALERT REGIONS, WHICH ADD HEIGHT WITH NO WARNING.** `.rsvp__feedback` was
+82 pixels and `.gate__feedback` 106, mounted on submit. Both now reserve their
+space from the first paint — one line's worth — so a refusal does not shove the
+page at the exact moment a guest is already stuck. Reserved for ONE line and not
+for the worst case: holding four lines of empty ground on every successful visit
+to spare the unlucky one a small scroll is the wrong trade.
+
+That change had a consequence in the browser suite worth recording. Three tests
+used `expect(gateAlert(page)).toBeVisible()` as a way to WAIT for a refusal. A
+reserved slot is visible while empty, so the wait became instantaneous and those
+tests went on to submit into a form that had not settled — and then failed on
+the next assertion, in a way that looked like a gate defect. `spoke(page)`, which
+waits for the region not to be empty, is what they use now.
+
+**WHAT BROKE IN THE BROWSER SUITE, AND WHY EACH BREAK IS INFORMATION.**
+
+- `.check()` on the attendance radios timed out in five places. `check()` clicks
+  and then waits for the input to REPORT itself checked; answering replaces the
+  screen, so the radio is unmounted a frame later and the wait can never be
+  satisfied. `.click()` throughout.
+- Two serial stories had to be told in two halves rather than one: a household
+  that has accepted now lands on the directions, so the test after the one that
+  accepts has to press "Volver a responder" first. That is the product
+  behaviour, and the tests say so.
+- `e2e/console-preview.spec.ts`'s drift guard compared the two documents byte
+  for byte, minus the RSVP slot. That worked while the guest's invitation and
+  the operator's preview WERE the same document with one hole in it. They are
+  not any more: the guest's is a stepped screen and the preview renders no form.
+  The guard now compares the `invitation__announcement` subtree and the greeting
+  — the two blocks both surfaces genuinely still build from the same components,
+  which is exactly what can drift. Narrower, and still real.
+
+**THE GUARD, AND THE PROOF IT CAN FAIL.** `playwright.config.ts` grew an
+`iphone-14` and a `pixel-7` project from the `devices` presets, scoped to one
+spec: pointing them at the whole suite would re-run the console at phone width,
+a surface nobody administers from a phone. `wedding-facts` now depends on all
+three projects rather than on `chromium` alone, because the two phones read the
+same singleton `ceremony` row that spec edits.
+
+Both run on Chromium, INCLUDING the iPhone, and that is a limitation rather than
+an oversight: the `iPhone 14` preset asks for WebKit, which this project does
+not install. What is measured is geometry — a viewport, a device pixel ratio and
+how `dvh` resolves — and Chromium gives all three. What it does not give is
+Safari's own layout, and it gives no software keyboard at all.
+
+`e2e/invitation-one-screen.spec.ts` asserts three things per step, on both
+phones: `scrollHeight <= innerHeight`, `scrollWidth <= clientWidth`, and that
+the step's primary control is inside the viewport. The third is not redundant —
+a page can satisfy the first two and still have pushed its send button out of
+the bottom of an element that clips, and `toBeVisible()` does not catch that
+either, because an element below the fold is "visible" to Playwright.
+
+**ALL THREE WERE FORCED RED BEFORE BEING RELIED ON.**
+
+Reverting the route to `mobilePhoto="band"` — the layout this unit replaced —
+turned 12 of the 16 mobile tests red:
+
+    Error: gate: the document is 916px tall on a 664px screen
+    Error: question: the document is 916px tall on a 664px screen
+    Error: question: the document is 1158px tall on a 839px screen
+
+And the third assertion, forced on its own by clipping `<main>` and pushing the
+send button down with a transform, so the document stayed exactly one viewport
+tall while the control left it:
+
+    Error: attendees (3): the primary control ends at 912px, past the 664px fold
+
+**THE RED FOR THE REST, QUOTED.**
+
+    FAIL  lib/domain/wedding-day.spec.ts > formatWeddingTime
+    TypeError: formatWeddingTime is not a function
+
+    FAIL  lib/domain/wedding-day.spec.ts > WEDDING_DRESS_CODE
+    AssertionError: expected undefined to be 'Formal elegante'
+
+    FAIL  components/landing/PhotoStage.spec.tsx > covers the viewport at the
+      focus the photograph declares
+    AssertionError: expected 'lg:object-center lg:object-cover obje…' not to
+      contain 'object-contain'
+
+    FAIL  components/landing/photos.spec.ts > holds both people on a Pixel 7
+    Error: The wedding photograph's overlay focus is "undefined", which this
+      spec cannot read.
+
+The step-boundary assertions in `RsvpAnswer.spec.tsx` were written after the
+component and were therefore proven able to fail rather than observed failing
+first: rendering the announcement unconditionally, deleting the hidden
+`attending` field and un-reserving the feedback region turned seven of them red,
+including
+
+    × does not repeat the announcement while they choose who is coming
+    expected document not to contain element, found <p>Nos casamos, Ana y Bruno</p>
+
+    × still says yes in the payload once the radios are off screen
+    AssertionError: expected null to be 'yes'
+
+and the same was done for `rsvpDeadlineSentence` and `rsvpConfirmedHeading`,
+which are pure functions written beside their tests.
+
+**ONE MISTAKE WORTH RECORDING, BECAUSE IT NEARLY SHIPPED A WRONG MEASUREMENT.**
+The first "after" numbers said every screen was 1.00 and they were wrong. The
+capture script waited for `networkidle` after submitting the phone number — but
+the unlock is a Server Action, not a navigation, so `networkidle` sometimes
+resolves while the GATE is still on screen. It was recording the gate's height
+under the question screen's name, which is why the "before" run read 832 for
+both. Waiting for `article.invitation` found the real numbers: 1022 before, and
+699 after — thirty-five pixels over, which is what the announcement's line of
+prose cost, and the reason that line is gone. Anything that measures a page has
+to prove it was looking at the right one; the before column in the table above
+was re-measured against a build of `97a146e` for the same reason.
+
+**WHAT DOES NOT FIT, STATED RATHER THAN GLOSSED.** A REFUSED gate is 676 on an
+iPhone 14 — twelve pixels over — because the refusal is two sentences and wraps
+past the reserved line. That is an exception state of the one screen that is
+deliberately allowed to scroll, and the alternative was shortening a refusal
+whose vagueness is a security decision. Every other screen, in every state,
+including a five-person household, is 1.00 on both phones.
+
+**DESKTOP IS UNCHANGED BY CONSTRUCTION.** `overlay` and `band` differ only below
+`lg`; above it both put the photograph in its own sticky framed column and the
+words in the next one. The stepped content is the change, and the accepted
+screen went from 1764 pixels on a 1440×900 window to 900.
+
+**GREEN.** `npm test` 2389 unit and component tests (2341 at `97a146e`),
+`npm run typecheck`, `npm run lint` (0 errors, 8 warnings — one fewer than
+before, all in files this unit did not touch), `npm run format:check`,
+`npm run build`, and `PORT=3100 npx playwright test` 239 browser tests (223 plus
+the 8 new ones on each of the two phones).
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
   renders `{{VENUE_NAME}}` and `{{VENUE_ADDRESS}}`. That is deliberate — the
   placeholders are visible rather than hidden, so an unfinished invitation
   cannot pass for a finished one — and it is theirs to do at `/console/wedding`.
-- Once `venue_address` is filled, `Dirección` and the map answer the same
-  question and only one of them is navigable. A landmark line rather than an
-  address may read better beside the map, but that is the couple's copy to
-  write.
+- The `Dirección` line is gone, which answers the question U33 left open in the
+  negative: the map is the only navigable answer, so the line beside it was the
+  one a guest could not act on. `venue_address` stays in the row and in the
+  console. If the couple want a landmark ("a 10 minutos al sur de Buga") on the
+  last screen, that is a line to add back deliberately, not a placeholder to
+  leave printing.
+- "Nos alegra mucho invitarlos a celebrar nuestro matrimonio." is no longer on
+  the invitation. It repeated the WhatsApp message that brings a guest here and
+  cost the question screen a tenth of its height. Theirs to overrule — the price
+  is stated in U34.
+- A refused gate is twelve pixels taller than an iPhone 14 screen. The gate is
+  the one surface deliberately left free to scroll, so this is a degradation
+  rather than a defect, but it is the only number in the feature that is not
+  1.00.
 - The submit button is quiet against the photograph. Legible and unambiguous,
   since it is the only one, but a judgement the couple may want to overrule.
