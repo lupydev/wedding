@@ -52,29 +52,30 @@ import { declaredColor, over } from "@/lib/design/declared-color";
  * The brightest pixel either card covers, on the phone where it is worst and
  * in the state where that card is worst.
  *
- * #FBF9F0 on an iPhone 14 — 0.946 luminance, all but white, the lit edge of
- * Michell's dress at 62% of the screen. Both cards cover it: the question's
- * runs 61%–91% and the list of who is coming runs 14%–68% for a household of
- * three and 14%–85% for one of five. A Pixel 7 is kinder to both (#BCB38E
- * under the question, #BAB8A6 under the list of three), so one constant for
- * the pair is the honest one rather than four.
+ * #FFFDF4 on an iPhone 14 — 0.980 luminance, all but pure white. It is the
+ * lit edge of Michell's dress again, but higher up it than any card had
+ * reached before: both cards are anchored to the FOOT of their screen now,
+ * with the announcement above them, so both run down from the middle of the
+ * frame rather than sitting under it.
  *
- * RE-SAMPLED AFTER THE CARD MOVED, AND IT GOT HARSHER BY A HAIR. The couple
- * asked the question's card to take the gate's width and to sit against the
- * deadline, so it is 374 pixels wide at 66%–91% rather than 342 at 57%–96%.
- * A card that low could easily have stopped covering the worst pixel, which
- * would have quietly retired the negative control below.
+ * RE-SAMPLED THREE TIMES IN ONE PASS, BECAUSE THE CARDS MOVED THREE TIMES.
+ * It was #FAF8EF while the question's card ran 57%–96%; #FBF9F0 when that
+ * card took the gate's width and fell to 66%–91%; and #FFFDF4 once the list
+ * of who is coming came down off the top of its screen to join it. Each
+ * number was measured on the shipped build at both phone presets, and each
+ * one was harsher than the last — which is the argument for re-sampling
+ * rather than reasoning about which way a move "should" go.
  *
- * IT DOES NOT, AND THE STATE THAT PROVES IT IS THE ONE THIS NUMBER COMES
- * FROM. The card is bottom-anchored and grows UPWARD: a household that
- * declined and pressed "Volver a responder" meets it with the line naming
- * their answer on it, 36 pixels taller, its top at 61% — back across the
- * dress edge. That is the same argument `gate-legibility.spec.tsx` makes for
- * keeping the gate's own fixture, and the same measurement: 0.9455 there
- * against 0.9369 for the fresh screen, so the fixture is the reconsidering
- * one.
+ * WHERE THIS ONE COMES FROM, EXACTLY: the list of who is coming, a household
+ * of TWO, an iPhone 14, card at 60%–95%. Two rather than four because a
+ * four-person card starts at the same 60% and runs past the fold, so the
+ * extra rows only cover darker ground further down. A Pixel 7 is kinder to
+ * every case (#D9C396 under the same card), and the question's card in its
+ * own worst state — a household that declined and pressed "Volver a
+ * responder", 36 pixels taller, top at 61% — measures 0.9369. One constant
+ * for both cards is the honest one, and it is the worst of all of them.
  */
-const BRIGHTEST_UNDER_THE_CARD = "#fbf9f0";
+const BRIGHTEST_UNDER_THE_CARD = "#fffdf4";
 
 /**
  * And the brightest pixel under the two lines that are NOT on the card.

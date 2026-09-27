@@ -175,6 +175,116 @@ async function expectOneScreen(
   ).toBeLessThanOrEqual(frame.clientWidth);
 }
 
+/**
+ * THE ONE SCREEN THAT DOES NOT FIT, MEASURED RATHER THAN EXCUSED.
+ *
+ * The couple asked for the announcement back at the top of the screen that
+ * asks who is coming, with the list at the foot: "sin importar que se lleguen
+ * a tapar las dos personas de la foto, porque sino despues de aceptar esa
+ * pagina de escoger las personas se ve extraña." It does not fit, they were
+ * given the number before it was built, and they chose to see it: "no saques
+ * nada todavia haz los cambios y yo creo una invitacion de 4 personas para
+ * ver como queda."
+ *
+ * SO THIS TABLE IS A TEMPORARY, CHOSEN STATE — NOT A TOLERANCE. Every other
+ * step at every household size is still held to 1.00, and so is this one on
+ * the phone where it fits. Where it does not, the assertion is the MEASURED
+ * height, which is a stronger claim than skipping it: it fails if the
+ * overflow grows, and it fails if the overflow goes away, because either way
+ * the number written here has stopped being true and somebody has to look.
+ *
+ * The three reactions this exists to avoid: leaving the suite red until
+ * nobody reads it, deleting the cases so they quietly pass, and a `skip` with
+ * no number that rots into "forgotten".
+ *
+ * WHEN THE COUPLE CHOOSE WHAT TO TRIM, THIS TABLE GOES and the three cases
+ * below go back to `expectOneScreen`. U38 in `odd/tasks/invitation-design.md`
+ * holds the candidates and what each one frees: the countdown 74 pixels, the
+ * greeting 70, "Nos casamos" 60, the date 40, the rule 25. Any two of the
+ * first three clear a four-person list on an iPhone 14.
+ *
+ * Keyed by `window.innerHeight` because the two phone projects run the same
+ * file: 664 is an iPhone 14, 839 a Pixel 7. A missing entry means 1.00.
+ */
+const CHOSEN_OVERFLOW: Record<string, Record<number, number>> = {
+  // A household of two is 17 pixels over on an iPhone 14 and fits a Pixel 7.
+  "attendees (2)": { 664: 17 },
+  // Four is the couple's stated ceiling, and the case they asked to see.
+  "attendees (4)": { 664: 125 },
+  // Five is the canary: nothing enforces four. It is the only case that
+  // overflows a Pixel 7 as well, and only just.
+  "attendees (5)": { 664: 179, 839: 4 },
+};
+
+/**
+ * How far the measured height may drift before the number above is stale.
+ *
+ * Small on purpose. These are deterministic layouts on fixed viewports, so
+ * anything larger than a rounding difference is a real change in what the
+ * screen holds.
+ */
+const OVERFLOW_TOLERANCE = 6;
+
+/**
+ * The step fits, or overflows by exactly the amount that was chosen for it.
+ *
+ * Everything `expectOneScreen` asserts still applies except the height: the
+ * document must not be WIDER than the window, and the step's primary control
+ * must be reachable — scrolled to, then actually inside the viewport, which
+ * is what catches a container that clips instead of scrolling.
+ */
+async function expectChosenHeight(
+  page: Page,
+  step: string,
+  control: Locator,
+): Promise<void> {
+  const frame = await frameOf(page);
+  const chosen = CHOSEN_OVERFLOW[step]?.[frame.innerHeight] ?? 0;
+
+  if (chosen === 0) {
+    await expectOneScreen(page, step, control);
+
+    return;
+  }
+
+  expect(
+    frame.scrollWidth,
+    `${step}: the document is ${frame.scrollWidth}px wide in a ${frame.clientWidth}px window`,
+  ).toBeLessThanOrEqual(frame.clientWidth);
+
+  const over = frame.scrollHeight - frame.innerHeight;
+
+  expect(
+    over,
+    `${step}: this screen is meant to overflow by ${chosen}px until the couple ` +
+      `choose what to trim, and it now overflows by ${over}px. If that is ` +
+      "worse, something grew that nobody asked for; if it is better, update " +
+      "the number in CHOSEN_OVERFLOW or, if it now fits, move this case back " +
+      "to expectOneScreen and delete its entry.",
+  ).toBeGreaterThanOrEqual(chosen - OVERFLOW_TOLERANCE);
+  expect(
+    over,
+    `${step}: this screen is meant to overflow by ${chosen}px and now overflows by ${over}px`,
+  ).toBeLessThanOrEqual(chosen + OVERFLOW_TOLERANCE);
+
+  // AND THE CONTROL IS STILL REACHABLE, which is the assertion that cannot be
+  // faked. A screen that scrolls is a worse screen; one whose send button
+  // cannot be reached at all is a dead end.
+  await control.scrollIntoViewIfNeeded();
+
+  const box = await control.boundingBox();
+
+  expect(box, `${step}: the primary control has no box at all`).not.toBeNull();
+  expect(
+    box!.y,
+    `${step}: the primary control cannot be scrolled into the viewport`,
+  ).toBeGreaterThanOrEqual(0);
+  expect(
+    box!.y + box!.height,
+    `${step}: the primary control ends at ${Math.round(box!.y + box!.height)}px once scrolled to, past the ${frame.innerHeight}px fold`,
+  ).toBeLessThanOrEqual(frame.innerHeight);
+}
+
 /** Gets past the phone gate, and waits for the screen behind it. */
 async function unlock(page: Page, invitation: SeededInvitation) {
   await page.goto(`/i/${invitation.slug}`);
@@ -358,27 +468,40 @@ test.describe("the invitation, one screen at a time", () => {
     await expect(
       page.getByRole("group", { name: /Quiénes asisten/ }),
     ).toBeVisible();
-    await expectOneScreen(
+    await expectChosenHeight(
       page,
-      "attendees (3)",
+      "attendees (4)",
       page.getByRole("button", { name: "Enviar respuesta" }),
     );
 
     /*
-      THE CARD AT THE TOP AND THE WAY BACK AT THE FOOT, WHICH IS WHAT THE
-      COUPLE ASKED FOR AND WHAT THE UNIT SPEC CANNOT SEE.
+      THE ANNOUNCEMENT ABOVE AND THE WAY BACK AGAINST THE CARD, WHICH
+      REVERSES WHAT THIS TEST USED TO ASSERT.
 
-      `RsvpAnswer.spec.tsx` asserts the containment — the list is on the card
-      and "Volver a la pregunta" is not. Only a real viewport can say that the
-      one is at the top of the screen and the other at the bottom of it, which
-      is the part about the photograph.
+      It read "the card at the top and the way back at the foot" — U37's
+      arrangement, chosen so the card would not cover the couple. The couple
+      reversed it: "sin importar que se lleguen a tapar las dos personas de
+      la foto, porque sino despues de aceptar esa pagina de escoger las
+      personas se ve extraña." So the shape is the question screen's now —
+      the announcement, the card under it, one small line beneath the card —
+      and that is what is asserted.
+
+      `RsvpAnswer.spec.tsx` asserts the containment and the order.
+      Only a real viewport can say the announcement is above the card and the
+      way back is directly under it rather than at the other end of the
+      screen.
     */
-    const fold = await page.evaluate(() => window.innerHeight);
+    const announcement = (await page
+      .locator(".invitation__announcement")
+      .boundingBox())!;
     const card = (await page.locator(".rsvp__panel").boundingBox())!;
     const back = (await page.locator(".rsvp__back").boundingBox())!;
 
-    expect(card.y).toBeLessThan(fold / 4);
-    expect(back.y).toBeGreaterThan(fold * 0.75);
+    expect(announcement.y + announcement.height).toBeLessThanOrEqual(card.y);
+    expect(back.y).toBeGreaterThanOrEqual(card.y + card.height);
+    // Against the card, not at the foot of the screen: the same gap the
+    // deadline keeps from the question's card.
+    expect(back.y - (card.y + card.height)).toBeLessThanOrEqual(16);
   });
 
   test("who is coming fits, for a household of two", async ({ page }) => {
@@ -387,7 +510,7 @@ test.describe("the invitation, one screen at a time", () => {
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
 
     await expect(page.getByRole("checkbox")).toHaveCount(2);
-    await expectOneScreen(
+    await expectChosenHeight(
       page,
       "attendees (2)",
       page.getByRole("button", { name: "Enviar respuesta" }),
@@ -402,7 +525,7 @@ test.describe("the invitation, one screen at a time", () => {
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
 
     await expect(page.getByRole("checkbox")).toHaveCount(5);
-    await expectOneScreen(
+    await expectChosenHeight(
       page,
       "attendees (5)",
       page.getByRole("button", { name: "Enviar respuesta" }),

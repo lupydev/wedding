@@ -1468,18 +1468,32 @@ describe("what each screen carries, and what it refuses to", () => {
   });
 
   /**
-   * AND THE ANNOUNCEMENT IS NOT REPEATED ON THE SCREENS AFTER IT.
+   * THE ANNOUNCEMENT IS ON THE SCREEN THAT ASKS WHO IS COMING, AND THIS TEST
+   * ASSERTED THE OPPOSITE UNTIL THE COUPLE CHANGED THEIR MINDS.
    *
-   * It is 250 pixels of a 664-pixel screen. The gate makes it, the question
-   * screen makes it again because the couple asked for the two to match, and a
-   * household choosing who is coming has now read it twice.
+   * It used to read "does not repeat the announcement while they choose who
+   * is coming", and the reasoning was U34's: 250 pixels of a 664-pixel
+   * screen, read once on the gate and again on the question.
+   *
+   * The couple reversed it with a reason that outranks the pixels: "sin
+   * importar que se lleguen a tapar las dos personas de la foto, porque sino
+   * despues de aceptar esa pagina de escoger las personas se ve extraña."
+   * Answering used to throw the announcement away and jump the card from the
+   * foot of the screen to the top of it; the screen a household lands on is
+   * the screen they just left now, with the list where the answers were.
+   *
+   * THE COST IS REAL AND WAS ACCEPTED WITH THE NUMBER IN FRONT OF THEM: a
+   * four-person list plus the whole announcement is 124 pixels past an
+   * iPhone 14. "No saques nada todavia haz los cambios y yo creo una
+   * invitacion de 4 personas para ver como queda."
+   * `e2e/invitation-one-screen.spec.ts` holds the measured overflow.
    */
-  it("does not repeat the announcement while they choose who is coming", async () => {
+  it("keeps the announcement on the screen that asks who is coming", async () => {
     renderForm();
 
     await userEvent.click(acceptButton());
 
-    expect(screen.queryByText(ANNOUNCEMENT)).not.toBeInTheDocument();
+    expect(screen.getByText(ANNOUNCEMENT)).toBeInTheDocument();
     expect(attendeeBoxes()).toHaveLength(GUESTS.length);
   });
 
@@ -1674,7 +1688,7 @@ describe("what each screen carries, and what it refuses to", () => {
    * reserves the space below it: a refusal grows down into the photograph,
    * and neither the card nor "Volver a la pregunta" moves.
    */
-  it("reserves the refusal below the list, not inside it", async () => {
+  it("reserves the refusal above the list, not inside it", async () => {
     const { container } = renderWithContainer();
 
     await userEvent.click(acceptButton());
@@ -1684,12 +1698,50 @@ describe("what each screen carries, and what it refuses to", () => {
 
     expect(feedback).not.toBeNull();
     expect(panel.querySelector(".rsvp__feedback")).toBeNull();
+    // Above the card, as on the question screen: both cards are anchored to
+    // the foot now, so a refusal has to grow up into the photograph rather
+    // than push the way back off the bottom of the screen.
     expect(
-      panel.compareDocumentPosition(feedback) &
+      feedback.compareDocumentPosition(panel) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     // And the send button keeps its place as the last thing on the card.
     expect(panel.lastElementChild?.getAttribute("type")).toBe("submit");
+    // With the way back immediately after it, the way the deadline follows
+    // the question's card.
+    expect(panel.nextElementSibling).toBe(
+      container.querySelector(".rsvp__back"),
+    );
+  });
+
+  /**
+   * AND THE THREE ASKING SCREENS ARE ONE SHAPE.
+   *
+   * The couple asked for it in those words — "para que se mantenga la misma
+   * ui" about the width, and then the announcement back on the second screen
+   * so that answering does not rearrange the page under them. Asserted as
+   * structure rather than as class names: announcement first, then a group
+   * holding the refusal's slot, the card, and one small line.
+   */
+  it("gives the question and the list the same three-part shape", async () => {
+    const { container } = renderWithContainer();
+    const form = () => container.querySelector("form.rsvp__form")!;
+    const shape = () =>
+      Array.from(form().children[1].children).map((child) =>
+        child.classList.contains("rsvp__feedback")
+          ? "slot"
+          : child.classList.contains("rsvp__panel")
+            ? "card"
+            : "line",
+      );
+
+    expect(form().children[0]).toHaveTextContent(ANNOUNCEMENT);
+    expect(shape()).toEqual(["slot", "card", "line"]);
+
+    await userEvent.click(acceptButton());
+
+    expect(form().children[0]).toHaveTextContent(ANNOUNCEMENT);
+    expect(shape()).toEqual(["slot", "card", "line"]);
   });
 
   it("puts the list of who is coming on the card, and the way back below it", async () => {
@@ -1745,7 +1797,11 @@ describe("what each screen carries, and what it refuses to", () => {
     await userEvent.click(acceptButton());
 
     expect(attendeeBoxes()).toHaveLength(5);
-    expect(screen.queryByText(ANNOUNCEMENT)).not.toBeInTheDocument();
+    // The announcement is back on this screen — see "keeps the announcement
+    // on the screen that asks who is coming" for the couple's reversal. The
+    // DEADLINE is not: it belongs to the question, where the decision is
+    // made, and this screen is already past an iPhone 14 without it.
+    expect(screen.getByText(ANNOUNCEMENT)).toBeInTheDocument();
     expect(screen.queryByText(rsvpDeadlineSentence(5))).not.toBeInTheDocument();
     expect(submitButton()).toBeInTheDocument();
   });

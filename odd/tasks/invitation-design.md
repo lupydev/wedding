@@ -210,10 +210,12 @@ declined screen given the language `/transmision` already uses.
       selection count and its band of empty card under `Enviar respuesta`.
       Buttons close the keyboard defect U28 recorded and left open, measured
       rather than assumed. The affirmative is confirmed singular for every
-      size. What is NOT done is the announcement moving back to the top of
-      the attendee screen: measured, it misses an iPhone 14 by 124 pixels at
-      the couple's own four-person ceiling, so the numbers went back to them
-      instead.
+      size. And the announcement is back at the top of the attendee screen
+      with the list at the foot, which reverses U37 on the couple's own
+      instruction: it misses an iPhone 14 by 125 pixels at their four-person
+      ceiling, they were given that number and every candidate trim before
+      it was built, and they chose to see it rather than cut anything yet.
+      The guard asserts the measured overflow instead of pretending it fits.
 
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
@@ -3292,10 +3294,13 @@ oversight is one a later reader tidies away.
 
 **GEOMETRY.** Every step, both phones, on the shipped build:
 
-| device          | gate | question | who is coming (2) | who is coming (4) | who is coming (5) | one person | accepted | declined |
-| --------------- | ---- | -------- | ----------------- | ----------------- | ----------------- | ---------- | -------- | -------- |
-| iPhone 14 (664) | 664  | 664      | 664               | 664               | 664               | 664        | 664      | 664      |
-| Pixel 7 (839)   | 839  | 839      | 839               | 839               | 839               | 839        | 839      | 839      |
+| device          | gate | question | one person | accepted | declined |
+| --------------- | ---- | -------- | ---------- | -------- | -------- |
+| iPhone 14 (664) | 664  | 664      | 664        | 664      | 664      |
+| Pixel 7 (839)   | 839  | 839      | 839        | 839      | 839      |
+
+The three screens that ask who is coming are the exception, and a chosen
+one: see the announcement's return below.
 
 `ff8af29`'s guard is unchanged in kind and grew three cases: a household of
 two, an invitation naming one person (which has no attendee screen at all),
@@ -3319,15 +3324,27 @@ The `gap-2` itself is a measurement rather than a preference. At `gap-3` the
 reconsidering state — the card 36 pixels taller — came to 667 on a 664-pixel
 screen. The two gaps this group spends are the cheapest four pixels on it.
 
-**WHAT IS NOT DONE, AND WHY IT STOPPED HERE.** The couple asked for the
-announcement to go back at the top of the screen that asks who is coming, with
-the list at the foot and "Volver a la pregunta" beneath it, explicitly
-accepting the cost: "sin importar que se lleguen a tapar las dos personas de
-la foto, porque sino despues de aceptar esa pagina de escoger las personas se
-ve extraña."
+**THE ANNOUNCEMENT WENT BACK ON THE SECOND SCREEN, WHICH REVERSES U37, AND IT
+DOES NOT FIT.** This is the one part of the pass with a cost the couple paid
+knowingly.
 
-**It does not fit, and not by a little.** Every term below is measured on the
-shipped build at iPhone 14, 664 pixels:
+U37 had put the list of who is coming at the TOP of its screen and left the
+announcement off it, on their own instruction — "los bloques quedan sobre la
+mitad de la foto y nos tapan" — and on U34's arithmetic: the announcement is
+250 pixels the screens after the question must not pay for. They changed their
+minds, and the reason outranks both: **"sin importar que se lleguen a tapar
+las dos personas de la foto, porque sino despues de aceptar esa pagina de
+escoger las personas se ve extraña."** Pressing "¡Sí, acepto!" used to throw
+the announcement away and jump the card from the foot of the screen to the top
+of it; the screen a household lands on is the screen they just left now, with
+the list where the answers were.
+
+So all three asking screens are one shape: **the announcement above, the card
+below it, one small line beneath the card** — the deadline on the question,
+"Volver a la pregunta" on the list.
+
+**THE MEASUREMENT CAME FIRST, AND IT WAS PUT TO THEM BEFORE ANYTHING WAS
+BUILT.** Every term measured on the shipped build, iPhone 14, 664 pixels:
 
 | term                                  | pixels  |
 | ------------------------------------- | ------- |
@@ -3339,20 +3356,13 @@ shipped build at iPhone 14, 664 pixels:
 | bottom padding                        | 28      |
 | **left for the card group**           | **286** |
 
-And the card group, at the sizes that matter:
-
 | household          | its card | + slot 40, gaps 16, way back 16 | over 286 by |
 | ------------------ | -------- | ------------------------------- | ----------- |
 | two                | 230      | 302                             | 16          |
 | four (the ceiling) | 338      | 410                             | **124**     |
 | five (the canary)  | 392      | 464                             | 178         |
 
-So it does not fit at the stated maximum, and it does not fit at two people
-either. A Pixel 7 is kinder — four fits there with 51 pixels to spare — but
-the iPhone 14 is the binding screen and the one the couple reviewed on.
-
-Nothing was shrunk to force it. What would have to give, each measured, for
-the four-person case's 124 pixels:
+And what each candidate would free, measured the same way:
 
 | candidate                                   | pixels freed |
 | ------------------------------------------- | ------------ |
@@ -3364,12 +3374,72 @@ the four-person case's 124 pixels:
 | the reserved refusal slot                   | 48           |
 | "Volver a la pregunta"                      | 24           |
 
-Any two of the first three clear it for four people; the countdown plus the
-greeting plus the date and the rule (209) clears it for five. **That is a
-product decision and it is the couple's**, so this unit stopped at the three
-instructions that do not depend on it — the full-width card, the deleted count
-line, and the dead band under `Enviar respuesta` — and the list stays at the
-top of its screen until they choose.
+Any two of the first three clear a four-person list. The couple's answer: **"no
+saques nada todavia haz los cambios y yo creo una invitacion de 4 personas
+para ver como queda."** They want to see the overflow before choosing what to
+lose. Nothing was trimmed, no target shrunk, no row compressed.
+
+**WHAT THE SCREEN ACTUALLY DOES NOW, MEASURED ON THE SHIPPED BUILD:**
+
+| household | iPhone 14 (664)       | Pixel 7 (839)   |
+| --------- | --------------------- | --------------- |
+| two       | 681 — over by 17      | 839 — fits      |
+| four      | 789 — **over by 125** | 839 — fits      |
+| five      | 843 — over by 179     | 843 — over by 4 |
+
+The predictions above were 16, 124 and 178; the built screens are 17, 125 and 179. Every other step, at every household size, on both phones, is still 1.00.
+
+**AND THE GUARD ASSERTS THE OVERFLOW RATHER THAN EXCUSING IT.** Three
+reactions were available and all three are worse than the number:
+
+- leaving `main` red, which is how a suite stops being read — this branch
+  already carries eleven environmental failures doing exactly that damage;
+- deleting or loosening the attendee cases so they quietly pass, which is a
+  guard that has stopped asking;
+- a `skip` with no number, which rots into "forgotten".
+
+So `CHOSEN_OVERFLOW` in `e2e/invitation-one-screen.spec.ts` holds the measured
+excess per step per viewport, and the three cases assert it **within six
+pixels, in both directions**. It fails if the overflow grows — something got
+bigger that nobody asked for — and it fails if the overflow shrinks or goes
+away, because then the recorded number is stale and the case belongs back on
+`expectOneScreen`. The failure message says which of the two happened and what
+to do. Proven falsifiable rather than assumed: setting the four-person entry
+to 60 produces
+
+    Error: attendees (4): this screen is meant to overflow by 60px and now
+    overflows by 125px
+
+The other two assertions are unchanged for these cases — the document is still
+never WIDER than the window, and the send button must still be reachable: the
+test scrolls to it and then requires it to be inside the viewport, which is
+what catches a container that clips instead of scrolling.
+
+**WHEN THE COUPLE CHOOSE, THE TABLE GOES** and those three cases return to
+`expectOneScreen`. That sentence is in the spec beside the numbers, not only
+here.
+
+**THE CARD'S FIXTURE WAS RE-SAMPLED A THIRD TIME, AND GOT HARSHER AGAIN.**
+Moving the list to the foot put a card over the brightest ground any card has
+covered in this product: **#FFFDF4, 0.9804** on an iPhone 14 — the lit edge of
+Michell's dress, nearly pure white — under a two-person list running 60%–95%.
+The sequence across this one pass, each measured on the shipped build at both
+phone presets:
+
+| when                                       | fixture   | luminance |
+| ------------------------------------------ | --------- | --------- |
+| the question's card at 57%–96%             | `#FAF8EF` | 0.9369    |
+| after it took the gate's width, at 66%–91% | `#FBF9F0` | 0.9455    |
+| after the list came down to the foot too   | `#FFFDF4` | 0.9804    |
+
+Every floor still clears against the worst of the three, which is what
+`BRIGHTEST_UNDER_THE_CARD` now holds: the question 6.29:1, the answer labels
+4.98:1, the answer and send edges 3.42:1, a member's name 7.08:1, the child
+marker 5.02:1, the line naming the current answer 4.72:1 — and the negative
+controls at 1.63:1 and 1.58:1, still failing as they must. Two rather than
+four people is the harshest case because a four-person card starts at the same
+60% and runs past the fold, so its extra rows only cover darker ground further
+down.
 
 **AND NOTHING ENFORCES FOUR, WHICH IS WHY THE CANARY STAYS.** Checked rather
 than assumed:
@@ -3407,45 +3477,58 @@ to fail first:
 63 of the 85 assertions in `RsvpAnswer.spec.tsx` and
 `step-legibility.spec.tsx` were red before the component moved.
 
-**GREEN.** `npm test` — 2,453 unit and component tests, 2,444 passing.
+**GREEN.** `npm test` — 2,454 unit and component tests, 2,443 passing.
 `npm run typecheck`, `npm run lint` (0 errors, 8 warnings, the same eight in
 files this unit did not touch), `npm run format:check`, `npm run build`.
 `PORT=3100 npx playwright test` — 194 passed, and all 22 geometry assertions
 green on both phone projects.
 
-**NOT GREEN, AND MEASURED AT `1e03636` RATHER THAN ASSUMED.** The brief for
-this unit said eight environmental failures; it is **nine** now, and the ninth
-is not this unit's. Running the suite on a clean checkout of `1e03636`:
+**NOT GREEN, AND COUNTED FRESH EACH TIME RATHER THAN QUOTED.** The brief for
+this unit said eight environmental failures. It was **nine** when the first
+half of the work was verified and **eleven** by the time the second half was,
+and the count moved while nobody touched those files: the local Supabase
+crossed PostgREST's unpaged 1000-row ceiling for one more table partway
+through the day. Every number below was measured by running the suite on the
+tree it describes.
 
-| suite                           | HEAD                             | with this unit                            |
+| suite                           | without this work                | with it                                   |
 | ------------------------------- | -------------------------------- | ----------------------------------------- |
-| `npm test`                      | 9 failed / 2,450                 | 9 failed / 2,453 — the same nine          |
+| `npm test` (first half)         | 9 failed / 2,450                 | 9 failed / 2,453 — the same nine          |
+| `npm test` (second half)        | 11 failed / 2,453                | 11 failed / 2,454 — the same eleven       |
 | `PORT=3100 npx playwright test` | 188 passed, 2 failed, 45 not run | 194 passed, the same 2 failed, 45 not run |
 
-The eight in `lib/server/guest-directory.spec.ts` are the ones U35, U36 and
-U37 recorded. The ninth is
-`lib/server/invitations.spec.ts > listConsoleInvitations > lists both
-partitions on the shared dashboard`, and its browser twin is
-`console-guest-list.spec.ts:625`, which fails only in a FULL run — the suite
-seeds invitations as it goes, so the row count crosses PostgREST's unpaged
-1000-row ceiling partway through. Same defect, one table further along: the
-local database now holds more invitations than an unpaged `.select()` returns,
-so a freshly created one falls outside the first thousand. Not fixed here and
-not reset; it is the same entry already in **Next**.
+Eight are in `lib/server/guest-directory.spec.ts` — the ones U35, U36 and U37
+recorded. The other three are in `lib/server/invitations.spec.ts`
+(`listConsoleInvitations` twice and `listSenderDirectory` once), and the
+browser twin of the first is `console-guest-list.spec.ts:625`, which fails
+only in a FULL run: the suite seeds invitations as it goes, so the row count
+crosses the ceiling partway through. Same defect, three tables further along
+than it was — the local database holds more rows than an unpaged `.select()`
+returns, so a freshly created row falls outside the first thousand. Not fixed
+here and not reset; it is the same entry already in **Next**, and it is now
+doing the damage that entry predicted: eleven red tests nobody reads is how a
+real failure gets through.
 
 ## Next
 
-- **The list of who is coming still has its card at the TOP, and the couple
-  asked for it at the foot with the announcement above it.** U38 measured it
-  instead of building it: the announcement group is 236 pixels, the greeting
-  50, and what is left for the card on an iPhone 14 is 286 — against 410 for
-  a four-person card with its reserved refusal slot and its way back, so it
-  misses by 124 at the couple's own stated ceiling and by 16 even for a
-  household of two. The full table, and what each candidate would free — the
-  countdown 74, the greeting 70, "Nos casamos" 60, the date 40, the rule 25 —
-  is in U38. **Any two of the first three clear it for four people.** This is
-  the one open product decision in the pass and it is theirs; nothing was
-  shrunk to force it and the 44-pixel targets were not touched.
+- **The screen that asks who is coming does not fit an iPhone 14, by
+  choice, and the couple owe it a decision.** The announcement is back at its
+  top with the list at the foot, which is what they asked for and why: "sin
+  importar que se lleguen a tapar las dos personas de la foto, porque sino
+  despues de aceptar esa pagina de escoger las personas se ve extraña." It
+  overflows by **17 pixels at two people, 125 at four — their stated ceiling
+  — and 179 at five**; a Pixel 7 fits every case but five, and only misses
+  that by four. They were given those numbers before it was built and
+  answered "no saques nada todavia haz los cambios y yo creo una invitacion
+  de 4 personas para ver como queda", so nothing was trimmed. What is on the
+  table, each measured: the countdown frees 74 pixels, the greeting 70, "Nos
+  casamos" 60, the date 40, the hairline rule 25 — **any two of the first
+  three clear four people**. Until they choose, `CHOSEN_OVERFLOW` in
+  `e2e/invitation-one-screen.spec.ts` asserts the measured overflow within
+  six pixels in both directions, so the suite stays green, the real number
+  stays visible, and it goes red the moment the screen grows OR shrinks.
+  **When they decide, delete that table and put those three cases back on
+  `expectOneScreen`.** U38 has the full arithmetic.
 - **Nothing in this product enforces "el máximo de personas por invitación es
   de 4".** Not the schema (`invitation_guests` has no row-count constraint and
   no counting trigger; the only column that ever carried an upper bound was

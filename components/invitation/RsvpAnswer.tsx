@@ -919,14 +919,70 @@ export function RsvpAnswer({
         ) : (
           <>
             {/*
-              THE CARD AND THE SLOT UNDER IT, AS ONE GROUP AT THE TOP.
+              THE ANNOUNCEMENT, BACK ON THIS SCREEN, WHICH REVERSES U37 ON
+              THE COUPLE'S OWN INSTRUCTION AND WITH THEIR OWN REASON.
 
-              Two siblings of the way back rather than one would spread three
-              ways under `justify-between` and strand the slot in the middle
-              of the photograph, which is the arrangement every move in this
-              file has been undoing.
+              U37 put this card at the TOP of its screen and left the
+              announcement off it entirely, because "los bloques quedan sobre
+              la mitad de la foto y nos tapan" and because U34 had counted
+              the announcement as 250 pixels the screens after the question
+              must not pay for.
+
+              The couple have changed their minds, and the reason is worth
+              more than the pixels: "sin importar que se lleguen a tapar las
+              dos personas de la foto, porque sino despues de aceptar esa
+              pagina de escoger las personas se ve extraña." Consistency
+              across the four screens beats the photograph on this one.
+              Pressing "¡Sí, acepto!" used to throw the announcement away and
+              jump the card from the foot to the top; now the screen a
+              household lands on is the screen they just left, with the list
+              where the answers were.
+
+              SO ALL THREE SCREENS ARE THE SAME SHAPE NOW: the announcement
+              above, the card below it, and one small line beneath the card —
+              the deadline on the question, the way back here.
+
+              IT DOES NOT FIT, AND THAT IS A CHOICE RATHER THAN AN OVERSIGHT.
+              A four-person list plus the whole announcement is 124 pixels
+              past an iPhone 14, measured. The couple were given the number
+              and the list of what could be trimmed to close it — the
+              countdown is 74, the greeting 70, "Nos casamos" 60, the date
+              40, the rule 25 — and answered: "no saques nada todavia haz los
+              cambios y yo creo una invitacion de 4 personas para ver como
+              queda." They want to see it before they cut anything.
+              `e2e/invitation-one-screen.spec.ts` asserts the measured
+              overflow rather than pretending it fits, and U38 in
+              `odd/tasks/invitation-design.md` records what is owed.
+            */}
+            {announcement}
+
+            {/*
+              THE SLOT, THE CARD AND THE WAY BACK, AS ONE GROUP AT THE FOOT.
+
+              The question screen's group, with the way back where the
+              deadline stands. Two siblings of the announcement rather than
+              one would spread three ways under `justify-between` and put the
+              card back in the middle of the photograph.
             */}
             <div className="flex flex-col gap-2">
+              {/*
+                THE REFUSAL'S SLOT, ABOVE THE CARD FOR THE REASON IT IS ABOVE
+                THE QUESTION'S.
+
+                It was BELOW this card while the card was anchored to the top
+                of the screen — a refusal grew downward into empty
+                photograph, which cost nothing. With the card at the foot
+                that space is the way back's, so the slot moves to the other
+                side of the card and a refusal grows upward into the middle
+                instead. Neither the card nor the way back moves either way,
+                which is the whole point of reserving it.
+              */}
+              {feedbackRegion(
+                messages.length === 0
+                  ? ""
+                  : `${CARD_GROUND} px-4 py-2 text-center`,
+              )}
+
               <div className={`flex flex-col gap-4 ${PANEL} ${CARD_MEASURE}`}>
                 {/*
               THE ANSWER TRAVELS AS A HIDDEN FIELD ONCE THE ANSWERS ARE GONE.
@@ -1024,30 +1080,7 @@ export function RsvpAnswer({
               </div>
 
               {/*
-              AND THE REFUSAL'S SLOT CAME OFF THIS CARD TOO.
-
-              The same 56 pixels the question's card lost: the gap above the
-              slot and the 40 it holds open, sitting under the send button as
-              a band of empty card taller than a name row. The couple named
-              it on the question screen and then named it here.
-
-              BELOW THE CARD RATHER THAN ABOVE IT, and the difference is
-              which end of the screen the card is anchored to. On the
-              question screen the card is at the foot and a refusal has to
-              grow upward, so its slot is above; here the card is at the top
-              and a refusal grows down into the empty photograph, beside the
-              send button that was just refused. Either way the card and the
-              way back stay where they are.
-            */}
-              {feedbackRegion(
-                messages.length === 0
-                  ? ""
-                  : `${CARD_GROUND} px-4 py-2 text-center`,
-              )}
-            </div>
-
-            {/*
-              THE WAY BACK, AT THE FOOT OF THE SCREEN AND OUTSIDE THE CARD.
+              THE WAY BACK, AGAINST THE CARD AND OUTSIDE IT.
 
               The radio group used to stay visible above the checkboxes, so a
               household that tapped "yes" by mistake simply tapped "no". With
@@ -1062,9 +1095,14 @@ export function RsvpAnswer({
               in `step-legibility.spec.tsx` rather than assumed. It was 70%
               cream while it sat on the card; U35 recorded the same move for
               the gate's own way out, and the same answer.
+
+              IT SITS AGAINST THE CARD NOW RATHER THAN AT THE FOOT OF THE
+              SCREEN, because the card came down to the foot with it. Same
+              relationship the deadline has to the question's card, same gap,
+              so the two asking screens read as one shape.
             */}
-            <button
-              className="
+              <button
+                className="
                 rsvp__back self-center text-xs text-[#f6efe2] underline
                 underline-offset-4 transition-colors
                 duration-(--console-motion-fast)
@@ -1073,11 +1111,12 @@ export function RsvpAnswer({
                 focus-visible:outline-2 focus-visible:outline-offset-2
                 focus-visible:outline-[#f6efe2]
               "
-              onClick={reconsider}
-              type="button"
-            >
-              Volver a la pregunta
-            </button>
+                onClick={reconsider}
+                type="button"
+              >
+                Volver a la pregunta
+              </button>
+            </div>
           </>
         )}
       </form>
