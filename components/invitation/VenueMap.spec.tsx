@@ -4,21 +4,30 @@ import { describe, expect, it } from "vitest";
 import { VenueMap } from "./VenueMap";
 
 /**
- * The map, which is the only directions a guest gets.
+ * The way to the venue, which is the only directions a guest gets.
  *
  * "Salón para Eventos Villa Campestre" HAS NO STREET ADDRESS. There is no line
- * a guest can type into anything, so this block is not decoration beside the
- * venue's name — it is the venue's location, and the link is the only way to
- * turn it into a route.
+ * a guest can type into anything, so this control is not decoration beside the
+ * venue's name — it is the only way the location reaches a guest at all.
+ *
+ * THE PICTURE IT USED TO CARRY IS GONE, on the couple's own instruction:
+ * "solamente el botón de cómo llegar sin una imagen." Three assertions went
+ * with it — that the image was the tap target, that its description named Buga
+ * without inventing a street, and that it loaded lazily — because each of them
+ * described something that is no longer on the screen. Two replace them: that
+ * no picture came back, and that the link itself is a 44px target, which the
+ * browser suite used to measure on the bar UNDER the picture and now measures
+ * on the control that IS the bar.
  *
  * WHAT THESE TESTS ARE ACTUALLY PROTECTING
  *
- * The destination and the picture are one fact declared in one place, and the
- * assertions below are written as LITERALS rather than read back off that
- * declaration. A test that imported the constant and compared it to the
- * rendered href would assert a constant against itself: it would still pass
- * after somebody moved the pin to the wrong field, which is the single edit
- * most likely to send a hundred guests to the wrong side of Buga.
+ * The destination is declared in one place, and the assertions below are
+ * written as LITERALS rather than read back off that declaration. A test that
+ * imported the constant and compared it to the rendered href would assert a
+ * constant against itself: it would still pass after somebody moved the pin to
+ * the wrong field, which is the single edit most likely to send a hundred
+ * guests to the wrong side of Buga — and, with the picture gone, there is no
+ * longer anything on the screen for a guest to notice the mistake against.
  *
  * Guest-facing copy is Spanish, neutral register. Identifiers and comments stay
  * English.
@@ -49,18 +58,35 @@ describe("VenueMap", () => {
   });
 
   /**
-   * THE WHOLE PICTURE IS THE CONTROL.
+   * NOTHING TO PINCH, AND NOTHING TO LOOK AT EITHER.
    *
-   * An embedded, pinchable map was considered and rejected: it needs a tap to
+   * An embedded, pinchable map was considered and rejected — it needs a tap to
    * activate before it can be pinched, or it swallows the page scroll of an
-   * invitation the guest is still reading. What replaced it only works if the
-   * image itself is the tap target — a small link underneath a picture is the
-   * same two-step problem wearing different clothes.
+   * invitation the guest is still reading. A still picture replaced it, and
+   * the couple then asked for the picture to go too. What is left has to be
+   * the whole of this block: an `<img>` reappearing here means somebody has
+   * put 118 kB of committed tiles back on the screen the couple emptied.
    */
-  it("makes the picture itself the tap target, not a link beside it", () => {
+  it("shows the guest no picture of the map", () => {
     render(<VenueMap />);
 
-    expect(mapLink()).toContainElement(screen.getByRole("img"));
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(document.querySelectorAll("img")).toHaveLength(0);
+  });
+
+  /**
+   * AND IT IS A TARGET A THUMB CAN FIND.
+   *
+   * 44px is the smallest a phone should offer. It used to be measured on the
+   * "Cómo llegar" bar under the picture, because the picture was the link and
+   * its height was never in doubt. The bar is the link now, so the floor moved
+   * onto it — and it is declared rather than left to the padding, which is the
+   * first thing a later tidy-up rounds down.
+   */
+  it("is big enough to press on a phone", () => {
+    render(<VenueMap />);
+
+    expect(mapLink().className).toContain("min-h-11");
   });
 
   /**
@@ -95,47 +121,5 @@ describe("VenueMap", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("Cómo llegar")).toBeVisible();
-  });
-
-  /**
-   * THE DESCRIPTION IS OF THE MAP, AND IT IS NOT AN ADDRESS.
-   *
-   * Two separate failures are guarded here. A reader who cannot see the picture
-   * gets nothing at all from "mapa", so the description names the venue and
-   * anchors it to the town — Buga is in the frame precisely because the owner
-   * rejected a tighter crop that showed nothing anybody could place, and a
-   * description that dropped it would throw that away for the one reader who
-   * cannot recover it from the pixels.
-   *
-   * And it must not read as a POSTAL ADDRESS. There is none; writing one here
-   * would invent a street for a venue that has no street, and it would be
-   * believed.
-   */
-  it("describes the map without inventing a street for a venue that has none", () => {
-    render(<VenueMap />);
-
-    const description = screen.getByRole("img").getAttribute("alt") ?? "";
-
-    expect(description).toMatch(/Villa Campestre/);
-    expect(description).toMatch(/Buga/);
-    expect(description).not.toMatch(
-      /\b(calle|carrera|cra\.?|cll\.?|avenida|av\.)\b|#\s*\d/i,
-    );
-  });
-
-  /**
-   * IT MUST NOT COMPETE WITH THE PHOTOGRAPH ABOVE IT.
-   *
-   * This sits below the fold, behind an accepted RSVP, on a page whose LCP
-   * element is a preloaded wedding photograph — and roughly 99% of guests open
-   * it from WhatsApp on a phone, over cellular. Written out rather than left to
-   * the default for the same reason `PhotoStage` writes `preload={false}` on
-   * its backdrop: the value is a decision about this page's loading order, and
-   * a default that changes underneath is a decision nobody re-made.
-   */
-  it("waits its turn behind the photograph the page opens with", () => {
-    render(<VenueMap />);
-
-    expect(screen.getByRole("img")).toHaveAttribute("loading", "lazy");
   });
 });

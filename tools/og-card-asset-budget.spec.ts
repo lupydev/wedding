@@ -3,8 +3,6 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { readJpegSize } from "./jpeg-size";
-
 /**
  * The weight guard for the photograph the Open Graph card IS.
  *
@@ -95,18 +93,87 @@ function readAsset(relativePath: string): Uint8Array {
   return new Uint8Array(readFileSync(`${REPO_ROOT}${relativePath}`));
 }
 
-/*
-  THE DIMENSION READER MOVED OUT, TO `tools/jpeg-size.ts`.
+/**
+ * Reads a JPEG's declared dimensions out of its own frame header.
+ *
+ * Hand-rolled because this repository has no image library: `sharp` is not a
+ * dependency, and adding one to measure two numbers would be a build cost paid
+ * on every install for a test. The parse is the marker walk every JPEG decoder
+ * starts with — segments are `FF <marker> <2-byte length>`, and the frame
+ * header (SOF) carries height then width as big-endian 16-bit values at a
+ * fixed offset inside it.
+ *
+ * Reading the HEADER rather than trusting a filename is the point: a file
+ * named `og-card.jpg` that is secretly 3000px wide would pass any assertion
+ * about its name, and would be served to every crawler at that size.
+ *
+ * IT SPENT ONE COMMIT AS `tools/jpeg-size.ts` AND HAS COME BACK.
+ *
+ * It was extracted in `97a146e` for a stated reason — `img/venue-map.jpg` had
+ * become a second committed binary somebody measured, and a copied marker walk
+ * is two decoders that agree until a bug is fixed in one of them. The couple
+ * then asked for the map picture to go, `tools/venue-map-asset.spec.ts` went
+ * with it, and this file is the only caller again. A shared module with one
+ * caller is a promise of reuse that nothing keeps: the next reader has to open
+ * two files to follow one assertion, and the extraction's own doc comment goes
+ * on naming an asset that no longer exists. If a third binary ever wants it,
+ * moving it out again is the same commit it was the first time.
+ *
+ * The triangulation below is what keeps it honest wherever it lives: a reader
+ * that returned a constant cannot sit green behind a file that has been
+ * replaced with something else entirely.
+ */
+function readJpegSize(bytes: Uint8Array): {
+  width: number;
+  height: number;
+} {
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error("Not a JPEG: the file does not open with SOI (FF D8).");
+  }
 
-  It lived here while this card was the only committed binary anybody measured.
-  `img/venue-map.jpg` is a second one — the map the invitation shows a household
-  that has said it is coming — and a copied marker walk is two decoders that
-  agree until somebody fixes a bug in one of them.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 2;
 
-  The negative control below stays HERE rather than moving with it: what it
-  proves is that the reader is reading THIS file, which is a fact about this
-  guard.
-*/
+  while (offset + 3 < bytes.byteLength) {
+    if (bytes[offset] !== 0xff) {
+      throw new Error(`Lost the marker stream at byte ${offset}.`);
+    }
+
+    const marker = bytes[offset + 1];
+
+    // A run of fill bytes before a marker is legal padding, not a segment.
+    if (marker === 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const segmentLength = view.getUint16(offset + 2);
+
+    // SOF0 through SOF15 all carry the frame header. Three markers share that
+    // numeric range and carry something else entirely: DHT (C4), JPG (C8) and
+    // DAC (CC). Reading dimensions out of a Huffman table would produce two
+    // confident wrong numbers.
+    const isFrameHeader =
+      marker >= 0xc0 &&
+      marker <= 0xcf &&
+      marker !== 0xc4 &&
+      marker !== 0xc8 &&
+      marker !== 0xcc;
+
+    if (isFrameHeader) {
+      // Inside the segment: length (2), sample precision (1), height (2),
+      // width (2). So height sits at +5 from the marker and width at +7.
+      return {
+        height: view.getUint16(offset + 5),
+        width: view.getUint16(offset + 7),
+      };
+    }
+
+    offset += 2 + segmentLength;
+  }
+
+  throw new Error("No frame header: this JPEG declares no dimensions.");
+}
 
 describe("the photograph the Open Graph card serves", () => {
   const card = readAsset(CARD_ASSET);

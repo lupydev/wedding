@@ -776,10 +776,15 @@ test.describe("the invitation on a laptop", () => {
 /**
  * THE WAY TO A VENUE THAT HAS NO STREET ADDRESS, ON THE DEVICE IT IS READ ON.
  *
- * "Salón para Eventos Villa Campestre" has no address to print. `Dirección`
- * carries whatever the couple put in the row; the MAP is the only thing on this
- * page a guest can actually navigate by, and the link under it is the only way
- * to turn it into a route.
+ * "Salón para Eventos Villa Campestre" has no address to print. The only thing
+ * on this page a guest can navigate by is this one link, which opens a route
+ * with their own position already at the near end.
+ *
+ * THE PICTURE OF THE MAP IS GONE, on the couple's instruction — "solamente el
+ * botón de cómo llegar sin una imagen" — and so is the assertion that the
+ * picture was the committed file. What is left is the destination, the
+ * target size and the width of the document, which are the three things a
+ * guest actually feels.
  *
  * ON A PHONE, BECAUSE THAT IS WHERE IT ARRIVES. Invitations go out over
  * WhatsApp, so close to every guest opens this on a phone — and a link inside
@@ -789,15 +794,12 @@ test.describe("the invitation on a laptop", () => {
  *
  * 360px RATHER THAN THE 390 `console-design.spec.ts` USES. That file measures
  * the console on the couple's own phone; this measures the narrowest screen an
- * invitation still has to survive, which is where a full-width committed image
- * overflows first. The assertion is on the DOCUMENT, not on the block: an image
- * that pushes the page wider is felt as the whole invitation sliding sideways
- * under the thumb, not as one element sticking out.
+ * invitation still has to survive, which is where a full-width block overflows
+ * first. The assertion is on the DOCUMENT, not on the block: an element that
+ * pushes the page wider is felt as the whole invitation sliding sideways under
+ * the thumb, not as one element sticking out.
  */
 test.describe("the way to the venue, on a phone", () => {
-  /** Rendered by `next/image`, so the file is carried in the query string. */
-  const MAP_SOURCE = /venue-map/;
-
   /**
    * Written out by hand, not read back off the page.
    *
@@ -848,25 +850,24 @@ test.describe("the way to the venue, on a phone", () => {
     await expect(directions).toBeVisible();
     await expect(directions).toHaveAttribute("href", DIRECTIONS_URL);
     await expect(directions).toHaveAttribute("rel", "noopener noreferrer");
-    await expect(page.locator("a.rsvp__venue-map img")).toHaveAttribute(
-      "src",
-      MAP_SOURCE,
-    );
+
+    // AND NO PICTURE OF THE MAP CAME BACK WITH IT. The invitation renders the
+    // wedding photograph as a background, never as an `<img>`, so any `<img>`
+    // on this screen is a committed map somebody has put back.
+    await expect(page.locator(".rsvp__confirmed img")).toHaveCount(0);
 
     /*
       THE TAP TARGET, MEASURED RATHER THAN ASSUMED.
 
-      The whole picture is the link, so its height is never in doubt; what can
-      quietly fall under the thumb is the "Cómo llegar" bar that makes the
-      picture read as a control at all. 44px is the smallest target a phone
-      should offer.
+      This used to be measured on the "Cómo llegar" bar UNDER the picture,
+      because the picture was the link and its own height was never in doubt.
+      The bar is the link now, so the floor moved onto it: 44px is the smallest
+      target a phone should offer, and this is the only control on the screen.
     */
-    const affordance = await page
-      .locator(".rsvp__venue-map__affordance")
-      .boundingBox();
+    const target = await directions.boundingBox();
 
-    expect(affordance).not.toBeNull();
-    expect(affordance!.height).toBeGreaterThanOrEqual(44);
+    expect(target).not.toBeNull();
+    expect(target!.height).toBeGreaterThanOrEqual(44);
 
     // Scrolled to, because an element below the fold can overflow a page that
     // measures clean while it is still off screen.
