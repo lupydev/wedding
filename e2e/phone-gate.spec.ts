@@ -86,7 +86,10 @@ function householdList(page: Page) {
  * act on.
  */
 async function openWhoIsComing(page: Page) {
-  await page.getByRole("radio", { name: /Sí, acepto/ }).click();
+  // A BUTTON, on the couple's instruction: "deberían ser como dos botones".
+  // Pressing the affirmative is an action here, never a selection something
+  // later submits — `e2e/rsvp.spec.ts` carries the long version.
+  await page.getByRole("button", { name: /Sí, acepto/ }).click();
   await expect(householdList(page)).toBeVisible();
 }
 

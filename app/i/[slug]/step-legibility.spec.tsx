@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { RsvpAnswer } from "@/components/invitation/RsvpAnswer";
@@ -49,16 +49,32 @@ import { declaredColor, over } from "@/lib/design/declared-color";
  */
 
 /**
- * The brightest pixel either card covers, on the phone where it is worst.
+ * The brightest pixel either card covers, on the phone where it is worst and
+ * in the state where that card is worst.
  *
- * #FAF8EF on an iPhone 14 — 0.937 luminance, all but white, the lit edge of
+ * #FBF9F0 on an iPhone 14 — 0.946 luminance, all but white, the lit edge of
  * Michell's dress at 62% of the screen. Both cards cover it: the question's
- * runs 57%–91% and the list of who is coming runs 14%–68% for a household of
- * three and 14%–85% for one of five. A Pixel 7 is kinder to both (#D9C396
+ * runs 61%–91% and the list of who is coming runs 14%–68% for a household of
+ * three and 14%–85% for one of five. A Pixel 7 is kinder to both (#BCB38E
  * under the question, #BAB8A6 under the list of three), so one constant for
  * the pair is the honest one rather than four.
+ *
+ * RE-SAMPLED AFTER THE CARD MOVED, AND IT GOT HARSHER BY A HAIR. The couple
+ * asked the question's card to take the gate's width and to sit against the
+ * deadline, so it is 374 pixels wide at 66%–91% rather than 342 at 57%–96%.
+ * A card that low could easily have stopped covering the worst pixel, which
+ * would have quietly retired the negative control below.
+ *
+ * IT DOES NOT, AND THE STATE THAT PROVES IT IS THE ONE THIS NUMBER COMES
+ * FROM. The card is bottom-anchored and grows UPWARD: a household that
+ * declined and pressed "Volver a responder" meets it with the line naming
+ * their answer on it, 36 pixels taller, its top at 61% — back across the
+ * dress edge. That is the same argument `gate-legibility.spec.tsx` makes for
+ * keeping the gate's own fixture, and the same measurement: 0.9455 there
+ * against 0.9369 for the fresh screen, so the fixture is the reconsidering
+ * one.
  */
-const BRIGHTEST_UNDER_THE_CARD = "#faf8ef";
+const BRIGHTEST_UNDER_THE_CARD = "#fbf9f0";
 
 /**
  * And the brightest pixel under the two lines that are NOT on the card.
@@ -135,11 +151,81 @@ function renderQuestion() {
   return { container, find };
 }
 
+/**
+ * The question screen with a refusal standing on it.
+ *
+ * The slot above the card paints its ground only when it has something to
+ * say, so this is the only state in which it can be measured at all. Reached
+ * the way a household reaches it: press the refusal, have the server turn it
+ * down, and stay exactly where they were.
+ */
+async function renderRefused() {
+  const { container } = render(
+    <RsvpAnswer
+      action={async () => ({ status: "not_authorized" as const })}
+      announcement={<p>Nos casamos</p>}
+      ceremony={{ streamUrl: "https://meet.google.com/abc-defg-hij" }}
+      current={null}
+      greetingName="Familia Aguirre"
+      guests={GUESTS}
+      venue={{ name: "Salón para Eventos Villa Campestre" }}
+    />,
+  );
+
+  const find = (selector: string): Element => {
+    const element = container.querySelector(selector);
+
+    if (element === null) {
+      throw new Error(`the step has no \`${selector}\``);
+    }
+
+    return element;
+  };
+
+  const answers = container.querySelectorAll(".rsvp__answer");
+
+  fireEvent.click(answers[answers.length - 1]);
+  await waitFor(() => expect(find(".rsvp__feedback").textContent).not.toBe(""));
+
+  return { container, find };
+}
+
+/** And the list of who is coming, with a refusal standing under its card. */
+async function renderAttendeesRefused() {
+  const { container } = render(
+    <RsvpAnswer
+      action={async () => ({ status: "not_authorized" as const })}
+      announcement={<p>Nos casamos</p>}
+      ceremony={{ streamUrl: "https://meet.google.com/abc-defg-hij" }}
+      current={null}
+      greetingName="Familia Aguirre"
+      guests={GUESTS}
+      venue={{ name: "Salón para Eventos Villa Campestre" }}
+    />,
+  );
+
+  const find = (selector: string): Element => {
+    const element = container.querySelector(selector);
+
+    if (element === null) {
+      throw new Error(`the step has no \`${selector}\``);
+    }
+
+    return element;
+  };
+
+  fireEvent.click(find(".rsvp__answer"));
+  fireEvent.click(find("button[type='submit']"));
+  await waitFor(() => expect(find(".rsvp__feedback").textContent).not.toBe(""));
+
+  return { container, find };
+}
+
 /** And the screen after it: the list of who is coming. */
 function renderAttendees() {
   const rendered = renderQuestion();
 
-  fireEvent.click(rendered.find(".rsvp__attending input[value='yes']"));
+  fireEvent.click(rendered.find(".rsvp__attending .rsvp__answer"));
 
   return rendered;
 }
@@ -149,7 +235,11 @@ describe("the ground the two asking screens are read on", () => {
     const { find } = renderQuestion();
     const panel = find(".rsvp__panel");
 
-    for (const selector of [".rsvp__current", ".rsvp__attending"]) {
+    for (const selector of [
+      ".rsvp__current",
+      ".rsvp__attending",
+      ".rsvp__answer",
+    ]) {
       expect(
         panel.querySelector(selector),
         `${selector} is outside the card, so it is on the photograph`,
@@ -215,7 +305,6 @@ describe("what the question screen's words measure", () => {
   it.each([
     [".rsvp__current", "the answer already on file"],
     [".rsvp__attending legend", "the question itself"],
-    [".rsvp__feedback", "the reason a refused submission was refused"],
   ])("reads %s on the card — %s", (selector) => {
     const { find } = renderQuestion();
 
@@ -225,24 +314,71 @@ describe("what the question screen's words measure", () => {
   });
 
   /**
-   * THE TWO ANSWERS SIT ON A DEEPENING OF THE CARD, NOT ON THE CARD.
+   * THE TWO ANSWERS SIT ON A FILL OF THEIR OWN, NOT ON THE CARD.
    *
-   * Each choice is a row with its own `bg-black/20`, so the words in it are
-   * two layers off the photograph. Measured through both rather than against
-   * the card alone, which would be the flattering reading.
+   * Each answer is a pill with its own `bg-[#f6efe2]/10` — the same control
+   * the send button is — so the words in it are two layers off the
+   * photograph. Measured through both rather than against the card alone,
+   * which would be the flattering reading.
    */
-  it("reads the two answers on the row they sit in", () => {
+  it("reads the two answers on the pill they are drawn as", () => {
     const { container, find } = renderQuestion();
-    const row = container.querySelector(".rsvp__attending label")!;
+    const answers = Array.from(container.querySelectorAll(".rsvp__answer"));
 
+    expect(answers).toHaveLength(2);
+
+    for (const answer of answers) {
+      expect(
+        contrastRatio(
+          declaredColor(answer, "text"),
+          over(declaredColor(answer, "bg"), card()),
+        ),
+      ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+      // And the card really is what the pill is painted over.
+      expect(find(".rsvp__panel").contains(answer)).toBe(true);
+    }
+  });
+
+  /**
+   * AND EACH ONE DRAWS AN EDGE, WHICH IS A THRESHOLD THEY DID NOT USED TO
+   * HAVE TO CLEAR.
+   *
+   * While the answers were a radio group this file said, in as many words,
+   * that their border was deliberately not measured as a control edge: "the
+   * control is the native radio or checkbox, drawn by the browser at full
+   * `accent-[#f6efe2]`, and the row is the tap target around it. The edge is
+   * a hint about where the row ends, not the thing that says a control is
+   * there."
+   *
+   * The couple asked for two buttons, so the row IS the control now and its
+   * edge is the only thing that says so. WCAG 1.4.11 holds that to 3:1, the
+   * same floor the send button is held to, and for the same reason: an
+   * invisible control is not a contrast problem, it is a missing control.
+   */
+  it("draws an edge on each answer that can be seen against the card", () => {
+    const { container } = renderQuestion();
+
+    for (const answer of container.querySelectorAll(".rsvp__answer")) {
+      expect(
+        contrastRatio(declaredColor(answer, "border"), card()),
+      ).toBeGreaterThanOrEqual(WCAG_AA_NON_TEXT);
+    }
+  });
+
+  /**
+   * AND THE EDGE THEY CARRIED AS ROWS WOULD NOT HAVE BEEN — the second
+   * permanent negative control on this screen.
+   *
+   * `border-[#f6efe2]/20` is what a choice row was drawn with for as long as
+   * a browser-painted radio sat inside it saying "control". Against the same
+   * card it measures 1.6:1, barely half the floor, so an assertion that only
+   * ever ran against the pill's `/60` would pass just as happily if somebody
+   * put the row's border back on a button.
+   */
+  it("would not have been, at the edge the rows carried until now", () => {
     expect(
-      contrastRatio(
-        declaredColor(row, "text"),
-        over(declaredColor(row, "bg"), card()),
-      ),
-    ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
-    // And the card really is what the row is painted over.
-    expect(find(".rsvp__panel").contains(row)).toBe(true);
+      contrastRatio(over("rgba(246, 239, 226, 0.2)", card()), card()),
+    ).toBeLessThan(WCAG_AA_NON_TEXT);
   });
 
   /**
@@ -263,6 +399,57 @@ describe("what the question screen's words measure", () => {
       ),
     ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
   });
+
+  /**
+   * AND THE REFUSAL CAME OFF THE CARD, ONTO A GROUND OF ITS OWN.
+   *
+   * The couple asked for two things that together moved it: the card matches
+   * the gate's width, and it sits against the deadline with nothing between
+   * them. So the 40 pixels this slot reserves are held above the card, in
+   * the empty middle of the photograph — which is the brightest place on the
+   * screen, not the darkest.
+   *
+   * It is therefore the one line on this screen that is painted onto a
+   * ground only when it speaks. Measured in the state that has one, because
+   * a slot holding nothing has no legibility to measure: the fixture renders
+   * a refused answer and reads the sentence a household is actually looking
+   * at.
+   */
+  it("reads a refusal on the ground it paints for itself", async () => {
+    const { find } = await renderRefused();
+    const feedback = find(".rsvp__feedback");
+
+    expect(find(".rsvp__panel").contains(feedback)).toBe(false);
+    expect(feedback.textContent).not.toBe("");
+    expect(
+      contrastRatio(
+        declaredColor(feedback, "text"),
+        over(declaredColor(feedback, "bg"), BRIGHTEST_UNDER_THE_CARD),
+      ),
+    ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+  });
+
+  /**
+   * AND UNBACKED IT WOULD NOT HAVE BEEN — the third permanent negative
+   * control, and the reason the ground is conditional rather than absent.
+   *
+   * The deadline and the way back are full cream on bare photograph, both
+   * measured and both comfortable, because they stand in the last tenth of
+   * the screen where the bottom scrim is at full strength. Copying that
+   * treatment up here, where the slot actually is, would put the most
+   * important sentence on the screen on the brightest pixel in the frame at
+   * 1.1:1.
+   */
+  it("would not read at all on the bare photograph up there", async () => {
+    const { find } = await renderRefused();
+
+    expect(
+      contrastRatio(
+        declaredColor(find(".rsvp__feedback"), "text"),
+        BRIGHTEST_UNDER_THE_CARD,
+      ),
+    ).toBeLessThan(WCAG_AA_NORMAL_TEXT);
+  });
 });
 
 describe("what the screen that asks who is coming measures", () => {
@@ -275,15 +462,49 @@ describe("what the screen that asks who is coming measures", () => {
     );
   }
 
-  it.each([
-    [".rsvp__attendees legend", "the heading — `¿Quiénes asisten?`"],
-    [".rsvp__seats", "how many more people may still be selected"],
-    [".rsvp__feedback", "the reason a refused submission was refused"],
-  ])("reads %s on the card — %s", (selector) => {
+  /*
+    `.rsvp__seats` WAS MEASURED HERE AND IS NOT ANY MORE.
+
+    "Ya seleccionaron las 3." — the couple deleted the line, so the `/80` U37
+    lifted it to has nothing to read. `lib/domain/rsvp-copy.ts` records why
+    the sentence went.
+  */
+  it("reads the heading — `¿Quiénes asisten?` — on the card", () => {
     const { find } = renderAttendees();
 
     expect(
-      contrastRatio(declaredColor(find(selector), "text"), card()),
+      contrastRatio(
+        declaredColor(find(".rsvp__attendees legend"), "text"),
+        card(),
+      ),
+    ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+  });
+
+  /**
+   * AND A REFUSAL HERE CAME OFF THE CARD TOO, ONTO THE SAME GROUND.
+   *
+   * The band of empty card under the send button was the same 56 pixels the
+   * question's card carried, and the couple named it on both screens. The
+   * slot reserves its space below this card rather than above it — this card
+   * is anchored to the top, so a refusal grows down into the photograph
+   * rather than up — and it paints the card's ground when it speaks.
+   *
+   * HELD TO THE BRIGHTEST PIXEL EITHER CARD COVERS, which is harsher than
+   * the band it actually sits in: where that band falls depends on how many
+   * people the invitation names, so a fixture sampled from a household of
+   * three would be a promise about one household size.
+   */
+  it("reads a refusal on the ground it paints for itself", async () => {
+    const { find } = await renderAttendeesRefused();
+    const feedback = find(".rsvp__feedback");
+
+    expect(find(".rsvp__panel").contains(feedback)).toBe(false);
+    expect(feedback.textContent).not.toBe("");
+    expect(
+      contrastRatio(
+        declaredColor(feedback, "text"),
+        over(declaredColor(feedback, "bg"), BRIGHTEST_UNDER_THE_CARD),
+      ),
     ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
   });
 
@@ -385,15 +606,21 @@ describe("whether the send button reads as a control", () => {
   });
 
   /*
-    THE CHOICE ROWS ARE DELIBERATELY NOT MEASURED AS CONTROL EDGES.
+    THE MEMBER ROWS ARE DELIBERATELY NOT MEASURED AS CONTROL EDGES, AND THE
+    TWO ANSWERS NO LONGER GET THAT EXEMPTION.
 
-    Their border is `border-[#f6efe2]/20` and it does not clear 3:1 against
-    the row's own ground. That is not the same failure the gate's field was:
-    there the input WAS the translucent bar, so an invisible edge left nothing
-    to aim at. Here the control is the native radio or checkbox, drawn by the
-    browser at full `accent-[#f6efe2]`, and the row is the tap target around
-    it. The edge is a hint about where the row ends, not the thing that says
-    a control is there.
+    A member row's border is `border-[#f6efe2]/20` and it does not clear 3:1
+    against the row's own ground. That is not the same failure the gate's
+    field was: there the input WAS the translucent bar, so an invisible edge
+    left nothing to aim at. Here the control is the native checkbox, drawn by
+    the browser at full `accent-[#f6efe2]`, and the row is the tap target
+    around it. The edge is a hint about where the row ends, not the thing
+    that says a control is there.
+
+    The two ANSWERS used to be covered by that same paragraph and are not
+    any more: the couple asked for buttons, so there is no native control
+    inside them and the edge is the whole of the affordance. They are
+    measured at 3:1 above, beside the question they belong to.
 
     Written down rather than left out, because "this file measures every edge
     except one" is exactly the kind of gap that reads as an oversight.

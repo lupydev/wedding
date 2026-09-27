@@ -98,34 +98,25 @@ export function rsvpFeedbackMessages(
   }
 }
 
-/**
- * How many more people this household may still select.
- *
- * The sentence exists because the form DISABLES the remaining checkboxes once
- * everybody on the invitation is selected (the hard cap has no "request more"
- * affordance, by confirmed decision). A control that stops responding without a
- * word reads as a broken page, so the moment it happens is stated in words.
- *
- * `memberCount` is the invitation's own membership since migration 0012, which
- * is why the completed sentence names the PEOPLE rather than reserved seats:
- * there is no allowance separate from the names to report.
- */
-export function seatsSelectionSentence(
-  selected: number,
-  memberCount: number,
-): string {
-  const remaining = memberCount - selected;
+/*
+  A SENTENCE COUNTING THE REMAINING SEATS STOOD HERE, AND THE COUPLE DELETED
+  IT.
 
-  if (remaining <= 0) {
-    return memberCount === 1
-      ? "Ya seleccionaron a la única persona."
-      : `Ya seleccionaron las ${memberCount}.`;
-  }
+  `seatsSelectionSentence` — "Puedes seleccionar 2 personas más." while a
+  household still had room, "Ya seleccionaron las 3." once they did not. It
+  existed because the form disables the remaining checkboxes when the
+  allowance is spent, and a control that stops responding without a word
+  reads as a broken page.
 
-  return remaining === 1
-    ? "Puedes seleccionar 1 persona más."
-    : `Puedes seleccionar ${remaining} personas más.`;
-}
+  MIGRATION 0012 HAD ALREADY TAKEN ITS SUBJECT AWAY. The cap became the
+  MEMBERSHIP, so the list is exactly the people the invitation names and they
+  all arrive ticked: the "N more" half was unreachable until a household
+  unticked somebody, and the "all selected" half was the first thing every
+  household read. The couple removed it on sight.
+
+  Deleted rather than left unexported. It had one caller, and a domain
+  function with none is a sentence this product no longer says.
+*/
 
 /** The parts of a stored answer this sentence needs. */
 export interface CurrentRsvpSummary {
@@ -181,10 +172,15 @@ export interface RsvpChoiceCopy {
  * being made to answer in the plural on the one page addressed to them by
  * name. The couple have now asked for one line on both, so the choice reads
  * "¡Sí, acepto!" beside a question and a refusal that are still inflected —
- * "¿Podrán acompañarnos?", "No podemos acompañarlos". That mixture is theirs
- * and it is written down rather than smoothed over: making it "¡Sí,
- * aceptamos!" for a household is a one-line change here if they want the
- * voices to agree again.
+ * "¿Podrán acompañarnos?", "No podemos acompañarlos".
+ *
+ * THE MIXTURE WAS PUT TO THEM AND THEY CONFIRMED IT. This note used to end
+ * by offering "¡Sí, aceptamos!" as a one-line change "if they want the
+ * voices to agree again", which left a settled decision reading like an
+ * oversight waiting to be tidied. It was asked explicitly — a household of
+ * four is addressed in the plural and answers in the singular — and the
+ * answer was to keep `¡Sí, acepto!` for every invitation, whatever its size.
+ * It is the couple's own string and it stays.
  */
 const YES = "¡Sí, acepto!";
 

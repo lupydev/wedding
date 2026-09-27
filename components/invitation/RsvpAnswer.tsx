@@ -10,7 +10,6 @@ import {
   rsvpConfirmedHeading,
   rsvpDeadlineSentence,
   rsvpFeedbackMessages,
-  seatsSelectionSentence,
   type RsvpFeedback,
 } from "@/lib/domain/rsvp-copy";
 
@@ -125,14 +124,15 @@ type RsvpStep = "question" | "attendees" | "confirmed" | "stream";
   opaque island in the middle of the photograph is what broke the two pages
   looking like one, and its content is four values to copy.
 
-  This is a radio group and a checkbox per member. A bare radio on a dark ground
-  is a five-pixel target on a phone. So the controls get a surface — but a
-  DEEPENING of the same ground rather than a sheet of paper laid on it: the
-  photograph still shows through, and the controls have something to sit on.
+  This is two buttons on one screen and a checkbox per member on the next. A
+  bare checkbox on a dark ground is a five-pixel target on a phone. So the
+  controls get a surface — but a DEEPENING of the same ground rather than a
+  sheet of paper laid on it: the photograph still shows through, and the
+  controls have something to sit on.
 
   It earns more now than it did. The photograph is no longer a strip at the top
   of the page; it fills the screen behind every one of these words, so the panel
-  is what keeps a radio legible over a lit waterfall.
+  is what keeps a control legible over a lit waterfall.
 
   The control language is `StreamLink`'s pill, already the guest-facing one on
   `/` and `/transmision`. A third would have been a third wedding.
@@ -169,25 +169,137 @@ type RsvpStep = "question" | "attendees" | "confirmed" | "stream";
   `declaredColor` reads the unconditional token and ignores the variant, so
   what the spec measures is the phone, which is where this is read.
 */
-const PANEL = `
-  rsvp__panel rounded-2xl bg-[#0d1114]/70 p-5 ring-1 ring-white/10
-  backdrop-blur-sm
-  sm:p-6
+const CARD_GROUND = `
+  rounded-2xl bg-[#0d1114]/70 ring-1 ring-white/10 backdrop-blur-sm
   lg:bg-black/25
 `;
 
 /*
-  A CHOICE, AS A FULL-WIDTH ROW.
+  THE HOOK AND THE PADDING ARE SEPARATE FROM THE GROUND, BECAUSE THREE THINGS
+  NOW STAND ON IT.
 
+  The two screens' cards, which share one measure — see `CARD_MEASURE` — and
+  the slot a refusal is painted into, which has no padding at all until it
+  has something to say. `rsvp__panel` stays on the two CARDS alone:
+  `step-legibility.spec.tsx` and the browser suite both find the card by it,
+  and a third element wearing that class would silently become the one
+  `querySelector` returns.
+*/
+const PANEL = `rsvp__panel ${CARD_GROUND}`;
+
+/*
+  AND ON BOTH ASKING SCREENS IT IS THE GATE'S CARD, TO THE PIXEL.
+
+  "Esto debería quedar como en la primera página en cuanto al ancho para que
+  se mantenga la misma UI" — the couple, holding the two screens side by side.
+  They are read one tap apart, and two cards of different widths on
+  consecutive screens read as an interface assembled out of parts.
+
+  THE GATE'S MEASURE IS NOT THE COLUMN'S. `InvitationGate` paints its ground
+  as an absolute layer at `-inset-x-4`, so on an iPhone 14 its card runs 8 to
+  382 — 374 pixels — while the field and `Ver la invitación` inside it run 24
+  to 366, the column's own 342. This card has to land on both numbers or it
+  matches neither: `-mx-4` puts its edges where the gate's are, and `px-4`
+  puts the two answers exactly where the gate's field and button are.
+
+  A `w-fit` CARD STOOD HERE FOR ONE PASS, and it was the wrong reading of the
+  same complaint. "Debe ocupar el ancho de las dos respuestas" was answered by
+  shrinking the card to its content, which made it 291 pixels — narrower than
+  the gate's 374 — and the couple's next words were about that. Recorded
+  rather than quietly replaced: the answer to "the card is too wide" turned
+  out to be "the card is the wrong width", and the reference was the screen
+  before it all along.
+
+  `lg:mx-0 lg:p-6` LEAVES THE DESKTOP EXACTLY AS IT WAS. Above the breakpoint
+  the gate paints no ground at all (`lg:hidden`), so there is nothing to
+  match; the card is a panel in its own column beside a framed print, and a
+  bleed past the column's gutter would be a change nobody asked for.
+
+  BOTH ASKING SCREENS WEAR IT, and that is the couple's instruction applied
+  twice: the screen that asks who is coming had inherited the same narrow
+  card, and they said the same thing about it. Three screens, one measure.
+*/
+const CARD_MEASURE = "-mx-4 px-4 py-5 sm:py-6 lg:mx-0 lg:p-6";
+
+/*
+  THE CONTROL BOTH SCREENS PRESS, WHICH IS ONE PILL WITH TWO CALLERS.
+
+  `StreamLink`'s pill, already the guest-facing control on `/` and
+  `/transmision`, and now the send button and the two answers alike. They were
+  two languages — a bordered row for the answers, a pill for the send — for as
+  long as the answers were radios and the row was only the target AROUND the
+  control. With the radio gone the row IS the control, so it is drawn as the
+  control this product already has.
+
+  `border-[#f6efe2]/60` IS A MEASURED VALUE, NOT A CHOSEN ONE. WCAG holds the
+  boundary of a control to 3:1, and this one is read over a card laid across
+  the brightest pixel in the photograph: `/40` measures 2.40:1 there and `/60`
+  measures 3.47:1. `app/i/[slug]/step-legibility.spec.tsx` holds every one of
+  these edges to that floor — including the two answers, which were exempt
+  while a browser-drawn radio was doing the work of saying a control was
+  there.
+*/
+const PILL = `
+  rounded-full border border-[#f6efe2]/60 bg-[#f6efe2]/10 px-5 py-3 text-sm
+  text-[#f6efe2] backdrop-blur-sm
+  transition-colors duration-(--console-motion-fast)
+  ease-(--ease-console-out)
+  hover:bg-[#f6efe2]/20
+  focus-visible:outline-2 focus-visible:outline-offset-2
+  focus-visible:outline-[#f6efe2]
+  disabled:opacity-50
+`;
+
+/*
+  AN ANSWER, AS A BUTTON — WHICH IS WHAT IT ALWAYS BEHAVED LIKE.
+
+  "Deberían ser como dos botones", the couple. They were a radio group, and a
+  radio describes a choice that some later submit will send. That stopped
+  being true when the question became a screen of its own: pressing an answer
+  here ACTS. The negative records a decline on the spot; the affirmative opens
+  the list of who is coming, or — for an invitation that names one person —
+  records the acceptance too. A control that says "selected" about something
+  already done is a control that lies.
+
+  IT ALSO RETIRES A DEFECT THIS PROJECT HAD WRITTEN DOWN RATHER THAN FIXED.
+  U28: "Both radios answer on `change`, so a keyboard user arrowing through
+  the group passes over the first option and answers it." Arrowing onto the
+  refusal RECORDED a decline. Buttons have no such behaviour — Tab moves,
+  arrows do nothing, and nothing is answered until Enter or Space — and
+  `RsvpAnswer.spec.tsx` walks the group with a keyboard to prove it rather
+  than asserting it went away with the markup.
+
+  `min-h-11` IS THE 44-PIXEL FLOOR, DECLARED RATHER THAN INHERITED FROM THE
+  PADDING. Everything else in this pass shrinks the container; the one thing
+  that must never shrink is the target a non-technical guest has to hit, so
+  the floor is written where a later change to the padding cannot quietly
+  lower it.
+
+  NEITHER ANSWER IS THE PRIMARY ONE. They are the same pill, the same size and
+  the same weight. Making the affirmative louder would be nudging a household
+  towards coming, and that is the couple's decision to make rather than a
+  default that arrives inside a layout fix.
+*/
+const ANSWER = `
+  rsvp__answer flex min-h-11 cursor-pointer items-center justify-center
+  text-center
+  ${PILL}
+`;
+
+/*
+  A MEMBER OF THE HOUSEHOLD, AS A FULL-WIDTH ROW.
+
+  This is the screen after the question, and here the input is still a real
+  checkbox: the household IS selecting, and the selection IS submitted later.
   The native input stays visible and is only sized and coloured. Hiding it
   behind a drawn substitute means re-implementing focus, and the tests in this
   component's spec find every control by ROLE and accessible name — which is
   exactly what a hidden input quietly costs.
 
-  `has-[:checked]:` lifts the row the moment its own input is checked, so the
-  selected answer is legible at arm's length rather than by squinting at a dot.
+  `has-[:checked]:` lifts the row the moment its own input is checked, so who
+  is coming is legible at arm's length rather than by squinting at a tick.
 */
-const CHOICE = `
+const MEMBER = `
   flex cursor-pointer items-center gap-3 rounded-xl border
   border-[#f6efe2]/20 bg-black/20 px-4 py-3 text-sm text-[#f6efe2]/90
   transition-colors duration-(--console-motion-fast)
@@ -211,16 +323,7 @@ const CHOICE = `
 
 const CONTROL = "size-4 shrink-0 accent-[#f6efe2]";
 
-const SEND = `
-  w-full rounded-full border border-[#f6efe2]/60 bg-[#f6efe2]/10
-  px-5 py-3 text-sm text-[#f6efe2] backdrop-blur-sm
-  transition-colors duration-(--console-motion-fast)
-  ease-(--ease-console-out)
-  hover:bg-[#f6efe2]/20
-  focus-visible:outline-2 focus-visible:outline-offset-2
-  focus-visible:outline-[#f6efe2]
-  disabled:opacity-50
-`;
+const SEND = `w-full ${PILL}`;
 
 /** Where the wedding happens. Only an attending household is told. */
 export interface RsvpAnswerVenue {
@@ -539,15 +642,23 @@ export function RsvpAnswer({
    * height with no warning — 82 pixels, measured — and this page's promise is
    * that a screen is a screen. The slot is there from the first paint, holding
    * nothing.
+   *
+   * AND IT IS NOT READ ON THE SAME GROUND ON BOTH SCREENS, which is what the
+   * argument is for. On the screen that asks who is coming it sits on the
+   * card, under the send button. On the question screen the card shrank to
+   * its two answers and this slot holds its space on the bare photograph
+   * below it, where it needs the shadow every other unbacked line carries.
+   * Both are measured in `step-legibility.spec.tsx`, against different
+   * pixels.
    */
-  function feedbackRegion() {
+  function feedbackRegion(ground = "") {
     return (
       <div
         // `role="alert"` so a screen reader announces the outcome; a guest who
         // cannot see the message has no other way to learn whether their answer
         // was saved.
         role="alert"
-        className="rsvp__feedback flex min-h-10 flex-col justify-center gap-1 text-sm text-[#f6efe2]"
+        className={`rsvp__feedback flex min-h-10 flex-col justify-center gap-1 text-sm text-[#f6efe2] ${ground}`}
       >
         {messages.map((message) => (
           <p key={message}>{message}</p>
@@ -625,14 +736,62 @@ export function RsvpAnswer({
             {announcement}
 
             {/*
-              THE CARD AND THE DEADLINE, AS ONE GROUP AT THE FOOT.
+              THE CARD, THE REFUSAL'S SLOT AND THE DEADLINE, AS ONE GROUP AT
+              THE FOOT.
 
               Two siblings of the announcement rather than one would spread
               three ways and put the card back in the middle of the
               photograph, which is the thing being fixed.
             */}
-            <div className="flex flex-col gap-3">
-              <div className={`flex flex-col gap-4 ${PANEL}`}>
+            {/*
+              `gap-2` RATHER THAN THE `gap-3` THE OTHER GROUPS USE, AND IT IS
+              A MEASUREMENT RATHER THAN A PREFERENCE.
+
+              "Pegado a la fecha de confirmación" asks for the smaller number
+              on its own. The measurement insists on it: a household that
+              declined and pressed "Volver a responder" meets this screen
+              with the line naming their answer on the card, which is 36
+              pixels the fresh screen does not pay, and at `gap-3` that state
+              came to 667 pixels on a 664-pixel iPhone 14. The two gaps this
+              group spends are the cheapest four pixels on the screen, and
+              they are four more than it needs.
+            */}
+            <div className="flex flex-col gap-2">
+              {/*
+                THE REFUSAL'S SLOT, AND IT IS ABOVE THE CARD BECAUSE THE
+                COUPLE ASKED FOR WHAT IS BELOW IT.
+
+                "El componente debe quedar abajo pegado a la fecha de
+                confirmación." The card sits against the deadline, so there
+                is nothing between them — and the 40 pixels this slot holds
+                open had to go somewhere that is not between them.
+
+                THE RESERVATION ITSELF IS NOT NEGOTIABLE, and it is the whole
+                reason this is not simply deleted: an alert that mounts on
+                submit adds height with no warning — 82 pixels, measured — to
+                a screen whose promise is that it is exactly one viewport
+                tall. Above the card the space is free: the group is
+                bottom-anchored, so a refusal grows UPWARD into the empty
+                middle of the photograph and neither the card nor the
+                deadline moves a pixel.
+
+                AND UP THERE IT NEEDS A GROUND, WHICH BELOW IT DID NOT. The
+                slot reserves 58%–64% of an iPhone 14, across the #FAF8EF
+                edge of Michell's dress at 62% — the brightest pixel in the
+                frame, and cream on it unbacked is 1.1:1. So a refusal is
+                painted onto the same ground the card uses, 6.4:1 against
+                that same pixel, and the ground is painted only when there is
+                something to say: an empty dark bar floating over the
+                photograph is the defect this pass exists to remove, not a
+                place to put it back.
+              */}
+              {feedbackRegion(
+                messages.length === 0
+                  ? ""
+                  : `${CARD_GROUND} px-4 py-2 text-center`,
+              )}
+
+              <div className={`flex flex-col gap-4 ${PANEL} ${CARD_MEASURE}`}>
                 {answered === null ? null : (
                   <p className="rsvp__current text-sm text-[#f6efe2]/80">
                     {answered}
@@ -651,35 +810,68 @@ export function RsvpAnswer({
                   <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
                     {choice.question}
                   </legend>
-                  <label className={CHOICE}>
-                    <input
-                      className={CONTROL}
-                      type="radio"
-                      name="attending"
-                      value="yes"
-                      checked={attending === "yes"}
-                      onChange={
-                        soloGuest === undefined
-                          ? () => setAttending("yes")
-                          : acceptNow
-                      }
-                      required
-                    />
+                  {/*
+                    `type="button"`, AND IT IS LOAD-BEARING. A bare `button`
+                    inside a form is a SUBMIT button, which would send the
+                    payload before the answer these handlers set had reached
+                    it — see `selfSubmits` below for why the submission is
+                    fired from an effect instead.
+
+                    BOTH GO QUIET WHILE AN ANSWER IS IN FLIGHT. A radio could
+                    not be pressed into answering twice: clicking an already
+                    checked one fires no `change`. A button can, and two taps
+                    on "no" are two recorded declines in an append-only
+                    table. `pending` closes that window, and it is also the
+                    only thing on this screen that says the tap was heard —
+                    the decline and the one-person acceptance both wait on a
+                    round trip here before the screen changes.
+                  */}
+                  <button
+                    className={ANSWER}
+                    disabled={pending}
+                    onClick={
+                      soloGuest === undefined
+                        ? () => setAttending("yes")
+                        : acceptNow
+                    }
+                    type="button"
+                  >
                     {choice.yes}
-                  </label>
-                  <label className={CHOICE}>
-                    <input
-                      className={CONTROL}
-                      type="radio"
-                      name="attending"
-                      value="no"
-                      checked={attending === "no"}
-                      onChange={declineNow}
-                      required
-                    />
+                  </button>
+                  <button
+                    className={ANSWER}
+                    disabled={pending}
+                    onClick={declineNow}
+                    type="button"
+                  >
                     {choice.no}
-                  </label>
+                  </button>
                 </fieldset>
+
+                {/*
+                  AND THE ANSWER ITSELF TRAVELS AS A HIDDEN FIELD, BECAUSE THE
+                  CONTROL THAT USED TO CARRY IT IS GONE.
+
+                  A radio contributed its own `name` and `value` to the
+                  payload. A button does not, so the two answers that submit
+                  from THIS screen — a decline, and an acceptance from an
+                  invitation that names one person — would have sent no
+                  `attending` at all. The schema would have refused it, which
+                  is the good outcome; the bad one is a default somewhere
+                  deciding it meant "no".
+
+                  Rendered only once there is an answer to carry, so a
+                  household that has not answered is not holding a blank one:
+                  the screen after a "Volver a responder" must arrive with
+                  nothing in the form, which is what makes re-choosing the
+                  same answer a real answer rather than a no-op.
+
+                  Written from the same state the effect below submits, so
+                  the value cannot disagree with the screen.
+                */}
+                {attending === "" ? null : (
+                  <input type="hidden" name="attending" value={attending} />
+                )}
 
                 {/*
                   THE SEAT A SOLO INVITATION CONFIRMS, NAMED FROM THIS SCREEN.
@@ -699,12 +891,10 @@ export function RsvpAnswer({
                 {soloGuest !== undefined && attending === "yes" ? (
                   <input type="hidden" name="attendee" value={soloGuest.id} />
                 ) : null}
-
-                {feedbackRegion()}
               </div>
 
               {/*
-                THE DEADLINE, OUT OF THE CARD AND UNDER IT.
+                THE DEADLINE, OUT OF THE CARD AND AGAINST IT.
 
                 It was the last line of a page two and a half screens tall, set
                 in `text-xs` at 70% opacity — small print under content most
@@ -714,55 +904,91 @@ export function RsvpAnswer({
                 directly below it. Full-strength cream with the shadow every
                 other line on bare photograph carries, and measured there
                 rather than assumed: see `step-legibility.spec.tsx`.
+
+                "El componente debe quedar abajo PEGADO a la fecha de
+                confirmación", so the only thing between them is the group's
+                own gap. It was 64 pixels for one pass, while the refusal's
+                slot stood in the middle of them; that slot is above the card
+                now and this line sits against it.
               */}
-              <p className="rsvp__deadline text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">
+              <p className="rsvp__deadline text-center text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">
                 {rsvpDeadlineSentence(guests.length)}
               </p>
             </div>
           </>
         ) : (
           <>
-            <div className={`flex flex-col gap-4 ${PANEL}`}>
-              {/*
-              THE ANSWER TRAVELS AS A HIDDEN FIELD ONCE THE RADIOS ARE GONE.
+            {/*
+              THE CARD AND THE SLOT UNDER IT, AS ONE GROUP AT THE TOP.
 
-              The radio group belongs to the screen before this one, and an
+              Two siblings of the way back rather than one would spread three
+              ways under `justify-between` and strand the slot in the middle
+              of the photograph, which is the arrangement every move in this
+              file has been undoing.
+            */}
+            <div className="flex flex-col gap-2">
+              <div className={`flex flex-col gap-4 ${PANEL} ${CARD_MEASURE}`}>
+                {/*
+              THE ANSWER TRAVELS AS A HIDDEN FIELD ONCE THE ANSWERS ARE GONE.
+
+              The two answers belong to the screen before this one, and an
               unmounted control contributes nothing to a payload — so the
               affirmative has to be restated here or the server would receive a
               submission with no `attending` at all. The value is not a second
               opinion: this branch is only reachable while `attending` is
               "yes".
             */}
-              <input type="hidden" name="attending" value="yes" />
+                <input type="hidden" name="attending" value="yes" />
 
-              <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
-                <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
-                  ¿Quiénes asisten?
-                </legend>
-                <p className="rsvp__seats text-xs text-[#f6efe2]/80">
-                  {seatsSelectionSentence(selected.length, guests.length)}
-                </p>
-                {guests.map((guest) => {
-                  const checked = selected.includes(guest.id);
+                <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
+                  <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
+                    ¿Quiénes asisten?
+                  </legend>
+                  {/*
+                  A COUNT STOOD HERE AND THE COUPLE DELETED IT.
 
-                  return (
-                    <label className={CHOICE} key={guest.id}>
-                      <input
-                        className={CONTROL}
-                        type="checkbox"
-                        name="attendee"
-                        value={guest.id}
-                        checked={checked}
-                        // The cap, enforced as an absence: an unchecked box stops being
-                        // selectable once the allowance is spent. Already-checked boxes
-                        // stay live so the household can swap one person for another.
-                        disabled={!checked && allowanceSpent}
-                        onChange={(event) =>
-                          toggle(guest.id, event.target.checked)
-                        }
-                      />
-                      {guest.fullName}
-                      {/*
+                  "Ya seleccionaron las 3." — `seatsSelectionSentence`, which
+                  told a household how many more people they could still tick
+                  and, once the allowance was spent, said so instead of
+                  letting the boxes freeze silently.
+
+                  IT HAD STOPPED BEING TRUE OF ANYTHING A GUEST COULD DO.
+                  Migration 0012 made the cap the MEMBERSHIP, so the list is
+                  every person this invitation names and they all start
+                  ticked: the "you may still choose N more" half could only
+                  ever be read after unticking somebody, and the "the
+                  allowance is spent" half is the resting state of every
+                  household that has not. A line that reports the obvious on
+                  arrival and disappears when a guest acts is a line that
+                  teaches them nothing.
+
+                  The domain function went with it — one caller, and a spec
+                  asserting the wording of a sentence nothing renders is a
+                  spec about nothing. `currentRsvpSentence` STAYS: that one
+                  reports an answer already on file, which is a fact a guest
+                  cannot see anywhere else.
+                */}
+                  {guests.map((guest) => {
+                    const checked = selected.includes(guest.id);
+
+                    return (
+                      <label className={MEMBER} key={guest.id}>
+                        <input
+                          className={CONTROL}
+                          type="checkbox"
+                          name="attendee"
+                          value={guest.id}
+                          checked={checked}
+                          // The cap, enforced as an absence: an unchecked box stops being
+                          // selectable once the allowance is spent. Already-checked boxes
+                          // stay live so the household can swap one person for another.
+                          disabled={!checked && allowanceSpent}
+                          onChange={(event) =>
+                            toggle(guest.id, event.target.checked)
+                          }
+                        />
+                        {guest.fullName}
+                        {/*
                         THE SPACE IS OUTSIDE THE SPAN, AND THAT IS NOT
                         FUSSINESS.
 
@@ -773,30 +999,51 @@ export function RsvpAnswer({
                         survives. The spec asserting that the form and the
                         couple's own list read alike caught exactly this.
                       */}
-                      {guest.isChild ? (
-                        <>
-                          {" "}
-                          <span className="text-[#f6efe2]/70">
-                            (niño o niña)
-                          </span>
-                        </>
-                      ) : (
-                        ""
-                      )}
-                    </label>
-                  );
-                })}
-              </fieldset>
+                        {guest.isChild ? (
+                          <>
+                            {" "}
+                            <span className="text-[#f6efe2]/70">
+                              (niño o niña)
+                            </span>
+                          </>
+                        ) : (
+                          ""
+                        )}
+                      </label>
+                    );
+                  })}
+                </fieldset>
 
-              {/*
+                {/*
                 FULL WIDTH, because on a phone this is the one thing the whole
                 screen exists to have pressed.
               */}
-              <button className={SEND} type="submit" disabled={pending}>
-                Enviar respuesta
-              </button>
+                <button className={SEND} type="submit" disabled={pending}>
+                  Enviar respuesta
+                </button>
+              </div>
 
-              {feedbackRegion()}
+              {/*
+              AND THE REFUSAL'S SLOT CAME OFF THIS CARD TOO.
+
+              The same 56 pixels the question's card lost: the gap above the
+              slot and the 40 it holds open, sitting under the send button as
+              a band of empty card taller than a name row. The couple named
+              it on the question screen and then named it here.
+
+              BELOW THE CARD RATHER THAN ABOVE IT, and the difference is
+              which end of the screen the card is anchored to. On the
+              question screen the card is at the foot and a refusal has to
+              grow upward, so its slot is above; here the card is at the top
+              and a refusal grows down into the empty photograph, beside the
+              send button that was just refused. Either way the card and the
+              way back stay where they are.
+            */}
+              {feedbackRegion(
+                messages.length === 0
+                  ? ""
+                  : `${CARD_GROUND} px-4 py-2 text-center`,
+              )}
             </div>
 
             {/*

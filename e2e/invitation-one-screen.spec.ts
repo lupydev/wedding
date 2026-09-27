@@ -42,25 +42,68 @@ import { seedInvitation, type SeededInvitation } from "./helpers/seed";
 
 const PHONE = "+573005551111";
 
-/** A household of three, which is the shape most invitations have. */
-function householdOfThree() {
+/**
+ * THE SIZES THIS GUARD MEASURES, AND WHY THEY ARE THESE FOUR.
+ *
+ * "El máximo de personas por invitación es de 4" — the couple. One person is
+ * the flow with no attendee screen at all, two is the smallest household that
+ * has one, and FOUR is the stated ceiling and therefore the tallest screen
+ * this product is supposed to be able to draw.
+ *
+ * The screen that asks who is coming grows with the household — 54 pixels per
+ * member, measured — so it is the only step whose height is not fixed, and a
+ * guard that only ever measured the common size would pass for a year and
+ * fail on the largest family on the list, in front of them.
+ */
+function householdOfOne() {
+  return seedInvitation({
+    greetingName: "Camila Aguirre",
+    guests: [{ fullName: "Camila Aguirre Vélez", phoneE164: PHONE }],
+  });
+}
+
+function householdOfTwo() {
+  return seedInvitation({
+    greetingName: "Familia Aguirre",
+    guests: [
+      { fullName: "Camila Aguirre Vélez", phoneE164: PHONE },
+      { fullName: "Rodrigo Aguirre Peña" },
+    ],
+  });
+}
+
+function householdOfFour() {
   return seedInvitation({
     greetingName: "Familia Aguirre",
     guests: [
       { fullName: "Camila Aguirre Vélez", phoneE164: PHONE },
       { fullName: "Rodrigo Aguirre Peña" },
       { fullName: "Sara Aguirre", isChild: true },
+      { fullName: "Tomás Aguirre Mesa", isChild: true },
     ],
   });
 }
 
 /**
- * AND ONE OF FIVE, WHICH IS THE SIZE THAT DECIDES WHETHER THIS HOLDS.
+ * AND A FIFTH PERSON, WHICH NOTHING IN THIS PRODUCT PREVENTS.
  *
- * The screen that asks who is coming grows with the household — about 54 pixels
- * per member — so it is the only step whose height is not fixed. A guard that
- * only ever measured three people would pass for a year and fail on the largest
- * family on the list, in front of them.
+ * The ceiling of four is the couple's own statement about their list, not a
+ * rule the software holds them to. Checked rather than assumed, and nothing
+ * enforces it anywhere:
+ *
+ *  - The schema has no bound. `invitation_guests` has no row-count
+ *    constraint and no trigger that counts; migration 0012 made the seat cap
+ *    `count(*)` of the members themselves, and 0013 dropped the column that
+ *    had been the only one to carry an upper bound at all.
+ *  - The console cannot refuse one. `DraftRefusal` in
+ *    `lib/domain/invitation-draft.ts` has no code for "too many members", and
+ *    a refusal without a code cannot reach an operator.
+ *  - The importer does not count. `scripts/import-guests.ts` sums members for
+ *    its report and bounds nothing.
+ *
+ * So a layout tuned to exactly four is a layout that breaks silently the
+ * first time somebody adds a fifth, and this fixture is the canary that says
+ * so before a guest does. It stays until something enforces the ceiling.
  */
 function householdOfFive() {
   return seedInvitation({
@@ -149,7 +192,7 @@ test.afterEach(async () => {
 
 test.describe("the invitation, one screen at a time", () => {
   test("the gate fits, with the way in on the screen", async ({ page }) => {
-    fixture = await householdOfThree();
+    fixture = await householdOfFour();
 
     await page.goto(`/i/${fixture.slug}`);
     await expect(page.locator("section.gate")).toBeVisible();
@@ -185,13 +228,13 @@ test.describe("the invitation, one screen at a time", () => {
   test("the question fits, with both answers and the deadline on it", async ({
     page,
   }) => {
-    fixture = await householdOfThree();
+    fixture = await householdOfFour();
     await unlock(page, fixture);
 
     await expectOneScreen(
       page,
       "question",
-      page.getByRole("radio", { name: /No podemos acompañarlos/ }),
+      page.getByRole("button", { name: /No podemos acompañarlos/ }),
     );
 
     /*
@@ -215,10 +258,102 @@ test.describe("the invitation, one screen at a time", () => {
     expect(box.y + box.height).toBeLessThanOrEqual(fold);
   });
 
-  test("who is coming fits, for a household of three", async ({ page }) => {
-    fixture = await householdOfThree();
+  /**
+   * AND IT IS THE GATE'S CARD, AT THE FOOT, WITH NOTHING SPARE INSIDE IT.
+   *
+   * Three of the couple's instructions meet on this screen, and only a real
+   * viewport can check any of them.
+   *
+   *  1. "Esto debería quedar como en la primera página en cuanto al ancho
+   *     para que se mantenga la misma UI." The gate is one tap earlier and
+   *     its card is 374 pixels wide on an iPhone 14 while its field and its
+   *     button are 342 — two numbers, because the gate paints its ground at
+   *     `-inset-x-4`. This card has to land on BOTH or it matches neither.
+   *  2. "El componente debe quedar abajo pegado a la fecha de confirmación."
+   *  3. The band of empty card under the second answer — 76 pixels, and the
+   *     one thing here they did not have to name — is gone.
+   *
+   * MEASURED AGAINST THE GATE ITSELF rather than against 374, because a
+   * hard-coded number goes stale the moment the gate's own padding changes,
+   * and the two screens would then drift apart with every assertion still
+   * green.
+   *
+   * THE FLOOR ON THE TWO TARGETS IS ASSERTED IN THE SAME BREATH, because the
+   * claims pull against each other: everything here shrinks containers, and
+   * the thing that must never shrink is the control a non-technical guest
+   * has to hit.
+   */
+  test("the question wears the gate's card, pushed down to the deadline", async ({
+    page,
+  }) => {
+    fixture = await householdOfFour();
+
+    // The gate first, since it is the reference the couple named.
+    await page.goto(`/i/${fixture.slug}`);
+    await expect(page.locator("section.gate")).toBeVisible();
+
+    const gateCard = (await page.locator(".gate__panel-ground").boundingBox())!;
+    const gateControl = (await page
+      .getByRole("button", { name: "Ver la invitación" })
+      .boundingBox())!;
+
     await unlock(page, fixture);
-    await page.getByRole("radio", { name: /Sí, acepto/ }).click();
+
+    const card = (await page.locator(".rsvp__panel").boundingBox())!;
+    const answers = await page.locator(".rsvp__answer").all();
+
+    expect(answers).toHaveLength(2);
+
+    const boxes = await Promise.all(
+      answers.map(async (answer) => (await answer.boundingBox())!),
+    );
+
+    // 1. The same card, and the same measure inside it.
+    expect(Math.round(card.x)).toBe(Math.round(gateCard.x));
+    expect(Math.round(card.width)).toBe(Math.round(gateCard.width));
+    expect(Math.round(boxes[0].x)).toBe(Math.round(gateControl.x));
+    expect(Math.round(boxes[0].width)).toBe(Math.round(gateControl.width));
+
+    // The two answers are one control repeated, not a primary and a
+    // secondary: same width, same height, whichever way the couple later
+    // decide that question.
+    expect(boxes[0].width).toBe(boxes[1].width);
+    expect(Math.round(boxes[0].height)).toBe(Math.round(boxes[1].height));
+
+    // Each one is still a target a thumb can hit.
+    for (const box of boxes) {
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+
+    // 2. Nothing between the card and the deadline but the group's own gap.
+    const deadline = (await page.locator(".rsvp__deadline").boundingBox())!;
+    const gap = deadline.y - (card.y + card.height);
+
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThanOrEqual(16);
+
+    // 3. And no dead band inside it: the card ends one padding below the
+    // last answer.
+    const padding = boxes[0].x - card.x;
+    const belowTheLast = card.y + card.height - (boxes[1].y + boxes[1].height);
+
+    expect(belowTheLast).toBeGreaterThan(0);
+    expect(belowTheLast).toBeLessThanOrEqual(padding + 12);
+
+    // The refusal keeps its reserved space, above the card where it costs
+    // neither the card nor the deadline a pixel.
+    const slot = (await page.locator(".rsvp__feedback").boundingBox())!;
+
+    expect(slot.y + slot.height).toBeLessThanOrEqual(card.y);
+    expect(slot.height).toBeGreaterThanOrEqual(40);
+  });
+
+  test("who is coming fits, for a household of four — the stated ceiling", async ({
+    page,
+  }) => {
+    fixture = await householdOfFour();
+    await unlock(page, fixture);
+    await page.getByRole("button", { name: /Sí, acepto/ }).click();
 
     await expect(
       page.getByRole("group", { name: /Quiénes asisten/ }),
@@ -246,10 +381,25 @@ test.describe("the invitation, one screen at a time", () => {
     expect(back.y).toBeGreaterThan(fold * 0.75);
   });
 
-  test("who is coming fits, for a household of five", async ({ page }) => {
+  test("who is coming fits, for a household of two", async ({ page }) => {
+    fixture = await householdOfTwo();
+    await unlock(page, fixture);
+    await page.getByRole("button", { name: /Sí, acepto/ }).click();
+
+    await expect(page.getByRole("checkbox")).toHaveCount(2);
+    await expectOneScreen(
+      page,
+      "attendees (2)",
+      page.getByRole("button", { name: "Enviar respuesta" }),
+    );
+  });
+
+  test("who is coming fits, for a household of five — the canary", async ({
+    page,
+  }) => {
     fixture = await householdOfFive();
     await unlock(page, fixture);
-    await page.getByRole("radio", { name: /Sí, acepto/ }).click();
+    await page.getByRole("button", { name: /Sí, acepto/ }).click();
 
     await expect(page.getByRole("checkbox")).toHaveCount(5);
     await expectOneScreen(
@@ -259,12 +409,44 @@ test.describe("the invitation, one screen at a time", () => {
     );
   });
 
+  /**
+   * AND THE FLOW THAT HAS NO SUCH SCREEN AT ALL.
+   *
+   * An invitation naming one person records its acceptance on the first tap
+   * and lands on the directions — `RsvpAnswer` records why. Measured here
+   * because "the screen it skips" is not a claim a unit test can make about
+   * pixels, and because a solo invitation is the shape a guest most often
+   * gets.
+   */
+  test("the question and the directions fit, for one person", async ({
+    page,
+  }) => {
+    fixture = await householdOfOne();
+    await unlock(page, fixture);
+
+    await expectOneScreen(
+      page,
+      "question (1)",
+      page.getByRole("button", { name: /Sí, acepto/ }),
+    );
+
+    await page.getByRole("button", { name: /Sí, acepto/ }).click();
+    await expect(page.locator(".rsvp__confirmed")).toBeVisible();
+    // Straight past the list of who is coming: there was nobody to choose.
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await expectOneScreen(
+      page,
+      "confirmed (1)",
+      page.getByRole("link", { name: /Cómo llegar/ }),
+    );
+  });
+
   test("where to go fits, with the hour, the dress code and the way there", async ({
     page,
   }) => {
-    fixture = await householdOfFive();
+    fixture = await householdOfFour();
     await unlock(page, fixture);
-    await page.getByRole("radio", { name: /Sí, acepto/ }).click();
+    await page.getByRole("button", { name: /Sí, acepto/ }).click();
     await page.getByRole("button", { name: "Enviar respuesta" }).click();
 
     await expect(page.locator(".rsvp__confirmed")).toBeVisible();
@@ -315,9 +497,9 @@ test.describe("the invitation, one screen at a time", () => {
   test("the stream fits, for a household that cannot come", async ({
     page,
   }) => {
-    fixture = await householdOfThree();
+    fixture = await householdOfFour();
     await unlock(page, fixture);
-    await page.getByRole("radio", { name: /No podemos acompañarlos/ }).click();
+    await page.getByRole("button", { name: /No podemos acompañarlos/ }).click();
 
     await expect(page.getByTestId("stream-details")).toBeVisible();
     await expectOneScreen(
@@ -366,7 +548,7 @@ test.describe("the gate when something is covering half the screen", () => {
   test("lets the page scroll and keeps the way in reachable", async ({
     page,
   }) => {
-    fixture = await householdOfThree();
+    fixture = await householdOfFour();
 
     // Roughly an iPhone 14 with its keyboard raised. Not a keyboard: a window.
     await page.setViewportSize({ width: 390, height: 360 });

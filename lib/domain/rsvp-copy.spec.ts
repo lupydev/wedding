@@ -7,7 +7,6 @@ import {
   rsvpConfirmedHeading,
   rsvpDeadlineSentence,
   rsvpFeedbackMessages,
-  seatsSelectionSentence,
 } from "./rsvp-copy";
 import { RSVP_DEADLINE_TEXT } from "./wedding-day";
 
@@ -90,33 +89,15 @@ describe("rsvpFeedbackMessages", () => {
   });
 });
 
-describe("seatsSelectionSentence", () => {
-  it("counts the seats still available in the plural", () => {
-    expect(seatsSelectionSentence(1, 3)).toBe(
-      "Puedes seleccionar 2 personas más.",
-    );
-  });
+/*
+  "seatsSelectionSentence" STOOD HERE WITH FOUR ASSERTIONS ABOUT ITS WORDING.
 
-  it("uses the singular for the last remaining seat", () => {
-    expect(seatsSelectionSentence(2, 3)).toBe(
-      "Puedes seleccionar 1 persona más.",
-    );
-  });
-
-  it("says everyone is selected rather than offering zero more", () => {
-    // "Puedes seleccionar 0 personas más" reads as a bug, and it is also the
-    // moment the remaining checkboxes are disabled — the sentence must explain
-    // that rather than leave it looking broken. It names the PEOPLE now, not a
-    // reserved-seat allowance that no longer exists.
-    expect(seatsSelectionSentence(3, 3)).toBe("Ya seleccionaron las 3.");
-  });
-
-  it("addresses the single member of a one-person invitation", () => {
-    expect(seatsSelectionSentence(1, 1)).toBe(
-      "Ya seleccionaron a la única persona.",
-    );
-  });
-});
+  The couple deleted the sentence from the screen that asks who is coming, so
+  the function went with it — `lib/domain/rsvp-copy.ts` records why. A spec
+  that pins the wording of a sentence nothing renders is a spec about
+  nothing, and keeping it would have made the function look like a live part
+  of the product.
+*/
 
 describe("currentRsvpSentence", () => {
   it("reports an accepted answer with its seat count", () => {
@@ -161,10 +142,10 @@ describe("currentRsvpSentence", () => {
  * household is asked "¿Podrán acompañarnos?" and offered "¡Sí, acepto!"
  * beside "No podemos acompañarlos".
  *
- * IN THE DOMAIN, NOT IN THE COMPONENT. This is the third place a count has
- * decided a Spanish ending — `seatsSelectionSentence` and `currentRsvpSentence`
- * are the other two — and all three live here, where they can be read against
- * each other and tested without a DOM.
+ * IN THE DOMAIN, NOT IN THE COMPONENT. This is the second place a count has
+ * decided a Spanish ending — `currentRsvpSentence` is the other, now that
+ * `seatsSelectionSentence` is gone — and both live here, where they can be
+ * read against each other and tested without a DOM.
  */
 describe("rsvpChoiceCopy", () => {
   it("speaks to one person in the singular", () => {

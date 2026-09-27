@@ -201,6 +201,20 @@ declined screen given the language `/transmision` already uses.
       been sitting on the brightest pixel in the photograph at `bg-black/25`
       since U34, and prose had recorded it as fine.
 
+- [x] **U38 — the two answers became two buttons, and three screens became
+      one card.** The couple compared the question with the gate: the card
+      had to be the gate's card to the pixel — 374 wide with its controls at
+      342, which is two numbers, not one — sitting against the deadline with
+      nothing between them, and the answers had to be buttons rather than
+      radios. The list of who is coming took the same card, lost its
+      selection count and its band of empty card under `Enviar respuesta`.
+      Buttons close the keyboard defect U28 recorded and left open, measured
+      rather than assumed. The affirmative is confirmed singular for every
+      size. What is NOT done is the announcement moving back to the top of
+      the attendee screen: measured, it misses an iPhone 14 by 124 pixels at
+      the couple's own four-person ceiling, so the numbers went back to them
+      instead.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -3135,8 +3149,320 @@ confirmation, the solo flow and the card's ground. Two rather than five, because
 the five changes interlock through three shared files: `RsvpAnswer` carries
 three of them, and two browser specs carry four.
 
+### U38 — done (two answers became two buttons, and three cards became one card)
+
+**WHAT WAS ASKED, IN THREE MESSAGES, AND ONE OF THEM REVERSED THE ONE BEFORE.**
+The couple read the question screen on a phone after U37 shipped.
+
+| #   | their words                                                                                         | what it became                                             |
+| --- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 1   | "este componente es muy ancho debe ocupar el ancho de las dos respuestas"                           | the card was rebuilt twice — see below                     |
+| 2   | "deberian ser como dos botones"                                                                     | the radio group is two buttons                             |
+| 3   | "esto deberia quedar como en la primera pagina en cuanto al ancho para que se mantenga la misma ui" | the card is the GATE's card, to the pixel                  |
+| 4   | "el componente debe quedar abajo pegado a la fecha de confirmación"                                 | nothing stands between the card and the deadline           |
+| 5   | "el maximo de personas por invitacion es de 4"                                                      | the geometry guard measures 1, 2 and 4 — and 5 as a canary |
+
+Plus one excess nobody named: **76 pixels of empty card below the second
+answer** on an iPhone 14, measured — the gap above the reserved refusal slot,
+the slot's own 40 pixels, and the card's bottom padding. A band the height of
+another answer, under every question nobody has got wrong yet.
+
+**THE WIDTH WAS BUILT TWICE, AND THE FIRST ONE WAS WRONG.** "Debe ocupar el
+ancho de las dos respuestas" was read as _hug the content_: `w-fit`, which
+made the card 291 pixels — narrower than the gate's 374 — and the couple's
+next message was about that. The answer to "the card is too wide" turned out
+to be "the card is the wrong width", and the reference was the screen one tap
+earlier all along. Recorded rather than quietly replaced, because the second
+instruction only makes sense beside the first.
+
+**THE GATE'S MEASURE IS TWO NUMBERS, NOT ONE**, which is why matching it by
+eye would have failed. `InvitationGate` paints its ground as an absolute layer
+at `-inset-x-4`, so on an iPhone 14 its card runs 8→382 (374 wide) while the
+field and `Ver la invitación` inside it run 24→366 (342). A card that matched
+only the outer number would have put its controls 16 pixels off the gate's;
+one that matched only the inner number would have been a visibly narrower
+card. `-mx-4 px-4` lands on both, and `e2e/invitation-one-screen.spec.ts`
+measures the question's card against the gate's own boxes rather than against
+374, so the two cannot drift apart while the assertion stays green.
+
+Measured on the shipped build, iPhone 14, all four household sizes:
+
+| screen        | card      | its controls |
+| ------------- | --------- | ------------ |
+| gate          | x=8 w=374 | x=24 w=342   |
+| the question  | x=8 w=374 | x=24 w=342   |
+| who is coming | x=8 w=374 | x=24 w=342   |
+
+**TWO BUTTONS, AND WHAT THAT RETIRES.** A radio describes a selection that a
+later submit will send, and that stopped being true when the question became a
+screen of its own: the negative records a decline on the spot, the affirmative
+opens the list of who is coming, and for an invitation naming one person it
+records the acceptance too. The markup had been describing something the
+product no longer did.
+
+**IT CLOSES U28'S RECORDED DEFECT, MEASURED RATHER THAN ASSUMED.** That entry
+says, in as many words: "Both radios answer on `change`, so a keyboard user
+arrowing through the group passes over the first option and answers it. That
+shape predates this work — the decline has always had it — and it is
+recoverable from either side. Named here so it is a decision rather than an
+oversight." It was worse than _recoverable_: arrowing onto the refusal
+RECORDED a decline, because a decline submits on the first answer. A keyboard
+user exploring the group answered on the household's behalf.
+
+Buttons have no such behaviour, and `RsvpAnswer.spec.tsx` proves it rather
+than asserting that the markup changed: a test tabs onto the affirmative,
+presses `ArrowDown`, `ArrowUp`, `ArrowRight` and `ArrowLeft`, tabs to the
+refusal, arrows again, and then asserts the Server Action was never called,
+the stream screen never appeared and no radio exists in the document at all.
+A second test presses `Enter` on the affirmative and asserts the list opens.
+**U28's open limitation is closed by this unit.**
+
+**THE CONTROL LANGUAGE COLLAPSED FROM TWO INTO ONE.** The answers were a
+bordered row and the send button a pill; with the radio gone the row IS the
+control, so both are now `PILL` — `StreamLink`'s pill, already the
+guest-facing control on `/` and `/transmision`. That has a measured
+consequence: `step-legibility.spec.tsx` used to explain in a comment why the
+choice rows were exempt from WCAG 1.4.11's 3:1 control-edge floor ("the
+control is the native radio… the row is the tap target around it"). The
+exemption died with the radio. The answers' edge is `border-[#f6efe2]/60`,
+measured at 3.46:1 against the card over the worst pixel it covers, and the
+row's old `/20` is now a permanent negative control at 1.59:1.
+
+**WHERE THE REFUSAL'S 40 RESERVED PIXELS WENT, AND WHY THEY DID NOT DIE.** The
+reservation is U34's and it is not negotiable: an alert that mounts on submit
+adds 82 pixels with no warning to a screen whose promise is that it is exactly
+one viewport tall. What changed is where the space is held, and the two asking
+screens now differ because they are anchored to opposite ends:
+
+- **The question's card is at the foot**, so the slot is ABOVE it. A refusal
+  grows upward into the empty middle of the photograph and neither the card
+  nor the deadline moves a pixel.
+- **The list of who is coming is at the top**, so its slot is BELOW it, beside
+  the send button that was just refused, growing downward.
+
+Up there the slot lands at 58%–64% of an iPhone 14, across the #FAF8EF edge of
+Michell's dress at 62%, where unbacked cream is **1.1:1**. So a refusal is
+painted onto the card's own ground when it has something to say — 6.4:1
+against that same pixel — and onto nothing at all when it does not, because an
+empty dark bar floating over the couple is the defect this pass removes, not a
+place to put it back. Both are measured, including a negative control that
+fails if anybody gives the slot the deadline's bare-photograph treatment.
+
+**THE CARD'S FIXTURE WAS RE-SAMPLED AND GOT HARSHER.** The card moved from
+57%–96% to 66%–91% and grew 32 pixels wider, so the pixels behind it changed
+twice over. A card that low could easily have stopped covering the worst pixel
+in the frame, which would have quietly retired the negative control that says
+`bg-black/25` is not a ground.
+
+It did not, and the state that proves it is not the resting one:
+
+| state                      | band, iPhone 14 | worst pixel       |
+| -------------------------- | --------------- | ----------------- |
+| the question, fresh        | 66%–92%         | `#CDC7A5` (0.565) |
+| after "Volver a responder" | 61%–92%         | `#FAF8EF` (0.937) |
+| with a refusal showing     | 63%–94%         | `#FEFCF0` (0.970) |
+
+The card is bottom-anchored and grows UPWARD: the line naming an answer
+already on file is 36 pixels that put its top back across the dress edge. That
+is the same argument `gate-legibility.spec.tsx` makes for keeping the gate's
+fixture, and `BRIGHTEST_UNDER_THE_CARD` is now **#FBF9F0** (0.9455, the
+reconsidering state) rather than #FAF8EF. Every floor still clears with the
+harsher number: the question 6.41:1, the answer labels 5.06:1, the answer
+edges 3.46:1, the line naming the current answer 4.79:1, and the negative
+control 1.69:1 — still under 4.5:1, so putting the old ground back cannot sit
+green.
+
+**THE SELECTION COUNT IS GONE, AND SO IS THE FUNCTION BEHIND IT.** "Ya
+seleccionaron las 3." existed to explain the moment the remaining checkboxes
+freeze. Migration 0012 had already taken its subject away: the cap became the
+MEMBERSHIP, so every box is a member, they all arrive ticked, and unticking
+one always leaves room — the "N more" half was unreachable and the "all
+selected" half was the first thing every household read. `seatsSelectionSentence`
+had exactly one caller, so it went with the line, and its four spec assertions
+with it. `currentRsvpSentence` STAYS: that one reports an answer already on
+file, which is a fact a guest cannot see anywhere else.
+
+**THE AFFIRMATIVE IS SETTLED, NOT HEDGED.** U37 left this open — "One line in
+`rsvp-copy.ts` if the couple want the voices to agree again" — and so did the
+function's own doc comment. It was put to them: a household of four is
+addressed in the plural and answers in the singular. **Asked and confirmed:
+`¡Sí, acepto!` stays, for every invitation whatever its size.** Both hedges
+are rewritten to say so, because a settled decision that reads like an
+oversight is one a later reader tidies away.
+
+**GEOMETRY.** Every step, both phones, on the shipped build:
+
+| device          | gate | question | who is coming (2) | who is coming (4) | who is coming (5) | one person | accepted | declined |
+| --------------- | ---- | -------- | ----------------- | ----------------- | ----------------- | ---------- | -------- | -------- |
+| iPhone 14 (664) | 664  | 664      | 664               | 664               | 664               | 664        | 664      | 664      |
+| Pixel 7 (839)   | 839  | 839      | 839               | 839               | 839               | 839        | 839      | 839      |
+
+`ff8af29`'s guard is unchanged in kind and grew three cases: a household of
+two, an invitation naming one person (which has no attendee screen at all),
+and the width assertion that ties this card to the gate's. Its fixtures are
+now **one, two and four** — "el máximo de personas por invitación es de 4" —
+with five kept as a canary, for the reason in the next section.
+
+**ONE STATE THAT IS NOT 1.00, AND IT IS A COMPOUND ONE.** A household that
+declined, pressed "Volver a responder", and then had the second answer REFUSED
+by the server measures 680 pixels on an iPhone 14 — 16 over. It is the only
+state on the screen that carries both the line naming the current answer (36
+pixels) and a two-line refusal (61 where 40 are reserved). The guard has never
+measured it, and this pass did not cause it: the group is strictly shorter
+than it was — the count line went (−24), and the group's gap went from `gap-3`
+to `gap-2` (−4) — so the same state was at least 20 pixels worse before.
+Recorded rather than fixed: everything on it stays reachable, and the fix is
+either a bigger reservation or a shorter refusal, both of which are copy or
+product decisions.
+
+The `gap-2` itself is a measurement rather than a preference. At `gap-3` the
+reconsidering state — the card 36 pixels taller — came to 667 on a 664-pixel
+screen. The two gaps this group spends are the cheapest four pixels on it.
+
+**WHAT IS NOT DONE, AND WHY IT STOPPED HERE.** The couple asked for the
+announcement to go back at the top of the screen that asks who is coming, with
+the list at the foot and "Volver a la pregunta" beneath it, explicitly
+accepting the cost: "sin importar que se lleguen a tapar las dos personas de
+la foto, porque sino despues de aceptar esa pagina de escoger las personas se
+ve extraña."
+
+**It does not fit, and not by a little.** Every term below is measured on the
+shipped build at iPhone 14, 664 pixels:
+
+| term                                  | pixels  |
+| ------------------------------------- | ------- |
+| top padding                           | 20      |
+| the greeting, two lines               | 50      |
+| the article's gap                     | 20      |
+| the announcement group                | 236     |
+| the form's gap between its two groups | 24      |
+| bottom padding                        | 28      |
+| **left for the card group**           | **286** |
+
+And the card group, at the sizes that matter:
+
+| household          | its card | + slot 40, gaps 16, way back 16 | over 286 by |
+| ------------------ | -------- | ------------------------------- | ----------- |
+| two                | 230      | 302                             | 16          |
+| four (the ceiling) | 338      | 410                             | **124**     |
+| five (the canary)  | 392      | 464                             | 178         |
+
+So it does not fit at the stated maximum, and it does not fit at two people
+either. A Pixel 7 is kinder — four fits there with 51 pixels to spare — but
+the iPhone 14 is the binding screen and the one the couple reviewed on.
+
+Nothing was shrunk to force it. What would have to give, each measured, for
+the four-person case's 124 pixels:
+
+| candidate                                   | pixels freed |
+| ------------------------------------------- | ------------ |
+| the countdown, with its gap                 | 74           |
+| the greeting "¡Hola, <name>!", with its gap | 70           |
+| "Nos casamos", with its gap                 | 60           |
+| the date line, with its gap                 | 40           |
+| the hairline rule, with its gap             | 25           |
+| the reserved refusal slot                   | 48           |
+| "Volver a la pregunta"                      | 24           |
+
+Any two of the first three clear it for four people; the countdown plus the
+greeting plus the date and the rule (209) clears it for five. **That is a
+product decision and it is the couple's**, so this unit stopped at the three
+instructions that do not depend on it — the full-width card, the deleted count
+line, and the dead band under `Enviar respuesta` — and the list stays at the
+top of its screen until they choose.
+
+**AND NOTHING ENFORCES FOUR, WHICH IS WHY THE CANARY STAYS.** Checked rather
+than assumed:
+
+- **The schema has no bound.** `invitation_guests` has no row-count constraint
+  and no trigger that counts — the only trigger on it is
+  `invitation_guests_clear_recipient_on_move` (0012). Migration 0012 made the
+  seat cap `count(*)` of the members themselves, and 0013 dropped the column
+  that had been the only one to carry an upper bound at all.
+- **The console cannot refuse a fifth.** `DraftRefusal`
+  (`lib/domain/invitation-draft.ts:49`) has no code for "too many members",
+  and a refusal without a code cannot reach an operator — the form translates
+  that union exhaustively, so an untranslated refusal is a compile error.
+- **The importer does not count.** `scripts/import-guests.ts:212` sums members
+  for its report and bounds nothing.
+
+So four is how the couple's list happens to be written, not a guarantee the
+layout can lean on. A five-person fixture stays in the guard as a documented
+canary; the gap is in **Next** rather than papered over, and no enforcement
+rule was invented here.
+
+**RED, QUOTED.** The specs were written against the shipped screens and forced
+to fail first:
+
+    × answers nothing when a keyboard walks through the two answers
+    TestingLibraryElementError: Unable to find an accessible element with the
+    role "button" and name `/Sí, acepto/`
+
+    × reserves the refusal below the card, not inside it
+    AssertionError: expected <div role="alert" …(1)></div> to be null
+
+    × reads the way back on the bare photograph
+    Error: the step has no `.rsvp__attending .rsvp__answer`
+
+63 of the 85 assertions in `RsvpAnswer.spec.tsx` and
+`step-legibility.spec.tsx` were red before the component moved.
+
+**GREEN.** `npm test` — 2,453 unit and component tests, 2,444 passing.
+`npm run typecheck`, `npm run lint` (0 errors, 8 warnings, the same eight in
+files this unit did not touch), `npm run format:check`, `npm run build`.
+`PORT=3100 npx playwright test` — 194 passed, and all 22 geometry assertions
+green on both phone projects.
+
+**NOT GREEN, AND MEASURED AT `1e03636` RATHER THAN ASSUMED.** The brief for
+this unit said eight environmental failures; it is **nine** now, and the ninth
+is not this unit's. Running the suite on a clean checkout of `1e03636`:
+
+| suite                           | HEAD                             | with this unit                            |
+| ------------------------------- | -------------------------------- | ----------------------------------------- |
+| `npm test`                      | 9 failed / 2,450                 | 9 failed / 2,453 — the same nine          |
+| `PORT=3100 npx playwright test` | 188 passed, 2 failed, 45 not run | 194 passed, the same 2 failed, 45 not run |
+
+The eight in `lib/server/guest-directory.spec.ts` are the ones U35, U36 and
+U37 recorded. The ninth is
+`lib/server/invitations.spec.ts > listConsoleInvitations > lists both
+partitions on the shared dashboard`, and its browser twin is
+`console-guest-list.spec.ts:625`, which fails only in a FULL run — the suite
+seeds invitations as it goes, so the row count crosses PostgREST's unpaged
+1000-row ceiling partway through. Same defect, one table further along: the
+local database now holds more invitations than an unpaged `.select()` returns,
+so a freshly created one falls outside the first thousand. Not fixed here and
+not reset; it is the same entry already in **Next**.
+
 ## Next
 
+- **The list of who is coming still has its card at the TOP, and the couple
+  asked for it at the foot with the announcement above it.** U38 measured it
+  instead of building it: the announcement group is 236 pixels, the greeting
+  50, and what is left for the card on an iPhone 14 is 286 — against 410 for
+  a four-person card with its reserved refusal slot and its way back, so it
+  misses by 124 at the couple's own stated ceiling and by 16 even for a
+  household of two. The full table, and what each candidate would free — the
+  countdown 74, the greeting 70, "Nos casamos" 60, the date 40, the rule 25 —
+  is in U38. **Any two of the first three clear it for four people.** This is
+  the one open product decision in the pass and it is theirs; nothing was
+  shrunk to force it and the 44-pixel targets were not touched.
+- **Nothing in this product enforces "el máximo de personas por invitación es
+  de 4".** Not the schema (`invitation_guests` has no row-count constraint and
+  no counting trigger; the only column that ever carried an upper bound was
+  dropped by 0013), not the console (`DraftRefusal` has no code for "too many
+  members", so there is nothing an operator could be shown), and not the
+  importer (`scripts/import-guests.ts` counts members for its report and
+  bounds nothing). Until something does, a layout tuned to four breaks
+  silently the first time somebody adds a fifth — so the geometry guard keeps
+  a five-person fixture as a canary, and the rule itself is a product decision
+  with a migration and a console message behind it, not something to invent
+  here.
+- **A household that declines, reconsiders, and is then refused reaches 680
+  pixels on an iPhone 14** — 16 over. It is the only state carrying both the
+  line naming the current answer and a two-line refusal in a 40-pixel slot.
+  The guard has never measured it and U38 made it at least 20 pixels better
+  rather than worse; the honest fixes are a bigger reservation or a shorter
+  refusal, and both are copy decisions.
 - The couple have not filled the wedding's own facts, so the invitation still
   renders `{{VENUE_NAME}}` and `{{VENUE_ADDRESS}}`. That is deliberate — the
   placeholders are visible rather than hidden, so an unfinished invitation
@@ -3184,11 +3510,13 @@ three of them, and two browser specs carry four.
   them, and there the picture is the point rather than the subject.
 - The affirmative answer is "¡Sí, acepto!" for everybody, and the refusal is
   still inflected — so a household is asked "¿Podrán acompañarnos?" and offered
-  "¡Sí, acepto!" beside "No podemos acompañarlos". That is the couple's own
-  string applied literally to a function they had previously asked to speak in
-  both voices, and it is the one line in this pass that reads as a mixture
-  rather than a decision. "¡Sí, aceptamos!" for a household of two or more is a
-  one-line change in `rsvp-copy.ts`, and it is theirs, not one to invent.
+  "¡Sí, acepto!" beside "No podemos acompañarlos". **Asked and confirmed at
+  U38, and no longer open:** the mixture was put to the couple — a household
+  of four is addressed in the plural and answers in the singular — and they
+  chose to keep `¡Sí, acepto!` for every invitation whatever its size. The
+  hedge in `rsvp-copy.ts` that offered "¡Sí, aceptamos!" as a one-line change
+  is rewritten to say so, because a settled decision that reads like an
+  oversight is one a later reader tidies away.
 - An accepted answer cannot be changed from inside the invitation any more.
   That was put to the couple before it was built and chosen; what it leaves is
   a household that ticks three people and then loses one, with nothing on the

@@ -70,27 +70,31 @@ function submit(page: Page) {
 }
 
 /**
- * Declining. ONE tap, and no submit button anywhere in it.
+ * The two answers. Declining is ONE tap, with no submit button anywhere in it.
  *
- * A helper rather than a repeated line, so the auto-submit is stated once: if
+ * Helpers rather than repeated lines, so the auto-submit is stated once: if
  * this ever needs a second click again, exactly one place changes and every
  * test that relies on the behaviour fails together.
+ *
+ * TWO BUTTONS, WHICH IS ALSO WHY THERE IS NOTHING TO `check()` ANY MORE.
+ * These were radios, and pressing one had to be `click()` rather than
+ * `check()`: `check()` clicks and then waits for the input to REPORT itself
+ * checked, and answering replaces the screen — the question gives way to the
+ * list of who is coming, or to the stream — so the control was unmounted a
+ * frame after it was pressed and the wait could never be satisfied. It timed
+ * out after thirty seconds having done the thing correctly.
+ *
+ * The couple asked for buttons, which is what these always behaved like: a
+ * press is an ACTION here, never a selection something later submits. There
+ * is no checked state left to wait for, and the mismatch that produced that
+ * paragraph cannot come back.
  */
-/*
-  `click`, NOT `check`, AND THE DIFFERENCE IS THE WHOLE STEPPED DESIGN.
-
-  `check()` clicks and then waits for the input to REPORT itself checked.
-  Answering now replaces the screen — the question gives way to the list of who
-  is coming, or to the stream — so the radio is unmounted a frame after it is
-  pressed and the wait it is still holding can never be satisfied. It times out
-  after thirty seconds having done the thing correctly.
-*/
 function decline(page: Page) {
-  return page.getByRole("radio", { name: /No podemos acompañarlos/ }).click();
+  return page.getByRole("button", { name: /No podemos acompañarlos/ }).click();
 }
 
 function accept(page: Page) {
-  return page.getByRole("radio", { name: /Sí, acepto/ }).click();
+  return page.getByRole("button", { name: /Sí, acepto/ }).click();
 }
 
 /**
@@ -190,11 +194,18 @@ test.describe("answering the invitation", () => {
     await expect(streamCard(page)).toBeVisible();
     await page.getByRole("button", { name: "Volver a responder" }).click();
 
-    // Nothing preselected: a mis-tap must not be one tap from repeating
-    // itself.
+    /*
+      THE QUESTION COMES BACK CARRYING NO ANSWER.
+
+      A radio showed that as an unchecked dot. Two buttons have nothing to be
+      checked, so what is asserted is the thing that dot stood for: the form
+      holds no `attending` value, so a mis-tap is not one tap from repeating
+      itself and re-choosing "no" is a real answer rather than a no-op.
+    */
     await expect(
-      page.getByRole("radio", { name: /No podemos acompañarlos/ }),
-    ).not.toBeChecked();
+      page.getByRole("button", { name: /No podemos acompañarlos/ }),
+    ).toBeVisible();
+    await expect(page.locator("input[name='attending']")).toHaveCount(0);
 
     await accept(page);
 
@@ -444,7 +455,8 @@ test.describe("the seat cap", () => {
     await attendeeBox(page, "Luis Restrepo").check();
     await attendeeBox(page, "Ana Restrepo").check();
 
-    await expect(page.getByText("Ya seleccionaron las 5.")).toBeVisible();
+    // The count line the couple deleted is not here to report it; what says
+    // the cap holds is the list itself.
     // Exactly one box per member and no more, so there is no sixth choice to
     // refuse in the first place.
     await expect(page.locator('input[name="attendee"]')).toHaveCount(5);
@@ -827,7 +839,7 @@ test.describe("the way to the venue, on a phone", () => {
 
       Choosing "yes" now opens the list of who is coming; the directions are
       the screen AFTER the household sends it. That ordering is the point: a
-      page that hands out the venue the instant a radio is pressed is handing it
+      page that hands out the venue the instant an answer is pressed is handing it
       to a household the couple are not expecting yet, and it is what pushed
       the send button 322 pixels down the page.
     */
