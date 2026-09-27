@@ -159,11 +159,27 @@ test.describe("the invitation, one screen at a time", () => {
       "gate",
       page.getByRole("button", { name: "Ver la invitación" }),
     );
-    // The escape hatch for a household whose number is not the stored one has
-    // to be reachable too: it is the only other thing on the screen.
-    await expect(
-      page.getByRole("link", { name: /Escríbenos por WhatsApp/ }),
-    ).toBeVisible();
+
+    /*
+      AND THE TWO GROUPS ARE AT THE TWO ENDS OF IT.
+
+      The couple moved them there because the old arrangement ran down the
+      middle of the photograph and covered the two of them. That is a claim
+      about pixels, so it is asserted in pixels: the announcement finishes in
+      the top half, the form starts in the bottom half, and the middle has
+      neither.
+
+      An escape hatch used to be asserted here — "¿No puedes entrar?
+      Escríbenos por WhatsApp", the only other thing on the screen. The couple
+      deleted it; `components/invitation/InvitationGate.spec.tsx` now asserts
+      that the gate offers no link at all.
+    */
+    const fold = await page.evaluate(() => window.innerHeight);
+    const top = (await page.locator(".gate__announcement").boundingBox())!;
+    const form = (await page.locator(".gate__panel").boundingBox())!;
+
+    expect(top.y + top.height).toBeLessThan(fold / 2);
+    expect(form.y).toBeGreaterThan(fold / 2);
   });
 
   test("the question fits, with both answers and the deadline on it", async ({

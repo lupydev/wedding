@@ -46,26 +46,31 @@ import { GateForm } from "./gate-form";
  *
  * Taken from the rendered page rather than from `img/boda.jpg`: what sits
  * behind the words is the photograph AFTER `PhotoStage` has laid its two
- * gradients over it, and those gradients are most of the story everywhere
- * except here. The panel lands in the gap between them — the top scrim ends at
- * 55% of the screen and the bottom one is still transparent at 62% — which is
- * exactly where the lit edge of Michell's dress falls.
+ * gradients over it, and those gradients are most of the story.
  *
- * Method: render `/i/[slug]` at 390×664, hide every glyph and every ground the
- * form draws for itself, screenshot, and take the maximum WCAG relative
- * luminance inside the label's own box. It came back #FAF8EF, which is all but
- * white: 0.937 against the 0.861 of the cream the page writes in.
+ * RE-SAMPLED WHEN THE PANEL MOVED, AND DELIBERATELY UNCHANGED. The couple
+ * asked for the form to go to the foot of the screen so the middle of the
+ * photograph is the couple again. Centred, the panel sat at 60%–72% — the gap
+ * where the top scrim has faded out and the bottom one has not begun, over
+ * the lit edge of Michell's dress, and the brightest pixel inside its box was
+ * #FAF8EF. At the foot it covers 66%–96% on an iPhone 14 and 73%–97% on a
+ * Pixel 7, and the brightest pixel inside its box AT REST is #DEC799.
+ *
+ * The value below stays at #FAF8EF anyway, and that is the interesting part.
+ * This panel is bottom-anchored and grows UPWARDS: the reserved refusal line
+ * is one line, a real refusal is two sentences, and on a narrow phone it
+ * wraps to three or four. #FAF8EF sits at 62% of the screen — four percent
+ * above the panel's resting top edge — so the state in which a guest most
+ * needs to read this card is the state that puts it back over the brightest
+ * pixel in the frame. A fixture measured only at rest would be a floor that
+ * lifts exactly when the screen gets harder to read.
+ *
+ * Method, unchanged so the numbers stay comparable: render `/i/[slug]` at
+ * 390×664 and 412×839, hide every glyph, every ground the form draws for
+ * itself and every transition, screenshot, and take the maximum WCAG relative
+ * luminance inside the panel's own box.
  */
 const BRIGHTEST_UNDER_THE_PANEL = "#faf8ef";
-
-/**
- * And the brightest pixel under the recovery link, which sits outside it.
- *
- * Measured the same way on a Pixel 7, which is where it is worst: the taller
- * screen puts the link at 79% rather than 89%, over Luis's lit trouser leg
- * instead of the dark ground below it.
- */
-const BRIGHTEST_UNDER_THE_RECOVERY_LINK = "#646564";
 
 /*
   THE CLASS-NAME READER MOVED OUT, TO `lib/design/declared-color.ts`.
@@ -78,10 +83,7 @@ const BRIGHTEST_UNDER_THE_RECOVERY_LINK = "#646564";
 
 function renderGate() {
   const { container } = render(
-    <InvitationGate
-      greetingName="Familia Aguirre"
-      recoveryHref="https://wa.me/573005550000?text=Hola"
-    >
+    <InvitationGate greetingName="Familia Aguirre">
       <GateForm action={async () => ({ status: "idle" })} />
     </InvitationGate>,
   );
@@ -162,23 +164,19 @@ describe("what the gate's words measure against the photograph", () => {
     ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
   });
 
-  /**
-   * THE ESCAPE HATCH IS OUTSIDE THE PANEL AND STILL HAS TO BE LEGIBLE.
-   *
-   * A household whose number is not the stored one has nothing else on this
-   * page. It is deliberately quiet — it must not compete with the field — but
-   * quiet is a matter of size and weight, not of being unreadable.
-   */
-  it("reads the way out, which sits on the bare photograph", () => {
-    const { find } = renderGate();
+  /*
+    AN ASSERTION FOR THE ESCAPE HATCH STOOD HERE.
 
-    expect(
-      contrastRatio(
-        declaredColor(find(".gate__recovery"), "text"),
-        BRIGHTEST_UNDER_THE_RECOVERY_LINK,
-      ),
-    ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
-  });
+    "¿No puedes entrar? Escríbenos por WhatsApp" sat outside the panel, on the
+    bare photograph, and U35 measured it there: at 60% cream it was 2.9:1
+    against Luis's lit trouser leg on a Pixel 7, and went to full cream at
+    5.1:1. The couple have deleted the link, so there is nothing left to
+    measure and the fixture that described its ground went with it.
+
+    Nothing on this screen is on bare photograph any more except the greeting
+    and the announcement, which `PhotoStage`'s top scrim covers and which
+    `confirm-legibility.spec.tsx` already measures in the same place.
+  */
 });
 
 /**

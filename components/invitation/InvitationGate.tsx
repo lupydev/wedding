@@ -23,39 +23,46 @@ import { greetingLine } from "@/lib/domain/greeting-name";
  */
 export function InvitationGate({
   greetingName,
-  recoveryHref,
   children,
 }: {
   readonly greetingName: string;
-  readonly recoveryHref: string;
   readonly children: ReactNode;
 }) {
   return (
     /*
-      ONE VIEWPORT, AND CENTRED RATHER THAN SPREAD — WHICH IS THE KEYBOARD
-      DECISION, WRITTEN WHERE IT IS MADE.
+      ONE VIEWPORT, WITH THE TWO GROUPS AT ITS TWO ENDS — AND THE PHOTOGRAPH
+      BETWEEN THEM, WHICH IS WHY THEY MOVED.
 
-      Every other screen of the invitation pushes its controls to the foot of
-      the viewport, the way the landing page does. This one must not, and it is
-      the only screen with a text field.
+      The couple looked at this screen on a phone: "los bloques quedan sobre la
+      mitad de la foto y nos tapan". Everything the gate says used to run down
+      the middle of the frame, which is exactly where the two of them are
+      standing. So the announcement goes to the top, the form to the foot, and
+      the middle is left to the picture — the landing page's own composition,
+      which pins one control at the bottom with `justify-between`.
+
+      AND THAT IS A DELIBERATE TRADE AGAINST THE KEYBOARD, RECORDED HERE
+      BECAUSE THE PREVIOUS DECISION WENT THE OTHER WAY.
 
       On real iOS Safari the software keyboard changes neither
       `window.innerHeight` nor the `dvh` unit — only `visualViewport.height`.
-      So a gate pinned to the bottom of `100dvh` keeps its full height BEHIND
-      the keyboard, and the field a guest has just tapped is under it. Safari
-      then has to scroll the document to bring the field back, and the further
-      down the screen the field sits, the further it has to move.
+      So a field near the foot of `100dvh` sits BEHIND the keyboard once it is
+      raised, and Safari has to scroll the document to bring it back: the
+      further down the screen the field is, the further it has to move. This
+      screen used to be `justify-center` for exactly that reason — keep it
+      short, keep the field in the middle, and there is less for the browser to
+      do.
 
-      TWO WAYS OUT WERE WEIGHED AND ONLY ONE OF THEM IS FREE. The visual
+      What has NOT changed is the part that makes the degradation safe:
+      `min-h-dvh` rather than a locked height, so nothing here forbids the
+      scroll the keyboard makes necessary. The cost is a longer scroll on iOS
+      once the keypad is up; the gain is the couple's faces uncovered on the
+      first screen every guest sees. That was the couple's call, not a
+      measurement.
+
+      The other way out was weighed again and is still not free: the visual
       viewport can be read in JavaScript and projected into a custom property,
-      which tracks the keyboard exactly — and makes the height of the one screen
-      every guest must get past depend on a script running. The other is to keep
-      this screen short, put the field in the middle of it, and let the browser
-      do what browsers already do: `min-h-dvh` rather than a locked height, so
-      nothing here forbids a scroll that the keyboard makes necessary, and
-      `justify-center` so there is less to scroll. That is what is written
-      below. The measured cost is nothing when there is no keyboard, and the
-      failure mode with one is an ordinary page that scrolls a little.
+      which tracks the keyboard exactly — and makes the height of the one
+      screen every guest must get past depend on a script running.
 
       `e2e/invitation-one-screen.spec.ts` checks the gate at a viewport the
       height of a phone with its keyboard up. Emulation cannot raise a real
@@ -66,7 +73,7 @@ export function InvitationGate({
     <section
       className="
         gate mx-auto flex min-h-dvh w-full max-w-md flex-col items-center
-        justify-center gap-4 px-6 sm:gap-5
+        justify-between gap-4 px-6 sm:gap-5
         pt-[max(1.25rem,env(safe-area-inset-top))] lg:max-w-none
         pb-[max(1.75rem,env(safe-area-inset-bottom))] text-center
         text-[#f6efe2]
@@ -74,6 +81,15 @@ export function InvitationGate({
       "
     >
       {/*
+        WHAT THE SCREEN SAYS, AT THE TOP OF IT.
+
+        One group rather than two siblings, because `justify-between` spreads
+        whatever children it is given: left loose, the greeting would go to the
+        top, the announcement to the middle and the form to the foot, and the
+        middle is the part the couple asked to have back.
+      */}
+      <div className="gate__announcement flex w-full flex-col items-center gap-4 sm:gap-5">
+        {/*
         THE MEASURE IS THE PHONE'S, NOT THE LAPTOP'S.
 
         `max-w-md` keeps the lines readable on a narrow screen and is wrong
@@ -87,38 +103,39 @@ export function InvitationGate({
         own greeting takes for the same reason: the control is fixed at
         `right-5` and is 44px across, so it owns the last 64px of the row.
       */}
-      <h1
-        className="
-          gate__greeting px-10 font-display text-2xl leading-[1.05]
-          text-balance text-[#f6efe2]
-          [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
-          sm:text-3xl
-          lg:px-0 lg:text-4xl
-        "
-      >
+        <h1
+          className="
+            gate__greeting px-10 font-display text-2xl leading-[1.05]
+            text-balance text-[#f6efe2]
+            [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
+            sm:text-3xl
+            lg:px-0 lg:text-4xl
+          "
+        >
+          {/*
+            THE SAME SENTENCE THE INVITATION BEHIND THIS SCREEN OPENS WITH,
+            from the one place it is written. The two are read a second apart
+            and each used to spell it out for itself.
+          */}
+          {greetingLine(greetingName)}
+        </h1>
+
         {/*
-          THE SAME SENTENCE THE INVITATION BEHIND THIS SCREEN OPENS WITH, from
-          the one place it is written. The two are read a second apart and
-          each used to spell it out for itself.
+          THE WEDDING, NOT ONLY THE QUESTION.
+
+          This screen said "we have your invitation, now prove who you are",
+          and the wedding it was about lived on the other side of the field. It
+          is the first thing a guest reaches from a WhatsApp message, so it
+          carries the same announcement the landing opens with — the script
+          line, the names, the date and the counter, which is what makes the
+          date feel like something approaching rather than small print.
+
+          BELOW THE GREETING, ON PURPOSE. The ordering is a product promise:
+          the message said "your invitation", so the household is greeted
+          before anything is asked of them or announced at them.
         */}
-        {greetingLine(greetingName)}
-      </h1>
-
-      {/*
-        THE WEDDING, NOT ONLY THE QUESTION.
-
-        This screen said "we have your invitation, now prove who you are", and
-        the wedding it was about lived on the other side of the field. It is the
-        first thing a guest reaches from a WhatsApp message, so it carries the
-        same announcement the landing opens with — the script line, the names,
-        the date and the counter, which is what makes the date feel like
-        something approaching rather than small print.
-
-        BELOW THE GREETING, ON PURPOSE. The ordering is a product promise: the
-        message said "your invitation", so the household is greeted before
-        anything is asked of them or announced at them.
-      */}
-      <SaveTheDate />
+        <SaveTheDate />
+      </div>
 
       {/*
         THE GROUND THE ONLY CONTROL ON THE PAGE STANDS ON.
@@ -164,9 +181,21 @@ export function InvitationGate({
         anywhere. The stacking context makes `-z-10` mean "behind these words"
         instead of "behind everything".
 
-        Deeper than `RsvpAnswer`'s panel, and the difference is measured rather
-        than felt: that one sits at 70%–95%, where the stage's bottom scrim is
-        already carrying 60% to 90% of the load. This one has none of that help.
+        AND IT IS AT THE FOOT OF THE SCREEN NOW, WHICH CHANGED WHAT IT IS
+        COVERING. Centred, the panel landed at 60%–72% — the gap where the top
+        scrim has faded out and the bottom one has not begun, over the #FAF8EF
+        edge of Michell's dress. Pushed down it sits at 66%–96% on an iPhone 14
+        and 73%–97% on a Pixel 7, over the couple's legs and the dark ground
+        below them, and the brightest pixel inside it at rest is #DEC799.
+
+        `gate-legibility.spec.tsx` was re-sampled at the new position rather
+        than trusted at the old one, and it KEPT the old number on purpose.
+        This panel is bottom-anchored and grows upwards: the refusal line is
+        reserved for one line and a real refusal wraps to three or four on a
+        narrow phone, which lifts the top of the card back over the 62% mark.
+        The state a guest most needs to read this in is the state that puts it
+        back on the brightest pixel in the frame, so that is the state the
+        floor is set from.
       */}
       <div className="gate__panel relative isolate flex w-full flex-col items-center gap-3 sm:gap-4">
         <div
@@ -193,41 +222,25 @@ export function InvitationGate({
       </div>
 
       {/*
-        THE WAY OUT, KEPT QUIET AND KEPT PRESENT.
+        A WAY OUT STOOD HERE, AND THE COUPLE DELETED IT.
 
-        A household whose number is not the one the couple stored has no other
-        move on this page, so this link is the only escape — but it must not
-        compete with the field, which is what almost everybody needs.
+        "¿No puedes entrar? Escríbenos por WhatsApp" — a `wa.me` link to the
+        invitation's owning sender, with a draft already written. It was the
+        only thing a household whose number is not the stored one could do on
+        this page, and it is gone on the couple's instruction, with the
+        consequence stated to them first: a guest the gate does not recognise
+        now has nothing on the screen to press. They still have the WhatsApp
+        thread the invitation arrived in — that is what the couple weighed it
+        against — but the page no longer says so.
 
-        QUIET IS NOW SIZE AND WEIGHT, NOT OPACITY, and the change is measured.
-        This link sits OUTSIDE the panel, on the bare photograph, and on a
-        Pixel 7 the taller screen puts it at 79% rather than 89% — over the lit
-        leg of Luis's trousers instead of the dark ground below them. At 60%
-        cream that measured 2.9:1 against the brightest pixel under it. It is
-        the one thing on the page a locked-out household can still use, so it
-        is now full cream at `text-xs`, which is 5.1:1 against the same pixel
-        and still the smallest thing on the screen.
-
-        The shadow is the same one `SaveTheDate` and `StreamLink` carry for the
-        same reason. It is not counted in the ratio above: WCAG has no term for
-        it, and a floor that credits an unmeasurable is not a floor.
+        The whole chain went with it rather than being left to be
+        rediscovered: `lib/domain/recovery-message.ts` and its spec,
+        `loadOwnerContactPhone`, and `findSenderContactPhone` had no other
+        caller between them. The `senders.contact_wa_phone_e164` COLUMN stays.
+        It is NOT NULL, `scripts/seed-operators.ts` writes it, and it is the
+        couple's own number rather than a guest's — deleting a column is a
+        migration, and this link may come back.
       */}
-      <p className="gate__recovery text-xs text-[#f6efe2] [text-shadow:0_1px_10px_rgba(0,0,0,0.6)]">
-        <a
-          className="
-            underline underline-offset-4 transition-colors
-            duration-(--console-motion-fast)
-            hover:text-[#f6efe2]
-            focus-visible:outline-2 focus-visible:outline-offset-2
-            focus-visible:outline-[#f6efe2]
-          "
-          href={recoveryHref}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          ¿No puedes entrar? Escríbenos por WhatsApp
-        </a>
-      </p>
     </section>
   );
 }

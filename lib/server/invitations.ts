@@ -1774,36 +1774,17 @@ export async function listSenderDirectory(
   return directory;
 }
 
-/**
- * The owning sender's WhatsApp contact number.
- *
- * Read separately from the invitation rather than joined into
- * `INVITATION_SELECT`, because it has exactly one consumer — the gate's
- * recovery link — and widening the invitation projection would put a phone
- * number inside the record every guest-facing read already loads.
- *
- * `senders.contact_wa_phone_e164` is NOT NULL and `owner_sender_id` is a
- * required foreign key, so `null` here means the owner row is gone, not that
- * the couple has no number.
- */
-export async function findSenderContactPhone(
-  client: SupabaseClient,
-  senderId: string,
-): Promise<string | null> {
-  const { data, error } = await client
-    .from("senders")
-    .select("contact_wa_phone_e164")
-    .eq("id", senderId)
-    .maybeSingle<{ contact_wa_phone_e164: string }>();
+/*
+  `findSenderContactPhone` STOOD HERE AND HAS NO CONSUMER LEFT.
 
-  if (error) {
-    throw new Error(
-      `Could not read the sender contact number: ${error.message}`,
-    );
-  }
-
-  return data?.contact_wa_phone_e164 ?? null;
-}
+  It read `senders.contact_wa_phone_e164` for the one thing that wanted it —
+  the gate's "¿No puedes entrar?" recovery link — separately from
+  `INVITATION_SELECT`, so that a phone number never widened the projection
+  every guest-facing read already loads. The couple deleted that link, so the
+  query, `loadOwnerContactPhone` above it and `lib/domain/recovery-message.ts`
+  went together rather than being left behind as a reachable way to read a
+  number nothing displays.
+*/
 
 /**
  * ── The console read side ───────────────────────────────────────────────────

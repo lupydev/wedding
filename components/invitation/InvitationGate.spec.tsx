@@ -18,11 +18,9 @@ import { InvitationGate } from "./InvitationGate";
  * has no field a phone number could arrive in.
  */
 
-const RECOVERY = "https://wa.me/573005550000?text=Hola";
-
 function renderGate(greetingName = "Ñoño Muñóz") {
   return render(
-    <InvitationGate greetingName={greetingName} recoveryHref={RECOVERY}>
+    <InvitationGate greetingName={greetingName}>
       <form aria-label="phone form">
         <input aria-label="Número de celular" />
       </form>
@@ -63,36 +61,27 @@ describe("InvitationGate", () => {
     expect(screen.getByLabelText("Número de celular")).toBeInTheDocument();
   });
 
-  it("offers the recovery link to the owning sender", () => {
+  /**
+   * THE WAY OUT IS GONE, AND THIS IS WHERE THAT IS RECORDED.
+   *
+   * Three assertions stood here: that the gate offered a `wa.me` link to the
+   * invitation's owning sender, that it addressed whichever owner it was
+   * given, and that it opened without handing WhatsApp a window opener. The
+   * couple deleted the link — "quitar la línea de ¿No puedes entrar?" — and
+   * were told first what it costs: a household whose number is not the stored
+   * one now has nothing on this page to press.
+   *
+   * So the positive assertions became one negative one. It is deliberately
+   * about ANY link rather than about the old wording: a replacement escape
+   * hatch under a different sentence is exactly the change that should have
+   * to be made on purpose, and the gate is the one screen in the product where
+   * a stray link is a way around the number check.
+   */
+  it("offers no way off the page at all, which the couple asked for", () => {
     renderGate();
 
-    const link = screen.getByRole("link", { name: /No puedes entrar/ });
-
-    expect(link).toHaveAttribute("href", RECOVERY);
-  });
-
-  it("points the recovery link at whichever owner it is given", () => {
-    render(
-      <InvitationGate
-        greetingName="Familia Restrepo"
-        recoveryHref="https://wa.me/573015551111?text=Hola"
-      >
-        <form />
-      </InvitationGate>,
-    );
-
-    expect(
-      screen.getByRole("link", { name: /No puedes entrar/ }),
-    ).toHaveAttribute("href", "https://wa.me/573015551111?text=Hola");
-  });
-
-  it("opens the recovery link without handing WhatsApp a window opener", () => {
-    renderGate();
-
-    const link = screen.getByRole("link", { name: /No puedes entrar/ });
-
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link.getAttribute("rel") ?? "").toContain("noopener");
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(document.body.textContent ?? "").not.toContain("No puedes entrar");
   });
 
   it("shows none of the invitation's contents before the guest is through", () => {
@@ -165,5 +154,59 @@ describe("what the gate says about the wedding", () => {
     const announcement = screen.getByText("Nos casamos");
 
     expect(heading.compareDocumentPosition(announcement) & 4).toBe(4);
+  });
+});
+
+/**
+ * THE MIDDLE OF THE SCREEN BELONGS TO THE PHOTOGRAPH.
+ *
+ * The couple looked at the live gate on a phone: everything it says ran down
+ * the centre of the frame, which is where the two of them are standing. So
+ * the announcement went to the top and the form to the foot, and the picture
+ * got the space between them — the landing page's own composition.
+ *
+ * `e2e/invitation-one-screen.spec.ts` measures what this produces on the two
+ * phones; what a unit test can hold is the structure that produces it, and
+ * the structure has one trap in it. `justify-between` spreads whatever
+ * children it is given, so three siblings would put the announcement in the
+ * middle — back on top of the couple, with the gate looking spread out rather
+ * than wrong.
+ */
+describe("how the gate is composed on a phone", () => {
+  it("pushes its two groups to the two ends of the screen", () => {
+    const { container } = renderGate();
+    const section = container.querySelector("section.gate")!;
+
+    expect(section.className).toContain("justify-between");
+    expect(section.className).not.toContain("justify-center");
+    // Two groups, so there is nothing to strand in the middle.
+    expect(section.children).toHaveLength(2);
+  });
+
+  it("keeps the greeting and the wedding in the group at the top", () => {
+    const { container } = renderGate();
+    const top = container.querySelector(".gate__announcement")!;
+
+    expect(top.querySelector(".gate__greeting")).not.toBeNull();
+    expect(top.textContent ?? "").toContain("Nos casamos");
+    expect(top.querySelector(".gate__panel")).toBeNull();
+  });
+
+  /**
+   * AND IT IS STILL FREE TO SCROLL, WHICH IS THE KEYBOARD DECISION.
+   *
+   * U34 kept this screen `justify-center` so the field sat in the middle,
+   * above where an iOS keyboard comes up. The couple have moved it to the
+   * foot and that trade is theirs; what must not go with it is `min-h-dvh`.
+   * A locked `h-dvh` gate clips instead of scrolling, and a clipped submit
+   * button on the one screen every guest must pass is a dead end.
+   */
+  it("is never taller than the screen by decree", () => {
+    const { container } = renderGate();
+    const section = container.querySelector("section.gate")!;
+
+    expect(section.className).toContain("min-h-dvh");
+    // A bare `h-dvh`, not the `h-dvh` inside `min-h-dvh`.
+    expect(section.className).not.toMatch(/(^|\s)h-dvh(\s|$)/);
   });
 });

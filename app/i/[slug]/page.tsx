@@ -10,7 +10,6 @@ import { InvitationUnavailable } from "@/components/invitation/InvitationUnavail
 import { RsvpAnswer } from "@/components/invitation/RsvpAnswer";
 import { RsvpClosed } from "@/components/invitation/RsvpClosed";
 import { buildInvitationMetadataText } from "@/lib/domain/og-card";
-import { buildGateRecoveryLink } from "@/lib/domain/recovery-message";
 import { UNLOCK_COOKIE_NAME, unlockCookieUnlocks } from "@/lib/server/cookies";
 import { rsvpIsOpenNow } from "@/lib/server/rsvp";
 
@@ -21,7 +20,6 @@ import {
   loadCurrentRsvp,
   loadGuestFacingInvitation,
   loadInvitationRecord,
-  loadOwnerContactPhone,
 } from "./load-invitation";
 
 /**
@@ -240,16 +238,16 @@ export default async function InvitationPage({ params }: RouteParams) {
     );
   }
 
-  const ownerContact = await loadOwnerContactPhone(record.ownerSenderId);
+  /*
+    THE OWNING SENDER'S CONTACT NUMBER WAS READ HERE, AND IS NOT ANY MORE.
 
-  if (ownerContact === null) {
-    // `senders.contact_wa_phone_e164` is NOT NULL and `owner_sender_id` is a
-    // required foreign key, so this means the owner row is gone. Failing loudly
-    // beats rendering a gate whose only escape hatch is missing.
-    throw new Error(
-      `Invitation ${record.id} has no reachable owning sender, so its gate has no recovery path.`,
-    );
-  }
+    The gate carried one escape hatch — a `wa.me` draft addressed to the
+    sender who owns this invitation — and the couple asked for it to go. With
+    the link gone nothing on this page needs the number, so the query, the
+    `null` guard that failed loudly when the owner row was missing, and the
+    domain function that built the link went with it. `InvitationGate` records
+    what the guest loses.
+  */
 
   return (
     /*
@@ -266,13 +264,7 @@ export default async function InvitationPage({ params }: RouteParams) {
       people — and the photograph says where to crop now.
     */
     <PhotoStage mobilePhoto="overlay" photo={WEDDING_PHOTO}>
-      <InvitationGate
-        greetingName={invitation.greetingName}
-        recoveryHref={buildGateRecoveryLink(
-          ownerContact,
-          invitation.greetingName,
-        )}
-      >
+      <InvitationGate greetingName={invitation.greetingName}>
         {/* The slug is bound on the SERVER: the form never supplies it, so a
             client cannot aim the unlock at a different household. */}
         <GateForm action={unlockAction.bind(null, slug)} />

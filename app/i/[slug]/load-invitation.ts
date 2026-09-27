@@ -5,7 +5,6 @@ import { cache } from "react";
 import { isWellFormedSlug } from "@/lib/domain/slug";
 import {
   findInvitationBySlug,
-  findSenderContactPhone,
   toGuestFacingInvitation,
   type GuestFacingInvitation,
   type InvitationRecord,
@@ -53,18 +52,6 @@ export const loadGuestFacingInvitation = cache(
 
     return record === null ? null : toGuestFacingInvitation(record);
   },
-);
-
-/**
- * The owning sender's contact number, for the gate's recovery link.
- *
- * Cached per request like the invitation itself: the gate renders once, but a
- * cached read costs nothing and keeps a future second call from doubling the
- * query.
- */
-export const loadOwnerContactPhone = cache(
-  async (senderId: string): Promise<string | null> =>
-    findSenderContactPhone(createServerSupabaseClient(), senderId),
 );
 
 /**

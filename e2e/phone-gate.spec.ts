@@ -644,69 +644,53 @@ test.describe("a client-supplied forwarding header", () => {
   });
 });
 
-test.describe("the recovery path", () => {
+/**
+ * THE RECOVERY PATH, WHICH IS NOW THE ABSENCE OF ONE.
+ *
+ * Four tests stood here. They asserted that the gate offered a `wa.me` link
+ * addressed to the invitation's OWNING sender, that a different invitation
+ * addressed its own owner and not the first one's, that the draft was Spanish
+ * and named the household, and that no second unlock mechanism stood beside
+ * it.
+ *
+ * The couple deleted the link, having been told what it costs: a household
+ * whose number is not the stored one now has nothing on this page to press.
+ * They still have the WhatsApp thread the invitation arrived in — that is
+ * what the couple weighed it against — but the page no longer says so.
+ *
+ * THE LAST OF THE FOUR IS THE ONE THAT SURVIVES, and it survives in a
+ * stronger form. "No second unlock mechanism" was the security property; with
+ * the recovery link gone the gate should offer no way off the page at all, so
+ * the assertion is now about every link rather than about the ones that are
+ * not the recovery link. `components/invitation/InvitationGate.spec.tsx`
+ * holds the same claim against the rendered component; this holds it against
+ * the bytes the server actually sends, which is where a stray link would
+ * reach a guest.
+ */
+test.describe("what the gate offers a household it cannot recognise", () => {
   let invitation: SeededInvitation;
-  let other: SeededInvitation;
 
   test.beforeAll(async () => {
     invitation = await household({ ownerContactPhone: "+573001110001" });
-    other = await seedInvitation({
-      greetingName: "Familia Ochoa",
-      ownerContactPhone: "+573002220002",
-      guests: [{ fullName: "Julián Ochoa", phoneE164: "+573015554444" }],
-    });
   });
 
   test.afterAll(async () => {
     await invitation?.cleanup();
-    await other?.cleanup();
   });
 
-  test("offers a wa.me link addressed to the OWNING sender", async ({
+  test("no way off the page, and no second unlock mechanism", async ({
     page,
   }) => {
     await page.goto(`/i/${invitation.slug}`);
 
-    const href = await page
-      .getByRole("link", { name: /No puedes entrar/ })
-      .getAttribute("href");
-
-    expect(href).toContain("https://wa.me/573001110001?text=");
-  });
-
-  test("addresses a different invitation's own owner", async ({ page }) => {
-    await page.goto(`/i/${other.slug}`);
-
-    const href = await page
-      .getByRole("link", { name: /No puedes entrar/ })
-      .getAttribute("href");
-
-    expect(href).toContain("https://wa.me/573002220002?text=");
-    expect(href).not.toContain("573001110001");
-  });
-
-  test("prepares a Spanish draft naming the household", async ({ page }) => {
-    await page.goto(`/i/${invitation.slug}`);
-
-    const href =
-      (await page
-        .getByRole("link", { name: /No puedes entrar/ })
-        .getAttribute("href")) ?? "";
-    const text = new URL(href).searchParams.get("text") ?? "";
-
-    expect(text).toContain(GREETING);
-    expect(text).toContain("no puedo abrir mi invitación");
-    // It PREPARES a draft; a human presses send inside WhatsApp.
-    expect(href.startsWith("https://wa.me/")).toBe(true);
-  });
-
-  test("never offers a second unlock mechanism next to it", async ({
-    page,
-  }) => {
-    await page.goto(`/i/${invitation.slug}`);
+    await expect(page.getByRole("link")).toHaveCount(0);
 
     const rendered = withoutScripts(await page.content());
 
+    // The owner's own number was the one thing the deleted link disclosed to
+    // anybody holding a slug. It must not survive anywhere in the document.
+    expect(rendered).not.toContain("573001110001");
+    expect(rendered).not.toContain("wa.me");
     // No one-time password, no email fallback, no "enter a code": every one of
     // those is a second unlock path on a route that must have exactly one.
     for (const alternative of ["código", "OTP", "correo", "contraseña"]) {
