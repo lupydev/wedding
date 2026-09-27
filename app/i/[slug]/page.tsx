@@ -119,7 +119,18 @@ export default async function InvitationPage({ params }: RouteParams) {
     // the SERVER. A form rendered past the deadline and refused on submit is a
     // form a household fills in believing they answered.
     const open = rsvpIsOpenNow();
-    const current = open ? await loadCurrentRsvp(record.id) : null;
+    /*
+      AND THE ANSWER IS READ EITHER WAY, WHICH IT WAS NOT.
+
+      This was `open ? await loadCurrentRsvp(record.id) : null`, which looks
+      like an economy and was the other half of a defect: the closed screen
+      took no props, so there was nothing for the answer to feed — and with
+      it null, a household that had accepted was indistinguishable from one
+      that had never replied. Both got the same blank page. The closed screen
+      shows three different endings now and this row is what chooses between
+      them.
+    */
+    const current = await loadCurrentRsvp(record.id);
     // Every wedding fact this page shows, from the one row that holds them.
     // Read unconditionally inside this branch rather than only when the RSVP is
     // open: the body itself now needs the couple, the date and the venue, so a
@@ -173,7 +184,7 @@ export default async function InvitationPage({ params }: RouteParams) {
             `RsvpClosed` is one screen with no steps, so there is nothing for
             it to decide and nothing for it to hand back.
           */
-          greetingOwner={open ? "step" : "frame"}
+          greetingOwner="step"
           rsvp={
             open ? (
               // The slug is bound on the SERVER here too: the form never
@@ -230,7 +241,35 @@ export default async function InvitationPage({ params }: RouteParams) {
                 action={submitRsvpAction.bind(null, slug)}
               />
             ) : (
-              <RsvpClosed />
+              /*
+                AND THE SAME FACTS ONCE THE ANSWERS ARE CLOSED, WHICH THIS
+                BRANCH USED TO THROW AWAY.
+
+                `<RsvpClosed />` took no props and replaced the whole stepper
+                with two sentences, so from the 21st of November a household
+                that had accepted lost the venue, the map, the hour and the
+                dress code, and one that had declined lost the stream link.
+                The deadline closes the ability to CHANGE an answer, not the
+                invitation — the couple confirmed exactly that — so the same
+                values the open flow hands down are handed down here.
+
+                `current` is read whether the RSVP is open or not now. It used
+                to be `open ? await loadCurrentRsvp(...) : null`, which is
+                what made the closed screen unable to tell an accepted
+                household from one that never answered.
+              */
+              <RsvpClosed
+                answer={
+                  current === null ? null : { attending: current.attending }
+                }
+                ceremony={{
+                  streamUrl: ceremony.streamUrl,
+                  coupleNames: ceremony.coupleNames,
+                }}
+                venue={{ name: ceremony.venueName }}
+                memberCount={invitation.guests.length}
+                greetingName={invitation.greetingName}
+              />
             )
           }
         />

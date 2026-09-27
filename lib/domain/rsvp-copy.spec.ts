@@ -6,7 +6,9 @@ import {
   currentRsvpSentence,
   rsvpConfirmedHeading,
   rsvpDeclinedHeading,
+  rsvpClosedNote,
   rsvpDeadlineSentence,
+  rsvpReconsiderSentence,
   rsvpFeedbackMessages,
 } from "./rsvp-copy";
 import { RSVP_DEADLINE_TEXT } from "./wedding-day";
@@ -350,6 +352,93 @@ describe("rsvpDeclinedHeading", () => {
 
       expect(rsvpDeclinedHeading(memberCount, "X")).toMatch(expected);
       expect(rsvpConfirmedHeading(memberCount, "X")).toMatch(expected);
+    }
+  });
+});
+
+/**
+ * THE SENTENCE THAT PROMISED SOMETHING THE PRODUCT DOES NOT DO.
+ *
+ * The declined screen said "puedes volver a responder cuando quieras" —
+ * whenever you like. The answer freezes seven days before the wedding, so for
+ * that whole last week the page was telling a household that had said no that
+ * they could still change their mind. It names the date now, and it names it
+ * by reading the SAME constant the question screen's deadline sentence reads.
+ */
+describe("rsvpReconsiderSentence", () => {
+  it("names the deadline to a household", () => {
+    expect(rsvpReconsiderSentence(3)).toBe(
+      `Si cambian de opinión, pueden volver a responder hasta el ${RSVP_DEADLINE_TEXT}.`,
+    );
+  });
+
+  it("names it to one guest, in their own number", () => {
+    expect(rsvpReconsiderSentence(1)).toBe(
+      `Si cambias de opinión, puedes volver a responder hasta el ${RSVP_DEADLINE_TEXT}.`,
+    );
+  });
+
+  /**
+   * AND IT PROMISES NOTHING OPEN-ENDED, which is the thing that was wrong.
+   * Asserted as an absence as well as a presence: a future edit that softened
+   * the date back into "cuando quieras" would restore the lie while still
+   * passing a test that only checked the date was mentioned somewhere.
+   */
+  it("makes no open-ended promise", () => {
+    for (const memberCount of [1, 4]) {
+      expect(rsvpReconsiderSentence(memberCount)).not.toMatch(/cuando quiera/);
+      expect(rsvpReconsiderSentence(memberCount)).toContain(RSVP_DEADLINE_TEXT);
+    }
+  });
+
+  /**
+   * AND IT SAYS THE SAME DAY AS THE QUESTION SCREEN, which is the reason it
+   * lives in this file at all. Two screens naming one deadline from two
+   * places is two dates waiting to disagree.
+   */
+  it("names the same day the question screen names", () => {
+    expect(rsvpReconsiderSentence(3)).toContain(RSVP_DEADLINE_TEXT);
+    expect(rsvpDeadlineSentence(3)).toContain(RSVP_DEADLINE_TEXT);
+  });
+});
+
+/**
+ * AND WHAT THE INVITATION SAYS ONCE THAT DAY HAS PASSED.
+ *
+ * One line per ending, because the deadline closes the ability to change an
+ * answer rather than the invitation: an accepted household still has a venue
+ * to reach, a declined one still has a stream to join, and one that never
+ * answered is offered the stream and not the address.
+ */
+describe("rsvpClosedNote", () => {
+  it.each([
+    ["accepted" as const, "todo lo que necesitan"],
+    ["declined" as const, "Los esperamos por la transmisión"],
+    ["unanswered" as const, "Si quieren, pueden acompañarnos"],
+  ])("says the %s ending is closed, and what is left", (state, expected) => {
+    const line = rsvpClosedNote(state, 3);
+
+    expect(line).toContain("Ya cerramos las confirmaciones");
+    expect(line).toContain(expected);
+  });
+
+  it("speaks to one person in the singular, on every ending", () => {
+    for (const state of ["accepted", "declined", "unanswered"] as const) {
+      expect(rsvpClosedNote(state, 1)).not.toBe(rsvpClosedNote(state, 3));
+    }
+  });
+
+  /**
+   * AND IT IS NOT THE MESSAGE A LATE SUBMISSION GETS.
+   *
+   * `RSVP_CLOSED_MESSAGE` answers a household whose form was already open
+   * when the day turned, and it tells them to write by WhatsApp. This is the
+   * standing state of a screen. Keeping them distinct is what stops the
+   * screen reading like an error.
+   */
+  it("is not the late-submission message", () => {
+    for (const state of ["accepted", "declined", "unanswered"] as const) {
+      expect(rsvpClosedNote(state, 3)).not.toBe(RSVP_CLOSED_MESSAGE);
     }
   });
 });

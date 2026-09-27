@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { RsvpFailureReason } from "@/lib/domain/rsvp-copy";
 import { RSVP_DEADLINE } from "@/lib/domain/wedding-day";
+import { rsvpClockOverride } from "@/lib/server/env";
 import { isRsvpOpen } from "@/lib/domain/rsvp-deadline";
 import { validateRsvpSelection } from "@/lib/domain/seats";
 
@@ -352,5 +353,16 @@ export async function getCurrentRsvp(
  * or closing a household nobody is watching.
  */
 export function rsvpIsOpenNow(): boolean {
-  return isRsvpOpen(RSVP_DEADLINE, new Date());
+  /*
+    `rsvpClockOverride()` FIRST, AND IT IS NORMALLY NULL.
+
+    The closed state used to be unreachable from any test — the deadline is a
+    constant in the future and the decision is made here, on the server,
+    during render — so the branch that decides what a household sees in the
+    last week before the wedding had never been exercised by anything. It
+    shipped blanking the venue, the map, the stream link and the calendar.
+    `lib/server/env.ts` records what the override is, how strictly it is
+    parsed, and why it refuses to exist in production.
+  */
+  return isRsvpOpen(RSVP_DEADLINE, rsvpClockOverride() ?? new Date());
 }

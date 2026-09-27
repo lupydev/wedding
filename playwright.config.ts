@@ -5,6 +5,34 @@ import { E2E_SITE_ORIGIN } from "./e2e/helpers/site-origin";
 const PORT = Number(process.env.PORT ?? 3000);
 const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
 
+/*
+  A SECOND SERVER, ONE PORT UP, WITH THE RSVP DEADLINE ALREADY PAST.
+
+  The deadline is derived from a constant in the future and decided on the
+  SERVER during render, so `page.clock` reaches nothing and no fixture can be
+  past it. That is why the closed branch shipped blanking the venue, the map,
+  the stream link and the calendar for every household in the final week: the
+  state was unreachable from this suite, and `e2e/rsvp.spec.ts` said so in a
+  comment for months.
+
+  `RSVP_CLOCK` is the seam — `lib/server/env.ts` records how strictly it is
+  parsed and why it refuses to exist in production. It cannot be per-test,
+  because one server process has one environment, so the closed state gets a
+  server of its own and two projects pointed at it.
+*/
+const CLOSED_PORT = PORT + 1;
+const closedBaseURL =
+  process.env.E2E_CLOSED_BASE_URL ?? `http://localhost:${CLOSED_PORT}`;
+
+/**
+ * Four days after the deadline and four before the wedding.
+ *
+ * Inside the closed week rather than years past it, so the screens under test
+ * are the ones a guest actually meets: the countdown still counts, the
+ * wedding has not happened, and only the answer is frozen.
+ */
+const AFTER_THE_DEADLINE = "2026-11-25T17:00:00.000Z";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -49,6 +77,7 @@ export default defineConfig({
       testIgnore: [
         /console-wedding\.spec\.ts/,
         /invitation-one-screen\.spec\.ts/,
+        /invitation-closed\.spec\.ts/,
       ],
     },
     /*
@@ -96,6 +125,30 @@ export default defineConfig({
       use: { ...devices["Pixel 7"] },
       testMatch: /invitation-one-screen\.spec\.ts/,
     },
+    /*
+      THE TWO PHONES AGAIN, AGAINST THE SERVER WHOSE DEADLINE HAS PASSED.
+
+      Same presets and the same geometry rules as the open pair above — these
+      are real screens, so they are held to everything the others are — but
+      pointed at `closedBaseURL`. The spec they run asserts the open origin
+      still shows a form in the same breath as asserting this one does not,
+      so a `RSVP_CLOCK` that silently failed to apply would fail the suite
+      rather than grade the open branch green under a closed name.
+    */
+    {
+      name: "iphone-14-closed",
+      use: {
+        ...devices["iPhone 14"],
+        browserName: "chromium",
+        baseURL: closedBaseURL,
+      },
+      testMatch: /invitation-closed\.spec\.ts/,
+    },
+    {
+      name: "pixel-7-closed",
+      use: { ...devices["Pixel 7"], baseURL: closedBaseURL },
+      testMatch: /invitation-closed\.spec\.ts/,
+    },
     {
       /*
         THE ONE SPEC THAT EDITS THE `ceremony` ROW, SEQUENCED AFTER EVERYTHING
@@ -131,34 +184,67 @@ export default defineConfig({
         renders and its assertion would fail them with a value nothing in that
         file ever wrote.
       */
-      dependencies: ["chromium", "iphone-14", "pixel-7"],
+      dependencies: [
+        "chromium",
+        "iphone-14",
+        "pixel-7",
+        "iphone-14-closed",
+        "pixel-7-closed",
+      ],
     },
   ],
   // The highest-value E2E assertions inspect the raw HTML of the first
   // response, so the suite runs against a production build, not `next dev`.
-  webServer: {
-    command: "npm run build && npm run start",
-    url: baseURL,
-    // NEVER reuse. This was `!process.env.CI`, and twice a developer's own
-    // `next dev` server was already listening on port 3000: Playwright attached
-    // to it, skipped the build, and the attached server had never received the
-    // `env` below — so `metadataBase` was unset, `og:image` came back relative,
-    // and the raw-HTML Open Graph assertions were silently measuring the wrong
-    // process. A suite that can quietly grade a different build than the one it
-    // was asked to grade is worse than a slow one.
-    reuseExistingServer: false,
-    timeout: 180_000,
-    env: {
-      // `metadataBase` is read from this variable at build time, and the
-      // Open Graph contract is that `og:image` is an ABSOLUTE HTTPS URL — a
-      // relative one yields no preview card at all. The local server listens on
-      // plain HTTP, so the public origin is injected separately from the
-      // address Playwright connects to, exactly as in production.
-      NEXT_PUBLIC_SITE_ORIGIN: E2E_SITE_ORIGIN,
-      // The console origin is separate from the public invitation origin: the
-      // server reads console-rendered pages over HTTP to resolve the advertised
-      // preview card, so it has to be an address this run can actually reach.
-      CONSOLE_ORIGIN: baseURL,
+  webServer: [
+    {
+      command: "npm run build && npm run start",
+      url: baseURL,
+      // NEVER reuse. This was `!process.env.CI`, and twice a developer's own
+      // `next dev` server was already listening on port 3000: Playwright attached
+      // to it, skipped the build, and the attached server had never received the
+      // `env` below — so `metadataBase` was unset, `og:image` came back relative,
+      // and the raw-HTML Open Graph assertions were silently measuring the wrong
+      // process. A suite that can quietly grade a different build than the one it
+      // was asked to grade is worse than a slow one.
+      reuseExistingServer: false,
+      timeout: 180_000,
+      env: {
+        // `metadataBase` is read from this variable at build time, and the
+        // Open Graph contract is that `og:image` is an ABSOLUTE HTTPS URL — a
+        // relative one yields no preview card at all. The local server listens on
+        // plain HTTP, so the public origin is injected separately from the
+        // address Playwright connects to, exactly as in production.
+        NEXT_PUBLIC_SITE_ORIGIN: E2E_SITE_ORIGIN,
+        // The console origin is separate from the public invitation origin: the
+        // server reads console-rendered pages over HTTP to resolve the advertised
+        // preview card, so it has to be an address this run can actually reach.
+        CONSOLE_ORIGIN: baseURL,
+      },
     },
-  },
+    /*
+      AND THE SAME BUILD SERVED AGAIN WITH THE DEADLINE BEHIND IT.
+
+      No second build: it waits for the first server to answer, which happens
+      only after `npm run build` has finished, and then starts another
+      `next start` on the same `.next`. Two concurrent builds would race on
+      that directory.
+
+      `RSVP_CLOCK` is the whole difference between the two processes. It is
+      read through `lib/server/env.ts`, which throws on an unparseable value
+      and refuses to be set on a production deployment at all.
+    */
+    {
+      command:
+        `until curl -sf ${baseURL} > /dev/null; do sleep 1; done; ` +
+        `npx next start -p ${CLOSED_PORT}`,
+      url: closedBaseURL,
+      reuseExistingServer: false,
+      timeout: 240_000,
+      env: {
+        NEXT_PUBLIC_SITE_ORIGIN: E2E_SITE_ORIGIN,
+        CONSOLE_ORIGIN: closedBaseURL,
+        RSVP_CLOCK: AFTER_THE_DEADLINE,
+      },
+    },
+  ],
 });

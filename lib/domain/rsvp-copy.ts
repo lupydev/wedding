@@ -224,6 +224,72 @@ export function rsvpDeadlineSentence(memberCount: number): string {
 }
 
 /**
+ * AND THE SAME DATE, SAID TO A HOUSEHOLD THAT HAS ALREADY ANSWERED NO.
+ *
+ * IT USED TO PROMISE SOMETHING THE PRODUCT DOES NOT DO. The declined screen
+ * said "Si cambias de opinión, puedes volver a responder cuando quieras." —
+ * *whenever you like*. `RSVP_DEADLINE_DAYS_BEFORE` is 7, so the answer is
+ * frozen from the 21st of November and the sentence was false for the last
+ * week before the wedding: exactly the week a household that had said no is
+ * most likely to change its mind, and exactly the week the page would have
+ * been telling them they still could.
+ *
+ * HERE RATHER THAN IN THE COMPONENT, and that is the whole reason it moved:
+ * the question screen already names this date through
+ * `rsvpDeadlineSentence`, and two screens naming the same deadline from two
+ * places is two dates waiting to disagree. Both read `RSVP_DEADLINE_TEXT`,
+ * which is derived from the wedding's own instant, so neither can be edited
+ * into a different day.
+ */
+/**
+ * WHAT THE INVITATION SAYS ONCE THE ANSWERS ARE CLOSED, PER ENDING.
+ *
+ * "Confirmaciones cerradas" was a headline over an empty screen, and it was
+ * the only thing on it. The screen carries the venue or the stream now — see
+ * `RsvpClosed` for the defect that made it necessary — so a headline
+ * announcing an absence would read as an error message above working
+ * content. One quiet line instead: the answers are closed, and here is what
+ * is still true for you.
+ *
+ * THREE LINES BECAUSE THERE ARE THREE ENDINGS, and the difference is what the
+ * household can still do rather than how sorry the sentence is. The one that
+ * never answered is offered the stream rather than told about it: nothing has
+ * been said to them yet, and this is the last thing the page can offer.
+ *
+ * `RSVP_CLOSED_MESSAGE` STAYS AND IS NOT THIS. That one answers a submission
+ * that arrives after the deadline — a household that had the form open when
+ * the day turned — and it tells them to write by WhatsApp. This is the
+ * standing state of a screen, not the answer to an attempt.
+ */
+export function rsvpClosedNote(
+  state: "accepted" | "declined" | "unanswered",
+  memberCount: number,
+): string {
+  const one = memberCount === 1;
+
+  switch (state) {
+    case "accepted":
+      return one
+        ? "Ya cerramos las confirmaciones. Aquí está todo lo que necesitas para acompañarnos."
+        : "Ya cerramos las confirmaciones. Aquí está todo lo que necesitan para acompañarnos.";
+    case "declined":
+      return one
+        ? "Ya cerramos las confirmaciones. Te esperamos por la transmisión."
+        : "Ya cerramos las confirmaciones. Los esperamos por la transmisión.";
+    case "unanswered":
+      return one
+        ? "Ya cerramos las confirmaciones. Si quieres, puedes acompañarnos por la transmisión."
+        : "Ya cerramos las confirmaciones. Si quieren, pueden acompañarnos por la transmisión.";
+  }
+}
+
+export function rsvpReconsiderSentence(memberCount: number): string {
+  return memberCount === 1
+    ? `Si cambias de opinión, puedes volver a responder hasta el ${RSVP_DEADLINE_TEXT}.`
+    : `Si cambian de opinión, pueden volver a responder hasta el ${RSVP_DEADLINE_TEXT}.`;
+}
+
+/**
  * What the screen after an acceptance opens with.
  *
  * The household has just said they are coming, so the answer is not "thank

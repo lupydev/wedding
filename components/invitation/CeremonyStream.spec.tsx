@@ -2,6 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { rsvpReconsiderSentence } from "@/lib/domain/rsvp-copy";
+
 import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
 
 /**
@@ -150,11 +152,16 @@ describe("the words on the card", () => {
     renderCard(vi.fn(), 1);
 
     expect(screen.getByText(/puedas acompañarnos/)).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Si cambias de opinión, puedes volver a responder cuando quieras.",
-      ),
-    ).toBeInTheDocument();
+    /*
+      AND IT NAMES THE DEADLINE RATHER THAN PROMISING "WHENEVER".
+
+      This asserted "puedes volver a responder cuando quieras." — which was
+      false for the last week before the wedding, the week a household that
+      said no is most likely to reconsider. The sentence is
+      `rsvpReconsiderSentence` now and reads the same constant the question
+      screen's deadline reads, so the two cannot name different days.
+    */
+    expect(screen.getByText(rsvpReconsiderSentence(1))).toBeInTheDocument();
   });
 
   /**

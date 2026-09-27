@@ -71,7 +71,22 @@ import { VenueMap } from "./VenueMap";
  * `app/i/[slug]/confirm-legibility.spec.tsx` measures this screen the same
  * way, so the figure is a floor rather than a preference.
  */
-const LABEL = "text-xs tracking-[0.18em] text-[#f6efe2]/75 uppercase";
+/*
+  `/85` RATHER THAN THE `/75` THIS SHIPPED WITH, AND IT IS A MEASUREMENT.
+
+  These three words — CUÁNDO, CÓDIGO DE VESTIMENTA, LUGAR — were measured on
+  the screen a household reaches by accepting, where they sit high on the
+  photograph and `/75` was comfortable. The same component is what a household
+  that accepted sees AFTER the deadline too, and there it sits one line lower:
+  `app/i/[slug]/closed-legibility.spec.tsx` found the day's label at 4.10:1 on
+  #5C5E47, under the floor.
+
+  Lifting the shared value rather than giving the closed screen its own copy,
+  because a second `RsvpConfirmed` is two weddings waiting to disagree about
+  an hour. It is 4.75:1 there now and better than it was on the open screen,
+  where nothing about it got worse.
+*/
+const LABEL = "text-xs tracking-[0.18em] text-[#f6efe2]/85 uppercase";
 
 const VALUE = "m-0 text-sm text-[#f6efe2] sm:text-base";
 

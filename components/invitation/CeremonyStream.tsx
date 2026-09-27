@@ -22,6 +22,8 @@
  * English.
  */
 
+import { rsvpReconsiderSentence } from "@/lib/domain/rsvp-copy";
+
 import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
 
 /**
@@ -32,21 +34,6 @@ import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
  * `StreamDetails` and named here for the callers that already import this name.
  */
 export type CeremonyStreamDetails = StreamDetailsValues;
-
-/**
- * The household's answer is never final.
- *
- * Declining submits on the first tap, so a mis-tap records a decline instantly.
- * The way back therefore lives here, beside the consequence, rather than
- * somewhere the guest would have to go looking for it. Responses are
- * append-only, so correcting one writes a new row and the couple still sees
- * that the household changed its mind.
- */
-function reconsiderSentence(memberCount: number): string {
-  return memberCount === 1
-    ? "Si cambias de opinión, puedes volver a responder cuando quieras."
-    : "Si cambian de opinión, pueden volver a responder cuando quieran.";
-}
 
 /**
  * What this screen says to a household that has just said no.
@@ -158,7 +145,7 @@ export function CeremonyStream({
       */}
       <div className="flex w-full flex-col items-center gap-4">
         <p className="rsvp__reconsider text-xs text-[#f6efe2]/85">
-          {reconsiderSentence(memberCount)}
+          {rsvpReconsiderSentence(memberCount)}
         </p>
         <button
           type="button"

@@ -150,3 +150,50 @@ export function supabasePublishableKey(): string {
 export function operatorSessionSecret(): string {
   return requireSecret("OPERATOR_SESSION_SECRET");
 }
+
+/**
+ * A FIXED INSTANT FOR THE DEADLINE, WHICH EXISTS SO THE CLOSED STATE CAN BE
+ * TESTED AT ALL.
+ *
+ * WHAT WENT WRONG WITHOUT IT. The RSVP closes seven days before the wedding,
+ * and that date is derived from one constant in the future — so no fixture
+ * can be past it, and the decision is made on the SERVER during render, where
+ * `page.clock` reaches nothing. `e2e/rsvp.spec.ts` recorded the gap honestly
+ * and left it open, which is how the closed branch shipped rendering a screen
+ * that blanked the venue, the map, the hour, the dress code, the stream link
+ * and the calendar for every household in the last week before the wedding.
+ * A state nobody can reach is a state nobody has looked at.
+ *
+ * STRICTLY PARSED, LIKE EVERY OTHER VALUE IN THIS FILE. An unparseable
+ * instant throws here, once and loudly, rather than resolving to "now" and
+ * quietly grading the wrong branch green.
+ *
+ * AND IT REFUSES TO EXIST IN PRODUCTION. A frozen clock on the real site
+ * would pin the deadline open or shut for everybody — the exact failure this
+ * unit is fixing, with a longer fuse. Set on the couple's deployment it takes
+ * the page down at the boundary instead, which is this module's stated
+ * contract for a misconfiguration: loudly, once, here.
+ */
+export function rsvpClockOverride(): Date | null {
+  const raw = process.env.RSVP_CLOCK?.trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  if (process.env.VERCEL_ENV === "production") {
+    throw new Error(
+      "RSVP_CLOCK is set on a production deployment. It freezes the RSVP " +
+        "deadline for every guest and exists only so tests can reach the " +
+        "closed state; unset it.",
+    );
+  }
+
+  const instant = new Date(raw);
+
+  if (Number.isNaN(instant.getTime())) {
+    throw new Error(`RSVP_CLOCK is not a parseable instant: ${raw}`);
+  }
+
+  return instant;
+}

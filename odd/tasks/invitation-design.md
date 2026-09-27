@@ -201,6 +201,19 @@ declined screen given the language `/transmision` already uses.
       been sitting on the brightest pixel in the photograph at `bg-black/25`
       since U34, and prose had recorded it as fine.
 
+- [x] **U40 — the deadline stopped blanking the invitation, and the clock
+      became testable.** Closing the RSVP replaced the whole stepper with two
+      sentences, so in the final seven days an accepted household lost the
+      venue, the map, the hour and the dress code and a declined one lost the
+      stream and the calendar. It closes the ability to CHANGE an answer now,
+      not the invitation — the couple's own decision — with the same shared
+      blocks the open flow uses. The reason nobody had seen it is that the
+      state was unreachable from any test: `RSVP_CLOCK` is the seam, a second
+      Playwright server runs with the deadline past, and the first test proves
+      the two origins differ so the rest cannot be green against the open
+      branch. The declined screen also stopped promising a household could
+      answer "cuando quieras".
+
 - [x] **U39 — the screen a household reaches by saying no.** The greeting
       becomes "Los vamos a extrañar, {name}", the pair to "Los esperamos" on
       the other ending and now beside it in the domain; the heading that said
@@ -3640,8 +3653,168 @@ warnings, the same eight), `npm run format:check`, `npm run build`, and the
 guest-facing browser specs. The environmental failures are the same ones U38
 records and counts fresh.
 
+### U40 — done (the deadline stopped blanking the invitation, and the clock became testable)
+
+**THE SMALL PART FIRST: A SENTENCE THAT WAS FALSE FOR THE LAST WEEK.** The
+declined screen said "Si cambias de opinión, puedes volver a responder cuando
+quieras." `RSVP_DEADLINE_DAYS_BEFORE` is 7, so the answer freezes on the 21st
+of November and _whenever you like_ was a promise the product stopped keeping
+exactly when a household that had said no is most likely to reconsider. It
+names the day now — `rsvpReconsiderSentence`, in `rsvp-copy.ts` beside
+`rsvpDeadlineSentence`, both reading `RSVP_DEADLINE_TEXT` — so the two screens
+that name this deadline cannot drift to two different days. The spec asserts
+the absence as well as the presence: a future edit that softened the date back
+into "cuando quieras" would restore the lie while still mentioning a date.
+
+**AND THE DEFECT: CLOSING THE RSVP CLOSED THE INVITATION.** `RsvpClosed` took
+no props and rendered an `h2` and a paragraph, and the route substituted it
+for the entire stepper. So from the 21st of November — the seven days when a
+guest most needs the page:
+
+| household      | what it lost                                                         |
+| -------------- | -------------------------------------------------------------------- |
+| accepted       | the venue, the map, `Cómo llegar`, the day, the hour, the dress code |
+| declined       | `Entrar a la transmisión`, `Agregar a Google Calendar`               |
+| never answered | everything above, and it could not be told apart from the other two  |
+
+Everyone opening their invitation in the final week got a greeting, the
+announcement, and the words "Confirmaciones cerradas". **Nothing anybody
+needed in order to reach the wedding survived the deadline.**
+
+The other half of it was in the route: `const current = open ? await
+loadCurrentRsvp(...) : null`. With the answer discarded, an accepted household
+was indistinguishable from one that had never replied — so even a closed
+screen that wanted to be useful had nothing to be useful with.
+
+**WHY NOBODY CAUGHT IT, WHICH IS THE PART WORTH FIXING.** The deadline is
+derived from a constant in the future and the decision is made on the SERVER
+during render: no fixture can be past it, and `page.clock` reaches nothing.
+`e2e/rsvp.spec.ts` had recorded the gap honestly — "the closed branch stays
+unreachable from this suite" — and left it open. A state nobody can reach is a
+state nobody has looked at.
+
+**WHAT THE COUPLE DECIDED**, put to them and confirmed: the deadline closes
+THE ABILITY TO CHANGE AN ANSWER, not the invitation.
+
+| household      | after the deadline                                                                      |
+| -------------- | --------------------------------------------------------------------------------------- |
+| accepted       | the venue, the map, the day, the hour, the dress code — and no way to change the answer |
+| declined       | the stream link and the calendar — and no way to change the answer                      |
+| never answered | **my decision, not theirs** — see below                                                 |
+
+**THE THIRD ENDING IS A DECISION TAKEN ON THEIR BEHALF AND IT IS FLAGGED
+RATHER THAN BURIED.** They named the first two. A household that never
+answered can still watch, so they are offered the stream and the calendar —
+but NOT the venue, because the venue is gated behind saying you are coming and
+a deadline passing is not a confirmation. Handing the address to everybody who
+ignored the invitation would undo the rule the whole accepted screen exists to
+enforce. It is asserted in two specs and written in **Next** so the couple can
+overrule it with one line.
+
+**NOTHING IS A SECOND COPY.** The accepted ending is `RsvpConfirmed`, the same
+component the open flow uses; the two stream endings are `StreamDetails`, the
+same block `/transmision` and the declining screen render. A closed-state copy
+of either would be two weddings waiting to disagree about an hour or a venue.
+`CeremonyStream` is deliberately NOT reused: it is the declining FLOW, and
+both of its own sentences — "comprendemos que no puedan acompañarnos" and the
+way back — are wrong on a screen where the decision is already made and
+frozen.
+
+**THE COPY.** "Confirmaciones cerradas" as a bare headline stopped making
+sense once the screen carries the venue underneath it — a headline announcing
+an absence over working content reads as an error message. It is one quiet
+line per ending now (`rsvpClosedNote`), and the heading is the same one the
+open flow would have given them: "Los esperamos" for a household that
+accepted, "Los vamos a extrañar" for one that declined, and the plain greeting
+for one that never answered, because nothing has been said to them yet.
+`greetingOwner` stopped being conditional on the deadline as a result.
+
+**THE CLOCK IS A SEAM NOW, AND THAT IS THE DURABLE PART OF THIS UNIT.**
+`RSVP_CLOCK` is read through `lib/server/env.ts` — the module whose whole job
+is turning one raw environment string into a validated value — parsed
+strictly, throwing on anything unparseable, and **refusing to exist on a
+production deployment at all**: a frozen clock on the couple's own site would
+pin the deadline open or shut for every guest, which is this same defect with
+a longer fuse.
+
+`playwright.config.ts` runs a second server on the next port with that
+variable set to four days after the deadline, and two `*-closed` projects at
+both phone presets point at it. No second build — it waits for the first
+server to answer, then serves the same `.next`.
+
+**AND THE SUITE PROVES IT IS LOOKING AT THE CLOSED BRANCH.** A frozen clock
+that silently failed to apply would leave every assertion running against the
+OPEN page — where a household that accepted also sees the venue — and the file
+would be green while testing nothing. So the first test loads the same
+invitation on BOTH origins: a form on one, no form and the closed note on the
+other. Proven falsifiable rather than assumed — moving the configured instant
+to the 1st of November turns four of the five red, the guard first:
+
+    Error: expect(locator).toHaveCount(expected) failed
+    Locator:  locator('form.rsvp__form')
+    Expected: 0
+    Received: 1
+
+**GEOMETRY.** Three endings × two household sizes × two phones, all measured
+on the shipped build with the deadline past:
+
+| device          | accepted | declined | never answered |
+| --------------- | -------- | -------- | -------------- |
+| iPhone 14 (664) | 664      | 664      | 664            |
+| Pixel 7 (839)   | 839      | 839      | 839            |
+
+**AND THE FIFTH LEGIBILITY SPEC FOUND ONE MORE THING.**
+`app/i/[slug]/closed-legibility.spec.tsx` measures a screen that never had
+numbers because it never had content. It caught a value inside a component
+that HAD been measured: `RsvpConfirmed`'s labels are `/75`, comfortable where
+the accepted screen puts them — and one line lower, under the closed note,
+the day's label lands on #5C5E47 at **4.10:1**. It is `/85` now, 4.75:1 here
+and better than it was on the open screen, lifted on the shared component
+rather than copied. That is the argument for sharing made twice in one unit:
+the reuse is what let a second surface find the first surface's defect.
+
+Permanent negative controls for both: `/75` on that pixel is asserted to fail
+4.5:1, and the stream controls' old `/30` edge to fail 3:1.
+
+**GREEN.** `npm test` — 2,497 unit and component tests, 2,486 passing.
+`npm run typecheck`, `npm run lint` (0 errors, 8 warnings, the same eight),
+`npm run format:check`, `npm run build`. `PORT=3100 npx playwright test` — 130
+passed, including all ten of the new closed-clock tests on both phones.
+
+**NOT GREEN, AND WORSE THAN WHEN THIS FEATURE STARTED.** Eleven unit failures
+and seven browser ones, all environmental and all the same cause: the local
+Supabase now holds 1,193 `senders` and more than a thousand `invitations`, so
+unpaged `.select()` reads no longer return freshly seeded rows. It has reached
+`console-auth.spec.ts`, which is a dependency of most console specs, so 114
+browser tests do not run at all. Measured on a clean checkout of the commit
+before this one and identical there. Not fixed and not reset — no permission
+was given to reset it, and the entry in **Next** has been predicting exactly
+this.
+
 ## Next
 
+- **A household that never answered is offered the stream and NOT the venue
+  after the deadline, and that is my decision rather than the couple's.** They
+  named the other two endings: accepted keeps the venue and the way there,
+  declined keeps the stream and the calendar. For the third I chose the stream
+  — they can still watch — and withheld the address, because the venue is
+  gated behind saying you are coming and a deadline passing is not a
+  confirmation. Handing it to everybody who ignored the invitation would undo
+  the rule the accepted screen exists to enforce. It is asserted in
+  `components/invitation/RsvpClosed.spec.tsx` and `e2e/invitation-closed.spec.ts`,
+  so overruling it is a visible change to two named tests rather than a quiet
+  one. **One line in `RsvpClosed` if they want it the other way.**
+- **The local Supabase is past PostgREST's unpaged 1000-row ceiling on two
+  tables and it is now costing real coverage.** `senders` is at 1,193 rows and
+  `invitations` over a thousand, so unpaged `.select()` reads cannot see
+  freshly seeded rows: eleven unit tests fail, and in the browser suite it has
+  reached `console-auth.spec.ts`, which most console specs depend on, so 114
+  of them do not run at all. Guest-facing seeding is by slug and still works,
+  which is the only reason this feature's own coverage is meaningful. Nothing
+  here reset it — no permission was given to — but "eleven red tests everybody
+  expects" is exactly how the closed-invitation defect in U40 survived, and
+  the fix is paging `listGuestDirectory`, `listConsoleInvitations` and
+  `listSenderDirectory` rather than a truncate.
 - **The screen that asks who is coming does not fit an iPhone 14, by
   choice, and the couple owe it a decision.** The announcement is back at its
   top with the list at the foot, which is what they asked for and why: "sin
