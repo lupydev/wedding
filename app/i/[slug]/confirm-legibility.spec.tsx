@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { InvitationGreeting } from "@/components/invitation/InvitationGreeting";
 import { RsvpConfirmed } from "@/components/invitation/RsvpConfirmed";
@@ -35,12 +35,21 @@ import { declaredColor, over } from "@/lib/design/declared-color";
  * this file measures.
  *
  * METHOD, SO THE NUMBERS CAN BE RETAKEN. Reach the accepted screen at the
- * `iPhone 14` and `Pixel 7` presets and at 1280×720, hide every glyph and
- * every ground the screen draws for itself, screenshot, and take the maximum
- * WCAG relative luminance inside each element's own box. The worst of the
- * three is what is written down. `p95` was recorded beside each maximum and is
- * deliberately not what is asserted: the maximum is the harsher floor and the
- * gate's spec already chose it.
+ * `iPhone 14` and `Pixel 7` presets and at 1280×720, hide every glyph, every
+ * ground the screen draws for itself and every transition — a colour
+ * transition otherwise catches the shot mid-fade and reads the words back as
+ * their own background — screenshot, and take the maximum WCAG relative
+ * luminance inside each element's own box. The worst of the three is what is
+ * written down. `p95` was recorded beside each maximum and is deliberately
+ * not what is asserted: the maximum is the harsher floor and the gate's spec
+ * already chose it.
+ *
+ * EVERY FIXTURE HERE WAS RE-SAMPLED IN THE PASS THAT FOLLOWED, and they all
+ * moved. The couple deleted "Su respuesta quedó guardada." from the top group
+ * and "Volver a responder" from the foot, which shortened both: the day and
+ * the hour rose, and the place and the way there fell into darker ground.
+ * Numbers taken before those two lines left describe a screen that no longer
+ * exists, so none of them was carried over untested.
  *
  * WHAT THIS DELIBERATELY DOES NOT CREDIT. The text shadow every line here
  * carries, and the blur behind the foot's ground. WCAG has no term for either,
@@ -62,15 +71,14 @@ const BRIGHTEST_UNDER_THE_TOP: readonly (readonly [string, string, string])[] =
   [
     [
       ".invitation__greeting",
-      "#33350f",
+      "#303011",
       "the line that names the household — worst on a 1280×720 window",
     ],
-    [".rsvp__saved", "#2d2e0d", "the receipt, said in words"],
-    [".rsvp__when dt", "#3e4038", "`CUÁNDO`"],
+    [".rsvp__when dt", "#282911", "`CUÁNDO`"],
     [
       ".rsvp__when dd",
-      "#66684c",
-      "the day and the hour — the thinnest on the screen at 5.0:1",
+      "#2e2f27",
+      "the day and the hour, which rose when the receipt line left",
     ],
   ];
 
@@ -78,12 +86,24 @@ const BRIGHTEST_UNDER_THE_TOP: readonly (readonly [string, string, string])[] =
  * And the brightest pixel under the FOOT, which is one constant because the
  * foot is one painted ground.
  *
- * #838380 on an iPhone 14, under `Lugar` at 78%–84% of the screen. The whole
- * group is measured against it rather than each line against its own: they
- * share a card, so the card has to be deep enough for the worst thing under
- * any part of it.
+ * The whole group is measured against one number rather than each line
+ * against its own: they share a card, so the card has to be deep enough for
+ * the worst thing under any part of it.
+ *
+ * AND IT IS THE BRIGHTEST PIXEL IN THE BOTTOM QUARTER OF THE SCREEN, NOT THE
+ * BRIGHTEST INSIDE THE GROUP'S OWN BOX. Losing "Volver a responder" dropped
+ * the group from 78%–96% to 81%–96% on an iPhone 14, and the pixel inside its
+ * box went with it — #838380 at the old position, #535453 at the new one. It
+ * would be easy, and wrong, to write the softer number down: this group's
+ * vertical position depends on how many lines the venue's NAME takes, and the
+ * couple have not filled that field in yet — production still renders
+ * `{{VENUE_NAME}}`. One line more and the group is back at 78%, where the
+ * brightest pixel in the band is #8A8985: Luis's lit trouser leg, the thing
+ * this ground was added for. So the band is the fixture, measured across
+ * 75%–100% on an iPhone 14, and it is slightly harsher than the number U36
+ * wrote down rather than softer.
  */
-const BRIGHTEST_UNDER_THE_FOOT = "#838380";
+const BRIGHTEST_UNDER_THE_FOOT = "#8a8985";
 
 /**
  * The brightest pixel under ANY of it at `lg`, where the ground lets go.
@@ -93,6 +113,13 @@ const BRIGHTEST_UNDER_THE_FOOT = "#838380";
  * is only safe if the blurred backdrop over there is dark enough on its own,
  * which is a claim worth a number rather than a sentence: measured at
  * 1280×720, the brightest pixel under any line of this screen is #33350f.
+ *
+ * RE-MEASURED AFTER THE TWO LINES LEFT, and it stays. Every element's own box
+ * now reads darker than this at 1280×720 — #303011 under the greeting is the
+ * worst of them — so the old value is the harsher of the two and there is no
+ * reason to relax it. The framed print in the other column is far brighter
+ * than any of these numbers and is deliberately not in them: nothing on this
+ * screen is written over it.
  */
 const BRIGHTEST_AT_LG = "#33350f";
 
@@ -100,10 +127,7 @@ function renderConfirmed() {
   const { container } = render(
     <>
       <InvitationGreeting>Los esperamos, Familia Aguirre</InvitationGreeting>
-      <RsvpConfirmed
-        onReconsider={vi.fn()}
-        venueName="Salón para Eventos Villa Campestre"
-      />
+      <RsvpConfirmed venueName="Salón para Eventos Villa Campestre" />
     </>,
   );
 
@@ -129,7 +153,6 @@ describe("the ground the foot of the accepted screen stands on", () => {
       ".rsvp__foot-ground",
       ".rsvp__venue",
       ".rsvp__venue-map",
-      ".rsvp__reconsider",
     ]) {
       expect(
         foot.querySelector(selector),
@@ -217,7 +240,6 @@ describe("what the accepted screen's words measure against the photograph", () =
     [".rsvp__venue dt", "`LUGAR`, which is why this ground exists"],
     [".rsvp__venue dd", "the venue's own name"],
     [".rsvp__venue-map", "the only control on the screen"],
-    [".rsvp__reconsider", "the way back to the question"],
   ])("reads %s on that ground — %s", (selector) => {
     const { find } = renderConfirmed();
 
@@ -255,13 +277,11 @@ describe("what the accepted screen's words measure against the photograph", () =
    */
   it.each([
     ".invitation__greeting",
-    ".rsvp__saved",
     ".rsvp__when dt",
     ".rsvp__when dd",
     ".rsvp__venue dt",
     ".rsvp__venue dd",
     ".rsvp__venue-map",
-    ".rsvp__reconsider",
   ])("reads %s beside the framed print", (selector) => {
     const { find } = renderConfirmed();
 

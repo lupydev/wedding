@@ -160,11 +160,33 @@ export function currentRsvpSentence(
 export interface RsvpChoiceCopy {
   /** The question above the two choices. */
   readonly question: string;
-  /** The affirmative, in the inviting household's own number. */
+  /** The affirmative, which is now one line whatever the number. */
   readonly yes: string;
-  /** And the refusal. */
+  /** And the refusal, which is still in the reader's own number. */
   readonly no: string;
 }
+
+/**
+ * The answer a household says yes with, and it is the same line for everybody.
+ *
+ * THE COUPLE NAMED IT EXACTLY, AND THE OPENING MARK IS PART OF IT. "¡Sí,
+ * acepto!" — with the `¡`, which is how every other exclamation in this
+ * product is written ("¡Hola, Familia Aguirre!", "¡Listo!"). A line set with
+ * only the closing mark reads as a typo on the one control the whole screen
+ * exists to have pressed.
+ *
+ * AND IT IS DELIBERATELY NOT INFLECTED, WHICH REVERSES PART OF AN EARLIER
+ * DECISION. The affirmative used to be "Sí, allá estaré" for one guest and
+ * "Sí, allá estaremos" for a household, because a guest invited alone was
+ * being made to answer in the plural on the one page addressed to them by
+ * name. The couple have now asked for one line on both, so the choice reads
+ * "¡Sí, acepto!" beside a question and a refusal that are still inflected —
+ * "¿Podrán acompañarnos?", "No podemos acompañarlos". That mixture is theirs
+ * and it is written down rather than smoothed over: making it "¡Sí,
+ * aceptamos!" for a household is a one-line change here if they want the
+ * voices to agree again.
+ */
+const YES = "¡Sí, acepto!";
 
 /**
  * The question, and the two answers, in the number the reader answers in.
@@ -172,7 +194,8 @@ export interface RsvpChoiceCopy {
  * Every line here was plural, because an invitation was assumed to be a
  * household. It is not: a guest invited alone was made to answer "Sí, allá
  * estaremos" on the one page in the product addressed to them by name. The
- * couple asked for both voices.
+ * couple asked for both voices — and then, for the affirmative alone, asked
+ * for one voice again. See `YES` above.
  *
  * ZERO READS AS A HOUSEHOLD, AND THAT IS DELIBERATE. An invitation with no
  * members is refused long before this function is reached, so the branch is
@@ -247,12 +270,12 @@ export function rsvpChoiceCopy(memberCount: number): RsvpChoiceCopy {
   return memberCount === 1
     ? {
         question: "¿Podrás acompañarnos?",
-        yes: "Sí, allá estaré",
+        yes: YES,
         no: "No puedo acompañarlos",
       }
     : {
         question: "¿Podrán acompañarnos?",
-        yes: "Sí, allá estaremos",
+        yes: YES,
         no: "No podemos acompañarlos",
       };
 }

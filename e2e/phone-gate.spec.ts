@@ -86,7 +86,7 @@ function householdList(page: Page) {
  * act on.
  */
 async function openWhoIsComing(page: Page) {
-  await page.getByRole("radio", { name: /Sí, allá est/ }).click();
+  await page.getByRole("radio", { name: /Sí, acepto/ }).click();
   await expect(householdList(page)).toBeVisible();
 }
 

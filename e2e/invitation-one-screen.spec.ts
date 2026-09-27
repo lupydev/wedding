@@ -200,7 +200,11 @@ test.describe("the invitation, one screen at a time", () => {
       It was the last line of a page two and a half screens tall, so the one
       fact with a date attached to it was the one most households never saw.
       The couple asked for it to be part of the question, which means being on
-      the same screen as the question — not merely in the same document.
+      the same screen as the question — not merely in the same document. They
+      have since asked for it to leave the CARD as well, so it now stands on
+      the bare photograph under it: still the same screen, still above the
+      fold, and measured against the pixels down there in
+      `app/i/[slug]/step-legibility.spec.tsx`.
     */
     const deadline = page.locator(".rsvp__deadline");
     await expect(deadline).toBeVisible();
@@ -214,7 +218,7 @@ test.describe("the invitation, one screen at a time", () => {
   test("who is coming fits, for a household of three", async ({ page }) => {
     fixture = await householdOfThree();
     await unlock(page, fixture);
-    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).click();
+    await page.getByRole("radio", { name: /Sí, acepto/ }).click();
 
     await expect(
       page.getByRole("group", { name: /Quiénes asisten/ }),
@@ -224,12 +228,28 @@ test.describe("the invitation, one screen at a time", () => {
       "attendees (3)",
       page.getByRole("button", { name: "Enviar respuesta" }),
     );
+
+    /*
+      THE CARD AT THE TOP AND THE WAY BACK AT THE FOOT, WHICH IS WHAT THE
+      COUPLE ASKED FOR AND WHAT THE UNIT SPEC CANNOT SEE.
+
+      `RsvpAnswer.spec.tsx` asserts the containment — the list is on the card
+      and "Volver a la pregunta" is not. Only a real viewport can say that the
+      one is at the top of the screen and the other at the bottom of it, which
+      is the part about the photograph.
+    */
+    const fold = await page.evaluate(() => window.innerHeight);
+    const card = (await page.locator(".rsvp__panel").boundingBox())!;
+    const back = (await page.locator(".rsvp__back").boundingBox())!;
+
+    expect(card.y).toBeLessThan(fold / 4);
+    expect(back.y).toBeGreaterThan(fold * 0.75);
   });
 
   test("who is coming fits, for a household of five", async ({ page }) => {
     fixture = await householdOfFive();
     await unlock(page, fixture);
-    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).click();
+    await page.getByRole("radio", { name: /Sí, acepto/ }).click();
 
     await expect(page.getByRole("checkbox")).toHaveCount(5);
     await expectOneScreen(
@@ -244,7 +264,7 @@ test.describe("the invitation, one screen at a time", () => {
   }) => {
     fixture = await householdOfFive();
     await unlock(page, fixture);
-    await page.getByRole("radio", { name: /Sí, allá estaremos/ }).click();
+    await page.getByRole("radio", { name: /Sí, acepto/ }).click();
     await page.getByRole("button", { name: "Enviar respuesta" }).click();
 
     await expect(page.locator(".rsvp__confirmed")).toBeVisible();

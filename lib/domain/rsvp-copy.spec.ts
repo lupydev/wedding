@@ -147,13 +147,19 @@ describe("currentRsvpSentence", () => {
 /**
  * WHO THE INVITATION IS SPEAKING TO, AND THE NUMBER IT SPEAKS IN.
  *
- * The couple: "si la invitación es para 1 sola persona deberá decir 'Sí, allá
- * estaré' y 'No puedo acompañarlos', y si la invitación es para 2 o más debe
- * decir 'Sí, allá estaremos' y 'No podemos acompañarlos'."
+ * The couple, once: "si la invitación es para 1 sola persona deberá decir 'Sí,
+ * allá estaré' y 'No puedo acompañarlos', y si la invitación es para 2 o más
+ * debe decir 'Sí, allá estaremos' y 'No podemos acompañarlos'." Every line had
+ * been plural, because every invitation was assumed to be a household, and a
+ * guest invited alone was answering in a voice that was not theirs on the one
+ * page in the product addressed to them by name.
  *
- * Every line was plural, because every invitation was assumed to be a
- * household. A guest invited alone was answering in a voice that was not
- * theirs, on the one page in the product that is addressed to them by name.
+ * AND THE COUPLE, LATER, FOR THE AFFIRMATIVE ALONE: it is "¡Sí, acepto!" now,
+ * the same line whatever the number. That reverses half of the decision above
+ * and it is theirs to make; what this file can do is hold the result where it
+ * can be read, so that the mixture is visible rather than accidental — a
+ * household is asked "¿Podrán acompañarnos?" and offered "¡Sí, acepto!"
+ * beside "No podemos acompañarlos".
  *
  * IN THE DOMAIN, NOT IN THE COMPONENT. This is the third place a count has
  * decided a Spanish ending — `seatsSelectionSentence` and `currentRsvpSentence`
@@ -164,7 +170,7 @@ describe("rsvpChoiceCopy", () => {
   it("speaks to one person in the singular", () => {
     expect(rsvpChoiceCopy(1)).toEqual({
       question: "¿Podrás acompañarnos?",
-      yes: "Sí, allá estaré",
+      yes: "¡Sí, acepto!",
       no: "No puedo acompañarlos",
     });
   });
@@ -172,9 +178,25 @@ describe("rsvpChoiceCopy", () => {
   it("speaks to a household in the plural", () => {
     expect(rsvpChoiceCopy(2)).toEqual({
       question: "¿Podrán acompañarnos?",
-      yes: "Sí, allá estaremos",
+      yes: "¡Sí, acepto!",
       no: "No podemos acompañarlos",
     });
+  });
+
+  /**
+   * THE AFFIRMATIVE IS ONE LINE FOR EVERYBODY, AND THE OPENING MARK IS PART
+   * OF IT.
+   *
+   * Asserted on its own rather than left implicit in the two objects above,
+   * because both halves are easy to lose quietly. A future edit that
+   * re-inflected the yes would still satisfy a test that only compared each
+   * number against itself; and a "Sí, acepto!" written with the closing mark
+   * alone is a typo nobody catches by reading, on the one control the whole
+   * screen exists to have pressed.
+   */
+  it("offers the same affirmative to one guest and to a household", () => {
+    expect(rsvpChoiceCopy(1).yes).toBe("¡Sí, acepto!");
+    expect(rsvpChoiceCopy(5).yes).toBe(rsvpChoiceCopy(1).yes);
   });
 
   it("keeps the plural for every size above two", () => {

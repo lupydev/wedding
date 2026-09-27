@@ -90,7 +90,7 @@ function decline(page: Page) {
 }
 
 function accept(page: Page) {
-  return page.getByRole("radio", { name: /Sí, allá estaremos/ }).click();
+  return page.getByRole("radio", { name: /Sí, acepto/ }).click();
 }
 
 /**
@@ -99,13 +99,15 @@ function accept(page: Page) {
  * "¡Listo! Guardamos su respuesta." used to appear under the controls the
  * household had just used. Those controls are replaced now: a recorded
  * acceptance hands over to the screen that says where to go, when, and what to
- * wear — and that screen says the answer was saved in its own words. The alert
- * region still exists and still carries REFUSALS, which leave a household
- * exactly where they were.
+ * wear. That screen used to repeat the receipt in words — "Su respuesta quedó
+ * guardada." — and the couple have removed it, so what proves the answer
+ * landed is the screen itself and the place on it. The alert region still
+ * exists and still carries REFUSALS, which leave a household exactly where
+ * they were.
  */
 async function expectRecorded(page: Page) {
   await expect(page.locator(".rsvp__confirmed")).toBeVisible();
-  await expect(page.getByText("Su respuesta quedó guardada.")).toBeVisible();
+  await expect(page.locator(".rsvp__venue")).toBeVisible();
 }
 
 function streamCard(page: Page) {
@@ -123,6 +125,20 @@ function rsvpAlert(page: Page) {
   return page.locator("form.rsvp__form").getByRole("alert");
 }
 
+/**
+ * ANSWERING, AS ONE STORY TOLD IN FOUR HALVES — AND IT NOW STARTS WITH A NO.
+ *
+ * THE ORDER IS FORCED BY A PRODUCT DECISION, NOT BY CONVENIENCE. The couple
+ * removed "Volver a responder" from the accepted screen, so an acceptance is
+ * final: there is no path in the product from a recorded yes back to the
+ * question. The append-only property this file exists to prove — two
+ * submissions, one reduced answer — therefore has to be told the only way
+ * round that is still reachable, which is decline first and accept after.
+ *
+ * That is not a smaller test. A reduction that returned either row would fail
+ * it exactly as before; what changed is which mind-change a guest can
+ * actually perform.
+ */
 test.describe("answering the invitation", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -136,80 +152,10 @@ test.describe("answering the invitation", () => {
     await invitation?.cleanup();
   });
 
-  test("records an answer and derives the seats from the names", async ({
+  test("records a decline on the first tap, with nothing to send", async ({
     page,
   }) => {
     await unlock(page, invitation);
-
-    await accept(page);
-    // Everybody starts checked, so two seats means UNCHECKING the third. The
-    // property under test is unchanged: the count is derived from the names,
-    // never typed.
-    await attendeeBox(page, GUEST_THREE).uncheck();
-    await submit(page);
-
-    await expectRecorded(page);
-
-    const history = await invitation.responseHistory();
-
-    expect(history).toHaveLength(1);
-    expect(history[0].attending).toBe(true);
-    // Never typed, always counted: two names, two seats.
-    expect(history[0].seatsConfirmed).toBe(2);
-    expect(history[0].attendeeGuestIds).toHaveLength(2);
-    /*
-      NULL, BECAUSE THERE IS NOTHING LEFT TO TYPE.
-
-      The dietary field was removed on the couple's instruction. The COLUMN
-      stays: `formData.get` yields null for a field the form no longer has, the
-      payload schema accepts that, and the row records it as null. Asserted
-      rather than dropped, so a field quietly reappearing — or the column
-      starting to store the empty string instead — is reported here.
-    */
-    expect(history[0].dietaryNotes).toBeNull();
-  });
-
-  test("shows the household what they already answered", async ({ page }) => {
-    await unlock(page, invitation);
-
-    /*
-      AN ACCEPTED HOUSEHOLD LANDS ON THE DIRECTIONS, NOT ON THE FORM.
-
-      The question is settled. What somebody reopening their invitation wants
-      is where to go and at what hour, and re-offering the form is how a
-      household ends up answering twice and wondering which one counted. What
-      they answered is one tap away, behind the same "Volver a responder" the
-      declining screen has offered all along.
-    */
-    await expect(page.locator(".rsvp__confirmed")).toBeVisible();
-    await page.getByRole("button", { name: "Volver a responder" }).click();
-
-    await expect(
-      page.getByText("Tu respuesta actual: asisten 2 personas."),
-    ).toBeVisible();
-
-    await accept(page);
-    await expect(attendeeBox(page, GUEST_ONE)).toBeChecked();
-    await expect(attendeeBox(page, GUEST_THREE)).not.toBeChecked();
-  });
-
-  test("keeps both answers when the household changes its mind", async ({
-    page,
-  }) => {
-    // THE test. Two submissions, and the aggregate must report ONE response —
-    // the second. A single-submission test cannot see this defect at all,
-    // because the naive count and the correct one agree until someone changes
-    // their mind.
-    await unlock(page, invitation);
-
-    /*
-      THROUGH THE WAY BACK, because the previous test left an acceptance on
-      file and an accepted household now lands on the directions rather than on
-      the form. That is the point of this file's serial ordering: these two
-      tests are one story told in two halves.
-    */
-    await expect(page.locator(".rsvp__confirmed")).toBeVisible();
-    await page.getByRole("button", { name: "Volver a responder" }).click();
 
     // One tap. No submit click follows, and the stream card appearing is the
     // proof the answer actually reached the server.
@@ -217,63 +163,57 @@ test.describe("answering the invitation", () => {
     await expect(streamCard(page)).toBeVisible();
 
     const history = await invitation.responseHistory();
-    const current = await invitation.currentResponse();
 
-    // The history keeps both: "she said yes, then cancelled" is information the
-    // couple wants, and the append-only trigger refuses to lose it.
-    expect(history).toHaveLength(2);
-    expect(history[0].attending).toBe(true);
-    expect(history[1].attending).toBe(false);
-
-    // The aggregate reduces to exactly one row, and it says no.
-    expect(current).not.toBeNull();
-    expect(current?.attending).toBe(false);
-    expect(current?.seatsConfirmed).toBe(0);
+    expect(history).toHaveLength(1);
+    expect(history[0].attending).toBe(false);
+    // A decline holds no seats and names nobody, by construction.
+    expect(history[0].seatsConfirmed).toBe(0);
+    expect(history[0].attendeeGuestIds).toEqual([]);
   });
 
-  test("lets a declined household come back and accept after all", async ({
+  test("keeps both answers when the household changes its mind", async ({
     page,
   }) => {
-    // A decline auto-submits, so a mis-tap is recorded instantly. This is the
-    // way back, end to end: the correction is a THIRD append-only row, and the
-    // reduced view must report the acceptance rather than the decline that
-    // preceded it. A view that ordered by anything less than total would be
-    // free to return either.
+    // THE test. Two submissions, and the aggregate must report ONE answer —
+    // the second. A single-submission test cannot see this defect at all,
+    // because the naive count and the correct one agree until someone changes
+    // their mind.
     await unlock(page, invitation);
 
-    // They land on the stream, because the answer on file is a decline.
+    /*
+      THROUGH THE WAY BACK, which the DECLINING screen still offers and the
+      accepted one no longer does. A decline auto-submits on the first tap, so
+      a mis-tap is recorded instantly and the escape sits beside the
+      consequence; an acceptance passes through a send button, which is the
+      check that ending has and this one does not.
+    */
     await expect(streamCard(page)).toBeVisible();
     await page.getByRole("button", { name: "Volver a responder" }).click();
 
-    // Nothing preselected: a mis-tap must not be one tap from repeating itself.
+    // Nothing preselected: a mis-tap must not be one tap from repeating
+    // itself.
     await expect(
       page.getByRole("radio", { name: /No podemos acompañarlos/ }),
     ).not.toBeChecked();
 
     await accept(page);
+
     /*
-      ONE SEAT, SO THE OTHER TWO COME OFF.
+      ONE SEAT, SO THE OTHER TWO COME OFF — AND ASSERTED POSITIVELY FIRST.
 
       Reconsidering opens with the whole household coming. A recorded decline
-      names NOBODY — it confirms zero seats by construction — so seeding the
-      boxes from it used to leave them empty, which is the friction this default
-      removes in exactly the case where somebody is changing their mind.
-    */
-    /*
-      ASSERTED POSITIVELY, BEFORE ANYTHING IS TOUCHED.
-
-      `uncheck()` is satisfied by the state it wants, so on a box that is
-      already off it is a silent no-op. Left to the two calls below, a default
-      that regressed to empty would pass both of them and fail only later and
-      indirectly, through the seat count — which is the shape of a test that
-      cannot say what broke.
+      names NOBODY, so seeding the boxes from it used to leave them empty,
+      which is the friction this default removes in exactly the case where
+      somebody is changing their mind. `uncheck()` is satisfied by the state
+      it wants, so on a box that is already off it is a silent no-op: left to
+      the two calls below, a default that regressed to empty would pass both
+      and fail only later and indirectly, through the seat count.
     */
     for (const guest of [GUEST_ONE, GUEST_TWO, GUEST_THREE]) {
       await expect(attendeeBox(page, guest)).toBeChecked();
     }
 
     await attendeeBox(page, GUEST_TWO).uncheck();
-    await attendeeBox(page, GUEST_THREE).uncheck();
     await submit(page);
 
     await expectRecorded(page);
@@ -281,9 +221,58 @@ test.describe("answering the invitation", () => {
     const history = await invitation.responseHistory();
     const current = await invitation.currentResponse();
 
-    expect(history.map((row) => row.attending)).toEqual([true, false, true]);
+    // The history keeps both: "they said no, then came after all" is
+    // information the couple wants, and the append-only trigger refuses to
+    // lose it.
+    expect(history.map((row) => row.attending)).toEqual([false, true]);
+
+    // The aggregate reduces to exactly one row, and it says yes.
     expect(current?.attending).toBe(true);
-    expect(current?.seatsConfirmed).toBe(1);
+    // Never typed, always counted: two names, two seats.
+    expect(current?.seatsConfirmed).toBe(2);
+    /*
+      NULL, BECAUSE THERE IS NOTHING LEFT TO TYPE.
+
+      The dietary field was removed on the couple's instruction. The COLUMN
+      stays: `formData.get` yields null for a field the form no longer has,
+      the payload schema accepts that, and the row records it as null.
+      Asserted rather than dropped, so a field quietly reappearing — or the
+      column starting to store the empty string instead — is reported here.
+    */
+    expect(current?.dietaryNotes).toBeNull();
+  });
+
+  /**
+   * AND THE ANSWER IS NOW FINAL, WHICH IS THE COUPLE'S OWN DECISION.
+   *
+   * A household that reopens an accepted invitation lands on the directions —
+   * the question is settled, and re-offering it is how a household ends up
+   * answering twice and wondering which one counted. What is new is that
+   * there is no longer anything to press: the escape hatch this file used to
+   * reach the form through is gone from this screen, and a household that
+   * needs to change an acceptance is back to the WhatsApp thread.
+   *
+   * Asserted here rather than only in the unit spec because it is the
+   * property the two tests above had to be rewritten around: if it ever comes
+   * back, this file should say so rather than quietly telling its story the
+   * old way again.
+   */
+  test("offers an accepted household no way back, only the directions", async ({
+    page,
+  }) => {
+    await unlock(page, invitation);
+
+    await expect(page.locator(".rsvp__confirmed")).toBeVisible();
+    await expect(page.locator(".rsvp__venue")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Volver a responder" }),
+    ).toHaveCount(0);
+    // One control on the screen, and it is the way to the venue.
+    await expect(
+      page.locator(".rsvp__confirmed").getByRole("link"),
+    ).toHaveCount(1);
+    // And nothing was written by looking.
+    expect(await invitation.responseHistory()).toHaveLength(2);
   });
 });
 

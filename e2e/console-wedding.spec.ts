@@ -223,79 +223,6 @@ test.describe("saving an edit", () => {
     expect(await readWeddingFacts()).toEqual(EDITED);
   });
 
-  test("shows the new values on the GUEST's invitation, not just in the console", async ({
-    browser,
-  }) => {
-    // The assertion this whole work unit exists for. Before it, the venue and the
-    // date were compiled into the component and no edit anywhere could change
-    // what a guest read.
-    const guest = await browser.newContext();
-    const guestPage = await guest.newPage();
-
-    try {
-      await guestPage.goto(`/i/${household.slug}`);
-      await guestPage
-        .getByLabel(/Número de celular/)
-        .fill(GUEST_PHONE.slice(-8));
-      await guestPage
-        .getByRole("button", { name: "Ver la invitación" })
-        .click();
-
-      const body = guestPage.locator("article.invitation");
-
-      await expect(body).toBeVisible();
-      await expect(body).toContainText(EDITED.coupleNames);
-
-      /*
-        THE VENUE NEEDS A RECORDED YES FIRST, AND THAT IS THE PRODUCT RULE.
-
-        The couple asked for the place to appear "solamente cuando al confirmar
-        la asistencia es positiva": a household that cannot come does not need
-        directions. So the assertion this test exists for — that an edit in the
-        console reaches the guest — has to answer the question the way a guest
-        going to the wedding would, and then SEND it: the directions are the
-        screen after the answer, not the tap.
-
-        `click`, NOT `check`. Answering replaces the screen, so the radio is
-        unmounted a frame after it is pressed and `check`'s wait for it to
-        report itself checked can never be satisfied.
-
-        THE DAY IS NOT ASSERTED HERE BECAUSE THE ROW NO LONGER HOLDS ONE. The
-        body states the day from `WEDDING_INSTANT` in its announcement, and
-        migration 0018 dropped `ceremony_date` and `ceremony_time` outright —
-        nothing rendered either, and the console form promised otherwise.
-
-        AND NEITHER IS THE ADDRESS, BECAUSE NO GUEST-FACING SURFACE RENDERS ONE
-        ANY MORE. The venue has no street a guest could type into a maps
-        application — `components/invitation/VenueMap.tsx` opens with that fact
-        — so `Dirección` was a second answer to the question the committed map
-        already answers, and the one a guest cannot act on. The column stays,
-        the console still edits it, and this test still proves an edit reaches
-        the guest: `venueName` is the value that does.
-      */
-      await guestPage.getByRole("radio", { name: /Sí, allá estar/ }).click();
-      await guestPage.getByRole("button", { name: "Enviar respuesta" }).click();
-
-      await expect(guestPage.locator(".rsvp__confirmed")).toBeVisible();
-      await expect(body).toContainText(EDITED.venueName);
-    } finally {
-      await guest.close();
-    }
-  });
-
-  test("puts the new names into the og:description of the first HTML response", async ({
-    request,
-  }) => {
-    // Not rendered by JavaScript and not fetched later: WhatsApp's crawler reads
-    // the first response and runs nothing, so the names have to be in these bytes.
-    const response = await request.get(`/i/${household.slug}`);
-    const html = await response.text();
-    const head = html.slice(0, html.indexOf("</head>"));
-
-    expect(head).toContain(EDITED.coupleNames);
-    expect(head).toMatch(/property="og:description"/);
-  });
-
   test("shows the new stream details to a household that declines", async ({
     browser,
   }) => {
@@ -311,15 +238,14 @@ test.describe("saving an edit", () => {
         .getByRole("button", { name: "Ver la invitación" })
         .click();
       /*
-        THROUGH THE WAY BACK, because the test above left an ACCEPTANCE on this
-        household's file and an accepted household now lands on the directions
-        rather than on the question. These two tests are one story told in two
-        halves, which is what `mode: "serial"` on this file is for.
+        STRAIGHT TO THE QUESTION, because this household has not answered yet
+        — and it runs FIRST for that reason. It used to come after the
+        acceptance below and reach the form through "Volver a responder" on
+        the accepted screen; the couple removed that control, so an
+        acceptance is final and the two halves of this story had to swap
+        places. `mode: "serial"` on this file is what makes the order mean
+        something.
       */
-      await guestPage
-        .getByRole("button", { name: "Volver a responder" })
-        .click();
-
       /*
         `click`, NOT `check`. A decline auto-submits and the stream screen
         replaces the form, so the radio is unmounted a frame after it is
@@ -358,6 +284,100 @@ test.describe("saving an edit", () => {
     } finally {
       await guest.close();
     }
+  });
+
+  test("shows the new values on the GUEST's invitation, not just in the console", async ({
+    browser,
+  }) => {
+    // The assertion this whole work unit exists for. Before it, the venue and the
+    // date were compiled into the component and no edit anywhere could change
+    // what a guest read.
+    const guest = await browser.newContext();
+    const guestPage = await guest.newPage();
+
+    try {
+      await guestPage.goto(`/i/${household.slug}`);
+      await guestPage
+        .getByLabel(/Número de celular/)
+        .fill(GUEST_PHONE.slice(-8));
+      await guestPage
+        .getByRole("button", { name: "Ver la invitación" })
+        .click();
+
+      const body = guestPage.locator("article.invitation");
+
+      await expect(body).toBeVisible();
+
+      /*
+        THROUGH THE WAY BACK, because the test above left a DECLINE on this
+        household's file and a declining household lands on the stream rather
+        than on the question. That escape is the one the couple KEPT — a
+        decline auto-submits on the first tap, so the way back sits beside the
+        consequence — and it is now the only way any answer can be changed
+        from inside the invitation.
+      */
+      await guestPage
+        .getByRole("button", { name: "Volver a responder" })
+        .click();
+
+      /*
+        AND THE NAMES ARE ASSERTED FROM THE QUESTION SCREEN, not from the one
+        the household landed on. The announcement — the script line, the
+        couple's names, the date and the counter — is rendered on the first
+        step and on no other, so a stream screen contains no `coupleNames` to
+        find. That is `RsvpAnswer`'s stated design rather than a gap: the
+        block is 250 pixels the other three screens must not pay for.
+      */
+      await expect(body).toContainText(EDITED.coupleNames);
+
+      /*
+        THE VENUE NEEDS A RECORDED YES FIRST, AND THAT IS THE PRODUCT RULE.
+
+        The couple asked for the place to appear "solamente cuando al confirmar
+        la asistencia es positiva": a household that cannot come does not need
+        directions. So the assertion this test exists for — that an edit in the
+        console reaches the guest — has to answer the question the way a guest
+        going to the wedding would, and then SEND it: the directions are the
+        screen after the answer, not the tap.
+
+        `click`, NOT `check`. Answering replaces the screen, so the radio is
+        unmounted a frame after it is pressed and `check`'s wait for it to
+        report itself checked can never be satisfied.
+
+        THE DAY IS NOT ASSERTED HERE BECAUSE THE ROW NO LONGER HOLDS ONE. The
+        body states the day from `WEDDING_INSTANT` in its announcement, and
+        migration 0018 dropped `ceremony_date` and `ceremony_time` outright —
+        nothing rendered either, and the console form promised otherwise.
+
+        AND NEITHER IS THE ADDRESS, BECAUSE NO GUEST-FACING SURFACE RENDERS ONE
+        ANY MORE. The venue has no street a guest could type into a maps
+        application — `components/invitation/VenueMap.tsx` opens with that fact
+        — so `Dirección` was a second answer to the question the committed map
+        already answers, and the one a guest cannot act on. The column stays,
+        the console still edits it, and this test still proves an edit reaches
+        the guest: `venueName` is the value that does.
+      */
+      await guestPage.getByRole("radio", { name: /Sí, acepto/ }).click();
+      await guestPage.getByRole("button", { name: "Enviar respuesta" }).click();
+
+      await expect(guestPage.locator(".rsvp__confirmed")).toBeVisible();
+      await expect(body).toContainText(EDITED.venueName);
+    } finally {
+      await guest.close();
+    }
+  });
+
+  test("puts the new names into the og:description of the first HTML response", async ({
+    request,
+  }) => {
+    // Not rendered by JavaScript and not fetched later: WhatsApp's crawler reads
+    // the first response and runs nothing, so the names have to be in these bytes.
+    const response = await request.get(`/i/${household.slug}`);
+    const html = await response.text();
+    const head = html.slice(0, html.indexOf("</head>"));
+
+    expect(head).toContain(EDITED.coupleNames);
+    expect(head).toMatch(/property="og:description"/);
   });
 
   test("keeps showing them after a reload of the editor", async () => {

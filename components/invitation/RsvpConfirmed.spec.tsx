@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   WEDDING_DRESS_CODE,
@@ -32,12 +31,8 @@ import { RsvpConfirmed } from "./RsvpConfirmed";
  */
 const VENUE = "Salón para Eventos La Ñapa";
 
-function renderConfirmed(options: { onReconsider?: () => void } = {}) {
-  const onReconsider = options.onReconsider ?? vi.fn();
-
-  render(<RsvpConfirmed onReconsider={onReconsider} venueName={VENUE} />);
-
-  return onReconsider;
+function renderConfirmed() {
+  return render(<RsvpConfirmed venueName={VENUE} />);
 }
 
 describe("RsvpConfirmed", () => {
@@ -50,9 +45,7 @@ describe("RsvpConfirmed", () => {
    * blocks in any arrangement at all, including the one this screen replaced.
    */
   it("puts the day and the dress code above the place and the way there", () => {
-    const { container } = render(
-      <RsvpConfirmed onReconsider={vi.fn()} venueName={VENUE} />,
-    );
+    const { container } = renderConfirmed();
 
     const order = Array.from(
       container.querySelectorAll(".rsvp__when, .rsvp__venue, .rsvp__venue-map"),
@@ -78,9 +71,7 @@ describe("RsvpConfirmed", () => {
    * left is spent on.
    */
   it("spreads its two groups to the ends of the screen", () => {
-    const { container } = render(
-      <RsvpConfirmed onReconsider={vi.fn()} venueName={VENUE} />,
-    );
+    const { container } = renderConfirmed();
 
     expect(container.querySelector(".rsvp__confirmed")!.className).toContain(
       "justify-between",
@@ -102,19 +93,19 @@ describe("RsvpConfirmed", () => {
   });
 
   /**
-   * THE SCREEN CHANGING IS NOT A RECEIPT.
+   * AND IT NO LONGER SAYS SO IN WORDS, WHICH REVERSES U36.
    *
-   * The form's own "¡Listo! Guardamos su respuesta." appeared under the
-   * controls the household had just used. Those controls are gone from this
-   * screen, so a guest who is not comfortable with phones would otherwise have
-   * nothing but a new heading to tell them the answer landed.
+   * "Su respuesta quedó guardada." was kept against the couple's list and
+   * flagged as theirs to overrule; they have overruled it. The assertion is
+   * kept as a negative rather than deleted, because the argument for the line
+   * was real — a guest who is not comfortable with phones has only the change
+   * of screen to tell them the answer landed — and a sentence that quietly
+   * reappears should be a decision rather than a merge.
    */
-  it("says the answer was saved, in words", () => {
+  it("does not say the answer was saved, because the couple removed it", () => {
     renderConfirmed();
 
-    expect(
-      screen.getByText("Su respuesta quedó guardada."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/quedó guardada/)).not.toBeInTheDocument();
   });
 
   it("names the place, under a label, and shows the way there", () => {
@@ -128,25 +119,26 @@ describe("RsvpConfirmed", () => {
   });
 
   /**
-   * AND IT IS THE ONLY CONTROL DOWN THERE.
+   * AND IT IS NOW THE ONLY CONTROL ON THE SCREEN AT ALL.
    *
-   * "Solamente el botón de cómo llegar." The escape hatch back to the question
-   * is not a second offer — it is the same `Volver a responder` both endings
-   * carry, set as small underlined text rather than as a control competing
-   * with this one.
+   * "Solamente el botón de cómo llegar", read the way the couple have now
+   * finished it: the escape hatch beside it is gone too, so this screen holds
+   * one link and no buttons. Asserted by COUNT rather than by name, because
+   * the failure worth catching is a second control appearing, whatever it
+   * says.
    */
-  it("offers one way to go and nothing else beside it", () => {
+  it("offers one way to go and no other control beside it", () => {
     renderConfirmed();
 
     expect(screen.getAllByRole("link")).toHaveLength(1);
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
   it("renders an unfinished venue verbatim rather than hiding it", () => {
     // The row may still hold its seeded placeholder. An unfinished value must
     // stay visibly unfinished; hiding it turns an obviously incomplete
     // invitation into a plausible wrong one.
-    render(<RsvpConfirmed onReconsider={vi.fn()} venueName="{{VENUE_NAME}}" />);
+    render(<RsvpConfirmed venueName="{{VENUE_NAME}}" />);
 
     expect(screen.getByText("{{VENUE_NAME}}")).toBeInTheDocument();
   });
@@ -203,21 +195,24 @@ describe("RsvpConfirmed", () => {
   });
 
   /**
-   * THE ANSWER IS NEVER FINAL.
+   * AND THE ANSWER IS NOW FINAL, WHICH IS THE HEAVIEST THING ON THE LIST.
    *
-   * A solo invitation records its acceptance on one tap, so a mis-tap lands
-   * here. The way back sits beside the consequence, exactly as it does on the
-   * stream screen, and in the same words — responses are append-only, so a
-   * correction writes a new row and the couple still see that the household
-   * changed its mind.
+   * This screen used to carry "Volver a responder", the same escape the
+   * stream screen offers, and the couple asked for it to go knowing what it
+   * costs: an accepted household has no way to change its answer from inside
+   * the invitation. A solo invitation records its acceptance on ONE tap, so a
+   * mis-tap lands here permanently.
+   *
+   * Asserted as an absence, and deliberately not by deleting the test: the
+   * declining screen keeps its own way back for a reason that has not
+   * changed, and the two endings are now deliberately different. See
+   * `CeremonyStream.spec.tsx`, which still asserts the positive.
    */
-  it("offers the way back, in the same words the stream screen uses", async () => {
-    const onReconsider = renderConfirmed();
+  it("offers no way back, which the couple chose knowing the cost", () => {
+    renderConfirmed();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Volver a responder" }),
-    );
-
-    expect(onReconsider).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: /Volver a responder/ }),
+    ).not.toBeInTheDocument();
   });
 });

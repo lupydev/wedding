@@ -136,10 +136,44 @@ type RsvpStep = "question" | "attendees" | "confirmed" | "stream";
 
   The control language is `StreamLink`'s pill, already the guest-facing one on
   `/` and `/transmision`. A third would have been a third wedding.
+
+  IT CARRIES A CLASS OF ITS OWN NOW, and it is not decoration: both screens
+  moved this pass — the question's card to the foot of the photograph, the
+  list of who is coming to the top of it — so what is BEHIND the card changed
+  on each. `app/i/[slug]/step-legibility.spec.tsx` measures the words on it
+  against the pixels at its new position, and it needs something to find it
+  by. The gate's ground has had one since U35 for the same reason.
+
+  AND `bg-black/25` WAS NOT A GROUND, WHICH THE MEASUREMENT FOUND RATHER THAN
+  THE MOVE. U35 wrote that this panel "has been fine at `bg-black/25` since
+  U34: it sits at 70%–95%, where the bottom scrim is already carrying 60% to
+  90% of the load." Both halves are wrong, and nothing had ever measured
+  them. On an iPhone 14 the question's card was at 57%–96% BEFORE this pass —
+  measured against a build of `19d67f2` — so it already covered the brightest
+  pixel in the frame, the #FAF8EF edge of Michell's dress at 62%, the same
+  pixel U35 gave the gate a card for. Cream on `bg-black/25` over that is
+  2.5:1; the screens moved this pass, and at their new positions it is 1.7:1.
+  WCAG holds body text to 4.5:1 either way.
+
+  So the card takes the gate's own ground — `#0d1114` at 70%, which measures
+  6.4:1 against that same pixel — and the four quiet opacities that sat on it
+  came up with it: the line naming the current answer and the seats sentence
+  to `/80`, the child marker to `/70`, the send button's edge to `/60`. Each
+  of those is a number in `step-legibility.spec.tsx` rather than a
+  preference.
+
+  `lg:bg-black/25` PUTS THE DESKTOP BACK. Above the breakpoint the words are
+  in their own column beside a framed print, where the brightest pixel under
+  the card is #2F271F and the old value already measures 5.8:1 — the same
+  reason `PhotoStage` drops its scrims and the gate drops its ground at `lg`.
+  `declaredColor` reads the unconditional token and ignores the variant, so
+  what the spec measures is the phone, which is where this is read.
 */
 const PANEL = `
-  rounded-2xl bg-black/25 p-5 ring-1 ring-white/10 backdrop-blur-sm
+  rsvp__panel rounded-2xl bg-[#0d1114]/70 p-5 ring-1 ring-white/10
+  backdrop-blur-sm
   sm:p-6
+  lg:bg-black/25
 `;
 
 /*
@@ -178,7 +212,7 @@ const CHOICE = `
 const CONTROL = "size-4 shrink-0 accent-[#f6efe2]";
 
 const SEND = `
-  w-full rounded-full border border-[#f6efe2]/40 bg-[#f6efe2]/10
+  w-full rounded-full border border-[#f6efe2]/60 bg-[#f6efe2]/10
   px-5 py-3 text-sm text-[#f6efe2] backdrop-blur-sm
   transition-colors duration-(--console-motion-fast)
   ease-(--ease-console-out)
@@ -374,13 +408,29 @@ export function RsvpAnswer({
     rejection keeps the household on the screen whose control it needs to
     change rather than advancing them past it.
   */
+  /*
+    AND A SOLO INVITATION HAS NO THIRD SCREEN AT ALL, WHICH IS THE COUPLE'S
+    OWN INSTRUCTION READ LITERALLY.
+
+    It used to pass THROUGH `attendees` on its way to the directions. Nobody
+    had to tap anything there — `acceptNow` submits from an effect — but the
+    screen still rendered for as long as the Server Action was in flight: a
+    card holding one hidden field, a send button that was pressing itself, and
+    a way back. A flash of a screen that exists for a choice this household
+    does not have.
+
+    So the affirmative submits from the QUESTION screen instead, exactly the
+    way a decline already did, and `soloGuest` never reaches `attendees`. The
+    hidden `attendee` field moved to the question screen with it, so the
+    payload is byte for byte the one that screen used to send.
+  */
   const settled = !reconsidering;
   const step: RsvpStep =
     settled && answerOnFile === "no"
       ? "stream"
       : settled && answerOnFile === "yes"
         ? "confirmed"
-        : attending === "yes"
+        : attending === "yes" && soloGuest === undefined
           ? "attendees"
           : "question";
 
@@ -529,7 +579,16 @@ export function RsvpAnswer({
       <>
         {greeting}
         <div className="rsvp flex flex-1 flex-col" data-rsvp-step={step}>
-          <RsvpConfirmed onReconsider={reconsider} venueName={venue.name} />
+          {/*
+            NO WAY BACK FROM HERE, ON THE COUPLE'S INSTRUCTION.
+
+            This screen used to take `onReconsider` and offer "Volver a
+            responder" the way the stream screen does. `RsvpConfirmed` records
+            what that costs a household that changes its mind. `reconsider`
+            itself stays: the stream screen and the way back from the list of
+            who is coming both still call it.
+          */}
+          <RsvpConfirmed venueName={venue.name} />
         </div>
       </>
     );
@@ -539,13 +598,19 @@ export function RsvpAnswer({
 
   return (
     /*
-      THE FORM SPANS THE SCREEN AND PUSHES ITS CONTROLS TO THE FOOT OF IT.
+      THE FORM SPANS THE SCREEN AND PUTS ITS TWO GROUPS AT THE TWO ENDS OF IT.
 
       The landing page's composition, which is what the couple asked this page
-      to look like: the announcement in the empty top half of the photograph,
-      the one thing to press down in the dark at the bottom. `justify-between`
-      does that on the question screen, where there are two groups; the screens
-      that have no announcement have one group and put it in the same place.
+      to look like — and, since they looked at it on a phone, what they asked
+      for a second time and for a different reason: "los bloques quedan sobre
+      la mitad de la foto y nos tapan". Everything used to sit in one block
+      near the middle of the frame, which is exactly where the two of them are
+      standing.
+
+      So every screen here is `justify-between` over two children, and the
+      middle belongs to the photograph. On the question screen that is the
+      announcement and the card with the two answers under it; on the screen
+      that asks who is coming it is the card and the way back.
     */
     <>
       {greeting}
@@ -553,77 +618,111 @@ export function RsvpAnswer({
         ref={formRef}
         action={record}
         data-rsvp-step={step}
-        className={`rsvp rsvp__form flex flex-1 flex-col gap-6 ${
-          asking ? "justify-between" : "justify-end"
-        }`}
+        className="rsvp rsvp__form flex flex-1 flex-col justify-between gap-6"
       >
-        {asking ? announcement : null}
+        {asking ? (
+          <>
+            {announcement}
 
-        <div className={`flex flex-col gap-4 ${PANEL}`}>
-          {asking ? (
-            <>
-              {answered === null ? null : (
-                <p className="rsvp__current text-sm text-[#f6efe2]/75">
-                  {answered}
-                </p>
-              )}
+            {/*
+              THE CARD AND THE DEADLINE, AS ONE GROUP AT THE FOOT.
 
-              <fieldset className="rsvp__attending m-0 flex flex-col gap-2 border-0 p-0">
+              Two siblings of the announcement rather than one would spread
+              three ways and put the card back in the middle of the
+              photograph, which is the thing being fixed.
+            */}
+            <div className="flex flex-col gap-3">
+              <div className={`flex flex-col gap-4 ${PANEL}`}>
+                {answered === null ? null : (
+                  <p className="rsvp__current text-sm text-[#f6efe2]/80">
+                    {answered}
+                  </p>
+                )}
+
+                <fieldset className="rsvp__attending m-0 flex flex-col gap-2 border-0 p-0">
+                  {/*
+                    THE QUESTION IS THE `h2` OF THIS SCREEN NOW.
+
+                    "Confirmen su asistencia" stood above it as a heading,
+                    which said the same thing as the question underneath in
+                    slightly different words. One screen, one question, asked
+                    once.
+                  */}
+                  <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
+                    {choice.question}
+                  </legend>
+                  <label className={CHOICE}>
+                    <input
+                      className={CONTROL}
+                      type="radio"
+                      name="attending"
+                      value="yes"
+                      checked={attending === "yes"}
+                      onChange={
+                        soloGuest === undefined
+                          ? () => setAttending("yes")
+                          : acceptNow
+                      }
+                      required
+                    />
+                    {choice.yes}
+                  </label>
+                  <label className={CHOICE}>
+                    <input
+                      className={CONTROL}
+                      type="radio"
+                      name="attending"
+                      value="no"
+                      checked={attending === "no"}
+                      onChange={declineNow}
+                      required
+                    />
+                    {choice.no}
+                  </label>
+                </fieldset>
+
                 {/*
-                THE QUESTION IS THE `h2` OF THIS SCREEN NOW.
+                  THE SEAT A SOLO INVITATION CONFIRMS, NAMED FROM THIS SCREEN.
 
-                "Confirmen su asistencia" stood above it as a heading, which
-                said the same thing as the question underneath in slightly
-                different words. One screen, one question, asked once.
-              */}
-                <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
-                  {choice.question}
-                </legend>
-                <label className={CHOICE}>
-                  <input
-                    className={CONTROL}
-                    type="radio"
-                    name="attending"
-                    value="yes"
-                    checked={attending === "yes"}
-                    onChange={
-                      soloGuest === undefined
-                        ? () => setAttending("yes")
-                        : acceptNow
-                    }
-                    required
-                  />
-                  {choice.yes}
-                </label>
-                <label className={CHOICE}>
-                  <input
-                    className={CONTROL}
-                    type="radio"
-                    name="attending"
-                    value="no"
-                    checked={attending === "no"}
-                    onChange={declineNow}
-                    required
-                  />
-                  {choice.no}
-                </label>
-              </fieldset>
+                  `seats_confirmed` is derived from the attendees and must
+                  EQUAL their number (migration 0007), so an acceptance that
+                  named nobody would record a household the couple then cook
+                  for nobody. This used to live on the screen after the
+                  question; a solo invitation no longer has one, so the field
+                  came here with the submission.
+
+                  Only while the answer is "yes". A decline auto-submits from
+                  this same screen, and a payload reading "we cannot come, and
+                  here is one of us" is one refactor away from failing the
+                  `rsvp_declined_has_zero_seats` constraint as a 500.
+                */}
+                {soloGuest !== undefined && attending === "yes" ? (
+                  <input type="hidden" name="attendee" value={soloGuest.id} />
+                ) : null}
+
+                {feedbackRegion()}
+              </div>
 
               {/*
-              THE DEADLINE, WHERE THE QUESTION IS.
+                THE DEADLINE, OUT OF THE CARD AND UNDER IT.
 
-              It was the last line of a page two and a half screens tall, set in
-              `text-xs` at 70% opacity — small print under content most guests
-              never reached. The couple asked for it to be part of the question.
-              Full-strength cream, directly under the two answers, so a
-              household deciding can see how long they have to decide.
-            */}
-              <p className="rsvp__deadline text-sm text-[#f6efe2]">
+                It was the last line of a page two and a half screens tall, set
+                in `text-xs` at 70% opacity — small print under content most
+                guests never reached. U34 brought it up beside the question;
+                the couple have now asked for the card to hold the two answers
+                and nothing else, so the sentence sits on the photograph
+                directly below it. Full-strength cream with the shadow every
+                other line on bare photograph carries, and measured there
+                rather than assumed: see `step-legibility.spec.tsx`.
+              */}
+              <p className="rsvp__deadline text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">
                 {rsvpDeadlineSentence(guests.length)}
               </p>
-            </>
-          ) : (
-            <>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={`flex flex-col gap-4 ${PANEL}`}>
               {/*
               THE ANSWER TRAVELS AS A HIDDEN FIELD ONCE THE RADIOS ARE GONE.
 
@@ -636,106 +735,104 @@ export function RsvpAnswer({
             */}
               <input type="hidden" name="attending" value="yes" />
 
-              {soloGuest === undefined ? (
-                <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
-                  <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
-                    ¿Quiénes asisten?
-                  </legend>
-                  <p className="rsvp__seats text-xs text-[#f6efe2]/70">
-                    {seatsSelectionSentence(selected.length, guests.length)}
-                  </p>
-                  {guests.map((guest) => {
-                    const checked = selected.includes(guest.id);
+              <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
+                <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
+                  ¿Quiénes asisten?
+                </legend>
+                <p className="rsvp__seats text-xs text-[#f6efe2]/80">
+                  {seatsSelectionSentence(selected.length, guests.length)}
+                </p>
+                {guests.map((guest) => {
+                  const checked = selected.includes(guest.id);
 
-                    return (
-                      <label className={CHOICE} key={guest.id}>
-                        <input
-                          className={CONTROL}
-                          type="checkbox"
-                          name="attendee"
-                          value={guest.id}
-                          checked={checked}
-                          // The cap, enforced as an absence: an unchecked box stops being
-                          // selectable once the allowance is spent. Already-checked boxes
-                          // stay live so the household can swap one person for another.
-                          disabled={!checked && allowanceSpent}
-                          onChange={(event) =>
-                            toggle(guest.id, event.target.checked)
-                          }
-                        />
-                        {guest.fullName}
-                        {/*
-                THE SPACE IS OUTSIDE THE SPAN, AND THAT IS NOT FUSSINESS.
+                  return (
+                    <label className={CHOICE} key={guest.id}>
+                      <input
+                        className={CONTROL}
+                        type="checkbox"
+                        name="attendee"
+                        value={guest.id}
+                        checked={checked}
+                        // The cap, enforced as an absence: an unchecked box stops being
+                        // selectable once the allowance is spent. Already-checked boxes
+                        // stay live so the household can swap one person for another.
+                        disabled={!checked && allowanceSpent}
+                        onChange={(event) =>
+                          toggle(guest.id, event.target.checked)
+                        }
+                      />
+                      {guest.fullName}
+                      {/*
+                        THE SPACE IS OUTSIDE THE SPAN, AND THAT IS NOT
+                        FUSSINESS.
 
-                Accessible-name computation TRIMS each element's text before
-                joining, so a space inside the span is discarded and a screen
-                reader announces "Sara Aguirre(niño o niña)". As a sibling text
-                node it survives. The spec asserting that the form and the
-                couple's own list read alike caught exactly this.
-              */}
-                        {guest.isChild ? (
-                          <>
-                            {" "}
-                            <span className="text-[#f6efe2]/60">
-                              (niño o niña)
-                            </span>
-                          </>
-                        ) : (
-                          ""
-                        )}
-                      </label>
-                    );
-                  })}
-                </fieldset>
-              ) : (
-                /*
-                THE SEAT IS STILL NAMED, BECAUSE THE DATABASE COUNTS NAMES.
-
-                `seats_confirmed` is derived from the attendees and must EQUAL
-                their number (migration 0007). A solo invitation that submitted
-                no name would record an accepted answer holding zero seats — a
-                household the couple would then cook for nobody. The payload is
-                byte for byte the one a single ticked box produced.
-              */
-                <input type="hidden" name="attendee" value={soloGuest.id} />
-              )}
+                        Accessible-name computation TRIMS each element's text
+                        before joining, so a space inside the span is
+                        discarded and a screen reader announces "Sara
+                        Aguirre(niño o niña)". As a sibling text node it
+                        survives. The spec asserting that the form and the
+                        couple's own list read alike caught exactly this.
+                      */}
+                      {guest.isChild ? (
+                        <>
+                          {" "}
+                          <span className="text-[#f6efe2]/70">
+                            (niño o niña)
+                          </span>
+                        </>
+                      ) : (
+                        ""
+                      )}
+                    </label>
+                  );
+                })}
+              </fieldset>
 
               {/*
-              FULL WIDTH, because on a phone this is the one thing the whole
-              screen exists to have pressed.
-            */}
+                FULL WIDTH, because on a phone this is the one thing the whole
+                screen exists to have pressed.
+              */}
               <button className={SEND} type="submit" disabled={pending}>
                 Enviar respuesta
               </button>
 
-              {/*
-              THE WAY BACK, BECAUSE THE QUESTION IS NO LONGER ON THIS SCREEN.
+              {feedbackRegion()}
+            </div>
+
+            {/*
+              THE WAY BACK, AT THE FOOT OF THE SCREEN AND OUTSIDE THE CARD.
 
               The radio group used to stay visible above the checkboxes, so a
               household that tapped "yes" by mistake simply tapped "no". With
-              one screen per step that escape disappeared, and a household with
-              no way to change its mind would have to close the invitation and
-              open it again.
+              one screen per step that escape disappeared, and a household
+              with no way to change its mind would have to close the
+              invitation and open it again.
+
+              The couple moved it off the card: "el bloque de quiénes asisten
+              arriba, y volver a la pregunta abajo." So it stands alone on the
+              photograph, which is a different reading surface — full cream
+              with the shadow the other bare-photograph lines carry, measured
+              in `step-legibility.spec.tsx` rather than assumed. It was 70%
+              cream while it sat on the card; U35 recorded the same move for
+              the gate's own way out, and the same answer.
             */}
-              <button
-                className="
-                rsvp__back self-center text-xs text-[#f6efe2]/70 underline
+            <button
+              className="
+                rsvp__back self-center text-xs text-[#f6efe2] underline
                 underline-offset-4 transition-colors
                 duration-(--console-motion-fast)
+                [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
                 hover:text-[#f6efe2]
                 focus-visible:outline-2 focus-visible:outline-offset-2
                 focus-visible:outline-[#f6efe2]
               "
-                onClick={reconsider}
-                type="button"
-              >
-                Volver a la pregunta
-              </button>
-            </>
-          )}
-
-          {feedbackRegion()}
-        </div>
+              onClick={reconsider}
+              type="button"
+            >
+              Volver a la pregunta
+            </button>
+          </>
+        )}
       </form>
     </>
   );

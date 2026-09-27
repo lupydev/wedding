@@ -88,11 +88,9 @@ const SHADOW = "[text-shadow:0_1px_12px_rgba(0,0,0,0.6)]";
 
 export function RsvpConfirmed({
   venueName,
-  onReconsider,
 }: {
   /** The place, from the `ceremony` row, rendered exactly as it is stored. */
   readonly venueName: string;
-  readonly onReconsider: () => void;
 }) {
   return (
     <div className="rsvp__confirmed flex flex-1 flex-col justify-between gap-6 text-center">
@@ -102,26 +100,21 @@ export function RsvpConfirmed({
       */}
       <div className="flex flex-col gap-4">
         {/*
-          SAID PLAINLY, BECAUSE THE SCREEN CHANGING IS NOT A RECEIPT.
+          "Su respuesta quedó guardada." STOOD HERE AND THE COUPLE REMOVED IT.
 
-          The form's own "¡Listo! Guardamos su respuesta." used to appear under
-          the controls the household had just used. They are gone now — this
-          screen replaces them — so a guest who is not comfortable with phones
-          would have nothing but a new heading to tell them the answer landed.
+          U36 kept it against their list and said so in as many words, so that
+          they could overrule it; they have. The argument for it was that a
+          guest who is not comfortable with phones would otherwise have only a
+          new screen to tell them the answer landed. What they are left with
+          is the line above — "Los esperamos, Familia Aguirre" — which says
+          the couple are expecting them, and the day, the dress code and the
+          way to the venue underneath it. That IS the receipt; it just does
+          not use the word.
 
-          IT IS NOT ON THE COUPLE'S LIST and it is kept anyway, which is worth
-          stating so they can overrule it: a confirmation screen that never
-          says anything was confirmed is the one failure on this page a guest
-          cannot recover from on their own. It is one line of `text-sm`, and
-          the screen has room for it.
-
-          Unconditional, and true: this screen is reachable only from an
-          acceptance the server recorded. `su` rather than a plural rule,
-          because it addresses one guest and a household of five equally well.
+          The refusal path is untouched: `RsvpAnswer`'s alert region still
+          carries a submission that failed, on the screen the household is
+          standing on. Nothing here was the only report of an error.
         */}
-        <p className={`rsvp__saved text-sm text-[#f6efe2]/80 ${SHADOW}`}>
-          Su respuesta quedó guardada.
-        </p>
 
         <dl className="rsvp__when m-0 flex flex-col gap-3">
           <div className="flex flex-col gap-0.5">
@@ -170,12 +163,21 @@ export function RsvpConfirmed({
           Measured the way `app/i/[slug]/gate-legibility.spec.tsx` measures the
           gate: the screen rendered at both phone presets with every glyph made
           transparent, and the brightest pixel inside each element's own box
-          taken off the shot. Under `Lugar` on an iPhone 14 that pixel is
+          taken off the shot. Under `Lugar` on an iPhone 14 that pixel was
           #838380 — Luis's lit trouser leg, at 78%–84% of the screen, where the
           stage's bottom scrim has barely begun. Cream on it measures 3.3:1 AT
           FULL STRENGTH, which no opacity can fix: WCAG holds body text to
           4.5:1, so the words needed something under them or a different place
           to stand.
+
+          THE GROUP HAS SINCE DROPPED THREE PERCENT, because the couple
+          removed the "Volver a responder" that stood under it, and the pixel
+          inside its box with it — #535453 now. That does NOT retire this
+          ground, and the spec says why at length: where this group sits
+          depends on how many lines the venue's name takes, the couple have
+          not filled that field in yet, and one line more puts `Lugar` back
+          on the trouser leg. The floor is measured across the bottom quarter
+          of the screen rather than against today's box.
 
           THIS IS A CONSEQUENCE OF THE MAP LEAVING, and worth saying plainly.
           The venue used to sit above 188 pixels of picture in a
@@ -242,37 +244,23 @@ export function RsvpConfirmed({
         <VenueMap />
 
         {/*
-          THE ANSWER IS NEVER FINAL, AND THE WAY BACK SITS BESIDE IT.
+          A "Volver a responder" STOOD HERE AND THE COUPLE REMOVED IT.
 
-          A household that lands here has said yes — on one tap, if the
-          invitation names one person. The same reasoning `CeremonyStream`
-          gives for its own "Volver a responder" applies unchanged: responses
-          are append-only, so a correction writes a new row and the couple
-          still see that the household changed its mind.
+          THIS IS THE ONE DELETION ON THE LIST WITH A CONSEQUENCE BEYOND THE
+          SCREEN, AND IT WAS STATED TO THEM BEFORE IT WAS MADE. An accepted
+          answer can no longer be changed from inside the invitation at all.
+          Responses are still append-only and the console still records
+          whatever is stored, but a household that taps yes and then finds
+          somebody cannot come has nothing on this page to press: they are
+          back to the WhatsApp thread the invitation arrived in.
 
-          Quieter than the control above it, because here there is nothing to
-          do. It is an escape hatch, not the point of the screen.
-
-          THE SAME WORDS THE DECLINING SCREEN USES, and number-neutral for the
-          same reason: "volver a responder" reads correctly to one guest and to
-          a household of five, so the one control that appears on both endings
-          does not need a plural rule of its own.
+          It is not a general removal. `CeremonyStream` — the screen a
+          declining household lands on — keeps its own `Volver a responder`,
+          for the reason it always had: a decline auto-submits on the first
+          tap, so a mis-tap is recorded instantly and the way back sits beside
+          the consequence. An acceptance passes through a send button, which
+          is the check this ending has and that one does not.
         */}
-        <button
-          className={`
-            rsvp__reconsider self-center text-xs text-[#f6efe2] underline
-            underline-offset-4 transition-colors
-            duration-(--console-motion-fast)
-            hover:text-[#f6efe2]
-            focus-visible:outline-2 focus-visible:outline-offset-2
-            focus-visible:outline-[#f6efe2]
-            ${SHADOW}
-          `}
-          onClick={onReconsider}
-          type="button"
-        >
-          Volver a responder
-        </button>
       </div>
     </div>
   );
