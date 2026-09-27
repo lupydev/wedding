@@ -185,6 +185,22 @@ declined screen given the language `/transmision` already uses.
       showing. Pushing the venue to the foot put it on the brightest ground on
       the page, so the foot carries a measured card of its own.
 
+- [x] **U37 — every block goes to an end of its screen, and four ways back
+      are deleted.** The couple read the whole flow on a phone: the blocks sat
+      over the middle of the photograph and covered the two of them. So the
+      gate's announcement goes to the top and its form to the foot, the
+      question's card keeps only the two answers with the deadline below it,
+      the list of who is coming goes to the top with "Volver a la pregunta" at
+      the foot, and the affirmative becomes "¡Sí, acepto!". With it go the
+      gate's WhatsApp escape hatch, the accepted screen's receipt line and its
+      "Volver a responder", and — for a one-person invitation — the screen that
+      asks who is coming, which used to flash for the length of the request.
+      Taken together an accepted answer can no longer be changed from inside
+      the invitation, which the couple were told and chose. The measurement
+      that came with the move found an older defect: the stepper's card had
+      been sitting on the brightest pixel in the photograph at `bg-black/25`
+      since U34, and prose had recorded it as fine.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -2868,6 +2884,257 @@ catches a different fixture each time. The probe was reverted. Run around that
 one file, all 211 tests outside it pass: `chromium`, all 8 on `iphone-14`, all 8
 on `pixel-7`, all 16 of `wedding-facts`.
 
+### U37 — done (every block to an end of its screen, and four ways back deleted)
+
+**WHAT WAS ASKED, AND THE ONE REASON GIVEN FOR ALL OF IT.** The couple read the
+live flow on a phone. Every item on their list is a move, and the reason is the
+same each time: the blocks sat over the middle of the photograph and covered the
+two of them.
+
+| screen        | before                               | after                                      |
+| ------------- | ------------------------------------ | ------------------------------------------ |
+| gate          | everything centred, 56%–86%          | announcement at the top, form at 66%–96%   |
+| the question  | card 57%–96%, deadline inside it     | card 57%–91%, deadline below it at 93%–96% |
+| who is coming | card bottom-justified, 36%–96%       | card 14%–68%, way back at 93%–96%          |
+| the accepted  | receipt line and a way back          | neither                                    |
+| one person    | a third screen flashed for a request | no third screen                            |
+
+Bands are an iPhone 14 (390×664); the "before" column was measured against a
+build of `19d67f2` rather than remembered, which matters because one of those
+numbers contradicts what this document already said. More on that below.
+
+**THE COPY, AND THE ONE PLACE IT ARGUES WITH ITSELF.** The affirmative is
+`¡Sí, acepto!` — the couple's own string, with the opening mark that every other
+exclamation in this product carries. It is now ONE line whatever the size of the
+invitation, and that reverses half of a decision they made in an earlier pass.
+`rsvpChoiceCopy` exists because a guest invited alone was being made to answer
+"Sí, allá estaremos" on the one page addressed to them by name: "the couple asked
+for both voices", in that function's own words. The refusal still has both
+voices. So a household of three is now asked "¿Podrán acompañarnos?" and offered
+
+    ¡Sí, acepto!
+    No podemos acompañarlos
+
+which mixes the singular and the plural inside one question. It is written down
+here and in `rsvp-copy.ts` rather than smoothed over, because smoothing it would
+have meant inventing "¡Sí, aceptamos!", which nobody asked for. **One line in
+`rsvp-copy.ts` if the couple want the voices to agree again.**
+
+**THE FOUR WAYS BACK THAT ARE GONE, AND WHAT EACH ONE COST.**
+
+- **The gate's escape hatch.** "¿No puedes entrar? Escríbenos por WhatsApp" was
+  a `wa.me` draft addressed to the invitation's owning sender. A household whose
+  number is not the stored one now has nothing on the page to press. They still
+  hold the WhatsApp thread the invitation arrived in; the page no longer says
+  so.
+- **The accepted screen's `Volver a responder`.** An accepted answer cannot be
+  changed from inside the invitation at all. Responses are still append-only and
+  the console still shows whatever is stored, but a household that ticks three
+  people and then loses one is back to WhatsApp.
+- **The receipt line.** "Su respuesta quedó guardada." U36 kept it against the
+  couple's list and said in as many words that it was theirs to overrule.
+- **The third screen, for a one-person invitation.** Not a way back, but the
+  same kind of removal: one tap now records and lands on the directions with
+  nothing in between.
+
+Taken together that is every way back except one. **The DECLINED screen keeps
+its own `Volver a responder`**, and that was verified rather than assumed:
+`CeremonyStream` owns it, it has never been the same element as the accepted
+screen's, and `CeremonyStream.spec.tsx` still asserts it positively. The
+asymmetry now has a reason worth stating — a decline auto-submits on the first
+tap, so a mis-tap is recorded instantly and the escape sits beside the
+consequence; an acceptance passes through a send button, which is the check this
+ending has and that one does not.
+
+**WHAT THE REMOVAL MADE UNREACHABLE, WHICH IS MORE THAN THE BUTTON.** With no
+path from a recorded acceptance back to the form, two pieces of `RsvpAnswer`
+have no way of being reached: the branch of `currentRsvpSentence` that reports
+an attending answer, and the seeding of `selected` from `current.attendeeGuestIds`.
+Both are KEPT rather than deleted, and the reason is in the component: what made
+them unreachable is one button the couple may put back, and the seeding is what
+stops a re-offered form quietly re-adding somebody who cannot come. Four tests
+that reached the form through that button are gone from `RsvpAnswer.spec.tsx`,
+replaced by one that asserts the absence and a comment naming what went with
+them.
+
+**WHAT THE ONE-PERSON FLOW ACTUALLY DID BEFORE, SINCE THE BRIEF ASKED.** Neither
+"already skips it" nor "requires a second tap": it rendered the step and then
+left it. `acceptNow` sets the answer and submits from an effect, so no second tap
+was ever needed — but `step` was derived as `attending === "yes" ? "attendees"`,
+so for the length of the Server Action the guest saw a card holding one hidden
+field, a send button pressing itself, and a way back. A flash of a screen that
+exists for a choice this household does not have. The affirmative submits from
+the QUESTION screen now, exactly as a decline already did, and the hidden
+`attendee` field came with it so the payload is byte for byte the one the third
+screen used to send.
+
+That one needed a test that could see a single frame. `waitFor(confirmedScreen)`
+was already green against the old behaviour and says nothing about what was on
+the screen in between, so the test holds the Server Action open with an
+unresolved promise, asserts, and then releases it. **Releasing it is not tidiness**
+— an action left unsettled keeps React's transition open and the next twelve
+tests in that file stop seeing their own updates, which cost twenty minutes.
+
+**AND THEN THE MEASUREMENT FOUND SOMETHING OLDER THAN THE MOVE.**
+
+The brief was explicit that moving a block changes what is behind it, and that
+fixtures sampled at the old positions had to be re-sampled rather than trusted.
+Two of the three re-samples were routine. The third was not.
+
+U35 recorded, in prose and without a number: "it is also why the panel on the
+question screen has been fine at `bg-black/25` since U34: it sits at 70%–95%,
+where the bottom scrim is already carrying 60% to 90% of the load."
+
+Both halves are wrong. Measured against a build of `19d67f2`, on an iPhone 14:
+
+| claim                        | prose   | measured |
+| ---------------------------- | ------- | -------- |
+| where the question's card is | 70%–95% | 57%–96%  |
+| cream on it, worst pixel     | "fine"  | 2.5:1    |
+
+57% is across the gap between `PhotoStage`'s two scrims, over the #FAF8EF edge of
+Michell's dress at 62% — 0.937 luminance, the brightest pixel in the frame, and
+the exact pixel U35 gave the GATE a card for twenty minutes after U34 shipped.
+The card that was supposedly fine was carrying a quarter of the black the gate's
+needed. This pass moved it to 57%–91% and the list of who is coming to 14%–68%,
+which took the reading from 2.5:1 to 1.7:1 against a 4.5:1 floor.
+
+So: **the defect is older than the move, the move made it worse, and nothing
+would have caught either** — there was no spec for these two screens at all, and
+the claim that there did not need to be was the prose above.
+
+The fix is the gate's own ground below `lg`, `bg-[#0d1114]/70`, at 6.4:1 against
+the same pixel, and the four quiet opacities that sat on it came up with it:
+
+| element                      | before | after | why             |
+| ---------------------------- | ------ | ----- | --------------- |
+| `.rsvp__current`             | /75    | /80   | 4.45:1 → 4.81:1 |
+| `.rsvp__seats`               | /70    | /80   | 4.11:1 → 4.81:1 |
+| `(niño o niña)`              | /60    | /70   | 4.22:1 → 5.11:1 |
+| the send button's edge (3:1) | /40    | /60   | 2.40:1 → 3.47:1 |
+
+`lg:bg-black/25` puts the desktop back exactly as it was: above the breakpoint
+the words are in their own column beside a framed print, the brightest pixel
+under the card is #2F271F, and the old value already measures 5.8:1 there.
+`declaredColor` reads the unconditional token and skips the variant, so what the
+spec measures is the phone, which is where this is read.
+
+**THE THIRD LEGIBILITY SPEC, AND ITS NEGATIVE CONTROL.**
+`app/i/[slug]/step-legibility.spec.tsx` joins the gate's and the accepted
+screen's. Eleven of its fifteen assertions were forced red against the ground it
+replaced:
+
+    × is deep enough to read cream on the brightest pixel it covers
+    AssertionError: expected 1.6999783869805252 to be greater than or equal to 4.5
+
+    × reads the two answers on the row they sit in
+    AssertionError: expected 2.421364418841415 to be greater than or equal to 4.5
+
+    × draws an edge that can be seen against the card it sits on
+    AssertionError: expected 1.3920111461611409 to be greater than or equal to 3
+
+and it carries a permanent one: an assertion that `bg-black/25` over the same
+pixel is UNDER 4.5:1, so putting the old ground back cannot sit green.
+
+**THE OTHER TWO RE-SAMPLES, WHICH WENT THE OTHER WAY.**
+
+- The gate's fixture is UNCHANGED at #FAF8EF and that is the interesting part.
+  At rest the panel now covers 66%–96% and the brightest pixel inside it is
+  #DEC799. The fixture stays harsher because this card is bottom-anchored and
+  grows upward: the refusal line is reserved for one line, a real refusal is two
+  sentences and wraps to three or four on a narrow phone, and that lifts the top
+  of the card back over the 62% mark. The state a guest most needs to read it in
+  is the state that puts it back on the brightest pixel in the frame.
+- The accepted screen's fixtures all got DARKER, because losing two lines
+  shortened both of its groups: the day and the hour rose to 14%–19% and the
+  place and the button fell to 81%–96%. `#3E4038` became `#282911` under
+  `CUÁNDO`, `#66684C` became `#2E2F27` under the day and the hour, and the foot
+  went from `#838380` to `#535453` inside its own box.
+
+  **The foot's fixture is deliberately not that number.** At `#535453`, `Lugar`
+  clears 4.5:1 WITHOUT the card by two percent, which would have retired U36's
+  negative control on an argument that does not hold: where that group sits
+  depends on how many lines the venue's NAME takes, and the couple have not
+  filled that field in — production still renders `{{VENUE_NAME}}`. One line
+  more and the group is back at 78%, on Luis's lit trouser leg. So the fixture
+  is the brightest pixel in the bottom quarter of the screen, `#8A8985`, which
+  is slightly harsher than the number U36 wrote down rather than softer.
+
+**GEOMETRY, WHICH IS WHAT THE WHOLE REDESIGN IS HELD TO.** Every step, on both
+phones, for a one-, three- and five-person invitation, measured on the shipped
+build:
+
+| device          | gate | question | who is coming | accepted | declined |
+| --------------- | ---- | -------- | ------------- | -------- | -------- |
+| iPhone 14 (664) | 664  | 664      | 664           | 664      | 664      |
+| Pixel 7 (839)   | 839  | 839      | 839           | 839      | 839      |
+| 1440×900        | 900  | 900      | 900           | 900      | 900      |
+
+Five people is the tightest and it is 1.00 on both phones. `ff8af29`'s guard is
+unchanged and not loosened; it grew two assertions instead — the gate's two
+groups are at the two ends of the screen, and on the screen that asks who is
+coming the card is in the top quarter while the way back is in the bottom one.
+
+**ONE NUMBER THAT IS NOT 1.00, AND IT IS NOT THIS PASS'S.** At 1280×720 the
+question screen is 768 tall. Measured at `19d67f2` it was 772, so this pass made
+it four pixels better and left it over. It is a desktop window shorter than the
+content of one step; the one-screen guard is a phone guard by construction and
+the couple's own review was on a phone. Recorded rather than fixed here.
+
+**AND A TRAP IN THE MEASUREMENT ITSELF, WORTH THE PARAGRAPH.** The harness makes
+every glyph transparent and removes every ground the screen draws for itself,
+then reads the photograph underneath. Twice it lied. The first time the native
+radios and checkboxes came back as pure white — `#FFFFFF`, brighter than
+anything in the picture — because `color: transparent` does not touch a control
+the browser paints itself. The second was subtler: `.rsvp__venue-map` and
+`.rsvp__back` carry `transition-colors`, so injecting the stripping stylesheet
+started a fade and the screenshot caught the words halfway out, reading them
+back as their own background. `transition: none` and `visibility: hidden` on
+inputs and SVGs fixed both. A contrast number is only as good as the proof that
+the shot contained no ink.
+
+The third trap cost the most and was not about colour at all: a stale `next
+start` still holding port 3210 meant a rebuilt app was being measured through an
+old server whose asset hashes no longer resolved. The page rendered as the
+blurred backdrop and nothing else, the figure measured zero pixels tall, and
+Playwright reported the photograph intercepting clicks on the submit button —
+which reads exactly like a layout regression. `lsof -ti tcp:PORT` before
+trusting a number.
+
+**RED, QUOTED, FOR THE REST.** The layout assertions were written against the
+shipped screens and forced to fail:
+
+    × how the gate is composed on a phone > pushes its two groups to the two ends
+    expected '\n        gate mx-auto flex min-h-dvh…' to contain 'justify-between'
+
+and the one-frame test for the solo flow was proven able to fail by the shape of
+its own construction: against an action that resolves immediately it is green
+whatever the stepper does, which is why it holds the promise open.
+
+**GREEN.** `npm test` 2,450 unit and component tests, of which the 2,442 outside
+`lib/server/guest-directory.spec.ts` all pass (2,445 at `19d67f2`).
+`npm run typecheck`, `npm run lint` (0 errors, 8 warnings — the same eight, all
+in files this unit did not touch), `npm run format:check`, `npm run build`.
+
+**NOT GREEN, AND STILL NOT THIS UNIT'S DOING.** The same eight
+`lib/server/guest-directory.spec.ts` failures U35 and U36 recorded, and the same
+`e2e/console-guest-directory.spec.ts:104`, from the same cause: the local
+Supabase holds more `invitation_guests` rows than PostgREST will return in one
+unpaged page, so a freshly seeded fixture falls outside the first thousand.
+`PORT=3100 npx playwright test` therefore reports 192 passed, 1 failed and 42
+not run — that file's serial describe aborts and takes the `wedding-facts`
+project's dependency with it. Run around that one file, **207 of 207 pass**,
+which is the 211 U36 recorded minus the four browser tests this unit deleted
+with the recovery link and the accepted screen's way back.
+
+**THE WORK UNITS.** `484565d feat(invitation): give the middle of the gate back
+to the couple` — the gate, the deleted recovery chain and its specs, verified
+green on its own before the rest was staged. `1e460f8 feat(invitation): move the
+three answering screens off the couple's faces` — the question, the list, the
+confirmation, the solo flow and the card's ground. Two rather than five, because
+the five changes interlock through three shared files: `RsvpAnswer` carries
+three of them, and two browser specs carry four.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
@@ -2893,11 +3160,14 @@ on `pixel-7`, all 16 of `wedding-facts`.
   the invitation. It repeated the WhatsApp message that brings a guest here and
   cost the question screen a tenth of its height. Theirs to overrule — the price
   is stated in U34.
-- A refused gate is eight pixels taller than an iPhone 14 screen — it was
-  twelve until U35 absorbed a section gap into the panel and stopped
-  over-reserving the refusal's line. The gate is the one surface deliberately
-  left free to scroll, so this is a degradation rather than a defect, but it is
-  still the only number in the feature that is not 1.00.
+- A refused gate was eight pixels taller than an iPhone 14 screen at U36 — it
+  was twelve until U35 absorbed a section gap into the panel. It has NOT been
+  re-measured since U37 moved the form to the foot of the screen, and the move
+  cuts both ways: the panel no longer competes with the announcement for the
+  middle, but it grows upward into it when a refusal wraps. The gate is the one
+  surface deliberately left free to scroll, so this is a degradation rather
+  than a defect either way — but the number in this list is now stale rather
+  than measured.
 - The submit button is quiet against the photograph. That was written here as
   "legible and unambiguous, since it is the only one", and U35 measured it:
   2.94:1 on a Pixel 7, against a 4.5:1 minimum. It was quiet because it was
@@ -2905,12 +3175,30 @@ on `pixel-7`, all 16 of `wedding-facts`.
   the button itself changing at all, so what is left really is a question of
   weight rather than of legibility — and still one the couple may want to
   overrule.
-- The gate's card covers the couple, the way the question screen's card already
-  does. The photograph carries the screen through the waterfall above it, but a
-  guest who opens the invitation no longer sees Luis and Michell until they are
-  through the gate. Overruling it means a different photograph for that one
-  screen — the engagement shot is already the landing's and is the phone's own
-  shape — which is the couple's choice, not a value to tune.
+- The gate's card no longer covers the couple, which closes the question U35
+  left open here. It said a guest opening the invitation "no longer sees Luis
+  and Michell until they are through the gate", and offered a different
+  photograph as the only way out. U37 answered it by moving the card instead:
+  at 66%–96% it sits over their legs and the dark ground below, and both faces
+  are clear above it. The two cards on the screens behind the gate still cover
+  them, and there the picture is the point rather than the subject.
+- The affirmative answer is "¡Sí, acepto!" for everybody, and the refusal is
+  still inflected — so a household is asked "¿Podrán acompañarnos?" and offered
+  "¡Sí, acepto!" beside "No podemos acompañarlos". That is the couple's own
+  string applied literally to a function they had previously asked to speak in
+  both voices, and it is the one line in this pass that reads as a mixture
+  rather than a decision. "¡Sí, aceptamos!" for a household of two or more is a
+  one-line change in `rsvp-copy.ts`, and it is theirs, not one to invent.
+- An accepted answer cannot be changed from inside the invitation any more.
+  That was put to the couple before it was built and chosen; what it leaves is
+  a household that ticks three people and then loses one, with nothing on the
+  page to press. `currentRsvpSentence`'s attending branch and the seeding of
+  the checkboxes from a stored acceptance are kept but unreachable, so putting
+  the button back is one element rather than a rewrite.
+- At 1280×720 the question screen is 768 pixels tall. It was 772 before U37, so
+  the pass improved it and left it over: it is a desktop window shorter than
+  one step's content, and the one-screen guard is a phone guard by
+  construction. Nothing on that screen is clipped; the window scrolls.
 - `listGuestDirectory` reads the guest directory with an unpaginated
   `.select()`, and PostgREST stops at 1000 rows. The list is 388 people, so
   nothing is missing today; past a thousand the console would simply stop
