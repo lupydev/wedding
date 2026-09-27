@@ -124,7 +124,10 @@ function renderQuestion() {
     <RsvpAnswer
       action={async () => ({ status: "idle" as const })}
       announcement={<p>Nos casamos</p>}
-      ceremony={{ streamUrl: "https://meet.google.com/abc-defg-hij" }}
+      ceremony={{
+        streamUrl: "https://meet.google.com/abc-defg-hij",
+        coupleNames: "Luis & Michell",
+      }}
       current={{
         attending: false,
         seatsConfirmed: 0,
@@ -165,7 +168,10 @@ async function renderRefused() {
     <RsvpAnswer
       action={async () => ({ status: "not_authorized" as const })}
       announcement={<p>Nos casamos</p>}
-      ceremony={{ streamUrl: "https://meet.google.com/abc-defg-hij" }}
+      ceremony={{
+        streamUrl: "https://meet.google.com/abc-defg-hij",
+        coupleNames: "Luis & Michell",
+      }}
       current={null}
       greetingName="Familia Aguirre"
       guests={GUESTS}
@@ -197,7 +203,10 @@ async function renderAttendeesRefused() {
     <RsvpAnswer
       action={async () => ({ status: "not_authorized" as const })}
       announcement={<p>Nos casamos</p>}
-      ceremony={{ streamUrl: "https://meet.google.com/abc-defg-hij" }}
+      ceremony={{
+        streamUrl: "https://meet.google.com/abc-defg-hij",
+        coupleNames: "Luis & Michell",
+      }}
       current={null}
       greetingName="Familia Aguirre"
       guests={GUESTS}

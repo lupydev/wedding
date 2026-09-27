@@ -43,22 +43,22 @@ import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
  */
 export type StreamInvitationCeremony = StreamDetailsValues;
 
-/**
- * Where "add it to my calendar" points.
- *
- * Built by the route rather than here, so this component stays props-only and
- * testable with one plain string.
- */
-export interface StreamInvitationCalendar {
-  readonly googleHref: string;
-}
+/*
+  A `StreamInvitationCalendar` PROP STOOD HERE.
+
+  The route built the event and handed this component a `googleHref` string,
+  which kept the component props-only and testable — and left the declined
+  screen, which renders the same block from a different route, with no
+  calendar at all. The entry is built inside `StreamDetails` now, from the
+  row both surfaces already pass it, so there is one definition of when this
+  wedding is rather than one per page. This component is still props-only;
+  it simply has one fewer prop to get wrong.
+*/
 
 export function StreamInvitation({
   ceremony,
-  calendar,
 }: {
   readonly ceremony: StreamInvitationCeremony;
-  readonly calendar: StreamInvitationCalendar;
 }) {
   /*
    * TWO GROUPS AND NO WRAPPER, SO THE PAGE CAN PUT ONE AT EACH END.
@@ -157,54 +157,21 @@ export function StreamInvitation({
         <StreamDetails ceremony={ceremony} className="block w-full" />
 
         {/*
-          THE REMINDER, WHICH IS THE ONLY THING ON THIS PAGE THAT SPEAKS UP BY
-          ITSELF.
+          THE ADD-TO-CALENDAR BUTTON USED TO BE DRAWN HERE, AND IS NOW PART OF
+          THE BLOCK ABOVE.
 
-          A guest joining by stream has no journey to plan, and that is
-          precisely why the date slips: nothing else in their week points at it.
+          The couple asked for the same control on the screen a household
+          reaches by declining, which renders `StreamDetails` and had no
+          calendar at all. Two copies of a calendar entry is the failure
+          `components/landing/photos.ts` describes for the photographs — "two
+          different weddings" — with a date attached, so the entry is built
+          once inside `StreamDetails` from the row it already renders.
 
-          ONE ACTION, AND IT DOWNLOADS NOTHING. A `.ics` file sat beside this
-          and was removed on the couple's instruction — answering a tap by
-          dropping a file into a downloads folder has not helped anybody reading
-          a wedding invitation on their phone.
-
-          The cost is named rather than hidden: a guest on Apple Calendar or
-          Outlook with no Google account gets no entry from this page. That was
-          the couple's call, and `StreamInvitation.spec.tsx` holds the rule so
-          the file cannot drift back in without one.
+          What that block still carries is everything this one asserted: the
+          Google link, `target="_blank"`, `noopener`, the full-column width
+          that matches "Entrar a la transmisión", and no `.ics` file. The
+          reasoning for each is in `StreamDetails`.
         */}
-        <a
-          href={calendar.googleHref}
-          target="_blank"
-          /*
-           * `noopener` first, and it is not decoration: without it the new tab
-           * can reach back into this one through `window.opener`. `noreferrer`
-           * implies it on modern browsers and is set for its own sake as well.
-           */
-          rel="noopener noreferrer"
-          /*
-            THE SAME WIDTH AS "Entrar a la transmisión", ON THE COUPLE'S
-            INSTRUCTION: "el botón de Google debe quedar igual que el de entrar
-            a la reunión en tamaño."
-
-            That one is `block w-full`, so it fills the column; this shrank to
-            its own text. Two controls stacked in one column at two different
-            widths reads as one of them being less of a button than the other —
-            and the smaller was the optional action, which is the wrong one to
-            make look provisional.
-          */
-          className="
-            block w-full rounded-full border border-[#f6efe2]/30 bg-black/30
-            px-5 py-2.5 text-center
-            text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
-            duration-(--console-motion-fast) ease-(--ease-console-out)
-            hover:bg-black/50
-            focus-visible:outline-2 focus-visible:outline-offset-2
-            focus-visible:outline-[#f6efe2]
-          "
-        >
-          Agregar a Google Calendar
-        </a>
 
         {/*
           THE WAY BACK, AND `<Link>` RATHER THAN `<a>` IS THE WHOLE POINT.

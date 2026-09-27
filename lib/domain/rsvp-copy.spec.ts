@@ -5,6 +5,7 @@ import {
   RSVP_CLOSED_MESSAGE,
   currentRsvpSentence,
   rsvpConfirmedHeading,
+  rsvpDeclinedHeading,
   rsvpDeadlineSentence,
   rsvpFeedbackMessages,
 } from "./rsvp-copy";
@@ -292,5 +293,63 @@ describe("rsvpConfirmedHeading", () => {
     expect(line).not.toMatch(/[¡!]/);
     expect(line).toMatch(/^Los esperamos, /);
     expect(line.endsWith(".")).toBe(false);
+  });
+});
+
+/**
+ * AND THE OTHER ENDING, WHICH IS THE SAME LINE IN THE OTHER DIRECTION.
+ *
+ * "Los vamos a extrañar, {name}" — what a household reads after saying they
+ * cannot come. It replaced two things at once: the greeting that opened that
+ * screen and the "Los esperamos por Google Meet" heading below it, neither
+ * of which said the thing the screen is for.
+ *
+ * ASSERTED AS A PAIR, deliberately. These two lines are the two endings of
+ * one invitation and the couple wrote them as a pair; a change to the number
+ * rule, the comma or the register in one of them is a change that should be
+ * made in both, and the assertion below is what tells the next reader so.
+ */
+describe("rsvpDeclinedHeading", () => {
+  it("misses a household, and names it", () => {
+    expect(rsvpDeclinedHeading(4, "Familia Restrepo")).toBe(
+      "Los vamos a extrañar, Familia Restrepo",
+    );
+  });
+
+  it("misses one guest, and names them", () => {
+    expect(rsvpDeclinedHeading(1, "Camila")).toBe(
+      "Te vamos a extrañar, Camila",
+    );
+  });
+
+  it("takes a membership and nothing about the answer", () => {
+    expect(rsvpDeclinedHeading.length).toBe(2);
+  });
+
+  it("treats a count it should never see as a household", () => {
+    expect(rsvpDeclinedHeading(0, "Familia Ossa")).toBe(
+      rsvpDeclinedHeading(2, "Familia Ossa"),
+    );
+  });
+
+  it("is written the way its twin is written", () => {
+    const line = rsvpDeclinedHeading(3, "Familia Aguirre");
+
+    expect(line).not.toMatch(/[¡!]/);
+    expect(line).toMatch(/^Los vamos a extrañar, /);
+    expect(line.endsWith(".")).toBe(false);
+  });
+
+  /**
+   * THE PAIR ITSELF, asserted rather than described: both endings switch on
+   * the same number, at the same boundary, and neither of them shouts.
+   */
+  it("turns singular at the same place its twin does", () => {
+    for (const memberCount of [1, 2, 3, 4]) {
+      const expected = memberCount === 1 ? /^Te / : /^Los /;
+
+      expect(rsvpDeclinedHeading(memberCount, "X")).toMatch(expected);
+      expect(rsvpConfirmedHeading(memberCount, "X")).toMatch(expected);
+    }
   });
 });

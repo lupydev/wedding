@@ -44,6 +44,12 @@
  * English.
  */
 
+import {
+  buildStreamCalendarEvent,
+  googleCalendarUrl,
+} from "@/lib/domain/calendar-event";
+import { WEDDING_INSTANT } from "@/lib/domain/wedding-day";
+
 /** The stream half of the `ceremony` row, as a component renders it. */
 /**
  * Is this value somewhere a browser can actually go?
@@ -78,6 +84,17 @@ function isJoinable(value: string): boolean {
  */
 export interface StreamDetailsValues {
   readonly streamUrl: string;
+  /**
+   * AND THE ONE FACT THE CALENDAR ENTRY'S TITLE NEEDS, WHICH IS WHY IT IS
+   * HERE AND NOT ONLY ON THE PAGES.
+   *
+   * The entry reads "Matrimonio de {coupleNames}". It is the same field of
+   * the same `ceremony` row both callers already hold, so asking for it costs
+   * nothing and buying the alternative — a `COUPLE_NAMES` constant read here
+   * while the row is read everywhere else — would be two sources for one
+   * wedding's name.
+   */
+  readonly coupleNames: string;
 }
 
 export function StreamDetails({
@@ -150,10 +167,11 @@ export function StreamDetails({
            */
           rel="noopener noreferrer"
           className="
-            block w-full rounded-full border border-current/30 bg-black/25
+            flex min-h-11 w-full items-center justify-center rounded-full
+            border border-current/60 bg-black/40
             px-5 py-2.5 text-center text-sm backdrop-blur-sm transition-colors
             duration-(--console-motion-fast) ease-(--ease-console-out)
-            hover:bg-black/40
+            hover:bg-black/55
             focus-visible:outline-2 focus-visible:outline-offset-2
             focus-visible:outline-current
           "
@@ -165,6 +183,73 @@ export function StreamDetails({
           {ceremony.streamUrl}
         </p>
       )}
+
+      {/*
+        THE REMINDER, AND IT LIVES HERE SO THAT TWO SURFACES CANNOT DISAGREE
+        ABOUT WHEN THIS WEDDING IS.
+
+        It was `/transmision`'s alone: the route built the event, passed a
+        `googleHref` down, and `StreamInvitation` drew the button. The couple
+        asked for the same control on the declined screen, which renders THIS
+        block and had no calendar of any kind — and the obvious way to give it
+        one is the way `components/landing/photos.ts` argues against for the
+        photographs, because two definitions "would drift into two different
+        weddings". A calendar entry is that failure with a date attached: two
+        screens offering the same wedding at two different times, and the
+        guest who took the wrong one finds out on the day.
+
+        So the entry is built once, HERE, from the row this block already
+        renders and the same `WEDDING_INSTANT` the countdown runs on. Both
+        surfaces get the button by rendering this component, and there is no
+        prop either of them could pass wrongly. `buildStreamCalendarEvent` and
+        `googleCalendarUrl` are unchanged and still hold their own spec;
+        nothing about the URL is hand-rolled here.
+
+        ONLY WHEN THERE IS SOMEWHERE TO GO, for the same reason the link above
+        is conditional — and this one matters more. The entry's description
+        carries the address, so an unfinished row would write the seeded
+        placeholder into somebody's calendar as the joining link: a reminder
+        that looks correct for months and fails on the one morning it is
+        read.
+      */}
+      {isJoinable(ceremony.streamUrl) ? (
+        <a
+          href={googleCalendarUrl(
+            buildStreamCalendarEvent(
+              {
+                coupleNames: ceremony.coupleNames,
+                streamUrl: ceremony.streamUrl,
+              },
+              WEDDING_INSTANT,
+            ),
+          )}
+          target="_blank"
+          /*
+           * `noopener` first, and it is not decoration: without it the new tab
+           * can reach back into this one through `window.opener`, and one of
+           * the two surfaces that renders this sits behind a phone gate.
+           */
+          rel="noopener noreferrer"
+          /*
+            THE SAME WIDTH AS "Entrar a la transmisión", ON THE COUPLE'S OWN
+            INSTRUCTION: "el botón de Google debe quedar igual que el de
+            entrar a la reunión en tamaño." Both are `block w-full` of the
+            same box now that they are siblings, rather than two places
+            agreeing.
+          */
+          className="
+            mt-3 flex min-h-11 w-full items-center justify-center rounded-full
+            border border-current/60 bg-black/40
+            px-5 py-2.5 text-center text-sm backdrop-blur-sm transition-colors
+            duration-(--console-motion-fast) ease-(--ease-console-out)
+            hover:bg-black/55
+            focus-visible:outline-2 focus-visible:outline-offset-2
+            focus-visible:outline-current
+          "
+        >
+          Agregar a Google Calendar
+        </a>
+      ) : null}
     </div>
   );
 }

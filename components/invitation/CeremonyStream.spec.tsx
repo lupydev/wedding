@@ -20,6 +20,7 @@ import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
 
 const CEREMONY: CeremonyStreamDetails = {
   streamUrl: "https://meet.google.com/abc-defg-hij",
+  coupleNames: "Luis & Michell",
 };
 
 function renderCard(onReconsider = vi.fn(), memberCount = 2) {
@@ -57,7 +58,10 @@ describe("CeremonyStream", () => {
     // obviously unfinished invitation into a plausible wrong one.
     render(
       <CeremonyStream
-        ceremony={{ streamUrl: "{{MEET_URL}}" }}
+        ceremony={{
+          streamUrl: "{{MEET_URL}}",
+          coupleNames: "Luis & Michell",
+        }}
         memberCount={2}
         onReconsider={vi.fn()}
       />,
@@ -108,12 +112,28 @@ describe("CeremonyStream", () => {
  * is the same offer, made to a household that has just declined.
  */
 describe("the words on the card", () => {
-  it("invites the household to the stream in one line", () => {
+  /**
+   * AND IT CARRIES NO HEADING OF ITS OWN ANY MORE.
+   *
+   * This asserted "Los esperamos por Google Meet" as an `h2`. It sat under
+   * "¡Hola, {name}!" — two headings, one of which greeted and neither of
+   * which said the thing the screen is for. The couple replaced both with one
+   * line in the greeting's place, "Los vamos a extrañar, {name}", which is
+   * `rsvpDeclinedHeading` and is painted by `RsvpAnswer` because only the
+   * stepper knows which screen is showing.
+   *
+   * So the absence is asserted here and the line itself is asserted where it
+   * is rendered — `RsvpAnswer.spec.tsx`, "says it will miss a household that
+   * cannot come". A card that grew its own heading back would put two on the
+   * screen again, which is exactly what this catches.
+   */
+  it("invites the household to the stream in one line, under no heading", () => {
     renderCard();
 
+    expect(screen.queryByRole("heading")).toBeNull();
     expect(
-      screen.getByRole("heading", { name: "Los esperamos por Google Meet" }),
-    ).toBeInTheDocument();
+      screen.queryByText(/Los esperamos por Google Meet/),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(/Vamos a transmitir la ceremonia en vivo/),
     ).toBeInTheDocument();

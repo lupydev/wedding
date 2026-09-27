@@ -94,19 +94,46 @@ export function CeremonyStream({
       a third control: every child is `w-full` of the same box by construction,
       rather than by three places agreeing.
     */
-    <div className="rsvp__stream mx-auto flex w-full max-w-sm flex-col items-center gap-4 text-center">
-      <h2 className="font-display text-xl text-[#f6efe2] sm:text-2xl">
-        Los esperamos por Google Meet
-      </h2>
-      <p className="text-sm text-[#f6efe2]/85">{welcome(memberCount)}</p>
-
+    <div className="rsvp__stream mx-auto flex w-full max-w-sm flex-1 flex-col items-center justify-between gap-4 text-center">
       {/*
+        TWO GROUPS, ONE AT EACH END, WHICH IS THE SHAPE EVERY OTHER SCREEN OF
+        THIS INVITATION ALREADY HAS.
+
+        Everything used to sit in one block pushed to the foot: the heading,
+        the paragraph, the way in, then the sentence about changing your mind
+        and the button under it. The couple asked for the stream itself to go
+        to the TOP — "el bloque de la transmisión arriba" — and the way back
+        to stay where it is, because it is the one mind-change a guest can
+        still make and it belongs beside the consequence.
+
+        So the middle of the photograph is the photograph's again, the way
+        U37 made it on the other three screens.
+      */}
+      <div className="flex w-full flex-col items-center gap-4">
+        {/*
+          A HEADING STOOD HERE AND THE SCREEN'S TOP LINE SAYS IT NOW.
+
+          "Los esperamos por Google Meet", under "¡Hola, {name}!" — two
+          headings, one of which greeted and neither of which said the thing
+          this screen is for. The couple replaced both with one line in the
+          greeting's own place: "Los vamos a extrañar, {name}", the pair to
+          "Los esperamos" on the accepted screen. `rsvpDeclinedHeading` holds
+          it, next to its twin, and `RsvpAnswer` paints it — only the stepper
+          knows which screen is showing.
+
+          The paragraph stands on its own once the heading says the feeling.
+        */}
+        <p className="rsvp__stream-welcome text-sm text-[#f6efe2]">
+          {welcome(memberCount)}
+        </p>
+
+        {/*
         The same block the public stream page renders, so the two surfaces
         cannot disagree about what these values are called or which order they
         come in. It renders them verbatim, placeholders included; the reasoning
         lives in `StreamDetails`.
       */}
-      {/*
+        {/*
         NEITHER THE DAY NOR THE HOUR, FOR THE REASON `/transmision` ALREADY
         GAVE. This card sits inside the invitation, below an announcement that
         names the day and counts down to it. A second statement is not
@@ -117,22 +144,35 @@ export function CeremonyStream({
         value on a page a guest could open — and migration 0018 dropped the two
         columns those props read.
       */}
-      <StreamDetails ceremony={ceremony} className="w-full" />
+        <StreamDetails ceremony={ceremony} className="w-full" />
+      </div>
 
-      <p className="rsvp__reconsider text-xs text-[#f6efe2]/70">
-        {reconsiderSentence(memberCount)}
-      </p>
-      <button
-        type="button"
-        onClick={onReconsider}
-        /*
+      {/*
+        AND THE ONE MIND-CHANGE A GUEST CAN STILL MAKE, KEPT AT THE FOOT.
+
+        The couple kept this deliberately while removing every other way back
+        in U37: a decline submits on the first tap, so a mis-tap is recorded
+        instantly and the escape has to sit beside the consequence. Two
+        browser stories in `1e460f8` are told decline-first because this is
+        the only reversal the product still offers.
+      */}
+      <div className="flex w-full flex-col items-center gap-4">
+        <p className="rsvp__reconsider text-xs text-[#f6efe2]/85">
+          {reconsiderSentence(memberCount)}
+        </p>
+        <button
+          type="button"
+          onClick={onReconsider}
+          /*
           FULL WIDTH, LIKE THE CONTROL ABOVE IT: "el botón debe ocupar todo el
           espacio, el de volver a responder." It sat centred at its own text
           width under a block whose other control fills the column — the same
           mismatch `/transmision` already had between its two buttons.
         */
-        className="
-          block w-full rounded-full border border-[#f6efe2]/30 bg-black/30
+          className="
+          rsvp__reconsider-button
+          flex min-h-11 w-full items-center justify-center rounded-full
+          border border-[#f6efe2]/60 bg-black/30
           px-5 py-2.5 text-center
           text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
           duration-(--console-motion-fast) ease-(--ease-console-out)
@@ -140,9 +180,10 @@ export function CeremonyStream({
           focus-visible:outline-2 focus-visible:outline-offset-2
           focus-visible:outline-[#f6efe2]
         "
-      >
-        Volver a responder
-      </button>
+        >
+          Volver a responder
+        </button>
+      </div>
     </div>
   );
 }

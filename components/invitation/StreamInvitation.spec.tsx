@@ -10,10 +10,7 @@ import {
 
 const CEREMONY: StreamInvitationCeremony = {
   streamUrl: "https://meet.google.com/abc-defg-hij",
-};
-
-const CALENDAR = {
-  googleHref: "https://calendar.google.com/calendar/render?action=TEMPLATE",
+  coupleNames: COUPLE_NAMES,
 };
 
 /**
@@ -36,7 +33,7 @@ describe("StreamInvitation", () => {
    * first tweak to either.
    */
   it("carries the landing's own announcement block", () => {
-    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: COUPLE_NAMES }),
@@ -58,7 +55,7 @@ describe("StreamInvitation", () => {
    * but only for the string it is given, and no test asked for this one.
    */
   it("makes it once, not twice", () => {
-    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(screen.getAllByText("Nos casamos")).toHaveLength(1);
   });
@@ -72,7 +69,7 @@ describe("StreamInvitation", () => {
    * announcement is shared rather than reproduced.
    */
   it("counts down here too", () => {
-    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(screen.getByTestId("countdown-summary")).toBeInTheDocument();
   });
@@ -97,7 +94,7 @@ describe("StreamInvitation", () => {
    * beside the wrong address would have passed the old test and fails this.
    */
   it("offers a way in that points at the stored address", () => {
-    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(
       screen.getByRole("link", { name: /Entrar a la transmisión/ }),
@@ -118,7 +115,7 @@ describe("StreamInvitation", () => {
    * new.
    */
   it("states the day exactly once, from the announcement", () => {
-    render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     // `SaveTheDate`'s own `<time>`, and nothing else on the page.
     expect(screen.getAllByTestId("save-the-date-when")).toHaveLength(1);
@@ -137,9 +134,7 @@ describe("StreamInvitation", () => {
    * rewritten.
    */
   it("keeps the whole page in the singular", () => {
-    const { container } = render(
-      <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
-    );
+    const { container } = render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(container.textContent).not.toMatch(
       /\bpueden\b|\bestén\b|\babran\b|\belijan\b|\bescriban\b/i,
@@ -155,9 +150,7 @@ describe("StreamInvitation", () => {
    * explains it anyway is a page that thinks less of whoever is reading it.
    */
   it("does not explain how to use Zoom", () => {
-    const { container } = render(
-      <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
-    );
+    const { container } = render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(container.textContent).not.toMatch(/unirse/i);
   });
@@ -173,9 +166,7 @@ describe("StreamInvitation", () => {
    * would slip through review.
    */
   it("names no venue and no address", () => {
-    const { container } = render(
-      <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
-    );
+    const { container } = render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(container.textContent).not.toMatch(/dirección|calle|carrera|venue/i);
   });
@@ -192,7 +183,6 @@ describe("StreamInvitation", () => {
     render(
       <StreamInvitation
         ceremony={{ ...CEREMONY, streamUrl: "{{MEET_URL}}" }}
-        calendar={CALENDAR}
       />,
     );
 
@@ -207,12 +197,31 @@ describe("StreamInvitation", () => {
    * inside it is the only thing on this page that will speak up on its own.
    */
   describe("adding it to a calendar", () => {
+    /**
+     * THE LINK IS BUILT, NOT PASSED, AND THAT IS WHAT THIS NOW ASSERTS.
+     *
+     * It used to be a `calendar={{ googleHref }}` prop this page composed, so
+     * the assertion could only check that the string arrived — true of any
+     * string. The couple asked for the same button on the declined screen,
+     * which renders the same `StreamDetails` block, and two routes building
+     * one calendar entry is two weddings waiting to disagree. The entry is
+     * built inside that block now, so what is worth asserting here is that
+     * this page offers an entry for THIS wedding: Google's own endpoint,
+     * carrying the couple's names.
+     */
     it("offers Google Calendar, opened away from this page", () => {
-      render(<StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />);
+      render(<StreamInvitation ceremony={CEREMONY} />);
 
       const google = screen.getByRole("link", { name: /google calendar/i });
+      const href = new URL(google.getAttribute("href")!);
 
-      expect(google).toHaveAttribute("href", CALENDAR.googleHref);
+      expect(href.origin + href.pathname).toBe(
+        "https://calendar.google.com/calendar/render",
+      );
+      expect(href.searchParams.get("action")).toBe("TEMPLATE");
+      expect(href.searchParams.get("text")).toContain(COUPLE_NAMES);
+      // The address a guest is being reminded of is the one on the page.
+      expect(href.searchParams.get("details")).toContain(CEREMONY.streamUrl);
       expect(google).toHaveAttribute("target", "_blank");
       // Without `noopener` the new tab can reach back into this one through
       // `window.opener`. `noreferrer` implies it, and is set for both reasons.
@@ -237,9 +246,7 @@ describe("StreamInvitation", () => {
      * through this component.
      */
     it("offers no file to download", () => {
-      const { container } = render(
-        <StreamInvitation ceremony={CEREMONY} calendar={CALENDAR} />,
-      );
+      const { container } = render(<StreamInvitation ceremony={CEREMONY} />);
 
       for (const anchor of container.querySelectorAll("a")) {
         expect(anchor.getAttribute("href")).not.toMatch(/\.ics/);
@@ -284,7 +291,7 @@ describe("the stream page's own words", () => {
    * lead should find out here that it was taken out rather than never written.
    */
   it("does not explain the stream above a control that is the explanation", () => {
-    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(
       screen.queryByText(/La ceremonia se va a transmitir/i),
@@ -305,7 +312,7 @@ describe("the stream page's own words", () => {
    * unlike a string comparison, this catches a line restated in ANY wording.
    */
   it("states neither the day nor the hour a second time", () => {
-    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     expect(screen.queryAllByRole("term")).toHaveLength(0);
     expect(screen.queryAllByRole("definition")).toHaveLength(0);
@@ -318,14 +325,25 @@ describe("the stream page's own words", () => {
  * The couple, with a screenshot of them stacked: "el botón de Google debe
  * quedar igual que el de entrar a la reunión en tamaño."
  *
- * "Entrar a la transmisión" is `block`, so it fills the column. The calendar
- * link shrank to its own text, so two controls sitting one above the other in
- * the same column were two different widths — which reads as one of them being
- * less of a button than the other, and the smaller one is the optional action.
+ * "Entrar a la transmisión" filled the column. The calendar link shrank to
+ * its own text, so two controls sitting one above the other in the same
+ * column were two different widths — which reads as one of them being less of
+ * a button than the other, and the smaller one is the optional action.
+ *
+ * THEY ARE SIBLINGS IN ONE COMPONENT NOW, which is what makes this hold by
+ * construction rather than by two places agreeing: both are written once, in
+ * `StreamDetails`, and both surfaces get them together.
+ *
+ * AND BOTH CLEAR 44 PIXELS, which they did not. `py-2.5` on `text-sm` draws a
+ * 42-pixel control, two under the floor, and the browser suite caught it the
+ * moment a third control joined them on the declined screen — see
+ * `e2e/invitation-one-screen.spec.ts`. The floor is declared with `min-h-11`
+ * rather than left to the padding, so a later change to the padding cannot
+ * quietly lower it.
  */
 describe("the two things there are to press", () => {
-  it("gives the calendar control the join control's width", () => {
-    render(<StreamInvitation calendar={CALENDAR} ceremony={CEREMONY} />);
+  it("gives the calendar control the join control's width and height", () => {
+    render(<StreamInvitation ceremony={CEREMONY} />);
 
     const join = screen.getByRole("link", { name: /Entrar a la transmisión/ });
     const calendar = screen.getByRole("link", {
@@ -333,8 +351,8 @@ describe("the two things there are to press", () => {
     });
 
     for (const control of [join, calendar]) {
-      expect(control.className).toContain("block");
       expect(control.className).toContain("w-full");
+      expect(control.className).toContain("min-h-11");
     }
   });
 });

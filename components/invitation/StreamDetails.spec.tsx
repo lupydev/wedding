@@ -6,6 +6,7 @@ import { StreamDetails, type StreamDetailsValues } from "./StreamDetails";
 
 const CEREMONY: StreamDetailsValues = {
   streamUrl: "https://meet.google.com/abc-defg-hij",
+  coupleNames: "Luis & Michell",
 };
 
 /**

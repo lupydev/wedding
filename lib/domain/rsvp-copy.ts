@@ -262,6 +262,37 @@ export function rsvpConfirmedHeading(
     : `Los esperamos, ${greetingName}`;
 }
 
+/**
+ * And what the OTHER ending opens with, which is the same line in the other
+ * direction.
+ *
+ * "Los vamos a extrañar, {name}" for two or more, "Te vamos a extrañar,
+ * {name}" for one. It replaces "¡Hola, {name}!" in the same place, keys off
+ * the same `memberCount`, takes the same vocative comma and the same flat
+ * register with no exclamation marks — everything written above
+ * `rsvpConfirmedHeading` applies here unchanged, which is why the two sit
+ * next to each other rather than in two files.
+ *
+ * A PAIR, AND THE PAIR IS THE POINT. The two endings of this invitation are
+ * the same sentence about the same people: one says we are expecting you, one
+ * says we will miss you. A future reader changing the tone of either should
+ * see the other immediately.
+ *
+ * IT ALSO TOOK OVER FROM A HEADING INSIDE THE CARD. The declined screen used
+ * to open "¡Hola, {name}!" and then say "Los esperamos por Google Meet" over
+ * the stream block. Two headings, one of which greeted and neither of which
+ * said the thing the screen is for. The couple replaced both with this, and
+ * `CeremonyStream` no longer renders a heading of its own.
+ */
+export function rsvpDeclinedHeading(
+  memberCount: number,
+  greetingName: string,
+): string {
+  return memberCount === 1
+    ? `Te vamos a extrañar, ${greetingName}`
+    : `Los vamos a extrañar, ${greetingName}`;
+}
+
 export function rsvpChoiceCopy(memberCount: number): RsvpChoiceCopy {
   return memberCount === 1
     ? {

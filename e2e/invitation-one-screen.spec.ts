@@ -630,6 +630,36 @@ test.describe("the invitation, one screen at a time", () => {
       "stream",
       page.getByRole("link", { name: /Entrar a la transmisión/ }),
     );
+
+    /*
+      AND IT CARRIES A THIRD CONTROL NOW WITHOUT LOSING ITS SHAPE.
+
+      The couple asked for "Agregar a Google Calendar" here — the button
+      `/transmision` already had — and for the stream block to move to the TOP
+      with the way back kept at the foot. Three controls on a screen that was
+      holding two is exactly the arithmetic that stops fitting, so it is
+      measured rather than assumed: both ends inside the fold, the stream
+      above the way back, and the middle left to the photograph.
+    */
+    const fold = await page.evaluate(() => window.innerHeight);
+    const calendar = (await page
+      .getByRole("link", { name: /Agregar a Google Calendar/ })
+      .boundingBox())!;
+    const join = (await page
+      .getByRole("link", { name: /Entrar a la transmisión/ })
+      .boundingBox())!;
+    const back = (await page
+      .getByRole("button", { name: "Volver a responder" })
+      .boundingBox())!;
+
+    expect(calendar.y).toBeGreaterThan(join.y);
+    expect(calendar.y + calendar.height).toBeLessThanOrEqual(fold);
+    expect(back.y).toBeGreaterThan(calendar.y + calendar.height);
+    expect(back.y + back.height).toBeLessThanOrEqual(fold);
+    // Every one of the three is still a target a thumb can hit.
+    for (const box of [join, calendar, back]) {
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
   });
 
   /**

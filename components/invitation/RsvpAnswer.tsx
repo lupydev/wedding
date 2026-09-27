@@ -8,6 +8,7 @@ import {
   currentRsvpSentence,
   rsvpChoiceCopy,
   rsvpConfirmedHeading,
+  rsvpDeclinedHeading,
   rsvpDeadlineSentence,
   rsvpFeedbackMessages,
   type RsvpFeedback,
@@ -550,13 +551,27 @@ export function RsvpAnswer({
     of whom one can come is still addressed as the three people the couple
     invited. `rsvpConfirmedHeading` carries the long version of that.
   */
-  const greeting = (
-    <InvitationGreeting>
-      {step === "confirmed"
-        ? rsvpConfirmedHeading(guests.length, greetingName)
-        : greetingLine(greetingName)}
-    </InvitationGreeting>
-  );
+  /*
+    AND THE TWO ENDINGS BOTH SAY SOMETHING ELSE IN THAT PLACE NOW.
+
+    It was one exception — the accepted screen — and the declined screen kept
+    "¡Hola, <name>!" with "Los esperamos por Google Meet" as a heading under
+    it. Two headings, one of which greeted and neither of which said the
+    thing that screen is for. The couple replaced both with the pair to the
+    accepted line: "Los vamos a extrañar, <name>".
+
+    So this is one element with THREE possible lines rather than two, and the
+    two endings are a pair in the domain as well — see `rsvpDeclinedHeading`
+    beside `rsvpConfirmedHeading`. The screens that still ASK are the ones
+    that still greet.
+  */
+  const heading =
+    step === "confirmed"
+      ? rsvpConfirmedHeading(guests.length, greetingName)
+      : step === "stream"
+        ? rsvpDeclinedHeading(guests.length, greetingName)
+        : greetingLine(greetingName);
+  const greeting = <InvitationGreeting>{heading}</InvitationGreeting>;
 
   function toggle(guestId: string, checked: boolean) {
     setSelected((previous) =>
@@ -671,10 +686,7 @@ export function RsvpAnswer({
     return (
       <>
         {greeting}
-        <div
-          className="rsvp flex flex-1 flex-col justify-end"
-          data-rsvp-step={step}
-        >
+        <div className="rsvp flex flex-1 flex-col" data-rsvp-step={step}>
           <CeremonyStream
             ceremony={ceremony}
             memberCount={guests.length}

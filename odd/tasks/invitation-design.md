@@ -201,6 +201,18 @@ declined screen given the language `/transmision` already uses.
       been sitting on the brightest pixel in the photograph at `bg-black/25`
       since U34, and prose had recorded it as fine.
 
+- [x] **U39 — the screen a household reaches by saying no.** The greeting
+      becomes "Los vamos a extrañar, {name}", the pair to "Los esperamos" on
+      the other ending and now beside it in the domain; the heading that said
+      "Los esperamos por Google Meet" is gone; the stream block moves to the
+      top with the way back kept at the foot; and "Agregar a Google Calendar"
+      arrives by SHARING `/transmision`'s button rather than rebuilding it —
+      one calendar entry, built inside the block both surfaces render, because
+      two would be two weddings with a date attached. The move put the words
+      in the gap between the two scrims, which is where the fourth legibility
+      spec found a 4.15:1 paragraph, two 1.77:1 control edges and three
+      42-pixel targets.
+
 - [x] **U38 — the two answers became two buttons, and three screens became
       one card.** The couple compared the question with the gate: the card
       had to be the gate's card to the pixel — 374 wide with its controls at
@@ -3508,6 +3520,125 @@ returns, so a freshly created row falls outside the first thousand. Not fixed
 here and not reset; it is the same entry already in **Next**, and it is now
 doing the damage that entry predicted: eleven red tests nobody reads is how a
 real failure gets through.
+
+### U39 — done (the screen a household reaches by saying no)
+
+**WHAT WAS ASKED.** Four changes to the declined screen, and one of them was
+already built somewhere else.
+
+| #   | asked                                                                               | done                                             |
+| --- | ----------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 1   | the greeting becomes "Los vamos a extrañar, {name}" / "Te vamos a extrañar, {name}" | `rsvpDeclinedHeading`, beside its twin           |
+| 2   | delete the "Los esperamos por Google Meet" heading                                  | gone; the screen has no `h2` at all now          |
+| 3   | the stream block goes to the TOP, the way back stays at the foot                    | two groups, one at each end                      |
+| 4   | add "Agregar a Google Calendar"                                                     | shared out of `/transmision` rather than rebuilt |
+
+**THE TWO ENDINGS ARE A PAIR NOW, IN THE DOMAIN AND ON THE SCREEN.** The
+accepted screen has said "Los esperamos, {name}" in the greeting's place since
+U36. The declined screen kept "¡Hola, {name}!" and put "Los esperamos por
+Google Meet" underneath it: two headings, one of which greeted and neither of
+which said the thing the screen is for. `rsvpDeclinedHeading` sits directly
+beside `rsvpConfirmedHeading` in `rsvp-copy.ts` — same `memberCount`
+boundary, same vocative comma, same flat register, no exclamation marks — and
+`rsvp-copy.spec.ts` asserts the pair rather than the line: both turn singular
+at the same place, and a change to either that leaves the other behind is
+red.
+
+The heading inside `CeremonyStream` is gone, and its spec asserts the absence
+— `queryByRole("heading")` is null — so a card that grows its own heading back
+puts two on the screen again and is caught.
+
+**THE CALENDAR ENTRY IS BUILT ONCE, WHICH IS THE WHOLE OF ITEM 4.**
+`/transmision` had the button: the route composed
+`googleCalendarUrl(buildStreamCalendarEvent(...))` and passed a `googleHref`
+down to `StreamInvitation`, which drew it. The declined screen renders
+`StreamDetails` and had no calendar of any kind.
+
+Two routes building one calendar entry is the failure
+`components/landing/photos.ts` argues against for the photographs — "two
+different weddings" — with a date attached: two screens offering the same
+wedding at two different times, and the guest who took the wrong one finds
+out on the day. So the entry moved INTO `StreamDetails`, which both surfaces
+already render, built from the row it already receives and the same
+`WEDDING_INSTANT` the countdown runs on. `buildStreamCalendarEvent` and
+`googleCalendarUrl` are untouched and still hold their own spec; nothing
+about the URL is hand-rolled.
+
+What that cost, stated: `StreamDetailsValues` gained `coupleNames` — the
+entry's title is "Matrimonio de {coupleNames}" — so both routes now pass two
+fields of the same row instead of one. The alternative was reading
+`COUPLE_NAMES` from the domain inside the block while every other surface
+reads the row, which is two sources for one wedding's name.
+
+`StreamInvitation` lost its `calendar` prop entirely, and its spec stopped
+asserting that a string it was handed came back out. It asserts the entry is
+for THIS wedding instead: Google's own endpoint, `action=TEMPLATE`, the
+couple's names in `text`, and the stream address in `details`.
+
+AND THE ENTRY ONLY EXISTS WHEN THERE IS SOMEWHERE TO GO. The description
+carries the address, so an unfinished row would write the seeded placeholder
+into somebody's calendar as the joining link — a reminder that looks correct
+for months and fails on the one morning it is read. `/transmision` used to
+render the button unconditionally; it does not any more, which is a change to
+that page nobody asked for and the right one.
+
+**AND THEN THE MEASUREMENT FOUND THREE THINGS, WHICH IS WHY THIS SCREEN NOW
+HAS A SPEC.** It was the last screen of the invitation with no legibility
+file — `app/i/[slug]/stream-legibility.spec.tsx` is the fourth, after the
+gate's, the accepted screen's and the two asking screens'. Moving the stream
+block to the top put it exactly where U37 measured the gap between
+`PhotoStage`'s two scrims: the top one has faded out, the bottom one has not
+started, and the photograph is carried by nothing.
+
+| element                       | was         | measured   | now                            |
+| ----------------------------- | ----------- | ---------- | ------------------------------ |
+| the welcome paragraph         | `/85` cream | **4.15:1** | full cream, 5.03:1             |
+| the two stream controls' edge | `/30`       | **1.77:1** | `/60` on `bg-black/40`, 3.62:1 |
+| the way back's edge           | `/30`       | **2.52:1** | `/60`, 5.02:1                  |
+| the sentence at the foot      | `/70`       | **4.48:1** | `/85`, 5.32:1                  |
+
+The paragraph is the sentence that tells a household the couple understand.
+It was under the floor, in the brightest band of the screen, and nothing
+would have said so. Two of the fixes carry permanent negative controls:
+`/85` on the paragraph's pixel is asserted to FAIL 4.5:1, and `/30` on the
+controls' ground is asserted to fail 3:1.
+
+THE LAST ROW OF THAT TABLE ONLY EXISTS BECAUSE THE FIXTURES WERE SAMPLED
+TWICE. Declaring `min-h-11` on the three controls — the fix below — moved
+everything under them by a few pixels, which took the foot's band from
+#504A3D to #4F4F4E and the sentence from 4.73:1 to 4.48:1. Two hundredths
+under the floor, found only because the screen was re-measured AFTER the
+last change to it rather than before.
+
+The control fix lands on `/transmision` too, because the block is shared.
+That page has never been contrast-measured either and stands on a photograph
+of its own; a stronger edge is not worse there.
+
+**AND A FOURTH THING THE BROWSER FOUND THAT NO UNIT COULD.** The three
+controls were **42 pixels tall** — `py-2.5` on `text-sm` — two under the 44
+the rest of this redesign is held to. Pre-existing on the two old ones, and
+the new calendar button inherited it; it surfaced the moment the geometry
+guard started measuring all three. All three declare `min-h-11` now rather
+than inheriting a height from their padding, the same way the question's two
+answers do.
+
+**GEOMETRY. IT FITS, WHICH WAS NOT A FOREGONE CONCLUSION.** A heading, a
+paragraph and two buttons at the top, a sentence and a button at the foot,
+with a third control added to a screen that was holding two:
+
+| device          | one person | two | four | five |
+| --------------- | ---------- | --- | ---- | ---- |
+| iPhone 14 (664) | 664        | 664 | 664  | 664  |
+| Pixel 7 (839)   | 839        | 839 | 839  | 839  |
+
+The guard grew assertions rather than just staying green: the calendar button
+is below the join link, the way back is below both, all three end inside the
+fold, and each one clears 44 pixels.
+
+**GREEN.** `npm test`, `npm run typecheck`, `npm run lint` (0 errors, 8
+warnings, the same eight), `npm run format:check`, `npm run build`, and the
+guest-facing browser specs. The environmental failures are the same ones U38
+records and counts fresh.
 
 ## Next
 

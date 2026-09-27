@@ -57,6 +57,7 @@ const VENUE = {
 
 const CEREMONY: CeremonyStreamDetails = {
   streamUrl: "https://meet.google.com/abc-defg-hij",
+  coupleNames: "Luis & Michell",
 };
 
 /**
@@ -1214,13 +1215,41 @@ describe("the line at the top of each screen", () => {
     expect(heading()).toBe("Los esperamos, Familia Aguirre");
   });
 
-  it("greets a household that cannot come, rather than expecting them", async () => {
+  /**
+   * AND THE OTHER ENDING SAYS THE OTHER HALF OF THE SAME SENTENCE.
+   *
+   * This asserted "¡Hola, Familia Aguirre!" — the declined screen kept the
+   * greeting and put "Los esperamos por Google Meet" under it as a second
+   * heading. The couple replaced both with the pair to the accepted line:
+   * "Los vamos a extrañar, {name}", in the singular for an invitation that
+   * names one person, in the same place, with the same vocative comma and no
+   * exclamation mark.
+   */
+  it("says it will miss a household that cannot come", async () => {
     renderForm();
 
     await userEvent.click(declineButton());
     await waitFor(() => expect(streamCard()).toBeInTheDocument());
 
-    expect(heading()).toBe("¡Hola, Familia Aguirre!");
+    expect(heading()).toBe("Los vamos a extrañar, Familia Aguirre");
+    // And the heading it replaced is not still standing above or below it.
+    expect(screen.queryByText(/¡Hola,/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Los esperamos por Google Meet/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("misses one person in the singular", async () => {
+    const [only] = GUESTS;
+    renderForm({ guests: [only], greetingName: only.fullName });
+
+    // A solo invitation refuses in its own number too.
+    await userEvent.click(
+      screen.getByRole("button", { name: "No puedo acompañarlos" }),
+    );
+    await waitFor(() => expect(streamCard()).toBeInTheDocument());
+
+    expect(heading()).toBe(`Te vamos a extrañar, ${only.fullName}`);
   });
 
   /**

@@ -4,11 +4,6 @@ import { connection } from "next/server";
 import { StreamInvitation } from "@/components/invitation/StreamInvitation";
 import { PhotoStage } from "@/components/landing/PhotoStage";
 import { ENGAGEMENT_PHOTO } from "@/components/landing/photos";
-import {
-  buildStreamCalendarEvent,
-  googleCalendarUrl,
-} from "@/lib/domain/calendar-event";
-import { WEDDING_INSTANT } from "@/lib/domain/wedding-day";
 import { getCeremony } from "@/lib/server/ceremony";
 import { createServerSupabaseClient } from "@/lib/server/supabase";
 
@@ -93,24 +88,24 @@ export default async function StreamPage() {
   const ceremony = await getCeremony(createServerSupabaseClient());
 
   /*
-   * The start comes from `WEDDING_INSTANT`, and there is nowhere else it could
-   * come from.
+   * THE CALENDAR ENTRY WAS BUILT HERE AND IS NOT ANY MORE.
    *
-   * A `ceremony_time` column used to sit beside this, free prose an operator
-   * typed — "5:00 p. m.", or anything else — while a calendar needs an instant.
-   * Recovering one by parsing the text is a guess that fails silently on the
-   * first wording nobody anticipated, and its failure mode is a reminder that
-   * fires on the wrong day. Nothing ever read it, so migration 0018 dropped it
-   * along with `ceremony_date`. This is the same instant the countdown uses, so
-   * the page and the calendar entry cannot disagree.
+   * This route composed `buildStreamCalendarEvent(...)` with `WEDDING_INSTANT`
+   * and handed the resulting link down as a prop. The couple asked for the
+   * same button on the screen a household reaches by declining, which renders
+   * the same `StreamDetails` block from a different route — and building it
+   * twice is how two screens end up offering the same wedding at two
+   * different times. It is built inside that block now, from the row this
+   * page already passes it and the same instant the countdown runs on.
+   *
+   * The paragraph that stood here is worth keeping, because it is the reason
+   * the instant is a constant at all: a `ceremony_time` column used to sit
+   * beside it, free prose an operator typed — "5:00 p. m.", or anything else
+   * — while a calendar needs an instant. Recovering one by parsing the text
+   * is a guess that fails silently on the first wording nobody anticipated,
+   * and its failure mode is a reminder that fires on the wrong day. Nothing
+   * ever read it, so migration 0018 dropped it along with `ceremony_date`.
    */
-  const calendarEvent = buildStreamCalendarEvent(
-    {
-      coupleNames: ceremony.coupleNames,
-      streamUrl: ceremony.streamUrl,
-    },
-    WEDDING_INSTANT,
-  );
 
   return (
     <PhotoStage mobilePhoto="overlay" photo={ENGAGEMENT_PHOTO}>
@@ -134,16 +129,23 @@ export default async function StreamPage() {
         "
       >
         {/*
-          The stream address comes from the row and nothing else, and it is the
-          ONLY value this page hands down. The venue and its street are on that
-          same row and are NOT passed: `StreamInvitation`'s prop type has no
-          field for them, so this page cannot leak an address even by a careless
-          edit here. `coupleNames` reaches the announcement through
-          `SaveTheDate`, which reads the domain rather than this row.
+          The stream address and the couple's names come from the row and
+          nothing else, and they are the ONLY values this page hands down. The
+          venue and its street are on that same row and are NOT passed:
+          `StreamInvitation`'s prop type has no field for them, so this page
+          cannot leak an address even by a careless edit here.
+
+          `coupleNames` is new here and it is not for the announcement —
+          `SaveTheDate` reads the domain for that. It is the title of the
+          calendar entry, which `StreamDetails` now builds so that this page
+          and the declined screen cannot describe the same wedding
+          differently.
         */}
         <StreamInvitation
-          ceremony={{ streamUrl: ceremony.streamUrl }}
-          calendar={{ googleHref: googleCalendarUrl(calendarEvent) }}
+          ceremony={{
+            streamUrl: ceremony.streamUrl,
+            coupleNames: ceremony.coupleNames,
+          }}
         />
       </div>
     </PhotoStage>
