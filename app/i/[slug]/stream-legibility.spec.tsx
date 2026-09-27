@@ -66,6 +66,18 @@ const BRIGHTEST_UNDER_THE_PARAGRAPH = "#66684c";
 const BRIGHTEST_UNDER_THE_CONTROLS = "#8b8c52";
 
 /**
+ * And under the two the couple added below them.
+ *
+ * #BFBCAA on an iPhone 14 for a four-person invitation — brighter than the
+ * stream's own controls because they sit further down the same scrim gap,
+ * and the brightest ground any control on this screen stands on. It is the
+ * reason all four are filled at `bg-black/55` rather than the `/40` the
+ * first two shipped with: at `/40` the label here measured 4.30:1 and the
+ * edge 2.61:1, both under.
+ */
+const BRIGHTEST_UNDER_THE_CALENDAR = "#bfbcaa";
+
+/**
  * And at the foot, where the way back is.
  *
  * #4F4F4E under the sentence and #322F25 under the button, both on an iPhone
@@ -90,6 +102,7 @@ function renderDeclined(memberCount = 4) {
       }}
       memberCount={memberCount}
       onReconsider={() => {}}
+      icsHref="/i/abc/evento.ics"
     />,
   );
 
@@ -235,5 +248,53 @@ describe("whether the declined screen's controls read as controls", () => {
     expect(
       contrastRatio(over("rgba(246, 239, 226, 0.3)", ground), ground),
     ).toBeLessThan(WCAG_AA_NON_TEXT);
+  });
+});
+
+/**
+ * THE TWO CALENDAR CONTROLS, WHICH THE COUPLE ADDED TO THIS SCREEN TOO.
+ *
+ * They asked for both on the accepted screen and said nothing about this
+ * one; the fourth control was measured before it was added — it fits at both
+ * phone sizes for one and four people — and the module's own argument is
+ * that the alarms matter MOST to a guest with no journey to plan.
+ *
+ * They stand lower than the stream's own pair, on brighter photograph, which
+ * is what moved every control on this screen from `bg-black/40` to `/55`.
+ */
+describe("the two ways a stream guest keeps the date", () => {
+  it("reads both labels, and draws both edges", () => {
+    const { container, find } = renderDeclined();
+    const actions = container.querySelectorAll(
+      '[data-testid="calendar-actions"] a',
+    );
+
+    expect(actions).toHaveLength(2);
+
+    for (const action of actions) {
+      const ground = over(
+        declaredColor(action, "bg"),
+        BRIGHTEST_UNDER_THE_CALENDAR,
+      );
+      const cream = declaredColor(find(".rsvp__reconsider-button"), "text");
+
+      expect(action.className).toContain("border-current/60");
+      expect(contrastRatio(cream, ground)).toBeGreaterThanOrEqual(
+        WCAG_AA_NORMAL_TEXT,
+      );
+      expect(
+        contrastRatio(over(cream.replace(/, 1\)$/, ", 0.6)"), ground), ground),
+      ).toBeGreaterThanOrEqual(WCAG_AA_NON_TEXT);
+    }
+  });
+
+  /**
+   * AND THE FILL THEY ARRIVED WITH WOULD NOT HAVE — the negative control for
+   * the value this unit changed.
+   */
+  it("would not have, at the fill these controls shipped with", () => {
+    const shallow = over("rgba(0, 0, 0, 0.4)", BRIGHTEST_UNDER_THE_CALENDAR);
+
+    expect(contrastRatio("#f6efe2", shallow)).toBeLessThan(WCAG_AA_NORMAL_TEXT);
   });
 });

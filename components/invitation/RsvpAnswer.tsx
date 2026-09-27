@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import type { CalendarEvent } from "@/lib/domain/calendar-event";
 import { greetingLine } from "@/lib/domain/greeting-name";
 import {
   currentRsvpSentence,
@@ -337,6 +338,7 @@ export function RsvpAnswer({
   current,
   ceremony,
   venue,
+  calendar,
   announcement,
   action,
 }: {
@@ -371,6 +373,19 @@ export function RsvpAnswer({
    * records why a venue with no street address is better served by a map alone.
    */
   readonly venue: RsvpAnswerVenue;
+  /**
+   * The two ways to keep the date, for a household that has accepted.
+   *
+   * Built by the route, like the action and the announcement, and for the
+   * same reason: the entry it carries names the VENUE, so the one place that
+   * may construct it is the server code that already knows this household
+   * said yes. A client component that built its own could not be stopped
+   * from building the wrong one.
+   */
+  readonly calendar?: {
+    readonly event: CalendarEvent;
+    readonly icsHref: string;
+  };
   /**
    * The wedding, announced — rendered on the FIRST screen and on no other.
    *
@@ -691,6 +706,7 @@ export function RsvpAnswer({
             ceremony={ceremony}
             memberCount={guests.length}
             onReconsider={reconsider}
+            icsHref={calendar?.icsHref}
           />
         </div>
       </>
@@ -711,7 +727,7 @@ export function RsvpAnswer({
             itself stays: the stream screen and the way back from the list of
             who is coming both still call it.
           */}
-          <RsvpConfirmed venueName={venue.name} />
+          <RsvpConfirmed venueName={venue.name} calendar={calendar} />
         </div>
       </>
     );

@@ -201,6 +201,20 @@ declined screen given the language `/transmision` already uses.
       been sitting on the brightest pixel in the photograph at `bg-black/25`
       since U34, and prose had recorded it as fine.
 
+- [x] **U41 — the calendar file is back, with two alarms, and the entry
+      knows who it is for.** The `.ics` the couple deleted returns as their
+      own experiment — "probemos qué sucede en un android e iphone" —
+      recovered from git rather than rewritten, with an alarm the evening
+      before at eight and another three hours out, both asserted as instants
+      so they move with the ceremony. The Google button gains the venue's
+      location and loses a comment claiming it carried alarms, which it never
+      could. Two builders rather than one: the entry a declining household
+      saves has no venue in it, because a calendar file is forwarded like a
+      link and outlives one. The fourth control was measured before it was
+      added to the declined screen, and re-sampling caught the accepted
+      foot's ground sitting on a pixel three and a half times brighter than
+      its fixture.
+
 - [x] **U40 — the deadline stopped blanking the invitation, and the clock
       became testable.** Closing the RSVP replaced the whole stepper with two
       sentences, so in the final seven days an accepted household lost the
@@ -3791,8 +3805,135 @@ before this one and identical there. Not fixed and not reset — no permission
 was given to reset it, and the entry in **Next** has been predicting exactly
 this.
 
+### U41 — done (the file is back, with two alarms, and the entry knows who it is for)
+
+**THE `.ics` IS A REVERSAL, TAKEN KNOWINGLY, AND THE ORIGINAL REASON STILL
+READS WELL.** `2cb43cb` deleted it on the couple's instruction: "a browser
+that answers a tap by dropping a file into a downloads folder has not helped
+anybody reading a wedding invitation on their phone." They have reversed that
+themselves — **"volvé al .ics con las dos alarmas para que probemos qué sucede
+en un android e iphone"** — as an experiment, because what each phone actually
+does with the file is the thing they want to see. Both sentences are in
+`lib/domain/calendar-event.ts` so the next reader meets a decision rather than
+a contradiction.
+
+**RECOVERED FROM GIT RATHER THAN REWRITTEN.** `git log -S` found the removal;
+the octet-accurate folding, the escape ORDER (backslash first, or the comma's
+own escape gets escaped) and the trailing CRLF came back as they were. They
+are easy to get subtly wrong and were already right. What is new is the two
+alarms and the location.
+
+**THE COMMENT THAT HAD BECOME A LIE.** The header said the entry went "with
+alarms attached". True of the `.ics`; never of the Google link, which sends
+`action`, `text`, `dates`, `details` and now `location` and has no reminder
+parameter at all. An entry saved that way inherits whatever default the guest
+has set. The file says that plainly now, in the module and on the component,
+because the difference between a guest who sets their own alarm and one who
+assumes we set it for them is a guest who misses the ceremony.
+
+**THE TWO ALARMS, AND WHY ONE IS ABSOLUTE.**
+
+| alarm                       | encoded                                    | resolves to             |
+| --------------------------- | ------------------------------------------ | ----------------------- |
+| the evening before at eight | `TRIGGER;VALUE=DATE-TIME:20261128T010000Z` | 2026-11-27 20:00 −05:00 |
+| three hours before          | `TRIGGER:-PT3H`                            | 2026-11-28 14:00 −05:00 |
+
+Three hours before is a DURATION and iCalendar says it in one token. Eight in
+the evening is a TIME OF DAY, and writing it as the 21 hours it happens to be
+today would quietly become nine o'clock if the ceremony moved an hour. So it
+is derived from the wedding's own local time of day, and the spec asserts the
+resulting INSTANTS rather than the trigger syntax — including a test that
+moves the ceremony to 19:00 and requires the alarm to stay at eight.
+
+**AND THE ENTRY KNOWS WHICH HOUSEHOLD IT IS FOR, WHICH IS THE PRIVACY LINE.**
+There are two builders, not one with a flag:
+
+| entry                                                     | name | date | Meet URL | location  |
+| --------------------------------------------------------- | ---- | ---- | -------- | --------- |
+| `buildCeremonyCalendarEvent` — accepted                   | ✓    | ✓    | ✓        | **✓**     |
+| `buildStreamCalendarEvent` — declined, stream, unanswered | ✓    | ✓    | ✓        | **never** |
+
+The venue is gated behind saying you are coming. A calendar entry is forwarded
+exactly like a link and survives longer — it lands in a file and an app rather
+than in a chat — so an address in a declining household's entry would travel
+further than anything the page ever showed them. Asserted from both
+directions, in the `.ics` and in the Google URL, by name and by coordinate,
+with a negative control for the way it would regress: one builder with
+`location: venueName ?? ""` writes `LOCATION:` and `location=` into every
+stream entry, and an empty location is not the same as no location.
+
+**THE ENDPOINT FOLLOWS THE ANSWER, NOT THE URL.** `app/i/[slug]/evento.ics`
+sits behind the same unlock cookie the page does, checked against THIS
+invitation, and re-reads the household's answer for itself: one path, one
+household, two possible files. A locked invitation answers exactly as an
+unknown slug does, so it cannot be used to discover which slugs are real. The
+browser suite proves all three: the gate, the accepted file's `LOCATION`, and
+the declining file's total absence of one.
+
+**THE LOCATION IS RESOLVABLE RATHER THAN DECORATIVE.** `venue_name` is "Villa
+Campestre", which a maps search will happily place in a dozen towns, and
+`venue_address` holds a placeholder the couple have decided they will never
+fill. So the entry carries the name AND the coordinates the directions button
+already uses — which meant moving `VENUE_COORDINATES` out of `VenueMap` and
+into the domain, because `lib/domain` cannot import a component and the only
+other option was a second copy. `tools/venue-coordinates.spec.ts` followed it
+and still holds the latitude to exactly one source file; it immediately caught
+a comment of mine that quoted the pair, which is the guard doing its job.
+
+**A FOURTH CONTROL ON THE DECLINED SCREEN — MEASURED FIRST, THEN ADDED.** The
+couple asked for both buttons on the accepted screen and said nothing about
+this one, which already had three. The module's own argument is that the
+alarms matter MOST to a guest with no journey to plan, so it was worth asking
+whether a fourth fits:
+
+| screen                 | iPhone 14 (664) | Pixel 7 (839) | controls     |
+| ---------------------- | --------------- | ------------- | ------------ |
+| accepted, one and four | 664             | 839           | 3, all ≥44px |
+| declined, one and four | 664             | 839           | 4, all ≥44px |
+
+It fits, so it is there. Nothing was shrunk to make room.
+
+**AND THE MEASUREMENT FOUND FOUR THINGS THE MOVE BROKE.** Adding controls
+made two cards taller, which pushed both onto brighter photograph — the
+failure mode this project has now hit in four consecutive units:
+
+| element                      | was               | measured at the new position      | now                      |
+| ---------------------------- | ----------------- | --------------------------------- | ------------------------ |
+| the accepted foot's ground   | `bg-[#0d1114]/60` | `Lugar` at **3.92:1**             | `/75`, 6.28:1            |
+| `Cómo llegar`'s edge         | `/50`             | **2.82:1**                        | `/60`, 3.35:1            |
+| the stream screen's controls | `bg-black/40`     | label **4.30:1**, edge **2.61:1** | `/55`, 6.59:1 and 3.53:1 |
+| the accepted foot's fixture  | `#8A8985`         | the card now covers **#F3F1E6**   | re-sampled               |
+
+That last row is the one worth reading twice. The foot's fixture was the
+brightest pixel in the bottom quarter of the screen, chosen carefully in U37
+for a card that sat there. Two more controls grew the card upward by about a
+hundred pixels, across the lit edge of Michell's dress — **0.250 to 0.877
+luminance, three and a half times brighter** — and every assertion in
+`confirm-legibility.spec.tsx` still passed, because they were all measured
+against the old number. Nothing but re-sampling would have found it.
+
+**GREEN.** `npm test` — 2,516 unit and component tests, 2,505 passing.
+`npm run typecheck`, `npm run lint` (0 errors, 8 warnings, the same eight),
+`npm run format:check`, `npm run build`. `PORT=3100 npx playwright test` — 131
+passed, and all 96 guest-facing browser tests green across both phone projects
+and both clocks.
+
+**NOT GREEN.** The same eleven unit and seven browser failures U40 records,
+unchanged and environmental: the local Supabase is past PostgREST's unpaged
+1000-row ceiling on `senders` and `invitations`, `console-auth.spec.ts` cannot
+find a seeded operator, and 114 console tests do not run behind it. Nothing
+here reset it.
+
 ## Next
 
+- **`CEREMONY_MINUTES = 60` is an assumption nobody has confirmed, and both
+  calendar entries now state an end time from it.** `lib/domain/calendar-event.ts`
+  has always said so — "the couple gave a start and nobody has said how long
+  the ceremony runs" — and it mattered less while the number only padded a
+  link. It is in a downloaded file with two alarms on a guest's phone now, and
+  an hour that is wrong is a block of time in their day that ends before the
+  ceremony does. **How long does the ceremony run?** One line to correct, and
+  worth asking before the invitations go out rather than after.
 - **A household that never answered is offered the stream and NOT the venue
   after the deadline, and that is my decision rather than the couple's.** They
   named the other two endings: accepted keeps the venue and the way there,

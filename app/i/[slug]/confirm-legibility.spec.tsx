@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { InvitationGreeting } from "@/components/invitation/InvitationGreeting";
 import { RsvpConfirmed } from "@/components/invitation/RsvpConfirmed";
+import { buildCeremonyCalendarEvent } from "@/lib/domain/calendar-event";
+import { WEDDING_INSTANT } from "@/lib/domain/wedding-day";
 import {
   WCAG_AA_NON_TEXT,
   WCAG_AA_NORMAL_TEXT,
@@ -90,20 +92,30 @@ const BRIGHTEST_UNDER_THE_TOP: readonly (readonly [string, string, string])[] =
  * against its own: they share a card, so the card has to be deep enough for
  * the worst thing under any part of it.
  *
- * AND IT IS THE BRIGHTEST PIXEL IN THE BOTTOM QUARTER OF THE SCREEN, NOT THE
- * BRIGHTEST INSIDE THE GROUP'S OWN BOX. Losing "Volver a responder" dropped
- * the group from 78%–96% to 81%–96% on an iPhone 14, and the pixel inside its
- * box went with it — #838380 at the old position, #535453 at the new one. It
- * would be easy, and wrong, to write the softer number down: this group's
- * vertical position depends on how many lines the venue's NAME takes, and the
- * couple have not filled that field in yet — production still renders
- * `{{VENUE_NAME}}`. One line more and the group is back at 78%, where the
- * brightest pixel in the band is #8A8985: Luis's lit trouser leg, the thing
- * this ground was added for. So the band is the fixture, measured across
- * 75%–100% on an iPhone 14, and it is slightly harsher than the number U36
- * wrote down rather than softer.
+ * AND IT IS THE BRIGHTEST PIXEL THE GROUP CAN COVER, WHICH IS NO LONGER IN
+ * THE BOTTOM QUARTER OF THE SCREEN.
+ *
+ * It used to be: losing "Volver a responder" dropped the group to 81%–96% on
+ * an iPhone 14, and the fixture was deliberately the brightest pixel in the
+ * band 75%–100% rather than the softer one inside that box, because the
+ * group's position depends on how many lines the venue's NAME takes and the
+ * couple have not filled that field in.
+ *
+ * THE COUPLE THEN PUT TWO MORE CONTROLS IN IT. "Agregar a Google Calendar"
+ * and the `.ics` join `Cómo llegar` inside this same card, so the group grew
+ * upward by about a hundred pixels and now runs from the middle of the frame
+ * — across the lit edge of Michell's dress, the brightest thing in the
+ * photograph and the pixel every other card on this product is measured
+ * against. Measured at the new position: **#F3F1E6, 0.877**, against the
+ * #8A8985 this file was holding.
+ *
+ * That is a 3.5× jump in the luminance behind the foot's words, and nothing
+ * would have said so: the old fixture still passed every assertion in this
+ * file. The ground went from `/60` to `/75` and the map link's edge from
+ * `/50` to `/60` as a result — both measured below their floors at the new
+ * position, both comfortable now.
  */
-const BRIGHTEST_UNDER_THE_FOOT = "#8a8985";
+const BRIGHTEST_UNDER_THE_FOOT = "#f3f1e6";
 
 /**
  * The brightest pixel under ANY of it at `lg`, where the ground lets go.
@@ -127,7 +139,20 @@ function renderConfirmed() {
   const { container } = render(
     <>
       <InvitationGreeting>Los esperamos, Familia Aguirre</InvitationGreeting>
-      <RsvpConfirmed venueName="Salón para Eventos Villa Campestre" />
+      <RsvpConfirmed
+        venueName="Salón para Eventos Villa Campestre"
+        calendar={{
+          event: buildCeremonyCalendarEvent(
+            {
+              coupleNames: "Luis & Michell",
+              streamUrl: "https://meet.google.com/abc-defg-hij",
+              venueName: "Salón para Eventos Villa Campestre",
+            },
+            WEDDING_INSTANT,
+          ),
+          icsHref: "/i/abc/evento.ics",
+        }}
+      />
     </>,
   );
 
@@ -333,5 +358,71 @@ describe("whether the way to the venue reads as a control", () => {
     const { find } = renderConfirmed();
 
     expect(find(".rsvp__venue-map").className).toContain("min-h-11");
+  });
+});
+
+/**
+ * THE TWO CONTROLS THE COUPLE ADDED, ON THE CARD THEY MADE TALLER.
+ *
+ * "Agregar a Google Calendar" and the `.ics` sit inside `rsvp__foot` beside
+ * `Cómo llegar`, so they are read over the same ground — and they are the
+ * reason that ground moved onto the brightest pixel in the frame. Their own
+ * fill is deeper than the card's, which is what a control on a card looks
+ * like here, so the sum is three layers: cream on `bg-black/55` on the foot's
+ * ground on the photograph.
+ */
+describe("the two ways to keep the date", () => {
+  function ground(find: (selector: string) => Element): string {
+    return over(
+      declaredColor(find(".rsvp__foot-ground"), "bg"),
+      BRIGHTEST_UNDER_THE_FOOT,
+    );
+  }
+
+  it("reads both labels, and draws both edges", () => {
+    const { container, find } = renderConfirmed();
+    const actions = container.querySelectorAll(
+      '[data-testid="calendar-actions"] a',
+    );
+
+    expect(actions).toHaveLength(2);
+
+    for (const action of actions) {
+      const fill = over(declaredColor(action, "bg"), ground(find));
+
+      /*
+        The label and the edge are `currentColor`, inherited from the
+        invitation's own cream — `CalendarActions` has no palette, for the
+        reason `StreamDetails` records. It is read off a sibling in the same
+        card rather than written down here.
+      */
+      const cream = declaredColor(find(".rsvp__venue dd"), "text");
+
+      expect(contrastRatio(cream, fill)).toBeGreaterThanOrEqual(
+        WCAG_AA_NORMAL_TEXT,
+      );
+      expect(action.className).toContain("border-current/60");
+      expect(
+        contrastRatio(over(cream.replace(/, 1\)$/, ", 0.6)"), fill), fill),
+      ).toBeGreaterThanOrEqual(WCAG_AA_NON_TEXT);
+    }
+  });
+
+  /**
+   * AND THE GROUND THEY PUSHED THIS CARD ONTO WOULD NOT HAVE CARRIED IT — the
+   * negative control for the value that actually changed.
+   *
+   * `/60` is what this card was painted with while it held one control. At
+   * the position two more controls moved it to, `Lugar` over that ground
+   * measures 3.9:1. An assertion that only ever ran at `/75` would pass just
+   * as happily if somebody restored the shallower one.
+   */
+  it("would not have, at the depth this card carried with one control", () => {
+    const { find } = renderConfirmed();
+    const shallow = over("rgba(13, 17, 20, 0.6)", BRIGHTEST_UNDER_THE_FOOT);
+
+    expect(
+      contrastRatio(declaredColor(find(".rsvp__venue dt"), "text"), shallow),
+    ).toBeLessThan(WCAG_AA_NORMAL_TEXT);
   });
 });

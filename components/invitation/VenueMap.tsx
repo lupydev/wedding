@@ -1,5 +1,7 @@
 import { Navigation } from "lucide-react";
 
+import { VENUE_COORDINATES } from "@/lib/domain/wedding-day";
+
 /**
  * How a guest gets to a venue that has no street address.
  *
@@ -50,33 +52,25 @@ import { Navigation } from "lucide-react";
  * stay English.
  */
 
-/**
- * WHERE THE WEDDING IS, DECLARED ONCE.
- *
- * WGS84 decimal degrees, "lat,lon" — the form Google Maps expects. Two copies
- * become two venues the day somebody edits one, and that failure is silent: a
- * guest sent to the wrong side of Buga finds out on the afternoon of the
- * wedding. `tools/venue-coordinates.spec.ts` asserts this file is the only
- * source that names the latitude, and that it names it once.
- *
- * WHY THIS IS IN THE SOURCE AT ALL, WHEN `tools/no-source-placeholders.spec.ts`
- * ARGUES THE OPPOSITE. That rule exists because the venue's NAME lives in the
- * `ceremony` row, where an operator corrects it with an UPDATE and no
- * redeploy. A coordinate is not that kind of fact: it is not a name anybody
- * proofreads, an operator typing one has no way to see whether it landed on
- * the right field, and a wrong one fails silently in a way a wrong name never
- * does. Binding it to a commit is the trade, and the price is stated plainly —
- * MOVING THE WEDDING MEANS A DEPLOY, not editing a row. Taken knowingly, on a
- * wedding whose venue is booked.
- *
- * A COMMITTED PICTURE OF THIS POINT STOOD BESIDE IT and is gone; the
- * paragraphs above say why. What the deletion removes from this constant is
- * the older, stronger argument for keeping it in the source — that a
- * coordinate in the database would move the link while the committed image
- * went on showing the old place. There is no image to disagree with any more,
- * so the reason is the one written above and nothing else.
- */
-const VENUE_DESTINATION = "3.853778,-76.2971633";
+/*
+  THE COORDINATE MOVED TO `lib/domain/wedding-day.ts`, AND THE REASON IS A
+  SECOND READER.
+
+  It lived here, module-private, with the argument that the coordinates
+  "appear exactly once in this repository". That argument did not change —
+  what changed is that the calendar entry an accepted household saves now
+  carries the venue's location too, and `lib/domain/calendar-event.ts` cannot
+  import a component. Leaving it here would have meant a second copy in the
+  domain, which is the exact failure the original note describes: two venues
+  the day somebody edits one, and a guest sent to the wrong side of Buga who
+  finds out on the afternoon of the wedding.
+
+  So it sits beside the wedding's other committed facts — the instant, the
+  dress code, the deadline — and the whole of its reasoning went with it,
+  including the trade it names: MOVING THE WEDDING MEANS A DEPLOY.
+  `tools/venue-coordinates.spec.ts` follows it and still asserts exactly one
+  source names the latitude.
+*/
 
 /**
  * The directions form, not a place page.
@@ -92,7 +86,7 @@ const VENUE_DESTINATION = "3.853778,-76.2971633";
  * coordinates appear exactly once in this repository.
  */
 const DIRECTIONS_URL = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-  VENUE_DESTINATION,
+  VENUE_COORDINATES,
 )}`;
 
 /**
@@ -140,7 +134,7 @@ export function VenueMap() {
     <a
       className="
         rsvp__venue-map flex min-h-11 w-full items-center justify-center gap-2
-        rounded-full border border-[#f6efe2]/50 bg-[#f6efe2]/10 px-5 py-3
+        rounded-full border border-[#f6efe2]/60 bg-[#f6efe2]/10 px-5 py-3
         text-sm text-[#f6efe2] backdrop-blur-sm transition-colors
         duration-(--console-motion-fast) ease-(--ease-console-out)
         hover:bg-[#f6efe2]/20

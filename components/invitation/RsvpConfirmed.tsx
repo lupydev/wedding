@@ -5,6 +5,9 @@ import {
   formatWeddingWeekday,
 } from "@/lib/domain/wedding-day";
 
+import type { CalendarEvent } from "@/lib/domain/calendar-event";
+
+import { CalendarActions } from "./CalendarActions";
 import { VenueMap } from "./VenueMap";
 
 /**
@@ -103,9 +106,23 @@ const SHADOW = "[text-shadow:0_1px_12px_rgba(0,0,0,0.6)]";
 
 export function RsvpConfirmed({
   venueName,
+  calendar,
 }: {
   /** The place, from the `ceremony` row, rendered exactly as it is stored. */
   readonly venueName: string;
+  /**
+   * The two ways to keep the date, for the one household allowed the venue.
+   *
+   * The event is built by the caller rather than here, because the caller is
+   * the only one that knows it may carry a location: `buildCeremonyCalendarEvent`
+   * is reachable from an accepted household's screen and from nowhere else.
+   * Optional, so the operator preview and any future caller that has no
+   * invitation behind it can render this screen without inventing one.
+   */
+  readonly calendar?: {
+    readonly event: CalendarEvent;
+    readonly icsHref: string;
+  };
 }) {
   return (
     <div className="rsvp__confirmed flex flex-1 flex-col justify-between gap-6 text-center">
@@ -229,7 +246,7 @@ export function RsvpConfirmed({
           aria-hidden="true"
           className="
             rsvp__foot-ground pointer-events-none absolute -inset-x-4
-            -inset-y-3 -z-10 rounded-3xl bg-[#0d1114]/60 ring-1 ring-white/10
+            -inset-y-3 -z-10 rounded-3xl bg-[#0d1114]/75 ring-1 ring-white/10
             shadow-[0_18px_60px_rgba(0,0,0,0.5)] backdrop-blur-sm
             lg:hidden
           "
@@ -257,6 +274,26 @@ export function RsvpConfirmed({
           household can reach without accepting.
         */}
         <VenueMap />
+
+        {/*
+          AND THE TWO WAYS TO KEEP THE DATE, UNDER THE WAY TO GET THERE.
+
+          The couple asked for both on this screen: the Google entry, which
+          carries the name, the day, the hour, the joining link and — only
+          here — the venue's location, and the `.ics`, which is the only one
+          of the two that can carry an alarm.
+
+          THE LOCATION IS THE REASON THIS BLOCK IS NOT THE STREAM'S. The
+          entry offered on the declined and stream screens has no venue in it
+          at all: a calendar file is forwarded exactly like a link, so an
+          address in a declining household's entry would travel further than
+          anything the page shows them. `CalendarActions` takes the event
+          rather than building it, so the difference is visible at the call
+          site instead of hidden in a flag.
+        */}
+        {calendar === undefined ? null : (
+          <CalendarActions event={calendar.event} icsHref={calendar.icsHref} />
+        )}
 
         {/*
           A "Volver a responder" STOOD HERE AND THE COUPLE REMOVED IT.

@@ -1,3 +1,4 @@
+import type { CalendarEvent } from "@/lib/domain/calendar-event";
 import { greetingLine } from "@/lib/domain/greeting-name";
 import {
   rsvpClosedNote,
@@ -80,6 +81,7 @@ export function RsvpClosed({
   venue,
   memberCount,
   greetingName,
+  calendar,
 }: {
   readonly answer: RsvpClosedAnswer | null;
   readonly ceremony: StreamDetailsValues;
@@ -87,6 +89,11 @@ export function RsvpClosed({
   readonly venue: { readonly name: string };
   readonly memberCount: number;
   readonly greetingName: string;
+  /** The two ways to keep the date, for the accepted ending only. */
+  readonly calendar?: {
+    readonly event: CalendarEvent;
+    readonly icsHref: string;
+  };
 }) {
   const state =
     answer === null ? "unanswered" : answer.attending ? "accepted" : "declined";
@@ -134,7 +141,7 @@ export function RsvpClosed({
         </p>
 
         {state === "accepted" ? (
-          <RsvpConfirmed venueName={venue.name} />
+          <RsvpConfirmed venueName={venue.name} calendar={calendar} />
         ) : (
           /*
             THE STREAM, FOR BOTH OF THE OTHER TWO, AND NO VENUE FOR EITHER.

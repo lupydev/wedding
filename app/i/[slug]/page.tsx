@@ -11,6 +11,8 @@ import { RsvpAnswer } from "@/components/invitation/RsvpAnswer";
 import { RsvpClosed } from "@/components/invitation/RsvpClosed";
 import { buildInvitationMetadataText } from "@/lib/domain/og-card";
 import { UNLOCK_COOKIE_NAME, unlockCookieUnlocks } from "@/lib/server/cookies";
+import { buildCeremonyCalendarEvent } from "@/lib/domain/calendar-event";
+import { WEDDING_INSTANT } from "@/lib/domain/wedding-day";
 import { rsvpIsOpenNow } from "@/lib/server/rsvp";
 
 import { submitRsvpAction, unlockAction } from "./actions";
@@ -138,6 +140,31 @@ export default async function InvitationPage({ params }: RouteParams) {
     // and pays for none of it. `generateMetadata` reads the same request-cached
     // function, so the two together cost one query.
     const ceremony = await loadCeremony();
+    /*
+      THE ENTRY AN ACCEPTED HOUSEHOLD SAVES, BUILT HERE AND NOWHERE ELSE.
+
+      It is the only calendar entry in the product that carries the venue's
+      location, so it is built on the server that already knows this
+      household's answer and handed down as a value. A client component given
+      the facts could construct one for a household that declined, which is
+      the one thing the venue gate exists to prevent — and a calendar file is
+      forwarded exactly like a link.
+
+      The `.ics` is a per-invitation endpoint for the same reason: see
+      `app/i/[slug]/evento.ics/route.ts`, which re-reads the answer rather
+      than trusting the path.
+    */
+    const calendar = {
+      event: buildCeremonyCalendarEvent(
+        {
+          coupleNames: ceremony.coupleNames,
+          streamUrl: ceremony.streamUrl,
+          venueName: ceremony.venueName,
+        },
+        WEDDING_INSTANT,
+      ),
+      icsHref: `/i/${slug}/evento.ics`,
+    };
 
     return (
       /*
@@ -215,6 +242,7 @@ export default async function InvitationPage({ params }: RouteParams) {
                   answer.
                 */
                 venue={{ name: ceremony.venueName }}
+                calendar={calendar}
                 guests={invitation.guests}
                 /*
                   The same name the gate greeted them with a tap ago, from the
@@ -267,6 +295,7 @@ export default async function InvitationPage({ params }: RouteParams) {
                   coupleNames: ceremony.coupleNames,
                 }}
                 venue={{ name: ceremony.venueName }}
+                calendar={calendar}
                 memberCount={invitation.guests.length}
                 greetingName={invitation.greetingName}
               />

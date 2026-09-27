@@ -35,7 +35,17 @@ import { seedInvitation, type SeededInvitation } from "./helpers/seed";
  */
 
 const PHONE = "+573005551111";
-const OPEN_ORIGIN = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+/**
+ * The origin whose deadline has NOT passed, derived the way the config
+ * derives it.
+ *
+ * Written as a literal `localhost:3000` once, which passed only because
+ * something else happened to be listening there — the stale-server trap this
+ * project has been caught by before. `PORT` is what `playwright.config.ts`
+ * reads, so this reads it too.
+ */
+const OPEN_ORIGIN =
+  process.env.E2E_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
 function householdOfFour() {
   return seedInvitation({

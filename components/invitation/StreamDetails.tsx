@@ -44,11 +44,10 @@
  * English.
  */
 
-import {
-  buildStreamCalendarEvent,
-  googleCalendarUrl,
-} from "@/lib/domain/calendar-event";
+import { buildStreamCalendarEvent } from "@/lib/domain/calendar-event";
 import { WEDDING_INSTANT } from "@/lib/domain/wedding-day";
+
+import { CalendarActions } from "./CalendarActions";
 
 /** The stream half of the `ceremony` row, as a component renders it. */
 /**
@@ -99,9 +98,18 @@ export interface StreamDetailsValues {
 
 export function StreamDetails({
   ceremony,
+  icsHref,
   className,
 }: {
   readonly ceremony: StreamDetailsValues;
+  /**
+   * Where this household's `.ics` is served, when there is a household.
+   *
+   * Absent on `/transmision`, which has no invitation behind it and so no
+   * answer to decide what the file may contain. Present on the screens inside
+   * an invitation, where the endpoint re-reads that answer for itself.
+   */
+  readonly icsHref?: string;
   /** The host surface's own spacing. Never its colours. */
   readonly className?: string;
 }) {
@@ -168,10 +176,10 @@ export function StreamDetails({
           rel="noopener noreferrer"
           className="
             flex min-h-11 w-full items-center justify-center rounded-full
-            border border-current/60 bg-black/40
+            border border-current/60 bg-black/55
             px-5 py-2.5 text-center text-sm backdrop-blur-sm transition-colors
             duration-(--console-motion-fast) ease-(--ease-console-out)
-            hover:bg-black/55
+            hover:bg-black/65
             focus-visible:outline-2 focus-visible:outline-offset-2
             focus-visible:outline-current
           "
@@ -191,64 +199,33 @@ export function StreamDetails({
         It was `/transmision`'s alone: the route built the event, passed a
         `googleHref` down, and `StreamInvitation` drew the button. The couple
         asked for the same control on the declined screen, which renders THIS
-        block and had no calendar of any kind — and the obvious way to give it
-        one is the way `components/landing/photos.ts` argues against for the
-        photographs, because two definitions "would drift into two different
-        weddings". A calendar entry is that failure with a date attached: two
-        screens offering the same wedding at two different times, and the
-        guest who took the wrong one finds out on the day.
+        block and had no calendar of any kind — and two definitions of one
+        calendar entry is the failure `components/landing/photos.ts` describes
+        for the photographs, with a date attached.
 
-        So the entry is built once, HERE, from the row this block already
-        renders and the same `WEDDING_INSTANT` the countdown runs on. Both
-        surfaces get the button by rendering this component, and there is no
-        prop either of them could pass wrongly. `buildStreamCalendarEvent` and
-        `googleCalendarUrl` are unchanged and still hold their own spec;
-        nothing about the URL is hand-rolled here.
+        `CalendarActions` draws them because the accepted screen offers the
+        same pair, and the difference between the two is the EVENT rather than
+        the markup: the entry built here carries no venue, and the one built
+        for an accepted household does. Passing the event in is what keeps
+        that difference visible at the call site.
 
-        ONLY WHEN THERE IS SOMEWHERE TO GO, for the same reason the link above
-        is conditional — and this one matters more. The entry's description
-        carries the address, so an unfinished row would write the seeded
-        placeholder into somebody's calendar as the joining link: a reminder
-        that looks correct for months and fails on the one morning it is
-        read.
+        ONLY WHEN THERE IS SOMEWHERE TO GO. The entry's description carries
+        the address, so an unfinished row would write the seeded placeholder
+        into somebody's calendar as the joining link — a reminder that looks
+        correct for months and fails on the one morning it is read.
       */}
       {isJoinable(ceremony.streamUrl) ? (
-        <a
-          href={googleCalendarUrl(
-            buildStreamCalendarEvent(
-              {
-                coupleNames: ceremony.coupleNames,
-                streamUrl: ceremony.streamUrl,
-              },
-              WEDDING_INSTANT,
-            ),
+        <CalendarActions
+          event={buildStreamCalendarEvent(
+            {
+              coupleNames: ceremony.coupleNames,
+              streamUrl: ceremony.streamUrl,
+            },
+            WEDDING_INSTANT,
           )}
-          target="_blank"
-          /*
-           * `noopener` first, and it is not decoration: without it the new tab
-           * can reach back into this one through `window.opener`, and one of
-           * the two surfaces that renders this sits behind a phone gate.
-           */
-          rel="noopener noreferrer"
-          /*
-            THE SAME WIDTH AS "Entrar a la transmisión", ON THE COUPLE'S OWN
-            INSTRUCTION: "el botón de Google debe quedar igual que el de
-            entrar a la reunión en tamaño." Both are `block w-full` of the
-            same box now that they are siblings, rather than two places
-            agreeing.
-          */
-          className="
-            mt-3 flex min-h-11 w-full items-center justify-center rounded-full
-            border border-current/60 bg-black/40
-            px-5 py-2.5 text-center text-sm backdrop-blur-sm transition-colors
-            duration-(--console-motion-fast) ease-(--ease-console-out)
-            hover:bg-black/55
-            focus-visible:outline-2 focus-visible:outline-offset-2
-            focus-visible:outline-current
-          "
-        >
-          Agregar a Google Calendar
-        </a>
+          icsHref={icsHref}
+          className="mt-3"
+        />
       ) : null}
     </div>
   );

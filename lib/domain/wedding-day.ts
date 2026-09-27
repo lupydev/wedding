@@ -200,3 +200,31 @@ export function formatWeddingTime(
     timeZone,
   }).format(instant);
 }
+
+/**
+ * WHERE THE WEDDING IS, DECLARED ONCE.
+ *
+ * WGS84 decimal degrees, "lat,lon" — the form Google Maps expects. Two copies
+ * become two venues the day somebody edits one, and that failure is silent: a
+ * guest sent to the wrong side of Buga finds out on the afternoon of the
+ * wedding. `tools/venue-coordinates.spec.ts` asserts this file is the only
+ * source that names the latitude, and that it names it once.
+ *
+ * WHY THIS IS IN THE SOURCE AT ALL, WHEN `tools/no-source-placeholders.spec.ts`
+ * ARGUES THE OPPOSITE. That rule exists because the venue's NAME lives in the
+ * `ceremony` row, where an operator corrects it with an UPDATE and no
+ * redeploy. A coordinate is not that kind of fact: it is not a name anybody
+ * proofreads, an operator typing one has no way to see whether it landed on
+ * the right field, and a wrong one fails silently in a way a wrong name never
+ * does. Binding it to a commit is the trade, and the price is stated plainly —
+ * MOVING THE WEDDING MEANS A DEPLOY, not editing a row. Taken knowingly, on a
+ * wedding whose venue is booked.
+ *
+ * A COMMITTED PICTURE OF THIS POINT STOOD BESIDE IT and is gone; the
+ * paragraphs above say why. What the deletion removes from this constant is
+ * the older, stronger argument for keeping it in the source — that a
+ * coordinate in the database would move the link while the committed image
+ * went on showing the old place. There is no image to disagree with any more,
+ * so the reason is the one written above and nothing else.
+ */
+export const VENUE_COORDINATES = "3.853778,-76.2971633";

@@ -278,10 +278,25 @@ test.describe("answering the invitation", () => {
     await expect(
       page.getByRole("button", { name: "Volver a responder" }),
     ).toHaveCount(0);
-    // One control on the screen, and it is the way to the venue.
+    /*
+      THREE CONTROLS NOW, AND NONE OF THEM CHANGES THE ANSWER.
+
+      This asserted ONE — the way to the venue — when that was everything on
+      the screen. The couple added the two calendar controls, so what the
+      assertion is really about has to be said directly: the screen offers a
+      way to GET there and two ways to REMEMBER it, and no way to answer
+      again.
+    */
+    const links = page.locator(".rsvp__confirmed").getByRole("link");
+
+    await expect(links).toHaveCount(3);
+    await expect(page.getByRole("link", { name: /Cómo llegar/ })).toBeVisible();
     await expect(
-      page.locator(".rsvp__confirmed").getByRole("link"),
-    ).toHaveCount(1);
+      page.getByRole("link", { name: /Agregar a Google Calendar/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Descargar el evento/ }),
+    ).toBeVisible();
     // And nothing was written by looking.
     expect(await invitation.responseHistory()).toHaveLength(2);
   });
@@ -880,5 +895,103 @@ test.describe("the way to the venue, on a phone", () => {
     }));
 
     expect(measured.scrollWidth).toBeLessThanOrEqual(measured.clientWidth);
+  });
+});
+
+/**
+ * THE CALENDAR, AND THE LINE IT MUST NOT CROSS.
+ *
+ * Two controls, two different promises: the Google entry, which carries no
+ * reminder because `TEMPLATE` has no parameter for one, and the `.ics`, which
+ * carries the couple's two alarms and is the reason the file is back after
+ * being deleted — "volvé al .ics con las dos alarmas para que probemos qué
+ * sucede en un android e iphone".
+ *
+ * WHAT ONLY A BROWSER CAN PROVE HERE is the endpoint: that it is behind the
+ * same gate the venue is, and that what it serves follows the household's
+ * ANSWER rather than the URL. `lib/domain/calendar-event.spec.ts` asserts the
+ * file's own shape — the alarms as instants, the escaping, the folding, and
+ * the venue's absence from the stream entry — over values, where it belongs.
+ */
+test.describe("the calendar entry a household can keep", () => {
+  test("serves a declining household no venue, and an accepting one the place", async ({
+    page,
+    request,
+  }) => {
+    const invitation = await household();
+    const href = `/i/${invitation.slug}/evento.ics`;
+
+    try {
+      /*
+        DECLINE FIRST, ACCEPT SECOND, WHICH IS THE ONLY ORDER THE PRODUCT
+        ALLOWS. An accepted answer cannot be changed from inside the
+        invitation — the couple removed that way back — so the declining
+        screen is the only one with a road out of it. The rest of this file
+        tells its stories the same way round for the same reason.
+      */
+      await unlock(page, invitation);
+      await decline(page);
+      await expect(streamCard(page)).toBeVisible();
+
+      await expect(
+        page.getByRole("link", { name: /Agregar a Google Calendar/ }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: /Descargar el evento/ }),
+      ).toBeVisible();
+
+      const declined = await page.request.get(href);
+      const declinedBody = await declined.text();
+
+      expect(declined.status()).toBe(200);
+      expect(declined.headers()["content-type"]).toContain("text/calendar");
+      expect(declinedBody).toContain("BEGIN:VEVENT");
+      // Both alarms, and the evening one is the absolute trigger.
+      expect(declinedBody).toContain("TRIGGER;VALUE=DATE-TIME:");
+      expect(declinedBody).toContain("TRIGGER:-PT3H");
+      // And not one trace of where the wedding is.
+      expect(declinedBody).not.toContain("LOCATION");
+      expect(declinedBody).not.toContain("3.853778");
+      expect(declinedBody).not.toContain("Villa Campestre");
+
+      /*
+        AND THE SAME URL ONCE THE SAME HOUSEHOLD ACCEPTS.
+
+        One path, one household, two answers: what comes back follows the
+        ANSWER rather than the address. A guest who forwards their file
+        forwards what they were allowed to have, which matters more for a
+        calendar entry than for a page — it lands in an app and survives.
+      */
+      await page.getByRole("button", { name: "Volver a responder" }).click();
+      await accept(page);
+      await submit(page);
+      await expectRecorded(page);
+
+      const download = page.getByRole("link", { name: /Descargar el evento/ });
+
+      await expect(download).toBeVisible();
+      expect(await download.getAttribute("href")).toBe(href);
+
+      const accepted = await page.request.get(href);
+      const acceptedBody = await accepted.text();
+
+      expect(accepted.status()).toBe(200);
+      expect(acceptedBody).toContain("LOCATION:");
+      expect(acceptedBody).toContain("3.853778");
+
+      /*
+        AND A REQUEST WITHOUT THE COOKIE GETS WHAT AN UNKNOWN SLUG GETS.
+
+        `request` is the suite's own context rather than the page's, so it
+        carries no unlock. A locked invitation and a nonexistent one answer
+        identically, so this endpoint cannot be used to discover which slugs
+        are real.
+      */
+      const locked = await request.get(href);
+
+      expect(locked.status()).toBe(404);
+    } finally {
+      await invitation.cleanup();
+    }
   });
 });

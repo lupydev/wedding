@@ -35,8 +35,23 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-/** The component that builds the link, read so this guard is bound to real use. */
-const VENUE_COMPONENT = "components/invitation/VenueMap.tsx";
+/**
+ * The one module that names the point, read so this guard is bound to real use.
+ *
+ * IT WAS `components/invitation/VenueMap.tsx` AND THE MOVE IS THE REASON THIS
+ * GUARD EARNED ITS KEEP. The coordinate was module-private inside the
+ * component that builds the directions link, with a note saying it appears
+ * exactly once in this repository. Then the calendar entry an accepted
+ * household saves grew a location — and `lib/domain/calendar-event.ts` cannot
+ * import a component, so the honest choices were to move the constant or to
+ * write it down a second time. A second copy is two venues the day somebody
+ * edits one, which is precisely what this file exists to prevent, so it moved
+ * to the domain beside the wedding's other committed facts.
+ *
+ * Changing this path is therefore a real decision and not a rename: it is the
+ * line that says where the single source is.
+ */
+const VENUE_MODULE = "lib/domain/wedding-day.ts";
 
 /**
  * The venue's latitude, which must appear in exactly one source file.
@@ -76,15 +91,15 @@ describe("the venue's coordinates", () => {
       readFileSync(`${REPO_ROOT}${file}`, "utf8").includes(VENUE_LATITUDE),
     );
 
-    expect(naming).toEqual([VENUE_COMPONENT]);
+    expect(naming).toEqual([VENUE_MODULE]);
   });
 
   it("is written down exactly once inside that file", () => {
     // The link is DERIVED from the constant rather than written beside it, so
     // there is one literal here and one place to correct. A second occurrence
     // is a second venue waiting to happen, even within one file.
-    const component = readFileSync(`${REPO_ROOT}${VENUE_COMPONENT}`, "utf8");
-    const occurrences = component.split(VENUE_LATITUDE).length - 1;
+    const source = readFileSync(`${REPO_ROOT}${VENUE_MODULE}`, "utf8");
+    const occurrences = source.split(VENUE_LATITUDE).length - 1;
 
     expect(occurrences).toBe(1);
   });
