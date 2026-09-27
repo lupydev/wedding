@@ -3,9 +3,11 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import { greetingLine } from "@/lib/domain/greeting-name";
 import {
   currentRsvpSentence,
   rsvpChoiceCopy,
+  rsvpConfirmedHeading,
   rsvpDeadlineSentence,
   rsvpFeedbackMessages,
   seatsSelectionSentence,
@@ -13,6 +15,7 @@ import {
 } from "@/lib/domain/rsvp-copy";
 
 import { CeremonyStream, type CeremonyStreamDetails } from "./CeremonyStream";
+import { InvitationGreeting } from "./InvitationGreeting";
 import { RsvpConfirmed } from "./RsvpConfirmed";
 
 /**
@@ -37,8 +40,15 @@ import { RsvpConfirmed } from "./RsvpConfirmed";
  *
  *   `question`  — the announcement, and one question with two answers.
  *   `attendees` — who is coming, and the send button. Nothing else.
- *   `confirmed` — where to go, when, and what to wear.
+ *   `confirmed` — when, what to wear, and where to go.
  *   `stream`    — for a household that cannot come, how to be there anyway.
+ *
+ * AND THE TOP LINE OF THE SCREEN IS THIS COMPONENT'S TOO, WHICH IT WAS NOT.
+ * `InvitationBody` painted "¡Hola, <name>!" above the slot on every screen
+ * alike. The couple asked the LAST one to say "Te esperamos, <name>" in that
+ * same place — and which screen is showing is state only this component holds,
+ * so the body hands the placement over (`greetingOwner="step"`) and the line
+ * is chosen here, beside the `step` that decides it.
  *
  * Each screen carries only what a household needs in order to do the one thing
  * it is being asked to do, which is also why the announcement is a SLOT rather
@@ -185,6 +195,7 @@ export interface RsvpAnswerVenue {
 
 export function RsvpAnswer({
   guests,
+  greetingName,
   current,
   ceremony,
   venue,
@@ -192,6 +203,18 @@ export function RsvpAnswer({
   action,
 }: {
   readonly guests: readonly RsvpAnswerGuest[];
+  /**
+   * How this household is addressed, which is the top line of every screen.
+   *
+   * A string rather than a rendered node, because this component does not
+   * merely place it — it CHOOSES it: three of the four screens greet the
+   * household and the fourth tells them they are expected. A node handed down
+   * ready-made could only ever be the greeting.
+   *
+   * It is the same value `InvitationBody` and the gate are given, resolved
+   * once on the server. Nothing here derives or reformats it.
+   */
+  readonly greetingName: string;
   readonly current: RsvpAnswerCurrent | null;
   /** The ceremony stream, shown in place of the form to a declining household. */
   readonly ceremony: CeremonyStreamDetails;
@@ -361,6 +384,27 @@ export function RsvpAnswer({
           ? "attendees"
           : "question";
 
+  /*
+    THE TOP LINE OF WHICHEVER SCREEN IS SHOWING.
+
+    Three of the four greet the household. The fourth replaces the greeting
+    rather than adding a heading under it — "en vez de decir: hola, nombre de
+    la invitación", the couple — so this is one element with two possible
+    lines, never two elements with one hidden.
+
+    The plural keys off `guests.length`, which is the size of the INVITATION.
+    Not `selected`, and not the seats the answer recorded: a household of three
+    of whom one can come is still addressed as the three people the couple
+    invited. `rsvpConfirmedHeading` carries the long version of that.
+  */
+  const greeting = (
+    <InvitationGreeting>
+      {step === "confirmed"
+        ? rsvpConfirmedHeading(guests.length, greetingName)
+        : greetingLine(greetingName)}
+    </InvitationGreeting>
+  );
+
   function toggle(guestId: string, checked: boolean) {
     setSelected((previous) =>
       checked
@@ -464,28 +508,30 @@ export function RsvpAnswer({
 
   if (step === "stream") {
     return (
-      <div
-        className="rsvp flex flex-1 flex-col justify-end"
-        data-rsvp-step={step}
-      >
-        <CeremonyStream
-          ceremony={ceremony}
-          memberCount={guests.length}
-          onReconsider={reconsider}
-        />
-      </div>
+      <>
+        {greeting}
+        <div
+          className="rsvp flex flex-1 flex-col justify-end"
+          data-rsvp-step={step}
+        >
+          <CeremonyStream
+            ceremony={ceremony}
+            memberCount={guests.length}
+            onReconsider={reconsider}
+          />
+        </div>
+      </>
     );
   }
 
   if (step === "confirmed") {
     return (
-      <div className="rsvp flex flex-1 flex-col" data-rsvp-step={step}>
-        <RsvpConfirmed
-          memberCount={guests.length}
-          onReconsider={reconsider}
-          venueName={venue.name}
-        />
-      </div>
+      <>
+        {greeting}
+        <div className="rsvp flex flex-1 flex-col" data-rsvp-step={step}>
+          <RsvpConfirmed onReconsider={reconsider} venueName={venue.name} />
+        </div>
+      </>
     );
   }
 
@@ -501,67 +547,69 @@ export function RsvpAnswer({
       does that on the question screen, where there are two groups; the screens
       that have no announcement have one group and put it in the same place.
     */
-    <form
-      ref={formRef}
-      action={record}
-      data-rsvp-step={step}
-      className={`rsvp rsvp__form flex flex-1 flex-col gap-6 ${
-        asking ? "justify-between" : "justify-end"
-      }`}
-    >
-      {asking ? announcement : null}
+    <>
+      {greeting}
+      <form
+        ref={formRef}
+        action={record}
+        data-rsvp-step={step}
+        className={`rsvp rsvp__form flex flex-1 flex-col gap-6 ${
+          asking ? "justify-between" : "justify-end"
+        }`}
+      >
+        {asking ? announcement : null}
 
-      <div className={`flex flex-col gap-4 ${PANEL}`}>
-        {asking ? (
-          <>
-            {answered === null ? null : (
-              <p className="rsvp__current text-sm text-[#f6efe2]/75">
-                {answered}
-              </p>
-            )}
+        <div className={`flex flex-col gap-4 ${PANEL}`}>
+          {asking ? (
+            <>
+              {answered === null ? null : (
+                <p className="rsvp__current text-sm text-[#f6efe2]/75">
+                  {answered}
+                </p>
+              )}
 
-            <fieldset className="rsvp__attending m-0 flex flex-col gap-2 border-0 p-0">
-              {/*
+              <fieldset className="rsvp__attending m-0 flex flex-col gap-2 border-0 p-0">
+                {/*
                 THE QUESTION IS THE `h2` OF THIS SCREEN NOW.
 
                 "Confirmen su asistencia" stood above it as a heading, which
                 said the same thing as the question underneath in slightly
                 different words. One screen, one question, asked once.
               */}
-              <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
-                {choice.question}
-              </legend>
-              <label className={CHOICE}>
-                <input
-                  className={CONTROL}
-                  type="radio"
-                  name="attending"
-                  value="yes"
-                  checked={attending === "yes"}
-                  onChange={
-                    soloGuest === undefined
-                      ? () => setAttending("yes")
-                      : acceptNow
-                  }
-                  required
-                />
-                {choice.yes}
-              </label>
-              <label className={CHOICE}>
-                <input
-                  className={CONTROL}
-                  type="radio"
-                  name="attending"
-                  value="no"
-                  checked={attending === "no"}
-                  onChange={declineNow}
-                  required
-                />
-                {choice.no}
-              </label>
-            </fieldset>
+                <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
+                  {choice.question}
+                </legend>
+                <label className={CHOICE}>
+                  <input
+                    className={CONTROL}
+                    type="radio"
+                    name="attending"
+                    value="yes"
+                    checked={attending === "yes"}
+                    onChange={
+                      soloGuest === undefined
+                        ? () => setAttending("yes")
+                        : acceptNow
+                    }
+                    required
+                  />
+                  {choice.yes}
+                </label>
+                <label className={CHOICE}>
+                  <input
+                    className={CONTROL}
+                    type="radio"
+                    name="attending"
+                    value="no"
+                    checked={attending === "no"}
+                    onChange={declineNow}
+                    required
+                  />
+                  {choice.no}
+                </label>
+              </fieldset>
 
-            {/*
+              {/*
               THE DEADLINE, WHERE THE QUESTION IS.
 
               It was the last line of a page two and a half screens tall, set in
@@ -570,13 +618,13 @@ export function RsvpAnswer({
               Full-strength cream, directly under the two answers, so a
               household deciding can see how long they have to decide.
             */}
-            <p className="rsvp__deadline text-sm text-[#f6efe2]">
-              {rsvpDeadlineSentence(guests.length)}
-            </p>
-          </>
-        ) : (
-          <>
-            {/*
+              <p className="rsvp__deadline text-sm text-[#f6efe2]">
+                {rsvpDeadlineSentence(guests.length)}
+              </p>
+            </>
+          ) : (
+            <>
+              {/*
               THE ANSWER TRAVELS AS A HIDDEN FIELD ONCE THE RADIOS ARE GONE.
 
               The radio group belongs to the screen before this one, and an
@@ -586,37 +634,37 @@ export function RsvpAnswer({
               opinion: this branch is only reachable while `attending` is
               "yes".
             */}
-            <input type="hidden" name="attending" value="yes" />
+              <input type="hidden" name="attending" value="yes" />
 
-            {soloGuest === undefined ? (
-              <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
-                <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
-                  ¿Quiénes asisten?
-                </legend>
-                <p className="rsvp__seats text-xs text-[#f6efe2]/70">
-                  {seatsSelectionSentence(selected.length, guests.length)}
-                </p>
-                {guests.map((guest) => {
-                  const checked = selected.includes(guest.id);
+              {soloGuest === undefined ? (
+                <fieldset className="rsvp__attendees m-0 flex flex-col gap-2 border-0 p-0">
+                  <legend className="font-display text-xl text-[#f6efe2] sm:text-2xl">
+                    ¿Quiénes asisten?
+                  </legend>
+                  <p className="rsvp__seats text-xs text-[#f6efe2]/70">
+                    {seatsSelectionSentence(selected.length, guests.length)}
+                  </p>
+                  {guests.map((guest) => {
+                    const checked = selected.includes(guest.id);
 
-                  return (
-                    <label className={CHOICE} key={guest.id}>
-                      <input
-                        className={CONTROL}
-                        type="checkbox"
-                        name="attendee"
-                        value={guest.id}
-                        checked={checked}
-                        // The cap, enforced as an absence: an unchecked box stops being
-                        // selectable once the allowance is spent. Already-checked boxes
-                        // stay live so the household can swap one person for another.
-                        disabled={!checked && allowanceSpent}
-                        onChange={(event) =>
-                          toggle(guest.id, event.target.checked)
-                        }
-                      />
-                      {guest.fullName}
-                      {/*
+                    return (
+                      <label className={CHOICE} key={guest.id}>
+                        <input
+                          className={CONTROL}
+                          type="checkbox"
+                          name="attendee"
+                          value={guest.id}
+                          checked={checked}
+                          // The cap, enforced as an absence: an unchecked box stops being
+                          // selectable once the allowance is spent. Already-checked boxes
+                          // stay live so the household can swap one person for another.
+                          disabled={!checked && allowanceSpent}
+                          onChange={(event) =>
+                            toggle(guest.id, event.target.checked)
+                          }
+                        />
+                        {guest.fullName}
+                        {/*
                 THE SPACE IS OUTSIDE THE SPAN, AND THAT IS NOT FUSSINESS.
 
                 Accessible-name computation TRIMS each element's text before
@@ -625,22 +673,22 @@ export function RsvpAnswer({
                 node it survives. The spec asserting that the form and the
                 couple's own list read alike caught exactly this.
               */}
-                      {guest.isChild ? (
-                        <>
-                          {" "}
-                          <span className="text-[#f6efe2]/60">
-                            (niño o niña)
-                          </span>
-                        </>
-                      ) : (
-                        ""
-                      )}
-                    </label>
-                  );
-                })}
-              </fieldset>
-            ) : (
-              /*
+                        {guest.isChild ? (
+                          <>
+                            {" "}
+                            <span className="text-[#f6efe2]/60">
+                              (niño o niña)
+                            </span>
+                          </>
+                        ) : (
+                          ""
+                        )}
+                      </label>
+                    );
+                  })}
+                </fieldset>
+              ) : (
+                /*
                 THE SEAT IS STILL NAMED, BECAUSE THE DATABASE COUNTS NAMES.
 
                 `seats_confirmed` is derived from the attendees and must EQUAL
@@ -649,18 +697,18 @@ export function RsvpAnswer({
                 household the couple would then cook for nobody. The payload is
                 byte for byte the one a single ticked box produced.
               */
-              <input type="hidden" name="attendee" value={soloGuest.id} />
-            )}
+                <input type="hidden" name="attendee" value={soloGuest.id} />
+              )}
 
-            {/*
+              {/*
               FULL WIDTH, because on a phone this is the one thing the whole
               screen exists to have pressed.
             */}
-            <button className={SEND} type="submit" disabled={pending}>
-              Enviar respuesta
-            </button>
+              <button className={SEND} type="submit" disabled={pending}>
+                Enviar respuesta
+              </button>
 
-            {/*
+              {/*
               THE WAY BACK, BECAUSE THE QUESTION IS NO LONGER ON THIS SCREEN.
 
               The radio group used to stay visible above the checkboxes, so a
@@ -669,8 +717,8 @@ export function RsvpAnswer({
               no way to change its mind would have to close the invitation and
               open it again.
             */}
-            <button
-              className="
+              <button
+                className="
                 rsvp__back self-center text-xs text-[#f6efe2]/70 underline
                 underline-offset-4 transition-colors
                 duration-(--console-motion-fast)
@@ -678,16 +726,17 @@ export function RsvpAnswer({
                 focus-visible:outline-2 focus-visible:outline-offset-2
                 focus-visible:outline-[#f6efe2]
               "
-              onClick={reconsider}
-              type="button"
-            >
-              Volver a la pregunta
-            </button>
-          </>
-        )}
+                onClick={reconsider}
+                type="button"
+              >
+                Volver a la pregunta
+              </button>
+            </>
+          )}
 
-        {feedbackRegion()}
-      </div>
-    </form>
+          {feedbackRegion()}
+        </div>
+      </form>
+    </>
   );
 }

@@ -209,10 +209,38 @@ export function rsvpDeadlineSentence(memberCount: number): string {
  *
  * The household has just said they are coming, so the answer is not "thank
  * you" — it is where to go. This line says the couple are expecting them and
- * hands over to the venue, the map and the hour beneath it.
+ * hands over to the day, the dress code and the venue beneath it.
+ *
+ * IT IS THE TOP LINE OF THE SCREEN, NOT A SECOND HEADING UNDER ONE. Every
+ * other screen opens with `greetingLine` — "¡Hola, Familia Aguirre!" — and the
+ * couple asked for this one to say something else in that same place: "en vez
+ * de decir: hola, nombre de la invitación debería ser… Te esperamos, nombre de
+ * la invitación". So it carries the household's name itself, and the greeting
+ * it replaces is not rendered above it.
+ *
+ * THE NUMBER IS THE INVITATION'S, NOT THE ANSWER'S, and that is the couple's
+ * own rule read literally: "si la invitación es 2 personas o más". A household
+ * of three of whom only one can come is still "los esperamos" — the invitation
+ * is addressed to the three of them, and a line that switched to the singular
+ * because two boxes came unticked would read as the couple striking people off
+ * a list. `memberCount` is `guests.length`, which is the membership itself
+ * since migration 0012, so there is nothing else it could accidentally be.
+ *
+ * ZERO READS AS A HOUSEHOLD, for the reason `rsvpChoiceCopy` gives below: the
+ * branch is unreachable, and being wrong in the plural costs nothing.
+ *
+ * The comma is a vocative one and the line takes no exclamation marks. "¡Te
+ * esperamos!" is an exclamation shouted at somebody who has just answered
+ * politely; the couple wrote it flat, and flat is the register the rest of
+ * this surface is written in.
  */
-export function rsvpConfirmedHeading(memberCount: number): string {
-  return memberCount === 1 ? "Te esperamos" : "Los esperamos";
+export function rsvpConfirmedHeading(
+  memberCount: number,
+  greetingName: string,
+): string {
+  return memberCount === 1
+    ? `Te esperamos, ${greetingName}`
+    : `Los esperamos, ${greetingName}`;
 }
 
 export function rsvpChoiceCopy(memberCount: number): RsvpChoiceCopy {

@@ -162,6 +162,20 @@ export default async function InvitationPage({ params }: RouteParams) {
         <InvitationBody
           invitation={invitation}
           wedding={ceremony}
+          /*
+            THE STEPPER OWNS THE TOP LINE WHILE THERE IS A STEPPER.
+
+            Every screen of the invitation opens with the household's own name,
+            and the LAST one opens with "Te esperamos, <name>" instead —
+            the couple's own instruction. Which screen is showing is client
+            state inside `RsvpAnswer`, so the body cannot choose between the
+            two lines and hands the placement over instead.
+
+            A CLOSED RSVP KEEPS IT IN THE FRAME, and that is not an oversight:
+            `RsvpClosed` is one screen with no steps, so there is nothing for
+            it to decide and nothing for it to hand back.
+          */
+          greetingOwner={open ? "step" : "frame"}
           rsvp={
             open ? (
               // The slug is bound on the SERVER here too: the form never
@@ -193,6 +207,12 @@ export default async function InvitationPage({ params }: RouteParams) {
                 */
                 venue={{ name: ceremony.venueName }}
                 guests={invitation.guests}
+                /*
+                  The same name the gate greeted them with a tap ago, from the
+                  same projection. The form does not greet with it on every
+                  screen — see `greetingOwner` above.
+                */
+                greetingName={invitation.greetingName}
                 current={
                   current === null
                     ? null

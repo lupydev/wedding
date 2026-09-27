@@ -209,6 +209,72 @@ describe("InvitationBody", () => {
    * `px-10` on top of the article's `px-6` is exactly 64px, and it is
    * symmetric so a centred line stays centred.
    */
+  /**
+   * AND THE GREETING IS NOT ALWAYS THIS COMPONENT'S TO PAINT.
+   *
+   * The last screen of the invitation opens with "Te esperamos, <name>" where
+   * every other one opens with "¡Hola, <name>!" — the couple's own change —
+   * and which screen is showing is client state inside `RsvpAnswer`. A Server
+   * Component above the stepper cannot choose between two lines, so it hands
+   * the PLACEMENT over instead.
+   *
+   * Asserted from both ends, because the failure that matters is not "the
+   * flag was ignored" but "nobody painted it" or "both of them did".
+   */
+  it("hands the greeting to the RSVP slot when the slot owns the screen", () => {
+    const { container } = render(
+      <InvitationBody
+        invitation={household}
+        wedding={wedding}
+        greetingOwner="step"
+        rsvp={<p>the step paints its own top line</p>}
+      />,
+    );
+
+    expect(container.querySelectorAll(".invitation__greeting")).toHaveLength(0);
+    expect(
+      screen.queryByText(`¡Hola, ${household.greetingName}!`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps it itself by default, which is what a closed RSVP gets", () => {
+    const { container } = render(
+      <InvitationBody
+        invitation={household}
+        wedding={wedding}
+        rsvp={<p>confirmations are closed</p>}
+      />,
+    );
+
+    expect(container.querySelectorAll(".invitation__greeting")).toHaveLength(1);
+    expect(
+      screen.getByText(`¡Hola, ${household.greetingName}!`),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * THE GAP BETWEEN THE GREETING AND THE SCREEN UNDER IT MOVED DOWN A LEVEL.
+   *
+   * When the slot paints the greeting, the two are siblings inside
+   * `.invitation__rsvp` rather than children of the article, so the space
+   * between them has to be declared there or they touch. Unconditional, so
+   * the arrangement that has one child cannot be the one somebody remembers.
+   */
+  it("holds the two apart wherever the greeting is painted", () => {
+    const { container } = render(
+      <InvitationBody
+        invitation={household}
+        wedding={wedding}
+        greetingOwner="step"
+        rsvp={<p>a screen</p>}
+      />,
+    );
+
+    expect(container.querySelector(".invitation__rsvp")!.className).toContain(
+      "gap-5",
+    );
+  });
+
   it("keeps the greeting clear of the music control on a phone", () => {
     const { container } = render(
       <InvitationBody invitation={household} wedding={wedding} />,

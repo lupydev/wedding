@@ -235,16 +235,59 @@ describe("rsvpDeadlineSentence", () => {
   });
 });
 
+/**
+ * THE TOP LINE OF THE LAST SCREEN, IN THE COUPLE'S OWN WORDS.
+ *
+ * "En vez de decir: hola, nombre de la invitación debería ser para la
+ * invitación individual **Te esperamos** nombre de la invitación y si la
+ * invitación es 2 personas o más debería decir: **Los esperamos** nombre de la
+ * invitación." It replaces the greeting rather than sitting under it, which is
+ * why it carries the name itself instead of leaving it to the line above.
+ */
 describe("rsvpConfirmedHeading", () => {
-  it("expects a household", () => {
-    expect(rsvpConfirmedHeading(4)).toBe("Los esperamos");
+  it("expects a household, and names it", () => {
+    expect(rsvpConfirmedHeading(4, "Familia Restrepo")).toBe(
+      "Los esperamos, Familia Restrepo",
+    );
   });
 
-  it("expects one guest", () => {
-    expect(rsvpConfirmedHeading(1)).toBe("Te esperamos");
+  it("expects one guest, and names them", () => {
+    expect(rsvpConfirmedHeading(1, "Camila")).toBe("Te esperamos, Camila");
+  });
+
+  /**
+   * THE NUMBER IS THE INVITATION'S, WHICH IS NOT THE SAME QUESTION AS "HOW
+   * MANY ARE COMING".
+   *
+   * The caller passes `guests.length`, and this asserts the shape of that
+   * contract from the copy's side: the function has no way to be told how many
+   * seats were confirmed, so no future edit can quietly make the line depend
+   * on it. `RsvpAnswer.spec.tsx` asserts the same rule from the component's
+   * side, where the two numbers can actually differ.
+   */
+  it("takes a membership and nothing about the answer", () => {
+    expect(rsvpConfirmedHeading.length).toBe(2);
   });
 
   it("treats a count it should never see as a household", () => {
-    expect(rsvpConfirmedHeading(0)).toBe(rsvpConfirmedHeading(2));
+    expect(rsvpConfirmedHeading(0, "Familia Ossa")).toBe(
+      rsvpConfirmedHeading(2, "Familia Ossa"),
+    );
+  });
+
+  /**
+   * NO EXCLAMATION MARKS, AND A VOCATIVE COMMA.
+   *
+   * The couple wrote it flat and the register of this surface is flat. "¡Te
+   * esperamos!" is shouted at somebody who has just answered politely, and a
+   * Spanish exclamation that opened without `¡` would be the kind of small
+   * wrongness a guest notices and cannot name.
+   */
+  it("is written the way the rest of this surface is written", () => {
+    const line = rsvpConfirmedHeading(3, "Familia Aguirre");
+
+    expect(line).not.toMatch(/[¡!]/);
+    expect(line).toMatch(/^Los esperamos, /);
+    expect(line.endsWith(".")).toBe(false);
   });
 });

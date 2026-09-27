@@ -63,3 +63,20 @@ export function resolveGreetingName(input: {
     ? deriveGreetingName(input.members)
     : input.stored;
 }
+
+/**
+ * How a household is greeted, in words, on the screens that greet them.
+ *
+ * ONE COPY OF THE LINE, WHICH IT HAD NOT BEEN. The gate and the invitation
+ * behind it are read a second apart and both open with this sentence, so it
+ * was written out twice; the accepted screen needed a third caller and three
+ * copies of one sentence is how a surface ends up greeting the same household
+ * in two voices.
+ *
+ * The LAST screen deliberately does not use it — a household that has just
+ * said they are coming is told they are expected, not hello again. That line
+ * is `rsvpConfirmedHeading`, beside the other copy a member count decides.
+ */
+export function greetingLine(greetingName: string): string {
+  return `¡Hola, ${greetingName}!`;
+}

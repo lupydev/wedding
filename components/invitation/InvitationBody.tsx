@@ -38,9 +38,11 @@
  * Guest-facing copy is Spanish. Identifiers and comments stay English.
  */
 
+import { greetingLine } from "@/lib/domain/greeting-name";
 import { rsvpDeadlineSentence } from "@/lib/domain/rsvp-copy";
 
 import { InvitationAnnouncement } from "./InvitationAnnouncement";
+import { InvitationGreeting } from "./InvitationGreeting";
 
 export interface InvitationBodyGuest {
   readonly id: string;
@@ -103,10 +105,31 @@ export function InvitationBody({
   invitation,
   wedding,
   rsvp,
+  greetingOwner = "frame",
 }: {
   invitation: InvitationBodyInvitation;
   /** The one row every surface reads. Never restated here. */
   wedding: InvitationBodyWedding;
+  /**
+   * Who paints the household's own name at the top of the screen.
+   *
+   * `"frame"` — this component does, as it always has. The operator preview
+   * and a closed RSVP get that, because neither has a stepper behind it and
+   * both open with the same line however they are reached.
+   *
+   * `"step"` — the RSVP slot does, and this component paints nothing there.
+   * The couple asked the accepted screen to open with "Te esperamos, <name>"
+   * where every other screen opens with "¡Hola, <name>!", and which screen is
+   * showing is client state owned by `RsvpAnswer` — unknowable to a Server
+   * Component sitting above it. A flag rather than two headings with one of
+   * them hidden: a name printed twice is a name that gets read out twice by
+   * anything that does not honour the CSS.
+   *
+   * It is a PLACEMENT, not a switch that can turn the greeting off. Exactly
+   * one of the two paints it in either setting, which is what
+   * `InvitationBody.spec.tsx` asserts from both ends.
+   */
+  greetingOwner?: "frame" | "step";
   /**
    * The current screen, composed by the route.
    *
@@ -180,24 +203,15 @@ export function InvitationBody({
         the words are already on it and the duplicate has gone with the slot
         that needed it.
 
-        `px-10` ON TOP OF THE ARTICLE'S `px-6` IS 64 PIXELS, AND IT IS MEASURED.
-        The music control is fixed at `right-5` and is 44px across, so it
-        occupies the last 64px of the row; a centred line reaching further would
-        run underneath it. `PhotoStage` applied the same gutter to the slot this
-        replaces, for the same reason. Symmetric, so the line stays centred.
+        AND IT IS NOT ALWAYS THIS COMPONENT THAT PAINTS IT. See `greetingOwner`
+        above: the last screen says something else in this exact place, and
+        only the stepper knows when it is showing.
       */}
-      <header className="flex shrink-0 flex-col items-center px-10 text-center lg:px-0">
-        <h2
-          className="
-            invitation__greeting font-display text-2xl leading-[1.05]
-            text-balance text-[#f6efe2]
-            [text-shadow:0_2px_24px_rgba(0,0,0,0.55)]
-            sm:text-3xl
-          "
-        >
-          ¡Hola, {invitation.greetingName}!
-        </h2>
-      </header>
+      {greetingOwner === "frame" ? (
+        <InvitationGreeting>
+          {greetingLine(invitation.greetingName)}
+        </InvitationGreeting>
+      ) : null}
 
       {rsvp === undefined ? (
         /*
@@ -226,8 +240,16 @@ export function InvitationBody({
           way the landing page does; the screens with no announcement put their
           single group at the bottom. Neither can do that without a box the
           height of the space that is left.
+
+          `gap-5 sm:gap-6` IS THE ARTICLE'S OWN GAP, MOVED DOWN ONE LEVEL. When
+          the slot paints the greeting, the header and the screen under it are
+          siblings HERE rather than children of the article, so the space
+          between them has to be declared here or the two would touch. With a
+          single child it changes nothing, which is why it is unconditional:
+          a gap that only exists in one of two arrangements is the one somebody
+          forgets when they add the third.
         */
-        <section className="invitation__rsvp flex flex-1 flex-col">
+        <section className="invitation__rsvp flex flex-1 flex-col gap-5 sm:gap-6">
           {rsvp}
         </section>
       )}

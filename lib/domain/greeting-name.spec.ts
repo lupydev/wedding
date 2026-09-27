@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { NameableGuest } from "./guest-name";
-import { deriveGreetingName, resolveGreetingName } from "./greeting-name";
+import {
+  deriveGreetingName,
+  greetingLine,
+  resolveGreetingName,
+} from "./greeting-name";
 
 function member(
   fullName: string,
@@ -82,5 +86,27 @@ describe("resolveGreetingName", () => {
         members,
       }),
     ).toBe("FAMILIA RESTREPO GUZMAN");
+  });
+});
+
+/**
+ * THE LINE ITSELF, WHICH THREE SURFACES WERE EACH SPELLING OUT.
+ *
+ * The gate, the invitation behind it and — once the last screen needed a
+ * different line in the same place — the stepper. Three copies of one
+ * sentence is how a household ends up greeted in two voices one tap apart.
+ */
+describe("greetingLine", () => {
+  it("greets a household by the name the invitation stores", () => {
+    expect(greetingLine("Familia Restrepo")).toBe("¡Hola, Familia Restrepo!");
+  });
+
+  it("opens the exclamation as well as closing it", () => {
+    // The one thing a hand-written copy in a third component would get wrong
+    // first, and the one nobody would notice in review.
+    const line = greetingLine("Camila");
+
+    expect(line.startsWith("¡")).toBe(true);
+    expect(line.endsWith("!")).toBe(true);
   });
 });

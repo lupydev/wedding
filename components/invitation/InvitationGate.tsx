@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { SaveTheDate } from "@/components/landing/SaveTheDate";
+import { greetingLine } from "@/lib/domain/greeting-name";
 
 /**
  * The gate screen: everything a guest sees before they are let through.
@@ -95,7 +96,12 @@ export function InvitationGate({
           lg:px-0 lg:text-4xl
         "
       >
-        ¡Hola, {greetingName}!
+        {/*
+          THE SAME SENTENCE THE INVITATION BEHIND THIS SCREEN OPENS WITH, from
+          the one place it is written. The two are read a second apart and
+          each used to spell it out for itself.
+        */}
+        {greetingLine(greetingName)}
       </h1>
 
       {/*

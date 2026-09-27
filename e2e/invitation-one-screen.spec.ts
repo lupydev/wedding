@@ -223,7 +223,7 @@ test.describe("the invitation, one screen at a time", () => {
     );
   });
 
-  test("where to go fits, with the map, the hour and the dress code", async ({
+  test("where to go fits, with the hour, the dress code and the way there", async ({
     page,
   }) => {
     fixture = await householdOfFive();
@@ -238,17 +238,42 @@ test.describe("the invitation, one screen at a time", () => {
       page.getByRole("link", { name: /Cómo llegar/ }),
     );
 
-    // The three facts this screen exists for, all above the fold with it.
+    /*
+      THE FACTS THIS SCREEN EXISTS FOR, ALL ABOVE THE FOLD WITH IT — AND NOW
+      THE LINE THAT NAMES THE HOUSEHOLD TOO.
+
+      The couple moved that line: "en la parte de arriba en vez de decir hola…
+      Te esperamos, nombre de la invitación." It is the top of the screen and
+      the only place on it that says the answer was heard, so a layout that
+      pushed it off the top would be the one failure a guest could not recover
+      from by scrolling.
+    */
     const fold = await page.evaluate(() => window.innerHeight);
     for (const locator of [
+      page.locator(".invitation__greeting"),
+      page.locator(".rsvp__when"),
       page.locator(".rsvp__venue"),
       page.locator(".rsvp__venue-map"),
-      page.locator(".rsvp__when"),
     ]) {
       const box = (await locator.boundingBox())!;
 
+      expect(box.y).toBeGreaterThanOrEqual(0);
       expect(box.y + box.height).toBeLessThanOrEqual(fold);
     }
+
+    /*
+      AND THE COUPLE'S ORDER SURVIVED THE TRIP THROUGH THE LAYOUT.
+
+      The unit spec asserts the DOM order; this asserts what the two grouped
+      blocks actually do on a phone — the day and the dress code at the top
+      under the heading, the place and the one control at the foot of the
+      screen, with the emptied middle between them.
+    */
+    const when = (await page.locator(".rsvp__when").boundingBox())!;
+    const venue = (await page.locator(".rsvp__venue").boundingBox())!;
+
+    expect(when.y + when.height).toBeLessThan(venue.y);
+    expect(venue.y).toBeGreaterThan(fold / 2);
   });
 
   test("the stream fits, for a household that cannot come", async ({

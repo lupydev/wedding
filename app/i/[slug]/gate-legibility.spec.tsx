@@ -6,11 +6,10 @@ import {
   WCAG_AA_NON_TEXT,
   WCAG_AA_NORMAL_TEXT,
   contrastRatio,
-  flatten,
   parseCssColor,
   relativeLuminance,
-  type Rgba,
 } from "@/lib/design/contrast";
+import { declaredColor, over } from "@/lib/design/declared-color";
 
 import { GateForm } from "./gate-form";
 
@@ -68,61 +67,14 @@ const BRIGHTEST_UNDER_THE_PANEL = "#faf8ef";
  */
 const BRIGHTEST_UNDER_THE_RECOVERY_LINK = "#646564";
 
-/** The named colours the gate's class names are allowed to use. */
-const NAMED_COLORS: Record<string, string> = {
-  black: "#000000",
-  white: "#ffffff",
-};
+/*
+  THE CLASS-NAME READER MOVED OUT, TO `lib/design/declared-color.ts`.
 
-function rgbaString(color: Rgba): string {
-  return `rgba(${color.red}, ${color.green}, ${color.blue}, ${color.alpha})`;
-}
-
-/** `a` painted on top of `b`, as one opaque colour the arithmetic can take. */
-function over(color: string, backdrop: string): string {
-  return rgbaString(flatten(parseCssColor(color), parseCssColor(backdrop)));
-}
-
-/**
- * Reads a colour back off a rendered class name.
- *
- * `bg-[#0d1114]/60`, `border-[#f6efe2]/55`, `bg-black/25`. Conditional
- * variants — `focus-visible:`, `hover:`, `lg:` — are skipped: this measures the
- * RESTING state, which is the one a guest who has not touched anything is
- * looking at.
- *
- * It throws rather than guessing, for the reason the whole file exists: a
- * silent zero here would be a confident pass for an unreadable pairing.
- */
-function declaredColor(
-  element: Element,
-  utility: "bg" | "text" | "border" | "ring",
-): string {
-  const pattern = new RegExp(
-    `^${utility}-(?:\\[(#[0-9a-f]{3,8})\\]|(black|white))(?:/(\\d{1,3}))?$`,
-    "i",
-  );
-  const found = Array.from(element.classList)
-    .filter((token) => !token.includes(":"))
-    .map((token) => pattern.exec(token))
-    .filter((match): match is RegExpExecArray => match !== null);
-
-  if (found.length !== 1) {
-    throw new Error(
-      `expected exactly one unconditional \`${utility}-\` colour on ` +
-        `<${element.tagName.toLowerCase()} class="${element.className}">, ` +
-        `found ${found.length}. This spec measures the colour the component ` +
-        "declares, so it cannot fall back to a default.",
-    );
-  }
-
-  const [, hex, name, opacity] = found[0];
-  const base = hex ?? NAMED_COLORS[name.toLowerCase()];
-  const { red, green, blue } = parseCssColor(base);
-  const alpha = opacity === undefined ? 1 : Number(opacity) / 100;
-
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
+  It lived here while the gate was the only surface whose words sat on a
+  photograph. The accepted screen is a second one — see
+  `confirm-legibility.spec.tsx` — and two copies of a parser are two parsers
+  that agree until somebody fixes a bug in one of them.
+*/
 
 function renderGate() {
   const { container } = render(

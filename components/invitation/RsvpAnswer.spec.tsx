@@ -73,6 +73,7 @@ function renderForm(
   options: {
     action?: ReturnType<typeof actionReturning>;
     guests?: readonly RsvpAnswerGuest[];
+    greetingName?: string;
     current?: RsvpAnswerCurrent | null;
     ceremony?: CeremonyStreamDetails;
     announcement?: React.ReactNode;
@@ -85,6 +86,7 @@ function renderForm(
       action={action}
       announcement={options.announcement ?? <p>{ANNOUNCEMENT}</p>}
       guests={options.guests ?? GUESTS}
+      greetingName={options.greetingName ?? GREETING_NAME}
       current={options.current ?? null}
       ceremony={options.ceremony ?? CEREMONY}
       venue={VENUE}
@@ -93,6 +95,16 @@ function renderForm(
 
   return action;
 }
+
+/**
+ * How this household is addressed, which is the top line of every screen.
+ *
+ * Deliberately NOT one of the guests' names and not a list of them: the
+ * greeting names the household, the checkboxes name its members, and a
+ * fixture where the two collide would let an assertion about one pass on the
+ * other.
+ */
+const GREETING_NAME = "Familia Aguirre";
 
 /**
  * A stand-in for the block the route actually passes.
@@ -941,6 +953,128 @@ describe("where the wedding is", () => {
       screen.queryByLabelText(/Restricciones alimentarias/),
     ).not.toBeInTheDocument();
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+  });
+});
+
+/**
+ * THE LINE AT THE TOP OF THE SCREEN, WHICH IS NOT THE SAME LINE ON ALL FOUR.
+ *
+ * The couple, on the accepted screen: "en la parte de arriba en vez de decir:
+ * hola, nombre de la invitación debería ser para la invitación individual Te
+ * esperamos nombre de la invitación y si la invitación es 2 personas o más
+ * debería decir: Los esperamos nombre de la invitación."
+ *
+ * IN VEZ DE — instead of, not underneath. Which is why this component paints
+ * it at all: the greeting used to belong to `InvitationBody`, a Server
+ * Component that cannot see which step is showing, so a screen that opens
+ * differently was not something it could express.
+ */
+describe("the line at the top of each screen", () => {
+  function heading(): string {
+    return document.querySelector(".invitation__greeting")!.textContent ?? "";
+  }
+
+  it("greets the household while there is still a question on screen", () => {
+    renderForm();
+
+    expect(heading()).toBe("¡Hola, Familia Aguirre!");
+  });
+
+  it("still greets them while they choose who is coming", async () => {
+    renderForm();
+
+    await userEvent.click(acceptRadio());
+
+    expect(heading()).toBe("¡Hola, Familia Aguirre!");
+  });
+
+  it("says they are expected once the acceptance is recorded", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(acceptRadio());
+    await user.click(submitButton());
+
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(heading()).toBe("Los esperamos, Familia Aguirre");
+    // And the greeting it replaced is not still standing above it.
+    expect(screen.queryByText(/¡Hola,/)).not.toBeInTheDocument();
+  });
+
+  it("says it in the singular to an invitation that names one person", async () => {
+    const [only] = GUESTS;
+    renderForm({ guests: [only], greetingName: only.fullName });
+
+    // A solo invitation records its acceptance on the first tap.
+    await userEvent.click(
+      screen.getByRole("radio", { name: /Sí, allá estaré/ }),
+    );
+
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(heading()).toBe(`Te esperamos, ${only.fullName}`);
+  });
+
+  /**
+   * THE PLURAL KEYS OFF THE INVITATION, NOT OFF THE ANSWER, AND THIS IS THE
+   * ONLY PLACE THE TWO CAN DIFFER.
+   *
+   * "Si la invitación es 2 personas o más" — the couple's own rule, read
+   * literally. A household of three of whom one can come is still addressed
+   * as the three people the couple invited; a line that dropped to "te
+   * esperamos" because two boxes came unticked would read as the couple
+   * striking people off a list at the moment those people had just been
+   * apologised for.
+   */
+  it("addresses the whole invitation even when one person is coming", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(acceptRadio());
+
+    const boxes = attendeeBoxes();
+    for (const box of boxes.slice(1)) {
+      await user.click(box);
+    }
+
+    expect(
+      boxes.filter((box) => (box as HTMLInputElement).checked),
+    ).toHaveLength(1);
+
+    await user.click(submitButton());
+
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(heading()).toBe("Los esperamos, Familia Aguirre");
+  });
+
+  it("greets a household that cannot come, rather than expecting them", async () => {
+    renderForm();
+
+    await userEvent.click(declineRadio());
+    await waitFor(() => expect(streamCard()).toBeInTheDocument());
+
+    expect(heading()).toBe("¡Hola, Familia Aguirre!");
+  });
+
+  /**
+   * ONE ELEMENT, NEVER TWO WITH ONE OF THEM HIDDEN.
+   *
+   * The alternative considered was leaving the body's greeting in place and
+   * hiding it with CSS on this step. A name printed twice is a name read out
+   * twice by anything that does not honour the stylesheet, and the guard is
+   * cheap: there is exactly one of these on the page, always.
+   */
+  it("paints exactly one of them, on every screen", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    expect(document.querySelectorAll(".invitation__greeting")).toHaveLength(1);
+
+    await user.click(acceptRadio());
+    expect(document.querySelectorAll(".invitation__greeting")).toHaveLength(1);
+
+    await user.click(submitButton());
+    await waitFor(() => expect(confirmedScreen()).not.toBeNull());
+    expect(document.querySelectorAll(".invitation__greeting")).toHaveLength(1);
   });
 });
 
