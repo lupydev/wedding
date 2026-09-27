@@ -174,6 +174,17 @@ declined screen given the language `/transmision` already uses.
       holds every word on that screen to the same 4.5:1 the two theme tables
       are already held to.
 
+- [x] **U36 — the last screen says the couple are expecting you, and the map
+      picture goes.** The couple's four changes to the accepted screen: the top
+      line becomes "Te esperamos, <name>" for one guest and "Los esperamos,
+      <name>" for two or more, the day and the dress code move up under it, the
+      place and one "Cómo llegar" button go to the foot of the screen, and the
+      committed map image is deleted — the file, its shape guard and the
+      `next/image` frame that reserved its box. The greeting had to move out of
+      `InvitationBody` to do it, because only the stepper knows which screen is
+      showing. Pushing the venue to the foot put it on the brightest ground on
+      the page, so the foot carries a measured card of its own.
+
 - [x] **U20 — the error screen, which nobody had ever looked at.** Black text
       on white, crammed top-left, a bare button. On the stage now, with the
       photograph.
@@ -2634,6 +2645,229 @@ list is 388 people today, so it is not urgent, but it is not hypothetical
 either — and it is nothing to do with the invitation, so it is written down
 here rather than fixed here.
 
+### U36 — done (the last screen, and the picture that left it)
+
+**WHAT WAS ASKED, IN THE COUPLE'S OWN WORDS.** "En la última parte del flujo de
+que sí van a asistir vamos a hacer un ajuste en la parte de arriba en vez de
+decir: hola, nombre de la invitación debería ser para la invitación individual
+**Te esperamos** nombre de la invitación y si la invitación es 2 personas o más
+debería decir: **Los esperamos** nombre de la invitación, seguido la fecha y el
+código de vestimenta y en la parte de abajo de la pantalla lugar y solamente el
+botón de cómo llegar **sin una imagen**."
+
+Four changes to one screen, and the fourth is the one with consequences.
+
+**THE PLURAL KEYS OFF THE INVITATION, NOT OFF THE ANSWER.** "Si la invitación
+es 2 personas o más" — read literally, because the literal reading is also the
+kind one. A household of three of whom only one can come is still "los
+esperamos": the invitation is addressed to the three people the couple invited,
+and a line that dropped to the singular because two boxes came unticked would
+read as the couple striking people off a list at the exact moment those people
+have just been apologised for. `rsvpConfirmedHeading` therefore takes
+`guests.length`, which has been the invitation's own membership since migration
+0012 — the same number `rsvpChoiceCopy`, `rsvpDeadlineSentence` and
+`RsvpAnswer`'s `soloGuest` already branch on, rather than a second notion of
+"one person" invented beside them. Two tests hold it: the pure function is
+asserted to take a membership and nothing about the answer, and
+`RsvpAnswer.spec.tsx` accepts for a household of three with two boxes unticked
+and asserts the heading is still plural — the only place the two numbers can
+actually differ.
+
+No exclamation marks and a vocative comma. "¡Te esperamos!" is shouted at
+somebody who has just answered politely, and the rest of this surface is flat.
+
+**THE GREETING HAD TO CHANGE OWNERS, AND THAT IS THE STRUCTURAL PART.**
+"En vez de" — instead of, not underneath. The top line of this screen is the
+same slot every other screen greets the household in, and that slot was painted
+by `InvitationBody`: a Server Component sitting ABOVE the stepper, which cannot
+see which of the four screens is showing. A Server Component cannot choose
+between two lines it has no way to distinguish.
+
+So the markup moved into `InvitationGreeting`, and the CHOICE of line moved to
+`RsvpAnswer`, beside the `step` that decides it. `InvitationBody` grew one prop,
+`greetingOwner`, defaulting to `"frame"`; the route passes `"step"` only while
+the stepper is rendered, so a closed RSVP and the operator preview are
+unchanged. The article's `gap-5 sm:gap-6` moved down one level onto
+`.invitation__rsvp`, because the greeting and the screen under it are siblings
+there now — which is why the geometry is identical rather than merely close.
+
+**THE ALTERNATIVE WAS CONSIDERED AND REJECTED, AND IT WAS THE SMALLER DIFF.**
+Leave the body's greeting where it is and hide it on this one step with a
+`group-has-[[data-rsvp-step=confirmed]]:hidden` on the header. Two lines,
+touching one file. It puts the household's name on the page TWICE and relies on
+a stylesheet to keep one of them quiet — and the whole point of U34 was to move
+things out of the tree rather than hide them. `RsvpAnswer.spec.tsx` asserts
+there is exactly one `.invitation__greeting` on every screen, which is the
+assertion that would have failed.
+
+`greetingLine` came out of the same change. The gate and the invitation behind
+it each spelled "¡Hola, <name>!" out for themselves; the stepper would have
+been a third copy, so the sentence is written once in `lib/domain/greeting-name.ts`
+and all three read it.
+
+**THE MAP PICTURE IS DELETED, NOT HIDDEN, AND SO IS WHAT GUARDED IT.**
+`img/venue-map.jpg` was 118,041 bytes of committed OpenStreetMap tiles with the
+pin painted on. With the `<Image>` gone it had no consumer, so it went, and
+`VenueMap` is now what survives of it: the coordinates, the derived
+`maps/dir/?api=1` link, the accessible name and a full-width pill in
+`StreamDetails`' own language. Same reasoning as `tools/og-font-coverage.spec.ts`
+and `ceremony_date` — a thing whose premise has died is deleted rather than left
+to be rediscovered.
+
+**ITS GUARD WAS HALF ALIVE, AND ONLY THE DEAD HALF WENT.**
+`tools/venue-map-asset.spec.ts` held five assertions. Three measured the FILE —
+that it is the 1280×800 2x crop the labels on a phone depend on, that the
+component imports that exact path, and a negative control against a
+differently-shaped asset. Those describe something that no longer exists.
+
+The other two guard the COORDINATES: that the venue's latitude appears in
+exactly one source file, and exactly once inside it. That premise did not die
+with the picture. It got slightly worse, in fact — the argument for one copy
+used to be "the image and the link must agree", and there is no image to
+disagree with now, so a wrong pin has nothing on the screen for a guest to catch
+it against. The file is `tools/venue-coordinates.spec.ts`, renamed because it
+now guards the destination rather than an asset, and it says in its own header
+what it lost and why the rest stayed.
+
+**AND `tools/jpeg-size.ts` FOLDED BACK INTO ITS ONE REMAINING CALLER.** It was
+extracted in `97a146e` for a stated reason: `img/venue-map.jpg` had become a
+second committed binary somebody measured, and a copied marker walk is two
+decoders that agree until a bug is fixed in one of them. That reason is gone —
+`tools/og-card-asset-budget.spec.ts` is the only caller again — so the parser
+is back inside it, with the round trip recorded in its doc comment. A shared
+module with one caller is a promise of reuse nothing keeps: the next reader
+opens two files to follow one assertion, and the extraction's own comment goes
+on naming an asset that no longer exists. If a third binary ever wants it,
+moving it out again is the same commit it was the first time.
+
+The same test ran the other way in this unit and came out the opposite way, which
+is the point of stating the rule rather than the outcome. `declaredColor` — the
+reader that pulls a colour back off a Tailwind class name — was written inside
+`gate-legibility.spec.tsx` when the gate was the only surface whose words sat on
+a photograph. This screen is the second, so it moved to
+`lib/design/declared-color.ts`. One caller is a module nobody needs; two is a
+module that earns itself.
+
+**THE PICTURE LEFT AND TOOK 188 PIXELS WITH IT, WHICH WERE SPENT ON AIR.**
+The screen is two groups pushed apart with `justify-between` rather than one
+stack pushed to the bottom: what a household has to KNOW at the top under the
+line that names them, what they have to DO at the foot under their thumb. The
+emptied middle is where `PhotoStage`'s two scrims fade towards each other around
+55%–62% — the brightest ground on the page, and now the part of it with no words
+on it at all.
+
+**AND THE ONE THING THAT MOVED ONTO A GROUND IT COULD NOT BE READ ON.**
+
+Measured the way U35 measured the gate: the screen rendered at both phone
+presets and at 1280×720, every glyph made transparent and every ground the
+screen draws for itself removed, and the maximum WCAG relative luminance taken
+from inside each element's own box. p95 was recorded beside each maximum; the
+maximum is what is asserted, because it is the harsher floor and it is the one
+the gate's spec already chose.
+
+| line                           | brightest pixel | where     | before   | after |
+| ------------------------------ | --------------- | --------- | -------- | ----- |
+| `Te esperamos, <name>`         | #33350f         | 1280×720  | 11.08    | 11.08 |
+| `Su respuesta quedó guardada.` | #2d2e0d         | 1280×720  | 6.99     | 8.36  |
+| `CUÁNDO`                       | #3e4038         | iPhone 14 | 4.48     | 6.00  |
+| the day and the hour           | #66684c         | iPhone 14 | 5.03     | 5.03  |
+| `LUGAR`                        | #838380         | iPhone 14 | **2.96** | 6.07  |
+| the venue's own name           | #656665         | iPhone 14 | 5.00     | 11.13 |
+| `Cómo llegar`                  | #494539         | iPhone 14 | 6.35     | 13.33 |
+| its edge (3:1, not 4.5:1)      | #494539         | iPhone 14 | **2.90** | 3.65  |
+| `Volver a responder`           | #2e2621         | 1280×720  | 10.06    | 15.29 |
+
+`LUGAR` is the finding. Pushed to the foot of an iPhone 14 it lands at 78%–84%
+of the screen, over Luis's lit trouser leg, whose brightest pixel is #838380.
+Cream on that measures **3.30:1 at FULL strength** — no opacity reaches 4.5, so
+this was not a label that had been set too quietly. It needed a ground or a
+different place to stand, and the couple had just said where it stands.
+
+So the foot of the screen carries a card of its own, in the gate's language and
+for the gate's reasons: painted rather than laid out, `absolute` with negative
+insets and `-z-10`, so it costs no height on a screen whose whole promise is
+that it is exactly one viewport tall. `isolate` on its parent is load-bearing
+and its absence is silent — without a stacking context of its own a `-z-10`
+ground paints below every positioned element including the photograph, and the
+screen renders exactly as it did before with no error anywhere.
+
+`bg-[#0d1114]/60` rather than the gate's `/70`, and the difference is measured:
+the gate's panel sits at 60%–72%, in the gap where neither scrim carries
+anything, and this sits low enough that the bottom one already does.
+
+**THE TOP OF THE SCREEN HAS NO CARD, AND THAT IS ALSO A MEASUREMENT.** Every
+line up there clears 4.5:1 on the bare photograph — the thinnest is the day and
+the hour at 5.03:1. U35 recorded what a card costs on the gate: "the gate is no
+longer a picture of the two of them." It is not a price worth paying twice on a
+screen that is otherwise the couple and four short lines. The labels went from
+`/60` to `/75` instead, which is what `CUÁNDO`'s 4.48 needed — thirty-six
+thousandths under the line, and exactly the kind of number nobody catches by
+looking.
+
+**THE CONTROL'S EDGE IS THE OTHER HALF, AND IT IS A DIFFERENT THRESHOLD.** With
+the picture gone, "Cómo llegar" is a bar rather than a 320×200 photograph of
+Buga, and WCAG holds the boundary of a control to 3:1 because an invisible
+control is not a contrast problem — it is a missing control. At the `/40` the
+send button uses it measured 2.90:1 against the foot's ground; it is `/50` here,
+at 3.65:1. The send button is deliberately not changed to match: it sits inside
+the form's own panel, higher up the photograph, with a heading and a list and a
+deadline around it. This one is alone at the foot of the last screen.
+
+**WHAT WAS KEPT AGAINST THE LIST, AND IT IS THE COUPLE'S TO OVERRULE.**
+"Su respuesta quedó guardada." is not among the four things they named. It
+stays, one line of `text-sm` directly under the heading, because a confirmation
+screen that never says anything was confirmed is the one failure on this page a
+guest cannot recover from on their own — and the screen has the room. Deleting
+it is one line if they disagree.
+
+**RED, QUOTED.** `confirm-legibility.spec.tsx` was forced to fail in both of
+the ways it exists to catch. With the foot's ground weakened to `/25`:
+
+    × reads .rsvp__venue dt on that ground — `LUGAR`, which is why this
+      ground exists
+    AssertionError: expected 3.611091032934468 to be greater than or equal to 4.5
+
+    × draws an edge that can be seen against the ground it sits on
+    AssertionError: expected 2.4903114469756296 to be greater than or equal to 3
+
+and with the labels put back to the `/60` they shipped at:
+
+    × reads .rsvp__when dt on the bare photograph — #3e4038
+    AssertionError: expected 4.476597291586587 to be greater than or equal to 4.5
+
+It also carries its own permanent negative control — one assertion measures
+`LUGAR` against the same pixel WITHOUT the card and requires it to be UNDER
+4.5:1, so an assertion that only ever ran with the card in place cannot sit
+green after the card stops being needed.
+
+**GREEN.** `npm test` 2,445 unit and component tests, of which the 2,432
+outside `lib/server/guest-directory.spec.ts` all pass (2,403 in total at
+`5d8622f`). The total moves by one between runs and the count outside that file
+does not, which is the same local database saying so twice. `npm run typecheck`,
+`npm run lint` (0 errors, 8 warnings — the same eight, all in files this unit
+did not touch), `npm run format:check`, `npm run build`.
+Every step of the invitation still measures 1.00 on both phones for a household
+of three and of five, and the one-screen spec now also asserts that the line
+naming the household is on the screen with the rest and that the two groups
+really are at the two ends of it.
+
+**NOT GREEN, AND STILL NOT THIS UNIT'S DOING.** The same eight
+`lib/server/guest-directory.spec.ts` failures U35 recorded, and the same
+`e2e/console-guest-directory.spec.ts` failure, from the same cause — which has
+got worse rather than better: the local Supabase now holds 807 invitations and
+1,409 `invitation_guests` rows. Confirmed directly this time rather than
+inferred, by asking PostgREST for the table and reading its own answer:
+
+    Content-Range: 0-999/1409
+    rows returned: 1000
+
+and confirmed as the cause by temporarily adding a `.limit()` to
+`listGuestDirectory`, which moved the failure from the spec's second test to its
+third and back again between runs — a page of 1000 unordered rows out of 1409
+catches a different fixture each time. The probe was reverted. Run around that
+one file, all 211 tests outside it pass: `chromium`, all 8 on `iphone-14`, all 8
+on `pixel-7`, all 16 of `wedding-facts`.
+
 ## Next
 
 - The couple have not filled the wedding's own facts, so the invitation still
@@ -2646,6 +2880,15 @@ here rather than fixed here.
   console. If the couple want a landmark ("a 10 minutos al sur de Buga") on the
   last screen, that is a line to add back deliberately, not a placeholder to
   leave printing.
+- U36 makes that question sharper rather than settling it. The map picture
+  carried an `alt` that named the town — "el salón Villa Campestre está señalado
+  al sur de Buga, junto a la Troncal de Occidente" — and it was the only place
+  in the product that told a guest who cannot see the screen roughly WHERE the
+  venue is before they open Google Maps. It went with the picture, because a
+  description of a picture that is not there is a lie. Nothing replaced it: the
+  last screen now says the venue's name and offers a route. One short landmark
+  line under `Lugar` would give it back to everybody, sighted or not, and it is
+  a sentence the couple have to write, not one to invent for them.
 - "Nos alegra mucho invitarlos a celebrar nuestro matrimonio." is no longer on
   the invitation. It repeated the WhatsApp message that brings a guest here and
   cost the question screen a tenth of its height. Theirs to overrule — the price
