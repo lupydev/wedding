@@ -140,9 +140,12 @@ test.describe("the per-device WhatsApp declaration", () => {
 
     // Nobody preselected. A suggestion here would make clearing site data
     // silently nominate an operator.
-    for (const option of await page.getByRole("radio").all()) {
-      await expect(option).not.toBeChecked();
-    }
+    //
+    // Asked as one query rather than one per operator, for the reason spelled
+    // out on the same assertion further down this file: the picker renders
+    // every operator the database holds, and this local one holds 1,502 of
+    // them from crashed runs.
+    await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
   });
 
   test("declaring the signed-in operator's own account opens the console", async () => {
@@ -205,9 +208,20 @@ test.describe("the per-device WhatsApp declaration", () => {
     await page.goto("/console");
 
     await expect(page).toHaveURL(/\/console\/device$/);
-    for (const option of await page.getByRole("radio").all()) {
-      await expect(option).not.toBeChecked();
-    }
+    /*
+      ONE QUERY FOR "NOBODY IS SELECTED", NOT ONE PER OPERATOR.
+
+      This walked every radio and asserted each was unchecked, which says the
+      same thing and costs a round trip and a retry budget per option. That was
+      free while the picker rendered a handful — and it stopped being free the
+      moment `listOperatorProfiles` began answering honestly: the read used to
+      stop at PostgREST's thousandth row, and against a local database holding
+      1,502 senders from crashed runs the loop now had 1,186 assertions to get
+      through inside one 30-second test. `checked: true` asks the page the
+      question directly, so the assertion no longer scales with how much junk
+      the database happens to be carrying.
+    */
+    await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
 
     // Back to a working console for the rest of the file.
     await declareDevice(page, ana.displayName);

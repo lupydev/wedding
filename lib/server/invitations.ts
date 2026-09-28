@@ -29,6 +29,7 @@ import {
 import { normalizeForStorage, type GuestPhoneRef } from "@/lib/domain/phone";
 
 import { placeGuestInInvitation } from "./guest-directory";
+import { readEveryPage, ROWS_PER_PAGE } from "./paged-read";
 import { encodeSlug, SLUG_BYTE_LENGTH } from "@/lib/domain/slug";
 import { nextFreeSlug, slugifyName } from "@/lib/domain/slug-from-name";
 import { isWellFormedUuid } from "@/lib/domain/uuid";
@@ -1757,17 +1758,28 @@ export async function findInvitationBySlug(
  */
 export async function listSenderDirectory(
   client: SupabaseClient,
+  rowsPerPage: number = ROWS_PER_PAGE,
 ): Promise<SenderDirectory> {
-  const { data, error } = await client
-    .from("senders")
-    .select("id, allowlisted_email");
-
-  if (error) {
-    throw new Error(`Could not read the sender directory: ${error.message}`);
-  }
+  // PAGED, and this is the read where a short answer does real damage rather
+  // than merely hiding rows: the import validates every file row against this
+  // map, so a sender PostgREST declined to send would come back as "that email
+  // is not an operator" and the import would refuse invitations that are
+  // perfectly valid. A missing key and an absent operator are the same value
+  // here, which is precisely why the truncation has to be impossible rather
+  // than unlikely. `id` is the page key — nothing reads this in order.
+  const rows = await readEveryPage<{ id: string; allowlisted_email: string }>(
+    "the sender directory",
+    rowsPerPage,
+    (from, to) =>
+      client
+        .from("senders")
+        .select("id, allowlisted_email")
+        .order("id")
+        .range(from, to),
+  );
 
   const directory: Record<string, string> = {};
-  for (const sender of data ?? []) {
+  for (const sender of rows) {
     directory[sender.allowlisted_email] = sender.id;
   }
 
@@ -1823,19 +1835,29 @@ export interface OperatorProfile {
  */
 export async function listOperatorProfiles(
   client: SupabaseClient,
+  rowsPerPage: number = ROWS_PER_PAGE,
 ): Promise<readonly OperatorProfile[]> {
-  const { data, error } = await client
-    .from("senders")
-    .select("id, display_name")
-    .order("display_name");
+  // `display_name` IS THE ORDER A READER SEES; `id` IS WHAT MAKES IT A PAGE
+  // KEY. Nothing stops two operators sharing a display name, and a key that is
+  // not unique is not a stable cursor: two rows tied on `display_name` can
+  // land either side of a page boundary in either order, so one is served
+  // twice and the other never. The tiebreak costs nothing and removes the
+  // question.
+  const rows = await readEveryPage<{ id: string; display_name: string }>(
+    "the operator list",
+    rowsPerPage,
+    (from, to) =>
+      client
+        .from("senders")
+        .select("id, display_name")
+        .order("display_name")
+        .order("id")
+        .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`Could not read the operator list: ${error.message}`);
-  }
-
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    displayName: row.display_name as string,
+  return rows.map((row) => ({
+    id: row.id,
+    displayName: row.display_name,
   }));
 }
 
@@ -1874,6 +1896,14 @@ export interface ConsoleListOptions {
   /** Narrows to one invitation. Applied as a `WHERE`, like the partition. */
   readonly invitationId?: string;
   readonly defaultCountry: CountryCode;
+  /**
+   * Households per request. Defaults to `ROWS_PER_PAGE`.
+   *
+   * A seam for the tests, and an honest one: it lets a spec prove the loop
+   * reassembles five households out of three pages instead of seeding a
+   * thousand and one to watch a single boundary. Production never passes it.
+   */
+  readonly rowsPerPage?: number;
 }
 
 /**
@@ -1906,40 +1936,56 @@ export async function listConsoleInvitations(
     return [];
   }
 
-  let query = client
-    .from("invitations")
-    .select(CONSOLE_INVITATION_SELECT)
-    /*
-      THE MEMBERS ARE ORDERED HERE; THE HOUSEHOLDS ARE NOT.
+  /*
+    READ IN PAGES, because neither filter bounds it. `ownedOnly` halves the
+    list between two operators and `invitationId` narrows it to one, but the
+    shared dashboard passes neither — that call is the whole `invitations`
+    table, and PostgREST answers an unbounded one with `max_rows` rows and no
+    hint that it did. The console would have stopped listing households past
+    the thousandth while looking exactly like a console with a thousand.
 
-      A member's position inside a household is a stable fact about that
-      household — primary first, then by when they were added — and the
-      database is the cheapest place to settle it.
+    THE MEMBERS ARE ORDERED INSIDE EACH HOUSEHOLD; THE HOUSEHOLDS ARE ORDERED
+    ONLY AS A PAGE KEY.
 
-      The order of the HOUSEHOLDS themselves used to be `display_name` here.
-      It is now `assembleConsoleRows`' business, newest first, stated once in
-      the domain alongside the directory's identical rule. Two opinions about
-      an order is how two lists that should agree drift apart.
-    */
-    .order("is_primary", { referencedTable: GUESTS, ascending: false })
-    .order("created_at", { referencedTable: GUESTS, ascending: true })
-    .order("id", { referencedTable: GUESTS, ascending: true });
+    A member's position inside a household is a stable fact about that
+    household — primary first, then by when they were added — and the database
+    is the cheapest place to settle it.
 
-  if (options.ownedOnly) {
-    query = query.eq("owner_sender_id", options.viewerSenderId);
-  }
+    The order of the HOUSEHOLDS themselves used to be `display_name` here, and
+    that was removed because it belongs to `assembleConsoleRows`, newest first,
+    stated once in the domain alongside the directory's identical rule. That is
+    still true and still where it lives: the `id` below is not a second opinion
+    about what a reader sees, it is the total, stable sequence `.range()` needs
+    in order to be asking for two halves of one list rather than making two
+    unordered reads with an offset between them.
+  */
+  const pageOf = (from: number, to: number) => {
+    let query = client
+      .from("invitations")
+      .select(CONSOLE_INVITATION_SELECT)
+      .order("is_primary", { referencedTable: GUESTS, ascending: false })
+      .order("created_at", { referencedTable: GUESTS, ascending: true })
+      .order("id", { referencedTable: GUESTS, ascending: true })
+      .order("id", { ascending: true });
 
-  if (options.invitationId !== undefined) {
-    query = query.eq("id", options.invitationId);
-  }
+    if (options.ownedOnly) {
+      query = query.eq("owner_sender_id", options.viewerSenderId);
+    }
 
-  const { data, error } = await query.returns<ConsoleInvitationRow[]>();
+    if (options.invitationId !== undefined) {
+      query = query.eq("id", options.invitationId);
+    }
 
-  if (error) {
-    throw new Error(`Could not read the console guest list: ${error.message}`);
-  }
+    return query.range(from, to).returns<ConsoleInvitationRow[]>();
+  };
 
-  const invitations = (data ?? []).map((row) => ({
+  const data = await readEveryPage<ConsoleInvitationRow>(
+    "the console guest list",
+    options.rowsPerPage ?? ROWS_PER_PAGE,
+    pageOf,
+  );
+
+  const invitations = data.map((row) => ({
     invitationId: row.id,
     slug: row.slug,
     greetingName: row.greeting_name,

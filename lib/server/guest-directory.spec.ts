@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { countingClient } from "../../supabase/tests/helpers/counting-client";
 import { withDb } from "../../supabase/tests/helpers/db";
 import { resolveLocalKeys } from "../../supabase/tests/helpers/local-keys";
 
@@ -428,4 +429,85 @@ describe("the directory's view of a send", () => {
 
     expect(row?.household?.dispatchState).toBe("not_dispatched");
   });
+});
+
+/**
+ * THE DIRECTORY IS NOT WHAT PostgREST FEELS LIKE SENDING.
+ *
+ * An unbounded `.select()` comes back with at most `max_rows` rows — 1000, in
+ * `supabase/config.toml` — and it comes back SILENTLY: no error, no flag, a
+ * short answer shaped exactly like a complete one. The console's guest list
+ * would simply have stopped at the thousandth person, and there would have
+ * been nothing on the page, in a log or in this suite to say so. That shape is
+ * why it survived: it was found by a test failing for what looked like an
+ * unrelated reason, not by anybody looking at the console.
+ *
+ * WHAT IS ASSERTED IS THE NUMBER OF REQUESTS, and it has to be. A single
+ * unpaged read still answers with up to a thousand rows, so against a small
+ * database it returns exactly what the loop would have returned and no
+ * assertion about the RESULT can tell them apart. A table-wide total would
+ * tell them apart and is not available: this database is shared with every
+ * other spec file and with whatever a crashed run left behind, so a total is a
+ * race. The request count is a fact on any database of any size, and one
+ * request means unpaged.
+ */
+describe("reading the whole directory, not the first page of it", () => {
+  it("pages the directory and reassembles every row it seeded", async () => {
+    useLocalSupabase();
+    const first = uniqueName("Paginada Uno");
+    const second = uniqueName("Paginada Dos");
+
+    await Promise.all([seedHousehold(first), seedHousehold(second)]);
+
+    const counted = countingClient(createServerSupabaseClient());
+    const directory = await listGuestDirectory(counted.client);
+    const names = new Set(directory.map((guest) => guest.fullName));
+
+    expect(names.has(first)).toBe(true);
+    expect(names.has(second)).toBe(true);
+    // Two at the very least: one page of rows and the empty one that ends the
+    // loop. An unpaged `.select()` makes exactly one, whatever the page size.
+    expect(counted.reads("invitation_guests")).toBeGreaterThan(1);
+  });
+
+  /**
+   * `is("invitation_id", null)` NARROWS THIS READ AND DOES NOT BOUND IT. The
+   * people nobody has placed yet are a set that grows with the guest list, and
+   * a filter matching an unbounded number of rows meets `max_rows` exactly as
+   * an unfiltered one does. This database is past it on that filter alone.
+   */
+  it("pages the free guests, whose filter bounds nothing", async () => {
+    useLocalSupabase();
+    const fullName = uniqueName("Libre Paginada");
+
+    const created = await createDirectoryGuest(
+      createServerSupabaseClient(),
+      { fullName, nickname: null, phone: "", isChild: false },
+      "CO",
+    );
+
+    const counted = countingClient(createServerSupabaseClient());
+    const free = await listFreeGuests(counted.client);
+
+    expect(free.some((guest) => guest.id === created.guest!.id)).toBe(true);
+    expect(counted.reads("invitation_guests")).toBeGreaterThan(1);
+  });
+
+  /*
+    THE PAGE SIZE IS INJECTABLE, AND IT IS EXERCISED WHERE IT IS CHEAP.
+
+    Two rows a page over five rows proves the loop reassembles, and seeding
+    1001 people to watch one boundary would take minutes and make this suite
+    slower — which is the disease being treated one level up. Neither read in
+    this file has a filter that can isolate five rows, though, so a tiny page
+    size here pages the WHOLE table: measured at 6.5 seconds against this
+    database and growing with every row anybody adds, for a fact already
+    established in bounded time.
+
+    So that proof lives in `invitations.spec.ts`, on `listConsoleInvitations`
+    with `ownedOnly` against a sender nobody shares: five households, pages of
+    two, exactly four requests, and the arithmetic is closed. The loop itself
+    is `paged-read.spec.ts`. What is left here is the assertion those two
+    cannot make — that these two reads page at all.
+  */
 });

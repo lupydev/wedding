@@ -201,6 +201,19 @@ declined screen given the language `/transmision` already uses.
       been sitting on the brightest pixel in the photograph at `bg-black/25`
       since U34, and prose had recorded it as fine.
 
+- [x] **U44 — five reads were answering with the first thousand rows and
+      calling it everything.** PostgREST caps an unbounded `.select()` at
+      `max_rows` and returns the short answer with no error, no flag and
+      nothing in the shape of the result to tell it from a complete one —
+      which is why this sat in `## Next` for four units while the suite went
+      red around it. The console's guest list, the free-guest picker, the
+      shared dashboard, the sender directory the import validates against and
+      the device picker all page now, against a stable key, stopping only on
+      an empty page rather than a short one. On the polluted local database it
+      took the unit suite from ten-to-seventeen drifting failures to 2,535
+      green, and the browser suite from 131 passing with 114 never reached to
+      243 passing.
+
 - [x] **U42 — the confirmation stopped reading like a spec sheet.** The
       couple asked for the countdown and said the page "se ve muy diferente a
       las demas y se ve un poco fea"; the cause was the label-over-value
@@ -4178,6 +4191,152 @@ all the cause U40, U41 and U42 record: the local Supabase is past PostgREST's
 unpaged 1000-row ceiling, `console-auth.spec.ts` cannot find a seeded operator,
 and 114 console tests do not run behind it. Nothing reset.
 
+### U44 — done (five reads were answering with the first thousand rows)
+
+**THE DEFECT IS THE SHAPE OF THE ANSWER, NOT THE SIZE OF IT.** PostgREST caps
+an unbounded `.select()` at `max_rows` — 1000, set in `supabase/config.toml` —
+and serves the first page with a 200, no error, no truncation flag and nothing
+in the body to distinguish it from the whole table. A console that had stopped
+listing guests past the thousandth would have looked exactly like a wedding
+with a thousand guests. **That is why it survived four units in `## Next`**:
+every symptom it produced was somebody else's test failing for what looked
+like an unrelated reason, and "eleven red tests everybody expects" is the same
+weather that hid the blanked-invitation defect until U40.
+
+**FIVE READS, NOT THE THREE THAT WERE NAMED.** `listGuestDirectory` (no filter
+at all) and `listConsoleInvitations` (the shared dashboard passes neither
+`ownedOnly` nor `invitationId`, so that call is the whole `invitations` table)
+were on the list. `listFreeGuests` was too, and its filter is the interesting
+one: `is("invitation_id", null)` NARROWS the read without BOUNDING it — the
+people nobody has placed yet grow with the guest list, and the local database
+is past a thousand on that filter alone. The survey added two more.
+`listSenderDirectory` reads `senders` with no filter, and a short answer there
+does not merely hide rows: the import validates every row of the couple's file
+against that map, and a missing key is indistinguishable from an operator who
+does not exist, so an operator PostgREST declined to send would come back as
+"that email is not on the allowlist" and the import would refuse invitations
+that are perfectly valid. `listOperatorProfiles` reads the same table for the
+device picker — which is precisely what had been breaking `console-auth`.
+
+**WHAT WAS JUDGED AND LEFT ALONE, WITH THE ARITHMETIC.** A filter is not a
+bound, so each one was reasoned about rather than waved past.
+`rsvp_latest.in(batch)` in `readLatestAnswers` is structurally safe: the view
+is one row per invitation by construction and a batch carries at most 100 ids,
+so it cannot exceed 100. `dispatch_events.in(batch)` in `readDispatchEvents`
+and `readDispatchStates` is the one with real exposure — the batch bounds the
+FILTER at 100 invitations, not the result, so ten operator actions per
+household in one batch would reach the cap. It holds 288 rows across the whole
+database today and this wedding has ~200 households; it is recorded in
+`## Next` rather than paged, because paging it adds a round trip per batch to
+the slowest read in the console and buys nothing at this scale.
+`gate_attempts` is bounded by an invitation AND a 60-minute window, and a
+brute force past a thousand attempts in an hour would still be answered
+correctly: the read is ordered `attempted_at` DESCENDING, so truncation drops
+the oldest attempts in the window and the 1000 it keeps are the ones any
+lockout threshold is decided on. `listDispatchEvents` is one household's log.
+`findSlugsInUse` matches one slug family; the largest in this database is 2.
+
+**ORDER WAS PART OF THE FIX, NOT SCOPE CREEP.** `.range()` over a query with
+no `ORDER BY` is two unordered reads with an offset between them: Postgres
+promises no repeatable row order, an UPDATE relocates a row in the heap, and
+two pages are then free to overlap or skip. None of the five ordered at the
+top level. `listGuestDirectory` was explicitly "UNORDERED ON PURPOSE" and that
+reasoning is preserved rather than overruled — `buildGuestDirectory` still
+sorts with a Spanish collator and the database still has no opinion about what
+a reader SEES. `id` is a page key: total, stable and invisible. The comment
+says so, because an `.order()` that looks decorative is one the next reader
+deletes. `listOperatorProfiles` ordered by `display_name`, which is not
+unique, so it gained `id` as a tiebreak — a cursor that is not unique can
+serve one of two tied rows twice and the other never.
+
+**THE LOOP STOPS ON AN EMPTY PAGE, NOT A SHORT ONE, AND THAT IS THE WHOLE
+GUARANTEE.** "Fewer rows than I asked for means there are no more" holds only
+while the server's ceiling is above the page size. Lower `max_rows` under it —
+one line in a config file nobody would connect to this — and every page comes
+back short, a loop that stopped on a short page stops on the first one, and
+the silent wrong answer is back with a paging loop on top of it looking like a
+fix. So `readEveryPage` advances the cursor by the rows it RECEIVED and ends
+only on a page with nothing in it. One extra round trip buys a correctness
+guarantee that does not depend on a setting the module cannot see.
+`paged-read.spec.ts` holds a server that caps every page at three while the
+caller asks for ten, and all seven rows still come back.
+
+**THE PAGE SIZE IS INJECTABLE BECAUSE THE ALTERNATIVE WAS THE DISEASE.** A
+test that seeded 1001 rows to watch one boundary would take minutes and make
+the suite slower, which is exactly what this unit is treating. Two rows a page
+over five households proves the same loop. It is exercised on
+`listConsoleInvitations` with `ownedOnly` against a sender nobody shares —
+five households, pages of two, exactly four requests including the empty one —
+because that is the only one of the five whose result set can be isolated. The
+same test written against `listGuestDirectory` was MEASURED at 6.5 seconds,
+because with no filter a page size of two pages the whole 2,991-row table, and
+it would get slower every time anybody crashed a run. It was deleted and the
+reason is in the file where it stood.
+
+**THE ASSERTION IS THE NUMBER OF REQUESTS, AND IT HAD TO BE.** An unpaged
+`.select()` still answers with up to a thousand rows, so against a small
+database it returns exactly what the loop would have returned: no assertion
+about the RESULT can tell the two apart, and one that only passes because this
+particular database happens to be polluted is a test that cannot fail on
+purpose. A table-wide total would distinguish them and is unavailable — this
+database is shared with every spec file and with whatever a crashed run left
+behind. `countingClient` wraps the REAL client, simulates nothing, and counts
+`from()`. One request means unpaged, on any database of any size.
+
+**PROVEN TO FAIL, because `3a7f89a` is in this history.** Each read was
+reverted to a single unpaged `.select()` and the tests were run:
+
+```
+listGuestDirectory   expected false to be true      (the seeded guest is absent)
+listFreeGuests       expected 1 to be greater than 1
+listConsoleInvitations  expected 1 to be 4
+listSenderDirectory  expected [ …(1000) ] to include 'cdf4c9a8-…'
+listOperatorProfiles expected [ …(1000) ] to include 'b6de60dd-…'
+```
+
+The cap is legible in the last two: `[ …(1000) ]` is PostgREST's ceiling
+printed into an assertion message.
+
+**THE PAYOFF, MEASURED ON THE POLLUTED DATABASE AND WITHOUT RESETTING IT.**
+Nothing was truncated; no permission was given to. `lib/server/guest-directory.spec.ts`
+went from **8 failed / 5 passed in 130.21s** to **16 passed in 8.99s**, and the
+eight failures were the whole of the diagnosis: they cleared because the cap
+was the cause, not because the fixtures moved. `lib/server/invitations.spec.ts`
+cleared its own. The full unit suite is **2,535 passing across 128 files in
+18.7s**, stable across three consecutive runs — `tools/eslint-zones.spec.ts`
+stopped timing out on its own, exactly as predicted, because nothing is
+starving it any more, and `lib/server/operators.spec.ts` stopped drifting. A
+suite whose red set changed every run is a suite again.
+
+**AND THE BROWSER SUITE, WHICH IS WHERE THE PRODUCTION BUG WAS ACTUALLY
+VISIBLE.** Before: **131 passed, 7 failed, 114 never ran** — `declareDevice`
+could not find a freshly seeded operator, because `listOperatorProfiles`
+stopped at the thousandth sender and the new one sorted past it, and most
+console specs sit behind that. After: **243 passed, 1 failed, 8 did not run.**
+That is 112 browser tests that had not executed in this repository for four
+units.
+
+**TWO E2E ASSERTIONS CHANGED, AND THE HONESTY IS WHY.** `console-guest-list.spec.ts`
+walked every radio on the device picker asserting each was unchecked. That was
+free while the picker rendered a handful and stopped being free the moment the
+read became honest: 1,186 radios, each with its own retry budget, inside one
+30-second test. `getByRole("radio", { checked: true })` with `toHaveCount(0)`
+says the same thing in one query and no longer scales with how much junk the
+database is carrying.
+
+**GREEN.** `npm test` — 2,535 passed, 128 files, 18.7s. `npm run typecheck`.
+`npm run lint` — 0 errors, 8 warnings, baseline. `npm run build`.
+
+**NOT GREEN, AND NOT THIS UNIT'S.** `npm run format:check` fails on
+`components/landing/StreamLink.spec.tsx`, which this unit does not touch —
+`1c83ae3` introduced `STREAM_LINK_LABEL` and left three call sites over the
+print width. Reproduced against `git show HEAD:` to confirm it predates this
+work, and fixed in a commit of its own so it is visible rather than absorbed.
+One browser test fails: `console-wedding.spec.ts:226`, a household declining.
+It is NEWLY REACHABLE rather than newly broken — the baseline died in that
+file's `beforeAll` at `declareDevice` and tests 123 onward never ran. It is
+recorded in `## Next` with the evidence.
+
 ## Next
 
 - **The countdown has no ground, and on bright photograph it cannot be
@@ -4230,17 +4389,31 @@ and 114 console tests do not run behind it. Nothing reset.
   `components/invitation/RsvpClosed.spec.tsx` and `e2e/invitation-closed.spec.ts`,
   so overruling it is a visible change to two named tests rather than a quiet
   one. **One line in `RsvpClosed` if they want it the other way.**
-- **The local Supabase is past PostgREST's unpaged 1000-row ceiling on two
-  tables and it is now costing real coverage.** `senders` is at 1,193 rows and
-  `invitations` over a thousand, so unpaged `.select()` reads cannot see
-  freshly seeded rows: eleven unit tests fail, and in the browser suite it has
-  reached `console-auth.spec.ts`, which most console specs depend on, so 114
-  of them do not run at all. Guest-facing seeding is by slug and still works,
-  which is the only reason this feature's own coverage is meaningful. Nothing
-  here reset it — no permission was given to — but "eleven red tests everybody
-  expects" is exactly how the closed-invitation defect in U40 survived, and
-  the fix is paging `listGuestDirectory`, `listConsoleInvitations` and
-  `listSenderDirectory` rather than a truncate.
+- **A household that declines cannot get through the gate in the browser
+  suite, and it is newly visible rather than newly broken.**
+  `console-wedding.spec.ts:226` times out at the decline radio. The trace says
+  the gate SUCCEEDED: the unlock POST answered 200 in 37ms carrying
+  `x-action-redirect: /i/<slug>;push`, and then the browser never performed
+  that navigation — no second GET, the page still on the gate with its submit
+  disabled. So the server is right and the client-side redirect is where it
+  stops. U44 did not cause it and reverting U44's console paging does not
+  change it; none of the five paged reads is on the guest gate's path. What
+  U44 changed is that the test RUNS: the baseline died in the same file's
+  `beforeAll` at `declareDevice`, so everything from test 123 onward has not
+  executed here in four units. It needs its own look, at Next 16.3.4's
+  handling of `redirect()` inside a `useActionState` action.
+- **The two batched `dispatch_events` reads are bounded by their filter and
+  not by their result, and the arithmetic is worth writing down.**
+  `readDispatchStates` in `guest-directory.ts` and `readDispatchEvents` in
+  `invitations.ts` chunk the `in` filter at 100 invitation ids — which bounds
+  the request line, which is what `IDS_PER_READ` was for, and says nothing
+  about how many rows come back. Ten operator actions per household across one
+  batch of 100 reaches PostgREST's thousand, and the answer would be a wrong
+  dispatch state shown in the console with no error: the same silent shape U44
+  removed everywhere else. It holds 288 rows across the entire database today
+  against ~200 households, so U44 judged it distant and left it, because
+  paging it adds a round trip per batch to the console's slowest read. If
+  `dispatch_events` ever grows an automatic writer, this stops being distant.
 - **The screen that asks who is coming does not fit an iPhone 14, by
   choice, and the couple owe it a decision.** The announcement is back at its
   top with the list at the foot, which is what they asked for and why: "sin
@@ -4340,8 +4513,3 @@ and 114 console tests do not run behind it. Nothing reset.
   the pass improved it and left it over: it is a desktop window shorter than
   one step's content, and the one-screen guard is a phone guard by
   construction. Nothing on that screen is clipped; the window scrolls.
-- `listGuestDirectory` reads the guest directory with an unpaginated
-  `.select()`, and PostgREST stops at 1000 rows. The list is 388 people, so
-  nothing is missing today; past a thousand the console would simply stop
-  showing the rest, with no error. Found while verifying U35, unrelated to the
-  invitation, and not fixed there.

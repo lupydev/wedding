@@ -14,6 +14,8 @@ import { validateDirectoryGuest } from "@/lib/domain/guest-directory";
 import type { DraftRefusal } from "@/lib/domain/invitation-draft";
 import { normalizeForStorage } from "@/lib/domain/phone";
 
+import { readEveryPage, ROWS_PER_PAGE } from "./paged-read";
+
 /**
  * Reading and writing guests as PEOPLE, not as members of a household.
  *
@@ -171,23 +173,36 @@ function toDirectoryGuest(
 /**
  * Every guest at this wedding, placed or not.
  *
- * UNORDERED ON PURPOSE. `buildGuestDirectory` sorts with a Spanish collator,
- * which Postgres cannot be relied on to match: the ordering a reader sees is a
- * presentation decision, it is unit-tested where it is made, and having the
- * database also have an opinion is how two orders drift apart.
+ * READ IN PAGES, because an unbounded `.select()` is not "everyone" — PostgREST
+ * stops at `max_rows` and says nothing (`paged-read.ts` has the whole reason).
+ * The console's guest list is the surface this was wrong on: past the
+ * thousandth person it simply stopped showing the rest, with no error anywhere
+ * to notice.
+ *
+ * THE DATABASE NOW ORDERS THIS READ, AND THAT IS A PAGE KEY RATHER THAN A
+ * PRESENTATION ORDER. It used to be unordered on purpose, because
+ * `buildGuestDirectory` sorts with a Spanish collator that Postgres cannot be
+ * relied on to match, and two opinions about an order is how two orders drift
+ * apart. That reasoning still holds and is untouched: `id` is total, stable and
+ * meaningless to a reader, so nobody sees it. What it buys is that `.range()`
+ * asks for two halves of ONE sequence — without it the second page is a fresh
+ * unordered read with an offset, free to repeat a row or drop one.
  */
 export async function listGuestDirectory(
   client: SupabaseClient,
+  rowsPerPage: number = ROWS_PER_PAGE,
 ): Promise<readonly DirectoryGuest[]> {
-  const { data, error } = await client
-    .from("invitation_guests")
-    .select(DIRECTORY_COLUMNS);
+  const rows = (await readEveryPage(
+    "the guest directory",
+    rowsPerPage,
+    (from, to) =>
+      client
+        .from("invitation_guests")
+        .select(DIRECTORY_COLUMNS)
+        .order("id")
+        .range(from, to),
+  )) as unknown as DirectoryRow[];
 
-  if (error) {
-    throw new Error(`Could not read the guest directory: ${error.message}`);
-  }
-
-  const rows = data as unknown as DirectoryRow[];
   const states = await readDispatchStates(client, [
     ...new Set(
       rows
@@ -213,15 +228,26 @@ export async function listGuestDirectory(
  */
 export async function listFreeGuests(
   client: SupabaseClient,
+  rowsPerPage: number = ROWS_PER_PAGE,
 ): Promise<readonly DirectoryGuest[]> {
-  const { data, error } = await client
-    .from("invitation_guests")
-    .select(DIRECTORY_COLUMNS)
-    .is("invitation_id", null);
-
-  if (error) {
-    throw new Error(`Could not read the free guests: ${error.message}`);
-  }
+  /*
+    `is("invitation_id", null)` NARROWS THIS AND DOES NOT BOUND IT. A filter
+    that matches an unbounded number of rows runs into `max_rows` exactly as an
+    unfiltered one does; the people nobody has placed yet are a set that grows
+    with the guest list, not a handful. Same page key as the directory above,
+    and for the same reason.
+  */
+  const rows = (await readEveryPage(
+    "the free guests",
+    rowsPerPage,
+    (from, to) =>
+      client
+        .from("invitation_guests")
+        .select(DIRECTORY_COLUMNS)
+        .is("invitation_id", null)
+        .order("id")
+        .range(from, to),
+  )) as unknown as DirectoryRow[];
 
   /*
     NO DISPATCH READ HERE, and its absence is the point: every row this query
@@ -229,9 +255,7 @@ export async function listFreeGuests(
     invitation and none has a message to have been sent. A second query would
     be one round trip to learn nothing.
   */
-  return (data as unknown as DirectoryRow[]).map((row) =>
-    toDirectoryGuest(row, new Map()),
-  );
+  return rows.map((row) => toDirectoryGuest(row, new Map()));
 }
 
 /**

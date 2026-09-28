@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
+import { countingClient } from "../../supabase/tests/helpers/counting-client";
 import {
   captureError,
   withDb,
@@ -3161,6 +3162,110 @@ describe("listConsoleInvitations — a list long enough to break a URL", () => {
       });
 
       expect(rows.length).toBeGreaterThanOrEqual(300);
+    });
+  });
+});
+
+/**
+ * THE CONSOLE'S READS ARE NOT WHAT PostgREST FEELS LIKE SENDING.
+ *
+ * An unbounded `.select()` comes back with at most `max_rows` rows — 1000, in
+ * `supabase/config.toml` — and it comes back SILENTLY: no error, no flag, a
+ * short answer shaped exactly like a complete one. The shared dashboard passes
+ * neither `ownedOnly` nor `invitationId`, so that call IS the whole
+ * `invitations` table; the sender directory and the operator list are the whole
+ * `senders` table with no filter at all.
+ *
+ * WHAT IS ASSERTED IS THE NUMBER OF REQUESTS. A single unpaged read still
+ * answers with up to a thousand rows, so against a small database it returns
+ * exactly what the loop would have returned and no assertion about the RESULT
+ * can tell the two apart. A table-wide total would tell them apart and is not
+ * available: this database is shared with every other spec file and with
+ * whatever a crashed run left behind. The request count is a fact on any
+ * database of any size, and one request means unpaged.
+ */
+describe("reading whole tables, not the first page of them", () => {
+  /**
+   * THE PAGE SIZE IS INJECTABLE SO THAT PROVING THE LOOP COSTS FIVE ROWS.
+   *
+   * A test that seeded 1001 households to watch one boundary would take
+   * minutes and make this suite slower, which is the disease being treated one
+   * level up. `ownedOnly` against a sender nobody else shares makes the result
+   * set exactly five, so the arithmetic is closed: pages of two are 2 + 2 + 1
+   * and then the empty fourth that ends the loop.
+   */
+  it("reassembles five households out of four pages of two", async () => {
+    await withSenderFixture(async (senderId) => {
+      const stamp = Date.now().toString(36);
+
+      await withDb(async (db) => {
+        await db.query(
+          `insert into invitations (slug, owner_sender_id, display_name, greeting_name)
+           select 'pag-${stamp}-' || i, $1, 'Paginada ' || i, 'Paginada ' || i
+             from generate_series(1, 5) as i`,
+          [senderId],
+        );
+      });
+
+      const counted = countingClient(createServerSupabaseClient());
+      const rows = await listConsoleInvitations(counted.client, {
+        viewerSenderId: senderId,
+        ownedOnly: true,
+        defaultCountry: "CO",
+        rowsPerPage: 2,
+      });
+
+      expect(rows).toHaveLength(5);
+      expect(counted.reads("invitations")).toBe(4);
+    });
+  });
+
+  /**
+   * And the same read with nothing narrowing it, which is the shared
+   * dashboard's call and the one that was silently short in production.
+   */
+  it("pages the shared dashboard, where no filter applies at all", async () => {
+    await withSenderFixture(async (senderId) => {
+      const counted = countingClient(createServerSupabaseClient());
+
+      await listConsoleInvitations(counted.client, {
+        viewerSenderId: senderId,
+        ownedOnly: false,
+        defaultCountry: "CO",
+      });
+
+      // Two at the very least: one page of rows and the empty one that ends
+      // the loop. An unpaged `.select()` makes exactly one, whatever the page
+      // size.
+      expect(counted.reads("invitations")).toBeGreaterThan(1);
+    });
+  });
+
+  /**
+   * A SHORT SENDER DIRECTORY IS WORSE THAN A SHORT LIST, because it does not
+   * merely hide rows. The import validates every row of the couple's file
+   * against this map, and a missing key is indistinguishable from an operator
+   * who does not exist — so an operator PostgREST declined to send would come
+   * back as "that email is not on the allowlist" and the import would refuse
+   * invitations that are perfectly valid.
+   */
+  it("pages the sender directory the import validates against", async () => {
+    await withSenderFixture(async (senderId) => {
+      const counted = countingClient(createServerSupabaseClient());
+      const directory = await listSenderDirectory(counted.client);
+
+      expect(Object.values(directory)).toContain(senderId);
+      expect(counted.reads("senders")).toBeGreaterThan(1);
+    });
+  });
+
+  it("pages the operator list behind the device picker", async () => {
+    await withSenderFixture(async (senderId) => {
+      const counted = countingClient(createServerSupabaseClient());
+      const profiles = await listOperatorProfiles(counted.client);
+
+      expect(profiles.map((profile) => profile.id)).toContain(senderId);
+      expect(counted.reads("senders")).toBeGreaterThan(1);
     });
   });
 });
