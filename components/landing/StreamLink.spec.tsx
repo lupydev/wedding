@@ -50,7 +50,9 @@ describe("StreamLink", () => {
       const closed = screen.getByRole("button", { name: STREAM_LINK_LABEL });
 
       expect(closed).toBeDisabled();
-      expect(screen.queryByRole("link", { name: STREAM_LINK_LABEL })).toBeNull();
+      expect(
+        screen.queryByRole("link", { name: STREAM_LINK_LABEL }),
+      ).toBeNull();
       expect(
         screen.getByText(/se abre el 21 de noviembre de 2026/i),
       ).toBeInTheDocument();
@@ -86,7 +88,9 @@ describe("StreamLink", () => {
       const link = screen.getByRole("link", { name: STREAM_LINK_LABEL });
 
       expect(link).toHaveAttribute("href", STREAM_PATH);
-      expect(screen.queryByRole("button", { name: STREAM_LINK_LABEL })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: STREAM_LINK_LABEL }),
+      ).toBeNull();
     });
 
     it("drops the line about when it opens", () => {
@@ -129,8 +133,8 @@ describe("StreamLink", () => {
     vi.useFakeTimers({ now: daysBefore(2) });
     render(<StreamLink ceremony={CEREMONY} />);
 
-    expect(screen.getByRole("link", { name: STREAM_LINK_LABEL }).textContent).toBe(
-      closedLabel,
-    );
+    expect(
+      screen.getByRole("link", { name: STREAM_LINK_LABEL }).textContent,
+    ).toBe(closedLabel);
   });
 });
