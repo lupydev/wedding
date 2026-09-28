@@ -45,7 +45,7 @@ import {
  * English.
  */
 
-const LABEL = "Acompáñanos por Google Meet";
+const LABEL = "Acompáñanos en la transmisión";
 
 /**
  * One class string for both states.

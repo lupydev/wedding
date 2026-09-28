@@ -56,7 +56,7 @@ import { createServerSupabaseClient } from "@/lib/server/supabase";
  * The landing stays static, deliberately. Nothing on it changes on the day.
  */
 
-const TITLE = "Acompáñanos por Google Meet";
+const TITLE = "Acompáñanos en la transmisión";
 const DESCRIPTION =
   "Vamos a transmitir la ceremonia en vivo. Acá están los datos para entrar.";
 
