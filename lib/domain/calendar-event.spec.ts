@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   CEREMONY_MINUTES,
   buildCeremonyCalendarEvent,
-  buildIcs,
   buildStreamCalendarEvent,
   googleCalendarUrl,
 } from "./calendar-event";
@@ -68,117 +67,21 @@ describe("googleCalendarUrl", () => {
   });
 });
 
-/**
- * THE FILE, WHICH WAS DELETED AND IS BACK BY THE COUPLE'S OWN DECISION.
- *
- * "Volvé al .ics con las dos alarmas para que probemos qué sucede en un
- * android e iphone." It is an experiment: what each phone does with the file
- * is the thing they want to see. The implementation is the one git held —
- * `2cb43cb` removed it — recovered rather than rewritten, because the
- * octet-accurate folding and the escaping order are easy to get subtly wrong
- * and were already right.
- */
-describe("buildIcs", () => {
-  const STAMP = new Date("2026-09-27T12:00:00Z");
-  const ics = buildIcs(EVENT, STAMP);
-  const unfold = (value: string) => value.replace(/\r\n /g, "");
-  const lines = unfold(ics).split("\r\n");
+/*
+  A `buildIcs` SUITE STOOD HERE: the folding at 75 octets, the escape order,
+  the two alarms asserted as instants, and the proof that the evening one
+  moved with the ceremony rather than drifting.
 
-  it("is a calendar with one event in it", () => {
-    expect(lines[0]).toBe("BEGIN:VCALENDAR");
-    expect(lines).toContain("BEGIN:VEVENT");
-    expect(lines).toContain("END:VEVENT");
-    expect(lines.at(-2)).toBe("END:VCALENDAR");
-    // Every content line ends with CRLF, the last one included: a file that
-    // stops mid-line is a file some readers reject.
-    expect(ics.endsWith("\r\n")).toBe(true);
-  });
+  All of it went with the file. The couple tested the download on a real
+  phone and removed the button — "el .ics realmente intenta descargar un
+  archivo" — which is the same reason they removed it the first time, and
+  the experiment they asked for is what settled it. Tests for a builder
+  nothing builds are tests about nothing; git holds them.
 
-  it("states the same instants the Google entry states", () => {
-    expect(lines).toContain("DTSTART:20261128T220000Z");
-    expect(lines).toContain("DTEND:20261128T230000Z");
-    expect(lines).toContain("DTSTAMP:20260927T120000Z");
-  });
-
-  /**
-   * THE TWO ALARMS, ASSERTED AS INSTANTS RATHER THAN AS TRIGGER SYNTAX.
-   *
-   * The couple asked for "the day before at 8:00 p.m." and "three hours
-   * before the start". Asserting `-PT21H` would pass while meaning the wrong
-   * thing the moment the ceremony moved an hour: the evening alarm is a time
-   * of DAY and the other is a duration, so what is checked here is where each
-   * one actually lands, computed from the wedding's own instant.
-   */
-  it("rings the evening before at eight, where the wedding is", () => {
-    const trigger = lines.find((line) =>
-      line.startsWith("TRIGGER;VALUE=DATE-TIME:"),
-    );
-
-    expect(trigger).toBeDefined();
-
-    const stamp = trigger!.split(":")[1];
-    const when = new Date(
-      `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`,
-    );
-
-    expect(when.toISOString()).toBe(
-      new Date("2026-11-27T20:00:00-05:00").toISOString(),
-    );
-    // And it is the evening BEFORE, not the evening of.
-    expect(when.getTime()).toBeLessThan(START.getTime());
-  });
-
-  it("rings again three hours before the start", () => {
-    expect(lines).toContain("TRIGGER:-PT3H");
-
-    const threeHoursBefore = new Date(START.getTime() - 3 * 60 * 60_000);
-
-    expect(threeHoursBefore.toISOString()).toBe(
-      new Date("2026-11-28T14:00:00-05:00").toISOString(),
-    );
-  });
-
-  /**
-   * AND THE EVENING ALARM MOVES WITH THE CEREMONY RATHER THAN DRIFTING.
-   *
-   * The failure this guards is silent: a relative trigger keeps its distance
-   * from the start, so a wedding moved to 7pm would ring at 10pm the night
-   * before and nothing would say so. Two hours later in the day, same alarm
-   * time.
-   */
-  it("still rings at eight if the ceremony moves", () => {
-    const later = buildStreamCalendarEvent(
-      FACTS,
-      new Date("2026-11-28T19:00:00-05:00"),
-    );
-    const trigger = unfold(buildIcs(later, STAMP))
-      .split("\r\n")
-      .find((line) => line.startsWith("TRIGGER;VALUE=DATE-TIME:"))!;
-
-    expect(trigger).toBe("TRIGGER;VALUE=DATE-TIME:20261128T010000Z");
-  });
-
-  /** 75 octets, counted in bytes rather than characters — this copy is Spanish. */
-  it("folds every line to 75 octets", () => {
-    for (const line of ics.split("\r\n")) {
-      expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75);
-    }
-  });
-
-  it("escapes the separators iCalendar would otherwise read", () => {
-    const event = buildStreamCalendarEvent(
-      { coupleNames: "A, B; C\\D", streamUrl: FACTS.streamUrl },
-      START,
-    );
-    const summary = unfold(buildIcs(event, STAMP))
-      .split("\r\n")
-      .find((line) => line.startsWith("SUMMARY:"))!;
-
-    // The backslash is escaped FIRST, so the comma's escape is not itself
-    // escaped: `a\,b` rather than `a\\,b`.
-    expect(summary).toBe("SUMMARY:Matrimonio de A\\, B\\; C\\\\D");
-  });
-});
+  WHAT THE DELETION COSTS, ASSERTED BELOW RATHER THAN MOURNED HERE: the file
+  was the only output that could carry a reminder. `googleCalendarUrl` has
+  no parameter for one and the entry inherits the guest's own default.
+*/
 
 /**
  * THE PRIVACY LINE, WHICH IS THE ONE THING IN THIS FILE THAT IS NOT A
@@ -198,66 +101,132 @@ describe("which entry may name the venue", () => {
     { ...FACTS, venueName: "Salón para Eventos Villa Campestre" },
     START,
   );
-  const STAMP = new Date("2026-09-27T12:00:00Z");
 
-  it("gives an accepted household the place, by name and by coordinate", () => {
-    expect(CEREMONY_EVENT.location).toContain(
-      "Salón para Eventos Villa Campestre",
-    );
-    expect(CEREMONY_EVENT.location).toContain(VENUE_COORDINATES);
+  /**
+   * THE LOCATION IS A POINT, NOT A NAME — AND THAT IS A FIX, NOT A STYLE.
+   *
+   * It read `Villa Campestre (3.853778,-76.2971633)` for one pass and the
+   * couple found it on a real phone: tapping it opened a DIFFERENT venue.
+   * Google text-searched the name and treated the parenthesised pair as
+   * decoration, matching some other Villa Campestre — the link they were
+   * sent carries `ftid=0x8e38599a77a5ec99:...` where their own venue is
+   * `0x8e39e561ae218207:...`.
+   *
+   * Google's URL documentation says a query "may be a place name, address,
+   * or comma-separated latitude/longitude coordinates". A bare pair is the
+   * coordinate form; a name beside it is a name search. So the assertion is
+   * the shape of the value, not merely that the numbers appear somewhere in
+   * it — the bug was that they appeared and were ignored.
+   */
+  it("gives an accepted household a point, not a name to search for", () => {
+    expect(CEREMONY_EVENT.location).toBe(VENUE_COORDINATES);
+    expect(CEREMONY_EVENT.location).toMatch(/^-?\d+\.\d+,-?\d+\.\d+$/);
 
     const url = new URL(googleCalendarUrl(CEREMONY_EVENT));
 
-    expect(url.searchParams.get("location")).toBe(CEREMONY_EVENT.location);
-    expect(buildIcs(CEREMONY_EVENT, STAMP)).toContain("LOCATION:");
+    expect(url.searchParams.get("location")).toBe(VENUE_COORDINATES);
+  });
+
+  /**
+   * AND THE NAME IS STILL SOMEWHERE A GUEST CAN READ IT.
+   *
+   * A calendar entry whose location is two decimals helps a maps
+   * application and nobody else, so the venue is named in the description —
+   * which is the half of this the couple also asked to be rewritten.
+   */
+  it("names the venue where the guest reads it", () => {
+    expect(CEREMONY_EVENT.description).toContain(
+      "Salón para Eventos Villa Campestre",
+    );
+    expect(CEREMONY_EVENT.location).not.toContain("Villa");
   });
 
   /**
    * THE SAME COORDINATE THE DIRECTIONS BUTTON USES, which is why it lives in
-   * the domain now rather than inside `VenueMap`. Two copies are two venues
-   * the day somebody edits one, and the guest finds out on the afternoon of
-   * the wedding.
+   * the domain rather than inside `VenueMap`. Two copies are two venues the
+   * day somebody edits one, and the guest finds out on the afternoon of the
+   * wedding.
    */
   it("sends the calendar to the same point the map does", () => {
     expect(VENUE_COORDINATES).toBe("3.853778,-76.2971633");
-    expect(CEREMONY_EVENT.location).toContain(VENUE_COORDINATES);
+    expect(CEREMONY_EVENT.location).toBe(VENUE_COORDINATES);
   });
 
   it("tells a stream guest nothing about where it is", () => {
-    const ics = buildIcs(EVENT, STAMP);
     const url = googleCalendarUrl(EVENT);
 
     expect(EVENT.location).toBeUndefined();
     expect(url).not.toContain("location=");
-    expect(ics).not.toContain("LOCATION");
 
-    // Not by name and not by number, in either output — the coordinate is the
-    // one that would survive a search-and-replace of the venue's name.
-    for (const output of [ics, url, decodeURIComponent(url)]) {
+    // Not by name and not by number — the coordinate is the one that would
+    // survive a search-and-replace of the venue's name.
+    for (const output of [url, decodeURIComponent(url)]) {
       expect(output).not.toContain(VENUE_COORDINATES);
       expect(output).not.toContain("3.853778");
       expect(output).not.toContain("Villa Campestre");
     }
   });
 
-  /**
-   * AND AN EMPTY LOCATION IS NOT THE SAME AS NO LOCATION — the negative
-   * control for the way this could regress.
-   *
-   * The obvious "simplification" is one builder with `location: facts.venueName
-   * ?? ""`, which writes `LOCATION:` into every stream entry and `location=`
-   * into every stream URL. Readers treat the property as present and some
-   * render the blank; more to the point, the next edit that fills the empty
-   * string in would leak the venue to everybody without touching a call site.
-   */
   it("writes no empty location for the entry that has none", () => {
-    const ics = buildIcs(EVENT, STAMP);
-
-    expect(ics.split("\r\n").some((line) => line.startsWith("LOCATION"))).toBe(
-      false,
-    );
     expect(new URL(googleCalendarUrl(EVENT)).searchParams.has("location")).toBe(
       false,
     );
+  });
+});
+
+/**
+ * WHAT EACH ENTRY SAYS, AND WHY THEY DO NOT SAY THE SAME THING.
+ *
+ * "El comentario esta horrible: 'Nos casamos y los acompañamos por Google
+ * Meet.'" — the couple, reading it on their phone. The screenshot was the
+ * ACCEPTED household's entry, which carries the venue, and it spoke in the
+ * stream's voice as though they were watching from home. Two entries, two
+ * audiences: one is travelling to a place, the other is joining a call.
+ */
+describe("what the two entries say", () => {
+  const CEREMONY = buildCeremonyCalendarEvent(
+    { ...FACTS, venueName: "Salón para Eventos Villa Campestre" },
+    START,
+  );
+
+  it("tells a household that is coming where, and that it is streamed too", () => {
+    expect(CEREMONY.description).toContain(
+      "Los esperamos en Salón para Eventos Villa Campestre",
+    );
+    expect(CEREMONY.description).toContain(FACTS.streamUrl);
+    expect(CEREMONY.description.toLowerCase()).toContain("también");
+  });
+
+  it("tells a guest who is watching how, and nothing about where", () => {
+    expect(EVENT.description).toContain("en vivo");
+    expect(EVENT.description).toContain(FACTS.streamUrl);
+    expect(EVENT.description).not.toContain("Villa Campestre");
+    expect(EVENT.description).not.toContain("Los esperamos en");
+  });
+
+  /**
+   * AND NEITHER SHOUTS.
+   *
+   * `rsvpConfirmedHeading` and `rsvpDeclinedHeading` set the register for
+   * this product — flat, vocative, no exclamation marks — and a calendar
+   * entry is read in a list, so both are short.
+   */
+  it("is written the way the rest of this product is written", () => {
+    for (const description of [CEREMONY.description, EVENT.description]) {
+      expect(description).not.toMatch(/[¡!]/);
+      expect(description.split("\n")[0].length).toBeLessThanOrEqual(90);
+    }
+  });
+
+  /**
+   * AND NEITHER IS THE OLD ONE — the permanent negative control for a
+   * sentence the couple rejected by name.
+   */
+  it("no longer says the line the couple called horrible", () => {
+    for (const description of [CEREMONY.description, EVENT.description]) {
+      expect(description).not.toContain(
+        "Nos casamos y los acompañamos por Google Meet.",
+      );
+    }
   });
 });

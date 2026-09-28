@@ -4,35 +4,33 @@ import {
 } from "@/lib/domain/calendar-event";
 
 /**
- * The two ways to keep the date, which are two different promises.
+ * The one way to keep the date.
  *
- * ONE BLOCK BECAUSE THE PAIR IS THE POINT. A guest gets a reminder from
- * exactly one of these, and which one depends on the phone in their hand:
+ * Google Calendar: one tap for anybody already signed in to Google, and
+ * nothing at all for anybody who is not. It carries the name, the day, the
+ * hour, the joining link and — on the entry that is allowed one — the venue's
+ * location.
  *
- *   Google Calendar — one tap for anybody already signed in to Google, and
- *   nothing at all for anybody who is not. It carries the name, the day, the
- *   hour, the joining link and (on the entry that is allowed one) the venue's
- *   location — but NOT a reminder. `TEMPLATE` has no parameter for one, so the
- *   entry inherits whatever default the guest's own calendar applies.
+ * IT CARRIES NO REMINDER, AND NOW NOTHING DOES. `TEMPLATE` has no parameter
+ * for one, so the entry inherits whatever default the guest has set on their
+ * own calendar — which may be nothing. A `.ics` stood beside this button
+ * for exactly one pass, carrying the two alarms they chose, and they removed
+ * it after testing it on a real phone: "el .ics realmente intenta descargar
+ * un archivo, entonces descartemos ese boton." That was the reason they
+ * deleted it the FIRST time too, and the experiment they asked for answered
+ * its own question.
  *
- *   The `.ics` file — the only one of the two that carries alarms, which is
- *   why it is back after being removed. It opens natively on iOS and in
- *   Outlook and lands in a downloads folder on a desktop browser.
+ * So the alarms are gone with it. That is a knowing loss rather than an
+ * oversight — it is the only thing the file could do that this cannot — and
+ * `lib/domain/calendar-event.ts` records it beside the rest.
  *
- * THE FILE WAS DELETED ONCE, ON THE COUPLE'S INSTRUCTION, and is back on
- * theirs: "volvé al .ics con las dos alarmas para que probemos qué sucede en
- * un android e iphone." What a phone actually does with it is the thing they
- * are testing. `lib/domain/calendar-event.ts` holds the reversal and the
- * original reason for the removal.
+ * WHY THIS IS STILL A COMPONENT WITH ONE CHILD. The accepted screen and the
+ * stream block both offer it, and the two entries they offer are NOT the same
+ * entry: one carries the venue's location and one must never. The difference
+ * belongs in the `event` passed in, where it is visible at the call site,
+ * rather than in two copies of an anchor that could drift into agreeing.
  *
- * WHY THIS IS A COMPONENT RATHER THAN TWO ANCHORS COPIED TWICE. The accepted
- * screen and the stream block both offer them, and the two entries they offer
- * are NOT the same entry — one carries the venue's location and one must never
- * — so the difference belongs in the `event` passed in, where it is visible,
- * rather than in two copies of the markup that could drift into agreeing.
- *
- * Props-only and synchronous. It reads no clock: `DTSTAMP` is a fact about a
- * file rather than about the wedding, so it is the endpoint's to supply.
+ * Props-only and synchronous.
  *
  * Guest-facing copy is Spanish, neutral register. Identifiers and comments
  * stay English.
@@ -57,19 +55,9 @@ const ACTION = `
 
 export function CalendarActions({
   event,
-  icsHref,
   className,
 }: {
   readonly event: CalendarEvent;
-  /**
-   * Where the `.ics` for THIS household is served, if it is offered at all.
-   *
-   * Optional, and absent on `/transmision`: that page has no invitation and
-   * therefore no household whose answer decides what the file may contain.
-   * The endpoint is per-invitation for exactly that reason — see
-   * `app/i/[slug]/evento.ics/route.ts`.
-   */
-  readonly icsHref?: string;
   /** The host surface's own spacing. Never its colours. */
   readonly className?: string;
 }) {
@@ -91,21 +79,6 @@ export function CalendarActions({
       >
         Agregar a Google Calendar
       </a>
-
-      {icsHref === undefined ? null : (
-        /*
-          `download`, AND THE FILENAME IS THE ONE THE ENDPOINT ALREADY SENDS.
-
-          The response carries `Content-Disposition: attachment` with the same
-          name, so this attribute changes nothing where the header is honoured
-          and says the right thing where a browser prefers the markup. Not
-          `target="_blank"`: a download that opens a tab first leaves an empty
-          one behind on every phone that honours it.
-        */
-        <a href={icsHref} download="boda.ics" className={ACTION}>
-          Descargar el evento (.ics)
-        </a>
-      )}
     </div>
   );
 }

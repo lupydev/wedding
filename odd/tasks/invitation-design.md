@@ -4038,6 +4038,146 @@ unpaged 1000-row ceiling, `console-auth.spec.ts` cannot find a seeded
 operator, and 114 console tests do not run behind it. The unit count moves
 between ten and eleven between runs as the row counts shift. Nothing reset.
 
+### U43 — done (the download went, and the pin it left behind was the wrong one)
+
+**THREE THINGS, AND THE MIDDLE ONE WAS A REAL DEFECT.** "El .ics realmente
+intenta descargar un archivo, entonces descartemos ese boton." "El comentario
+esta horrible: 'Nos casamos y los acompañamos por Google Meet.'" And, from
+their own phone, the location in the accepted household's entry opened a
+DIFFERENT venue.
+
+**THE FILE IS GONE FOR THE SECOND TIME, AND THE EXPERIMENT IS WHY IT STAYS
+GONE.** U41 restored it deliberately — "volvé al .ics con las dos alarmas para
+que probemos que sucede en un android e iphone" — and the answer came back from
+a real phone, which is exactly what the unit was for. Deleted with it:
+`app/i/[slug]/evento.ics/route.ts`, `buildIcs` and its four helpers
+(`fold`, `escapeText`, `octets`, `eveningBefore`), the alarm derivation, the
+`icsHref` prop through five components, and the builder's own test suite.
+
+**WHAT IT COST, STATED RATHER THAN MOURNED.** The file was the only output
+that could carry a reminder. Google's `TEMPLATE` endpoint takes `action`,
+`text`, `dates`, `details` and `location` and has **no reminder parameter at
+all**, so an entry saved through the one remaining button inherits whatever
+default the guest has set on their own calendar, which may be nothing. The
+guest this loses most is the one who joins by stream: no journey to plan
+around the date, and now no alarm either. That is a knowing loss, it is
+recorded in `lib/domain/calendar-event.ts` and in `CalendarActions.tsx`, and
+`lib/domain/calendar-event.spec.ts` keeps the deleted suite's obituary where
+the next reader will find it.
+
+**THE HEADER HAD DRIFTED FOR THE THIRD TIME AND THIS PASS CAUGHT IT.** It said
+"TWO DESTINATIONS", described the file as present, and explained that the
+`.ics` "exists beside" the link — with the file deleted in the same commit.
+Four blocks were rewritten, not one: the module header, `CEREMONY_MINUTES`
+("the start and the alarms are" → "the start is"),
+`buildCeremonyCalendarEvent`'s doc, and `googleCalendarUrl`'s. One more claim
+went with them: both the header and the button asserted a specific default
+reminder — "often ten minutes", "thirty minutes, in the couple's own
+screenshot" — which nothing here has measured. Neither says it now.
+
+**THE WRONG PIN, WHICH IS THE PART THAT WOULD HAVE COST GUESTS A WEDDING.**
+U41 wrote the location as `Villa Campestre (3.853778,-76.2971633)` — name
+first, coordinates in brackets. Google text-searches a name and treats the
+brackets as decoration: the link the couple's phone opened carries
+`ftid=0x8e38599a77a5ec99:0xdb3c2905bbdb6107`, where their own venue is
+`0x8e39e561ae218207:0x1ccc8574b77d6614`. Two different places, confidently,
+with nothing about it looking wrong until fifty people arrive somewhere else.
+
+| was                                     | is                                            |
+| --------------------------------------- | --------------------------------------------- |
+| `location=Villa Campestre (3.853778,…)` | `location=3.853778,-76.2971633`               |
+| name in the location, nowhere else      | name in the `details`, where a guest reads it |
+
+Google's own URL documentation settles the form: a query "may be a place name,
+address, or **comma-separated latitude/longitude coordinates**". A bare pair is
+the coordinate form; a name beside it is a name search. So the assertion is now
+the SHAPE of the value — `/^-?\d+\.\d+,-?\d+\.\d+$/` — and not merely that the
+numbers appear somewhere in it, because the bug was that they appeared and were
+ignored.
+
+**VERIFIED AS FAR AS IT CAN BE, AND THE LIMIT NAMED.** Google Maps resolves a
+`?q=` client-side: `curl` and a server-side fetch both receive a JavaScript
+shell with no canonical place in it, so nothing here can prove which pin
+Google will drop. Two things could be checked and were. Google's URL
+specification confirms the coordinate form, and an independent reverse geocode
+of the pair (OpenStreetMap Nominatim) places it on the **Troncal de Occidente,
+El Vínculo, Buga, Valle del Cauca** — which is the road and the town the map
+picture's deleted `alt` text named in U36. **The couple should still click the
+two links below before a guest does.** A `query_place_id` would be the only
+absolute guarantee, and it needs their venue's Place ID, which is theirs to
+read off their own Google listing.
+
+`Cómo llegar` was checked too and was never wrong: `VenueMap` has always sent
+`maps/dir/?api=1&destination=` the bare pair, which is why the two now agree —
+`3.853778,-76.2971633` has one definition in `lib/domain/wedding-day.ts` and
+`tools/venue-coordinates.spec.ts` fails if a second appears.
+
+**THE TWO DESCRIPTIONS, WHICH WERE ONE DESCRIPTION SAYING THE WRONG THING TO
+HALF ITS READERS.** The rejected line was written for a stream viewer and was
+being read by a household that had just said it was coming.
+
+| entry             | says                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| accepted          | `Los esperamos en Salón para Eventos Villa Campestre.` + `También transmitimos la ceremonia en vivo: <url>` |
+| declined / stream | `Transmitimos la ceremonia en vivo para que puedan acompañarnos desde donde estén.` + `Enlace: <url>`       |
+
+One is travelling to a place and is told where, and that there is a stream if
+they need it. The other is joining a call and is told nothing about where.
+Both are short — a calendar entry is read in a list — and neither shouts, which
+is the register `rsvpConfirmedHeading` and `rsvpDeclinedHeading` set. "Nos
+casamos y los acompañamos por Google Meet." is a **permanent negative control**
+in `calendar-event.spec.ts`: the sentence the couple rejected by name cannot
+come back quietly.
+
+**THE EXACT LINKS, SO THEY CAN CHECK THE PIN THEMSELVES.** Generated from
+`WEDDING_INSTANT` and the production coordinates; the Meet URL is whatever
+`/console/wedding` holds.
+
+    accepted:
+    https://calendar.google.com/calendar/render?action=TEMPLATE&text=Matrimonio+de+Luis+%26+Michell&dates=20261128T220000Z%2F20261128T230000Z&details=Los+esperamos+en+Sal%C3%B3n+para+Eventos+Villa+Campestre.%0A%0ATambi%C3%A9n+transmitimos+la+ceremonia+en+vivo%3A+%3Curl%3E&location=3.853778%2C-76.2971633
+
+    declined / stream:
+    https://calendar.google.com/calendar/render?action=TEMPLATE&text=Matrimonio+de+Luis+%26+Michell&dates=20261128T220000Z%2F20261128T230000Z&details=Transmitimos+la+ceremonia+en+vivo+para+que+puedan+acompa%C3%B1arnos+desde+donde+est%C3%A9n.%0A%0AEnlace%3A+%3Curl%3E
+
+    cómo llegar:
+    https://www.google.com/maps/dir/?api=1&destination=3.853778%2C-76.2971633
+
+**THE HEIGHT THE DELETION FREED WAS NOT SPENT.** Both screens still measure
+1.00 with nothing added, nothing enlarged and no target changed.
+
+| screen                 | iPhone 14 (664) | Pixel 7 (839) |
+| ---------------------- | --------------- | ------------- |
+| accepted, three people | 664             | 839           |
+| declined, three people | 664             | 839           |
+
+**AND THE RE-SAMPLE FOUND THE FIXTURES POINTING AT A CONTROL THAT NO LONGER
+EXISTS.** Both were measured under the LOWER of the two calendar buttons, and
+the lower one is the one that went:
+
+| fixture                        | recorded        | measured now    | kept     |
+| ------------------------------ | --------------- | --------------- | -------- |
+| `BRIGHTEST_UNDER_THE_CALENDAR` | `#BFBCAA` 0.500 | `#ACAF86` 0.412 | recorded |
+| `BRIGHTEST_UNDER_THE_FOOT`     | `#F3F1E6` 0.877 | `#A29C98` 0.337 | recorded |
+
+Both grounds got DARKER, so every assertion in the two files is now held
+against a brighter ground than the one that is there. The numbers are kept —
+relaxing a contrast fixture because a control was deleted buys nothing, and
+both cards' top edges still move with content nobody has fixed (the paragraph's
+line count on one, the unfilled venue name on the other). Both comments now say
+which number is measured and which is the high-water mark.
+
+**GREEN.** `npm test` — 2,514 unit and component tests, 2,503 passing.
+`npx tsc --noEmit`, `npm run lint` (0 errors, 8 warnings — back to baseline
+after an unused `WEDDING_TIME_ZONE` import the alarm derivation had left
+behind), `npm run format:check`, `npm run build`. `npm run e2e` — 131 passed,
+every guest-facing browser test green across both phone projects and both
+clocks; `e2e/rsvp.spec.ts` alone is 15/15.
+
+**NOT GREEN.** Eleven unit and seven browser failures, all environmental and
+all the cause U40, U41 and U42 record: the local Supabase is past PostgREST's
+unpaged 1000-row ceiling, `console-auth.spec.ts` cannot find a seeded operator,
+and 114 console tests do not run behind it. Nothing reset.
+
 ## Next
 
 - **The countdown has no ground, and on bright photograph it cannot be
@@ -4054,13 +4194,31 @@ between ten and eleven between runs as the row counts shift. Nothing reset.
   `closed-legibility.spec.tsx` so the day it is fixed the test says so. **The
   decision is theirs: a ground behind the counter, or leave it.**
 - **`CEREMONY_MINUTES = 60` is an assumption nobody has confirmed, and both
-  calendar entries now state an end time from it.** `lib/domain/calendar-event.ts`
+  calendar entries state an end time from it.** `lib/domain/calendar-event.ts`
   has always said so — "the couple gave a start and nobody has said how long
-  the ceremony runs" — and it mattered less while the number only padded a
-  link. It is in a downloaded file with two alarms on a guest's phone now, and
-  an hour that is wrong is a block of time in their day that ends before the
-  ceremony does. **How long does the ceremony run?** One line to correct, and
+  the ceremony runs". U43 deleted the `.ics`, so it is back to padding a link
+  rather than sitting in a file on a phone, which lowers the cost but does not
+  remove it: an hour that is wrong is a block of time in a guest's day that
+  ends before the ceremony does, and every guest who taps the one remaining
+  button gets it. **How long does the ceremony run?** One line to correct, and
   worth asking before the invitations go out rather than after.
+- **Nothing reachable from here can prove which pin Google drops, and a Place
+  ID would end the question.** U43 fixed a location that sent the couple's own
+  phone to the wrong venue, and verified the fix as far as it can be verified:
+  Google's URL specification confirms that a bare comma-separated pair is the
+  coordinate form, and an independent reverse geocode puts `3.853778,-76.2971633`
+  on the Troncal de Occidente in El Vínculo, Buga. But Google Maps resolves a
+  query client-side — a fetch returns a JavaScript shell — so the last step is
+  a human tapping the link. **`query_place_id` is the only absolute guarantee**,
+  and it needs the venue's Place ID off the couple's own Google listing. One
+  parameter in `googleCalendarUrl` and one in `VenueMap` the day they have it.
+- **The calendar entry carries no reminder and nothing replaces it.** The
+  `.ics` was the only output that could set one, and it is deleted. Google's
+  `TEMPLATE` endpoint has no reminder parameter, so every guest gets their own
+  calendar's default, which may be nothing. The stream guest loses most — no
+  journey to plan around the date and now no alarm — and there is no third
+  option that is a link rather than a download. Recorded here because it is a
+  consequence the couple chose, not a defect to fix.
 - **A household that never answered is offered the stream and NOT the venue
   after the deadline, and that is my decision rather than the couple's.** They
   named the other two endings: accepted keeps the venue and the way there,

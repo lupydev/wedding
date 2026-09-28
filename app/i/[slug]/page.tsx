@@ -150,9 +150,10 @@ export default async function InvitationPage({ params }: RouteParams) {
       the one thing the venue gate exists to prevent — and a calendar file is
       forwarded exactly like a link.
 
-      The `.ics` is a per-invitation endpoint for the same reason: see
-      `app/i/[slug]/evento.ics/route.ts`, which re-reads the answer rather
-      than trusting the path.
+      A per-invitation `.ics` endpoint stood beside it for one pass, gated
+      the same way and re-reading the same answer. The couple removed the
+      button after testing it on a phone — "el .ics realmente intenta
+      descargar un archivo" — so the endpoint went with its only consumer.
     */
     const calendar = {
       event: buildCeremonyCalendarEvent(
@@ -163,7 +164,6 @@ export default async function InvitationPage({ params }: RouteParams) {
         },
         WEDDING_INSTANT,
       ),
-      icsHref: `/i/${slug}/evento.ics`,
     };
 
     return (

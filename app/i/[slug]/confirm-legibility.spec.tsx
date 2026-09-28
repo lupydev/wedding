@@ -112,18 +112,28 @@ const BRIGHTEST_UNDER_THE_TOP: readonly (readonly [string, string, string])[] =
  * couple have not filled that field in.
  *
  * THE COUPLE THEN PUT TWO MORE CONTROLS IN IT. "Agregar a Google Calendar"
- * and the `.ics` join `Cómo llegar` inside this same card, so the group grew
- * upward by about a hundred pixels and now runs from the middle of the frame
+ * and the `.ics` joined `Cómo llegar` inside this same card, so the group
+ * grew upward by about a hundred pixels and reached the middle of the frame
  * — across the lit edge of Michell's dress, the brightest thing in the
  * photograph and the pixel every other card on this product is measured
- * against. Measured at the new position: **#F3F1E6, 0.877**, against the
- * #8A8985 this file was holding.
+ * against. Measured at that position: **#F3F1E6, 0.877**, against the
+ * #8A8985 this file had been holding.
  *
- * That is a 3.5× jump in the luminance behind the foot's words, and nothing
+ * That was a 3.5× jump in the luminance behind the foot's words, and nothing
  * would have said so: the old fixture still passed every assertion in this
  * file. The ground went from `/60` to `/75` and the map link's edge from
  * `/50` to `/60` as a result — both measured below their floors at the new
  * position, both comfortable now.
+ *
+ * THE `.ics` IS GONE AGAIN AND THE NUMBER IS KEPT ON PURPOSE. The card is
+ * one control shorter, so it is bottom-anchored one control lower and covers
+ * less of the photograph: re-sampled with two controls it stands on
+ * **#A29C98, 0.337**. The harsher number stays. The card's top edge is not
+ * fixed — it moves with how many lines the venue's NAME takes, and the
+ * couple have not filled that field in — so #F3F1E6 is the high-water mark
+ * this ground has actually been measured at rather than a number invented to
+ * be safe, and relaxing a contrast fixture because a control was deleted
+ * buys nothing at all.
  */
 const BRIGHTEST_UNDER_THE_FOOT = "#f3f1e6";
 
@@ -160,7 +170,6 @@ function renderConfirmed() {
             },
             WEDDING_INSTANT,
           ),
-          icsHref: "/i/abc/evento.ics",
         }}
       />
     </>,
@@ -395,7 +404,14 @@ describe("the two ways to keep the date", () => {
       '[data-testid="calendar-actions"] a',
     );
 
-    expect(actions).toHaveLength(2);
+    /*
+      ONE CONTROL, WHERE THERE WERE TWO. The `.ics` beside it was removed
+      after the couple tested the download on a real phone — "el .ics
+      realmente intenta descargar un archivo" — so what is measured here is
+      the one that remains, and the count is asserted so a silent return
+      would have to be looked at.
+    */
+    expect(actions).toHaveLength(1);
 
     for (const action of actions) {
       const fill = over(declaredColor(action, "bg"), ground(find));

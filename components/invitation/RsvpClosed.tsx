@@ -89,11 +89,8 @@ export function RsvpClosed({
   readonly venue: { readonly name: string };
   readonly memberCount: number;
   readonly greetingName: string;
-  /** The two ways to keep the date, for the accepted ending only. */
-  readonly calendar?: {
-    readonly event: CalendarEvent;
-    readonly icsHref: string;
-  };
+  /** The way to keep the date, for the accepted ending only. */
+  readonly calendar?: { readonly event: CalendarEvent };
 }) {
   const state =
     answer === null ? "unanswered" : answer.attending ? "accepted" : "declined";

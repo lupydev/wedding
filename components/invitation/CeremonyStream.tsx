@@ -61,14 +61,11 @@ export function CeremonyStream({
   ceremony,
   memberCount,
   onReconsider,
-  icsHref,
 }: {
   readonly ceremony: CeremonyStreamDetails;
   /** How many people this invitation names, which decides the number. */
   readonly memberCount: number;
   readonly onReconsider: () => void;
-  /** Where this household's `.ics` is served, if it is offered one. */
-  readonly icsHref?: string;
 }) {
   return (
     /*
@@ -134,11 +131,7 @@ export function CeremonyStream({
         value on a page a guest could open — and migration 0018 dropped the two
         columns those props read.
       */}
-        <StreamDetails
-          ceremony={ceremony}
-          icsHref={icsHref}
-          className="w-full"
-        />
+        <StreamDetails ceremony={ceremony} className="w-full" />
       </div>
 
       {/*

@@ -98,18 +98,9 @@ export interface StreamDetailsValues {
 
 export function StreamDetails({
   ceremony,
-  icsHref,
   className,
 }: {
   readonly ceremony: StreamDetailsValues;
-  /**
-   * Where this household's `.ics` is served, when there is a household.
-   *
-   * Absent on `/transmision`, which has no invitation behind it and so no
-   * answer to decide what the file may contain. Present on the screens inside
-   * an invitation, where the endpoint re-reads that answer for itself.
-   */
-  readonly icsHref?: string;
   /** The host surface's own spacing. Never its colours. */
   readonly className?: string;
 }) {
@@ -223,7 +214,6 @@ export function StreamDetails({
             },
             WEDDING_INSTANT,
           )}
-          icsHref={icsHref}
           className="mt-3"
         />
       ) : null}

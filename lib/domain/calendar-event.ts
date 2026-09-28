@@ -1,42 +1,37 @@
 /**
  * The ceremony as a calendar entry — pure.
  *
- * TWO DESTINATIONS, AND THEY DO DIFFERENT JOBS. A `.ics` file, which carries
- * its own alarms and opens natively on iOS and in Outlook; and a Google
- * Calendar link, which is one tap for anybody already signed in to Google and
- * nothing at all for anybody who is not.
+ * ONE DESTINATION NOW, AND THIS HEADER HAS LIED ABOUT THAT TWICE, SO IT IS
+ * WORTH BEING PLAIN. Everything here ends up as a Google Calendar link: one
+ * tap for anybody already signed in to Google, and nothing at all for anybody
+ * who is not. That gap is named on the page rather than hidden.
  *
- * THE FILE WAS HERE, WAS REMOVED, AND IS BACK — DELIBERATELY, AS AN
- * EXPERIMENT. This module built an `.ics` with its own folding, escaping and
- * alarms until `2cb43cb`, and the couple removed it with a reason worth
- * quoting exactly: "a browser that answers a tap by dropping a file into a
- * downloads folder has not helped anybody reading a wedding invitation on
- * their phone." They have reversed that knowingly — "volvé al .ics con las dos
- * alarmas para que probemos qué sucede en un android e iphone" — because what
- * each phone actually does with the file is the thing they want to see. The
- * implementation is the one git held, recovered rather than rewritten: the
- * octet-accurate folding and the escaping order below are easy to get subtly
- * wrong and were already right.
+ * WHAT THE SECOND DESTINATION WAS, AND WHAT DELETING IT COST. An `.ics` file
+ * stood beside the link — twice. It was built here with its own folding,
+ * escaping and two alarms, removed in `2cb43cb`, restored at the couple's
+ * request as an experiment on real phones, and removed again once they had
+ * their answer: "el .ics realmente intenta descargar un archivo, entonces
+ * descartemos ese boton." The experiment confirmed the original reason. A tap
+ * that drops a file into a downloads folder has not helped anybody reading a
+ * wedding invitation on their phone.
  *
- * WHICH ONE CARRIES A REMINDER, STATED HONESTLY BECAUSE THIS FILE USED TO GET
- * IT WRONG. The header said the entry went "with alarms attached", which was
- * true of the `.ics` and never of the link: Google's TEMPLATE endpoint takes
- * `action`, `text`, `dates`, `details` and `location`, and has no parameter
- * for a reminder at all. An entry saved through it inherits whatever default
- * the guest has set on their own calendar — often ten minutes, sometimes
- * nothing. That is not a failure and it is not something this code can change;
- * it is simply what that button does, and saying so is the difference between
- * a guest who sets their own alarm and one who assumes we set it for them.
- *
- * A guest who joins by stream has no venue to travel to and nothing to
- * arrange, which is exactly why the date slips: there is no journey to plan
- * around it. It is the guest the alarms were added for.
+ * THE COST IS THE REMINDER, AND NOTHING REPLACES IT. The file was the only
+ * output that could carry an alarm. Google's `TEMPLATE` endpoint accepts
+ * `action`, `text`, `dates`, `details` and `location` and has no parameter
+ * for a reminder at all, so an entry saved through the link inherits whatever
+ * default the guest has on their own calendar, which may be nothing. A guest
+ * who joins by stream has no journey to plan around the date, which is
+ * exactly the guest the alarms were added for; they now get their own
+ * default and no more. That is not something this code can change,
+ * and the honest thing is to say so here rather than to imply an alarm the
+ * link never sets.
  *
  * AND THE TWO ENTRIES ARE NOT THE SAME ENTRY. See `buildCeremonyCalendarEvent`
  * and `buildStreamCalendarEvent`: one carries the venue's location and one
- * must never. A calendar file is forwarded exactly like a link, so the address
- * in a declining household's entry would leak further, and more durably, than
- * anything the page itself shows them.
+ * must never. A calendar entry is forwarded exactly like a link — more
+ * durably, in fact, since it lands in an app rather than in a chat — so the
+ * address in a declining household's entry would travel further than anything
+ * the page ever showed them.
  *
  * Every value is derived from arguments, so the output is reproducible and the
  * whole thing is testable without a clock or a server.
@@ -45,7 +40,7 @@
  * English.
  */
 
-import { VENUE_COORDINATES, WEDDING_TIME_ZONE } from "./wedding-day";
+import { VENUE_COORDINATES } from "./wedding-day";
 
 /**
  * How long the entry blocks out.
@@ -53,7 +48,7 @@ import { VENUE_COORDINATES, WEDDING_TIME_ZONE } from "./wedding-day";
  * AN ASSUMPTION, AND RECORDED AS ONE. The couple gave a start and nobody has
  * said how long the ceremony runs. An hour is the ordinary length and, more to
  * the point, the END of a calendar entry is not what a guest acts on — the
- * start and the alarms are. Correcting it later is this line.
+ * start is. Correcting it later is this line.
  */
 export const CEREMONY_MINUTES = 60;
 
@@ -88,135 +83,24 @@ export interface CeremonyCalendarFacts extends StreamCalendarFacts {
   readonly venueName: string;
 }
 
-/**
- * The evening alarm's hour, where the wedding is. The couple said eight.
- */
-const EVENING_ALARM_HOUR = 20;
+/*
+  THE FILE'S OWN MACHINERY STOOD HERE, TWICE, AND IS GONE TWICE.
 
-/**
- * And how long before the start the second one rings. The couple said three.
- */
-const HOURS_BEFORE_ALARM = 3;
+  An octet-accurate line folder, an iCalendar TEXT escaper, a UTF-8 measurer
+  and the derivation that put an alarm at eight in the evening wherever the
+  wedding is. All of it existed to serve `buildIcs`, and `buildIcs` existed
+  because the Google link cannot carry a reminder.
 
-/**
- * Measures a string in UTF-8 octets.
- *
- * `TextEncoder`, and deliberately not Node's byte-length helper. `lib/domain`
- * is forbidden Node built-ins so that a client component may import anything
- * in it — the rule is in `eslint.config.mjs` — and that helper is one. The
- * linter cannot catch it, because it is reached through a global rather than
- * an import, so the only thing enforcing the rule here is knowing it.
- * `TextEncoder` is a web standard and exists in both runtimes.
- *
- * One encoder at module scope: `fold` asks per character, and an allocation
- * per character of every folded line is a cost with nothing to buy.
- */
-const UTF8 = new TextEncoder();
+  The couple deleted the file in `2cb43cb`, asked for it back as an experiment
+  — "volvé al .ics con las dos alarmas para que probemos qué sucede en un
+  android e iphone" — and deleted it again once they had their answer: "el
+  .ics realmente intenta descargar un archivo, entonces descartemos ese
+  boton." The experiment was the point, and it confirmed the original reason.
 
-function octets(value: string): number {
-  return UTF8.encode(value).length;
-}
-
-/**
- * Escapes an iCalendar TEXT value.
- *
- * The backslash goes FIRST. Escaping commas before backslashes would then
- * escape the backslashes it had just written, turning `a,b` into `a\\,b` — a
- * literal backslash followed by an unescaped separator, which is both wrong
- * values and wrong text.
- *
- * A raw comma is a value SEPARATOR in iCalendar, so an unescaped one silently
- * truncates the rest of the property. In a LOCATION that is a latitude and a
- * longitude with a comma between them, an unescaped one throws the longitude
- * away and drops the guest a few hundred kilometres west, in the Pacific.
- *
- * The pair itself is deliberately not quoted here. `VENUE_COORDINATES` is the
- * one source that names it and `tools/venue-coordinates.spec.ts` holds that
- * to exactly one file — a comment repeating the digits is a second copy for
- * every purpose except the one that would notice.
- */
-function escapeText(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\r?\n/g, "\\n");
-}
-
-/**
- * Folds a content line to 75 OCTETS, per RFC 5545 §3.1.
- *
- * Octets, not characters, and that distinction is the whole reason this is not
- * a `slice(0, 75)`. This copy is Spanish: every "ó" and "ñ" is two bytes in
- * UTF-8, so a character count overruns the limit — and a cut landing inside a
- * multi-byte sequence hands the calendar invalid UTF-8 and a description that
- * ends in a replacement character.
- *
- * So it walks code points, tracks the byte cost of each, and breaks before the
- * one that would not fit. Continuation lines begin with a single space, which
- * the reader strips.
- */
-function fold(line: string): string {
-  const LIMIT = 75;
-  const out: string[] = [];
-
-  let current = "";
-  let bytes = 0;
-  // The leading space of a continuation line costs one of its 75 octets.
-  let budget = LIMIT;
-
-  for (const char of line) {
-    const cost = octets(char);
-
-    if (bytes + cost > budget) {
-      out.push(current);
-      current = "";
-      bytes = 0;
-      budget = LIMIT - 1;
-    }
-
-    current += char;
-    bytes += cost;
-  }
-
-  out.push(current);
-
-  return out.join("\r\n ");
-}
-
-/**
- * THE EVENING BEFORE, AT A WALL-CLOCK HOUR RATHER THAN A DURATION.
- *
- * The couple asked for two alarms: "the day before at 8:00 p.m." and "three
- * hours before the start". The second is a duration and iCalendar says it in
- * one token, `-PT3H`. The first is not: 8:00 p.m. is a time of day where the
- * wedding is, and encoding it as the 21 hours it happens to be today would
- * quietly become 9:00 p.m. if the ceremony moved an hour later.
- *
- * So it is derived — the wedding's own local time of day, read in
- * `WEDDING_TIME_ZONE`, is what decides how far back to step. Move the
- * ceremony and the alarm stays at eight in the evening; the spec asserts the
- * resulting INSTANT rather than the token, so that promise is checked rather
- * than described.
- *
- * Bogota has no daylight saving, so stepping back across midnight cannot
- * change the offset. Written down because a zone that did would need the
- * arithmetic done in local parts rather than in milliseconds.
- */
-function eveningBefore(start: Date, timeZone: string, hour: number): Date {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(start);
-  const value = (type: string) =>
-    Number(parts.find((part) => part.type === type)?.value ?? "0");
-  const minutesIntoTheDay = value("hour") * 60 + value("minute");
-  const minutesBack = minutesIntoTheDay + (24 - hour) * 60;
-
-  return new Date(start.getTime() - minutesBack * 60_000);
-}
+  Nothing here is kept against a third return. Code with no consumer is a
+  thing to maintain and a thing to wonder about, and git holds every line of
+  it twice over.
+*/
 
 /** `YYYYMMDDTHHMMSSZ` — the iCalendar UTC form, and Google's `dates` form. */
 function asUtcStamp(instant: Date): string {
@@ -255,8 +139,21 @@ export function buildStreamCalendarEvent(
     start,
     durationMinutes: CEREMONY_MINUTES,
     title: `Matrimonio de ${facts.coupleNames}`,
+    /*
+      WHAT THE ENTRY SAYS, AND IT USED TO SAY THE WRONG THING TO HALF ITS
+      READERS.
+
+      "Nos casamos y los acompañamos por Google Meet." — the couple, looking
+      at it on their phone: "el comentario esta horrible". It was worse than
+      ugly: the screenshot they sent was the ACCEPTED household's entry, which
+      carries the venue, and it spoke in the stream's voice as though they
+      were watching from home.
+
+      Two entries, two audiences, two sentences. This is the one a guest who
+      is watching reads; `buildCeremonyCalendarEvent` writes the other.
+    */
     description: [
-      "Nos casamos y los acompañamos por Google Meet.",
+      "Transmitimos la ceremonia en vivo para que puedan acompañarnos desde donde estén.",
       "",
       `Enlace: ${facts.streamUrl}`,
     ].join("\n"),
@@ -279,9 +176,8 @@ export function buildStreamCalendarEvent(
  * `VENUE_COORDINATES` the directions button uses — one definition, so the
  * entry and the map cannot point at two places.
  *
- * The name goes in FRONT of the coordinates, separated by the comma
- * iCalendar escapes and `URLSearchParams` encodes: a guest reading the entry
- * sees a place with a name, and their maps application uses the numbers.
+ * The name is NOT beside the numbers; it is in the description. See the
+ * comment on `location` below, which is where that cost real guests a venue.
  */
 export function buildCeremonyCalendarEvent(
   facts: CeremonyCalendarFacts,
@@ -289,76 +185,36 @@ export function buildCeremonyCalendarEvent(
 ): CalendarEvent {
   return {
     ...buildStreamCalendarEvent(facts, start),
-    location: `${facts.venueName} (${VENUE_COORDINATES})`,
-  };
-}
-
-/**
- * The event as an `.ics` file.
- *
- * TWO ALARMS, AND THE COUPLE CHOSE BOTH TIMES. The evening before at eight,
- * when there is still time to arrange the next day, and three hours before
- * the start, which is when a guest who has to travel begins to. A calendar
- * entry with no alarm is a note the guest has to remember to look at, which
- * is the problem the file exists to solve — and the reason it is back after
- * being removed: the Google link cannot carry a reminder at all.
- *
- * ONE ABSOLUTE AND ONE RELATIVE, for the reason `eveningBefore` gives: eight
- * in the evening is a time of day and three hours before is a duration, and
- * encoding either as the other is what makes an alarm drift when the ceremony
- * moves.
- *
- * `stamp` IS AN ARGUMENT OF THE FILE RATHER THAN A FIELD OF THE EVENT.
- * `DTSTAMP` says when this iCalendar object was written, which is a fact
- * about the serialization and not about the wedding — and keeping it out of
- * `CalendarEvent` is what lets the Google link be built during a render
- * without reading a clock, where a server and a client disagreeing about the
- * time would be a hydration mismatch in an href.
- */
-export function buildIcs(event: CalendarEvent, stamp: Date): string {
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//invitacion.boda//ES",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    "BEGIN:VEVENT",
-    `UID:${event.uid}`,
-    `DTSTAMP:${asUtcStamp(stamp)}`,
-    `DTSTART:${asUtcStamp(event.start)}`,
-    `DTEND:${asUtcStamp(endOf(event))}`,
-    `SUMMARY:${escapeText(event.title)}`,
-    `DESCRIPTION:${escapeText(event.description)}`,
     /*
-      AND THE ADDRESS ONLY WHEN THE ENTRY HAS ONE.
+      BARE COORDINATES, AND THE NAME IS DELIBERATELY NOT HERE.
 
-      An empty `LOCATION:` is not the same as no `LOCATION`: some readers
-      render the blank as a line in the event, and all of them treat the
-      property as present. The stream entry must carry no trace of a venue,
-      not an empty box where one would go.
+      This read the venue's NAME with the coordinates in brackets after it
+      for exactly one pass, and the couple found it on their phone: tapping
+      it opened a DIFFERENT venue. Google text-searched the name and treated the
+      parenthesised pair as decoration — the link they were sent carries
+      `ftid=0x8e38599a77a5ec99:...` while their own venue is
+      `0x8e39e561ae218207:...`. Two different places, confidently.
+
+      Google's own URL documentation is unambiguous about the fix: a query
+      "may be a place name, address, or comma-separated latitude/longitude
+      coordinates", and a bare pair is the coordinate form. `venue_name` is
+      "Villa Campestre" in production, which matches a dozen places in
+      Colombia; a pair of decimals matches one point on the earth.
+
+      A WRONG PIN IS WORSE THAN NO PIN. It sends fifty people confidently to
+      the wrong town, and nothing about it looks wrong until they arrive.
+
+      So the numbers go here, where the maps application reads them, and the
+      venue's NAME goes in the description, where the guest reads it. A
+      calendar entry showing only decimals helps nobody either.
     */
-    ...(event.location === undefined
-      ? []
-      : [`LOCATION:${escapeText(event.location)}`]),
-    "BEGIN:VALARM",
-    "ACTION:DISPLAY",
-    `TRIGGER;VALUE=DATE-TIME:${asUtcStamp(
-      eveningBefore(event.start, WEDDING_TIME_ZONE, EVENING_ALARM_HOUR),
-    )}`,
-    `DESCRIPTION:${escapeText(event.title)}`,
-    "END:VALARM",
-    "BEGIN:VALARM",
-    "ACTION:DISPLAY",
-    `TRIGGER:-PT${HOURS_BEFORE_ALARM}H`,
-    `DESCRIPTION:${escapeText(event.title)}`,
-    "END:VALARM",
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ];
-
-  // A trailing CRLF as well: every content line ends with one, the last
-  // included, and a file that stops mid-line is a file some readers reject.
-  return `${lines.map(fold).join("\r\n")}\r\n`;
+    location: VENUE_COORDINATES,
+    description: [
+      `Los esperamos en ${facts.venueName}.`,
+      "",
+      `También transmitimos la ceremonia en vivo: ${facts.streamUrl}`,
+    ].join("\n"),
+  };
 }
 
 /**
@@ -370,8 +226,8 @@ export function buildIcs(event: CalendarEvent, stamp: Date): string {
  * IT CARRIES NO ALARM AND CANNOT. `TEMPLATE` accepts `action`, `text`,
  * `dates`, `details` and `location`; there is no reminder parameter, so an
  * entry saved this way gets whatever default the guest has set on their own
- * calendar. That is why the `.ics` exists beside it rather than instead of
- * it, and why nothing in this file claims otherwise any more.
+ * calendar. Nothing in this module compensates for that any more — the `.ics`
+ * that used to is gone — and nothing here claims otherwise.
  *
  * `URLSearchParams` does the encoding. There is deliberately no
  * iCalendar-style escaping here: this is a query parameter, and the

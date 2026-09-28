@@ -66,14 +66,24 @@ const BRIGHTEST_UNDER_THE_PARAGRAPH = "#66684c";
 const BRIGHTEST_UNDER_THE_CONTROLS = "#8b8c52";
 
 /**
- * And under the two the couple added below them.
+ * And under the calendar control below them.
  *
  * #BFBCAA on an iPhone 14 for a four-person invitation — brighter than the
- * stream's own controls because they sit further down the same scrim gap,
+ * stream's own controls because it sits further down the same scrim gap,
  * and the brightest ground any control on this screen stands on. It is the
- * reason all four are filled at `bg-black/55` rather than the `/40` the
- * first two shipped with: at `/40` the label here measured 4.30:1 and the
- * edge 2.61:1, both under.
+ * reason every control here is filled at `bg-black/55` rather than the `/40`
+ * the first two shipped with: at `/40` the label here measured 4.30:1 and
+ * the edge 2.61:1, both under.
+ *
+ * THERE WERE TWO CONTROLS HERE AND THERE IS ONE, AND THE NUMBER IS KEPT ON
+ * PURPOSE. #BFBCAA was the ground under the LOWER of them, the `.ics` the
+ * couple removed. Re-sampled with it gone, the remaining control stands on
+ * **#ACAF86, 0.412** — darker, because it is the higher of the two and the
+ * scrim gap only brightens downward. The harsher number stays: relaxing a
+ * contrast fixture because a control was deleted buys nothing, and the
+ * block's position on this screen moves with how many lines the paragraph
+ * takes. Every assertion below therefore holds against a ground 1.2× brighter
+ * than the one that is actually there.
  */
 const BRIGHTEST_UNDER_THE_CALENDAR = "#bfbcaa";
 
@@ -102,7 +112,6 @@ function renderDeclined(memberCount = 4) {
       }}
       memberCount={memberCount}
       onReconsider={() => {}}
-      icsHref="/i/abc/evento.ics"
     />,
   );
 
@@ -269,7 +278,14 @@ describe("the two ways a stream guest keeps the date", () => {
       '[data-testid="calendar-actions"] a',
     );
 
-    expect(actions).toHaveLength(2);
+    /*
+      ONE CONTROL, WHERE THERE WERE TWO. The `.ics` beside it was removed
+      after the couple tested the download on a real phone — "el .ics
+      realmente intenta descargar un archivo" — so what is measured here is
+      the one that remains, and the count is asserted so a silent return
+      would have to be looked at.
+    */
+    expect(actions).toHaveLength(1);
 
     for (const action of actions) {
       const ground = over(

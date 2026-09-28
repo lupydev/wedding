@@ -382,10 +382,7 @@ export function RsvpAnswer({
    * said yes. A client component that built its own could not be stopped
    * from building the wrong one.
    */
-  readonly calendar?: {
-    readonly event: CalendarEvent;
-    readonly icsHref: string;
-  };
+  readonly calendar?: { readonly event: CalendarEvent };
   /**
    * The wedding, announced — rendered on the FIRST screen and on no other.
    *
@@ -706,7 +703,6 @@ export function RsvpAnswer({
             ceremony={ceremony}
             memberCount={guests.length}
             onReconsider={reconsider}
-            icsHref={calendar?.icsHref}
           />
         </div>
       </>

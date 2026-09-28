@@ -126,10 +126,7 @@ export function RsvpConfirmed({
    * Optional, so the operator preview and any future caller that has no
    * invitation behind it can render this screen without inventing one.
    */
-  readonly calendar?: {
-    readonly event: CalendarEvent;
-    readonly icsHref: string;
-  };
+  readonly calendar?: { readonly event: CalendarEvent };
   /**
    * Whether this screen counts down, which is true everywhere but one.
    *
@@ -345,7 +342,7 @@ export function RsvpConfirmed({
           site instead of hidden in a flag.
         */}
         {calendar === undefined ? null : (
-          <CalendarActions event={calendar.event} icsHref={calendar.icsHref} />
+          <CalendarActions event={calendar.event} />
         )}
 
         {/*
