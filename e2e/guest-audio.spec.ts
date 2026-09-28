@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { STREAM_LINK_LABEL } from "../lib/domain/stream-window";
+
 import { seedInvitation } from "./helpers/seed";
 
 /**
@@ -143,9 +145,13 @@ test.describe("the song a guest hears", () => {
     await page.goto("/");
     await startByTouchingThePage(page);
 
-    const door = page.getByRole("link", {
-      name: "Acompáñanos por Google Meet",
-    });
+    /*
+      THE LABEL IS IMPORTED, NOT TYPED AGAIN. This spec is about the song
+      surviving a navigation; it has no opinion about what the door says. It
+      held its own copy of those words until the couple reworded the button,
+      and then a spec about audio went red over a noun.
+    */
+    const door = page.getByRole("link", { name: STREAM_LINK_LABEL });
     await expect(door).toBeVisible();
 
     const before = await audioState(page);

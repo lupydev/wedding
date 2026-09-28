@@ -25,6 +25,23 @@ const DAY = 86_400_000;
  */
 export const STREAM_PATH = "/transmision";
 
+/**
+ * What the door on the landing says, and the ONE place it is written.
+ *
+ * HERE RATHER THAN IN THE COMPONENT, for the same reason `STREAM_PATH` is: the
+ * browser suite locates that link by its words, and a spec cannot import a
+ * `"use client"` component without dragging React and `next/link` into a Node
+ * runner. A plain string in the domain is reachable from both sides.
+ *
+ * It earned the move. The constant read "Acompáñanos por Google Meet" until the
+ * couple reworded it, `e2e/guest-audio.spec.ts` held its own copy of the old
+ * words, and a spec about whether the song survives a navigation was about to
+ * go red over a noun it has no opinion on.
+ *
+ * Guest-facing copy is Spanish, neutral register.
+ */
+export const STREAM_LINK_LABEL = "Acompáñanos en la transmisión";
+
 /** How long before the ceremony the landing starts offering the stream. */
 export const STREAM_WINDOW_DAYS = 7;
 

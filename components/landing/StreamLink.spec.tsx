@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { STREAM_PATH, streamLinkOpensAt } from "@/lib/domain/stream-window";
+import {
+  STREAM_LINK_LABEL,
+  STREAM_PATH,
+  streamLinkOpensAt,
+} from "@/lib/domain/stream-window";
 
 import { StreamLink } from "./StreamLink";
 
@@ -43,10 +47,10 @@ describe("StreamLink", () => {
 
       render(<StreamLink ceremony={CEREMONY} />);
 
-      const closed = screen.getByRole("button", { name: /Google Meet/i });
+      const closed = screen.getByRole("button", { name: STREAM_LINK_LABEL });
 
       expect(closed).toBeDisabled();
-      expect(screen.queryByRole("link", { name: /Google Meet/i })).toBeNull();
+      expect(screen.queryByRole("link", { name: STREAM_LINK_LABEL })).toBeNull();
       expect(
         screen.getByText(/se abre el 21 de noviembre de 2026/i),
       ).toBeInTheDocument();
@@ -65,7 +69,7 @@ describe("StreamLink", () => {
       render(<StreamLink ceremony={CEREMONY} />);
 
       expect(
-        screen.getByRole("button", { name: /Google Meet/i }),
+        screen.getByRole("button", { name: STREAM_LINK_LABEL }),
       ).toHaveAttribute(
         "title",
         expect.stringMatching(/21 de noviembre de 2026/),
@@ -79,10 +83,10 @@ describe("StreamLink", () => {
 
       render(<StreamLink ceremony={CEREMONY} />);
 
-      const link = screen.getByRole("link", { name: /Google Meet/i });
+      const link = screen.getByRole("link", { name: STREAM_LINK_LABEL });
 
       expect(link).toHaveAttribute("href", STREAM_PATH);
-      expect(screen.queryByRole("button", { name: /Google Meet/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: STREAM_LINK_LABEL })).toBeNull();
     });
 
     it("drops the line about when it opens", () => {
@@ -99,7 +103,7 @@ describe("StreamLink", () => {
       render(<StreamLink ceremony={CEREMONY} />);
 
       expect(
-        screen.getByRole("link", { name: /Google Meet/i }),
+        screen.getByRole("link", { name: STREAM_LINK_LABEL }),
       ).toBeInTheDocument();
     });
   });
@@ -110,7 +114,7 @@ describe("StreamLink", () => {
     render(<StreamLink ceremony={CEREMONY} />);
 
     expect(
-      screen.getByRole("link", { name: /Google Meet/i }),
+      screen.getByRole("link", { name: STREAM_LINK_LABEL }),
     ).toBeInTheDocument();
   });
 
@@ -118,14 +122,14 @@ describe("StreamLink", () => {
     vi.useFakeTimers({ now: daysBefore(30) });
     const { unmount } = render(<StreamLink ceremony={CEREMONY} />);
     const closedLabel = screen.getByRole("button", {
-      name: /Google Meet/i,
+      name: STREAM_LINK_LABEL,
     }).textContent;
     unmount();
 
     vi.useFakeTimers({ now: daysBefore(2) });
     render(<StreamLink ceremony={CEREMONY} />);
 
-    expect(screen.getByRole("link", { name: /Google Meet/i }).textContent).toBe(
+    expect(screen.getByRole("link", { name: STREAM_LINK_LABEL }).textContent).toBe(
       closedLabel,
     );
   });

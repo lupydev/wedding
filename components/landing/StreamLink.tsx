@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 import { whyDisabled } from "@/components/ui/why-disabled";
 import { WEDDING_INSTANT, formatWeddingDate } from "@/lib/domain/wedding-day";
 import {
+  STREAM_LINK_LABEL,
   STREAM_PATH,
   streamLinkIsOpen,
   streamLinkOpensAt,
@@ -44,8 +45,6 @@ import {
  * Guest-facing copy is Spanish, neutral register. Identifiers and comments stay
  * English.
  */
-
-const LABEL = "Acompáñanos en la transmisión";
 
 /**
  * One class string for both states.
@@ -112,7 +111,7 @@ export function StreamLink({
         href={STREAM_PATH}
         className={`${PILL} hover:bg-black/40 hover:text-[#f6efe2]`}
       >
-        {LABEL}
+        {STREAM_LINK_LABEL}
       </Link>
     );
   }
@@ -135,7 +134,7 @@ export function StreamLink({
         {...whyDisabled(`El enlace se abre el ${opensOn}.`)}
         className={`${PILL} cursor-not-allowed opacity-55`}
       >
-        {LABEL}
+        {STREAM_LINK_LABEL}
       </button>
 
       <p className="text-xs text-[#f6efe2]/60 [text-shadow:0_1px_10px_rgba(0,0,0,0.6)]">
