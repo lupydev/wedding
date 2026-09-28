@@ -76,11 +76,21 @@ const BRIGHTEST_UNDER_THE_TOP: readonly (readonly [string, string, string])[] =
       "#303011",
       "the line that names the household — worst on a 1280×720 window",
     ],
-    [".rsvp__when dt", "#282911", "`CUÁNDO`"],
+    /*
+      THE TWO LINES THAT REPLACED THE LABEL/VALUE PAIRS, RE-SAMPLED WHERE
+      THEY NOW STAND.
+
+      `CUÁNDO` over the date and `CÓDIGO DE VESTIMENTA` over its value were
+      four elements; they are two lines of spaced caps now, in the
+      announcement's own setting, because the couple said this screen read
+      as a spec sheet beside the other three. Both moved, so both were
+      measured again rather than inheriting the pairs' numbers.
+    */
+    [".rsvp__when p:first-of-type", "#262620", "the day"],
     [
-      ".rsvp__when dd",
+      ".rsvp__when p:nth-of-type(2)",
       "#2e2f27",
-      "the day and the hour, which rose when the receipt line left",
+      "the hour and the dress code, on one line now",
     ],
   ];
 
@@ -302,8 +312,8 @@ describe("what the accepted screen's words measure against the photograph", () =
    */
   it.each([
     ".invitation__greeting",
-    ".rsvp__when dt",
-    ".rsvp__when dd",
+    ".rsvp__when p:first-of-type",
+    ".rsvp__when p:nth-of-type(2)",
     ".rsvp__venue dt",
     ".rsvp__venue dd",
     ".rsvp__venue-map",

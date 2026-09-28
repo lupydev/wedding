@@ -157,22 +157,60 @@ describe("RsvpConfirmed", () => {
    * pinned, and a second copy of the date here would be the one still holding
    * the old answer after the wedding moved.
    */
-  it("states the day and the hour the household has to be there", () => {
+  /**
+   * THE SAME THREE FACTS, IN THE ANNOUNCEMENT'S VOICE RATHER THAN A SPEC
+   * SHEET'S.
+   *
+   * These asserted the LABELS as well — `Cuándo`, `Código de vestimenta` —
+   * because the block was a `dl` of label-over-value pairs. The couple said
+   * the screen "se ve muy diferente a las demas y se ve un poco fea", and
+   * that form was the cause: every other screen says its facts in one quiet
+   * line of spaced caps under the couple's names. The labels are gone and
+   * the facts are not, which is exactly what is asserted now.
+   */
+  it("states the day, the hour and what to wear", () => {
     renderConfirmed();
 
     const when = document.querySelector(".rsvp__when")!;
 
-    expect(screen.getByText("Cuándo")).toBeInTheDocument();
     expect(when.textContent).toContain(formatWeddingWeekday());
     expect(when.textContent).toContain(formatWeddingDate());
     expect(when.textContent).toContain(formatWeddingTime());
+    expect(when.textContent).toContain(WEDDING_DRESS_CODE);
   });
 
-  it("states what to wear", () => {
+  /**
+   * AND IT SPEAKS THEM RATHER THAN LABELLING THEM.
+   *
+   * Asserted as an absence because the regression is a tidy-minded one:
+   * label-over-value is the obvious way to present two facts, and it is the
+   * shape the couple rejected by name.
+   */
+  it("labels nothing, the way the other three screens label nothing", () => {
     renderConfirmed();
 
-    expect(screen.getByText("Código de vestimenta")).toBeInTheDocument();
-    expect(screen.getByText(WEDDING_DRESS_CODE)).toBeInTheDocument();
+    expect(screen.queryByText("Cuándo")).toBeNull();
+    expect(screen.queryByText("Código de vestimenta")).toBeNull();
+    expect(document.querySelector(".rsvp__when dt")).toBeNull();
+    expect(document.querySelector(".rsvp__when dl")).toBeNull();
+  });
+
+  /**
+   * AND IT COUNTS DOWN, WHICH IS WHAT THEY ASKED FOR FIRST.
+   *
+   * "Importante que en la ultima pagina de afirmacion tambien tenga la cuenta
+   * regresiva." The same `Countdown` the landing and the other three screens
+   * run, so it counts to the same instant rather than to a second reading of
+   * the same date.
+   */
+  it("counts down to the ceremony, like every other screen", () => {
+    renderConfirmed();
+
+    const when = document.querySelector(".rsvp__when")!;
+
+    expect(
+      when.querySelector('[data-testid="countdown-figures"]'),
+    ).not.toBeNull();
   });
 
   /**

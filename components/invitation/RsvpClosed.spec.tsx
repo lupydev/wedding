@@ -62,8 +62,13 @@ describe("a household that accepted before the deadline", () => {
 
     expect(screen.getByText(VENUE.name)).toBeInTheDocument();
     expect(mapLink()).not.toBeNull();
-    expect(screen.getByText(/5:00 p\. m\./)).toBeInTheDocument();
-    expect(screen.getByText(WEDDING_DRESS_CODE)).toBeInTheDocument();
+    // The hour and the dress code share one line in the announcement's
+    // voice now — see `RsvpConfirmed` for the couple's complaint about the
+    // label-over-value pairs these replaced.
+    const when = document.querySelector(".rsvp__when")!;
+
+    expect(when.textContent).toContain("5:00 p. m.");
+    expect(when.textContent).toContain(WEDDING_DRESS_CODE);
   });
 
   it("greets them the way the accepted screen does", () => {

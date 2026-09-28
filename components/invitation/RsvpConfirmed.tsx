@@ -7,6 +7,12 @@ import {
 
 import type { CalendarEvent } from "@/lib/domain/calendar-event";
 
+import { Countdown } from "@/components/landing/Countdown";
+import {
+  ANNOUNCEMENT_LINE,
+  ANNOUNCEMENT_RULE,
+} from "@/components/landing/SaveTheDate";
+
 import { CalendarActions } from "./CalendarActions";
 import { VenueMap } from "./VenueMap";
 
@@ -107,6 +113,7 @@ const SHADOW = "[text-shadow:0_1px_12px_rgba(0,0,0,0.6)]";
 export function RsvpConfirmed({
   venueName,
   calendar,
+  countdown = true,
 }: {
   /** The place, from the `ceremony` row, rendered exactly as it is stored. */
   readonly venueName: string;
@@ -123,6 +130,25 @@ export function RsvpConfirmed({
     readonly event: CalendarEvent;
     readonly icsHref: string;
   };
+  /**
+   * Whether this screen counts down, which is true everywhere but one.
+   *
+   * The couple asked for the counter here — "importante que en la ultima
+   * pagina de afirmacion tambien tenga la cuenta regresiva" — and it is on
+   * by default for exactly that reason.
+   *
+   * THE CLOSED SCREEN TURNS IT OFF, AND THE REASON IS A MEASUREMENT RATHER
+   * THAN AN OPINION. `RsvpClosed` renders this same component under a line
+   * saying the answers are closed, which pushes the whole block down into
+   * the gap between `PhotoStage`'s two scrims: the counter's own box sits on
+   * #A6A57D there, where its figures measure **2.2:1** at full cream. There
+   * is no opacity that fixes that — the fix is a ground the counter does not
+   * have on any screen — so on the one screen where it is unreadable it is
+   * not shown, and the day and the hour are stated immediately above it
+   * either way. The feature document carries the defect; when the counter
+   * gets a ground this flag goes.
+   */
+  readonly countdown?: boolean;
 }) {
   return (
     <div className="rsvp__confirmed flex flex-1 flex-col justify-between gap-6 text-center">
@@ -148,35 +174,62 @@ export function RsvpConfirmed({
           standing on. Nothing here was the only report of an error.
         */}
 
-        <dl className="rsvp__when m-0 flex flex-col gap-3">
-          <div className="flex flex-col gap-0.5">
-            <dt className={`${LABEL} ${SHADOW}`}>Cuándo</dt>
-            {/*
-              THE DAY AND THE HOUR IN ONE LINE, AND THE HOUR IS NEW HERE.
+        {/*
+          THE DAY, THE HOUR AND THE DRESS CODE, IN THE VOICE THE OTHER THREE
+          SCREENS USE.
 
-              Until this screen existed no surface had ever printed the time:
-              the countdown consumed the instant and migration 0018 dropped the
-              column a household would have read. `formatWeddingTime` carries
-              the note about why the couple were asked to confirm it.
+          THIS WAS A SPEC SHEET AND THE COUPLE SAID SO: "importante que en la
+          ultima pagina de afirmacion tambien tenga la cuenta regresiva,
+          siento que esa pagina se ve muy diferente a las demas y se ve un
+          poco fea."
 
-              NO `<time dateTime>`, deliberately, and it is the one place on
-              this page where that needs saying. The announcement states the
-              machine day once, from the same instant; a second `<time>` here
-              would have to carry the hour too, and a `dateTime` less precise
-              than the words beside it is the error on this page that cannot be
-              caught by looking.
-            */}
-            <dd className={`${VALUE} ${SHADOW}`}>
-              {formatWeddingWeekday()}, {formatWeddingDate()},{" "}
-              {formatWeddingTime()}
-            </dd>
-          </div>
+          They are right about the cause, and it was not the countdown's
+          absence alone. This block was a `dl` of label-over-value pairs —
+          CUÁNDO over the date, CÓDIGO DE VESTIMENTA over the value — while
+          the gate, the question and the list of who is coming all open with
+          `SaveTheDate`: a script line, the couple's names, one quiet line of
+          spaced caps, a hairline and the counter. Same facts, different
+          voice. Adding a countdown under a spec sheet would have left a spec
+          sheet with a countdown under it.
 
-          <div className="flex flex-col gap-0.5">
-            <dt className={`${LABEL} ${SHADOW}`}>Código de vestimenta</dt>
-            <dd className={`${VALUE} ${SHADOW}`}>{WEDDING_DRESS_CODE}</dd>
-          </div>
-        </dl>
+          So the pairs are gone and the facts are said in the announcement's
+          own line — `ANNOUNCEMENT_LINE`, imported rather than copied, so
+          tuning that type on the landing tunes it here too. The hairline and
+          the counter close the block exactly as they close the other three.
+
+          EVERY FACT THE COUPLE ASKED FOR IS STILL HERE. The day, the hour and
+          the dress code are the three they named; what went is two label
+          lines that repeated in small caps what the values say plainly.
+
+          NO `<time dateTime>`, STILL, and the reason is unchanged by the
+          restyling: the announcement states the machine day once, from the
+          same instant, and a `dateTime` here would have to carry the hour too
+          — a machine date less precise than the words beside it is the one
+          error on this page that cannot be caught by looking.
+        */}
+        <div className="rsvp__when flex flex-col items-center gap-3 sm:gap-4">
+          <p className={`${ANNOUNCEMENT_LINE} ${SHADOW}`}>
+            {formatWeddingWeekday()}, {formatWeddingDate()}
+          </p>
+
+          <p className={`${ANNOUNCEMENT_LINE} ${SHADOW}`}>
+            {formatWeddingTime()} · {WEDDING_DRESS_CODE}
+          </p>
+
+          {countdown ? (
+            <span aria-hidden="true" className={ANNOUNCEMENT_RULE} />
+          ) : null}
+
+          {/*
+            THE COUNTDOWN THE COUPLE ASKED FOR, AND IT IS THE SAME ONE.
+
+            `Countdown` is the landing's own client component — the only
+            client boundary in that feature — so this screen counts to the
+            same instant with the same ticking, rather than to a second
+            reading of the same date.
+          */}
+          {countdown ? <Countdown /> : null}
+        </div>
       </div>
 
       {/*

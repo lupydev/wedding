@@ -56,7 +56,26 @@ const BRIGHTEST_UNDER_THE_NOTE = "#525043";
  * harshest ground any `/85` word on this screen stands on.
  */
 const BRIGHTEST_UNDER_A_LABEL = "#5c5e47";
-const BRIGHTEST_UNDER_A_VALUE = "#687041";
+const BRIGHTEST_UNDER_A_VALUE = "#63674e";
+
+/**
+ * And under the counter, which is why this screen does not have one.
+ *
+ * #A6A57D on an iPhone 14 — 0.365, the brightest ground any block on any of
+ * these five screens stands on. The couple asked for the countdown on the
+ * accepted screen and it is there; this screen renders the same component
+ * one note lower, which drops the counter into the gap between
+ * `PhotoStage`'s two scrims. Its figures are FULL cream already, so there is
+ * no opacity left to spend: 2.2:1, against a floor of 4.5.
+ *
+ * `RsvpConfirmed` takes `countdown={false}` here for that reason and the day
+ * and the hour are stated immediately above it either way. The counter's
+ * lack of a ground is a defect of its own, older and wider than this screen
+ * — it is under the floor on the live accepted screen's labels too — and the
+ * feature document carries it as an open decision rather than a fix
+ * smuggled into a unit about one screen.
+ */
+const BRIGHTEST_UNDER_A_COUNTDOWN = "#a6a57d";
 
 /**
  * And under the two stream controls, for the other two endings.
@@ -116,26 +135,26 @@ describe("what the closed screen's words measure", () => {
    * pixels THIS screen puts them over rather than the ones the accepted
    * screen did.
    */
-  it("reads the labels of the day and the place", () => {
+  /**
+   * THE TWO LINES THAT REPLACED THE LABEL/VALUE PAIRS.
+   *
+   * The couple said the accepted screen read as a spec sheet beside the
+   * other three, so `CUÁNDO` over the date and `CÓDIGO DE VESTIMENTA` over
+   * its value became two lines of spaced caps in the announcement's own
+   * setting. The closed screen renders the same component, so the same two
+   * lines are what it has to be able to read.
+   */
+  it("reads the day, and the hour beside the dress code", () => {
     const { find } = renderClosed({ attending: true });
 
-    expect(
-      contrastRatio(
-        declaredColor(find(".rsvp__when dt"), "text"),
-        BRIGHTEST_UNDER_A_LABEL,
-      ),
-    ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
-  });
-
-  it("reads the day and the hour themselves", () => {
-    const { find } = renderClosed({ attending: true });
-
-    expect(
-      contrastRatio(
-        declaredColor(find(".rsvp__when dd"), "text"),
-        BRIGHTEST_UNDER_A_VALUE,
-      ),
-    ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+    for (const [selector, ground] of [
+      [".rsvp__when p:first-of-type", BRIGHTEST_UNDER_A_LABEL],
+      [".rsvp__when p:nth-of-type(2)", BRIGHTEST_UNDER_A_VALUE],
+    ] as const) {
+      expect(
+        contrastRatio(declaredColor(find(selector), "text"), ground),
+      ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+    }
   });
 
   /**
@@ -203,5 +222,37 @@ describe("whether the closed screen's controls read as controls", () => {
     expect(
       contrastRatio(over("rgba(246, 239, 226, 0.3)", ground), ground),
     ).toBeLessThan(WCAG_AA_NON_TEXT);
+  });
+});
+
+/**
+ * THE COUNTER THIS SCREEN DELIBERATELY DOES NOT SHOW.
+ *
+ * Asserted rather than left to the component, because the obvious future
+ * edit is to pass `countdown` through for consistency with the live accepted
+ * screen — and consistency is the wrong reason to put an unreadable number
+ * on a photograph. The measurement is the argument, so the measurement is
+ * the test.
+ */
+describe("the counter after the deadline", () => {
+  it("is not shown, because it could not be read here", () => {
+    const { container } = renderClosed({ attending: true });
+
+    expect(
+      container.querySelector('[data-testid="countdown-figures"]'),
+    ).toBeNull();
+  });
+
+  /**
+   * AND THIS IS WHY — the number, kept where a reader will meet it.
+   *
+   * The figures are full cream and the ground is #A6A57D. When the counter
+   * gains a ground of its own this goes red, which is the signal to delete
+   * it and let the counter back onto this screen.
+   */
+  it("would be under the floor if it were", () => {
+    expect(
+      contrastRatio("rgba(246, 239, 226, 1)", BRIGHTEST_UNDER_A_COUNTDOWN),
+    ).toBeLessThan(WCAG_AA_NORMAL_TEXT);
   });
 });

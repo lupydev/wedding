@@ -201,6 +201,18 @@ declined screen given the language `/transmision` already uses.
       been sitting on the brightest pixel in the photograph at `bg-black/25`
       since U34, and prose had recorded it as fine.
 
+- [x] **U42 — the confirmation stopped reading like a spec sheet.** The
+      couple asked for the countdown and said the page "se ve muy diferente a
+      las demas y se ve un poco fea"; the cause was the label-over-value
+      pairs, so the day, the hour and the dress code are said in the
+      announcement's own line now, with its hairline and its counter closing
+      the block exactly as they close the other three. It cost 31 pixels and
+      the screen had 242 of empty middle, so every case is still 1.00.
+      Re-sampling lifted the shared line to full cream and found an older,
+      wider defect: the counter has no ground and its labels are 2.6:1 on the
+      live screen, its figures 2.2:1 after the deadline — so it is not shown
+      there, with the number asserted beside the absence.
+
 - [x] **U41 — the calendar file is back, with two alarms, and the entry
       knows who it is for.** The `.ics` the couple deleted returns as their
       own experiment — "probemos qué sucede en un android e iphone" —
@@ -3924,8 +3936,123 @@ unchanged and environmental: the local Supabase is past PostgREST's unpaged
 find a seeded operator, and 114 console tests do not run behind it. Nothing
 here reset it.
 
+### U42 — done (the confirmation stopped reading like a spec sheet)
+
+**WHAT WAS ASKED, AND THE COUPLE DIAGNOSED IT THEMSELVES.** "Importante que en
+la ultima pagina de afirmacion tambien tenga la cuenta regresiva, siento que
+esa pagina se ve muy diferente a las demas y se ve un poco fea."
+
+They asked for a countdown and they were right about the cause, which was not
+only the countdown's absence. The gate, the question and the list of who is
+coming all open the same way: script line, the couple's names, one quiet line
+of spaced caps, a hairline, the counter. The confirmation opened with
+
+    CUÁNDO
+    sábado, 28 de noviembre de 2026, 5:00 p. m.
+    CÓDIGO DE VESTIMENTA
+    Formal elegante
+
+— label over value, twice. Same facts, different voice: a spec sheet where
+every other screen is an invitation. **Adding a countdown under that would
+have left a spec sheet with a countdown under it**, so the block was rebuilt
+in the announcement's own line and the counter closes it the way it closes the
+other three.
+
+| was                                 | is                                                          |
+| ----------------------------------- | ----------------------------------------------------------- |
+| `dl` with two `dt`/`dd` pairs, 88px | two lines of spaced caps, a hairline and the counter, 119px |
+| `CUÁNDO` / value                    | `SÁBADO, 28 DE NOVIEMBRE DE 2026`                           |
+| `CÓDIGO DE VESTIMENTA` / value      | `5:00 P. M. · FORMAL ELEGANTE`                              |
+
+All three facts the couple named — the day, the hour, the dress code — are
+still there. What went is two label lines that said in small caps what the
+values say plainly.
+
+**REUSED, NOT RESTATED.** `SaveTheDate` now exports `ANNOUNCEMENT_LINE` and
+`ANNOUNCEMENT_RULE` and uses them itself, so the setting has one definition
+and tuning the landing's type tunes the confirmation with it. The counter is
+the landing's own `Countdown`, ticking to the same instant rather than to a
+second reading of the same date.
+
+**THE CONSTRAINT DID NOT BIND, AND THE MEASUREMENT IS WHY WE KNOW.** The brief
+expected a fight for space: this screen carries the most of any and measures
+1.00. It measures 1.00 because the content is 422 pixels and the layout is
+`justify-between` — there were **242 pixels of empty middle** on an iPhone 14
+before this change, which is what U37's two-groups-at-the-two-ends design
+bought. The block grew from 88 to 119 and the middle absorbed it.
+
+| device          | one person | four people |
+| --------------- | ---------- | ----------- |
+| iPhone 14 (664) | 664        | 664         |
+| Pixel 7 (839)   | 839        | 839         |
+
+Nothing was tightened, no control dropped, no target shrunk. The attendees
+screen's `CHOSEN_OVERFLOW` was not touched.
+
+**AND THE RE-SAMPLE FOUND TWO THINGS, ONE OF WHICH IS OLDER AND WIDER THAN
+THIS SCREEN.**
+
+The new lines sit where the old pairs did not, so both fixtures moved —
+`#262620` and `#2E2F27` on the live screen, `#5C5E47` and `#63674E` on the
+closed one, which pushes the block a note lower. At the closed screen's
+position the shared line measured **4.23:1** at `/85`. It is full cream now:
+5.13:1 there, better everywhere else, and 85% versus 100% of this cream at
+12px is not a difference anybody sees.
+
+**THE COUNTER HAS NO GROUND, AND ON BRIGHT PHOTOGRAPH IT CANNOT BE READ.**
+This is not this unit's doing and it is not confined to this screen — the
+counter has never been measured anywhere:
+
+| where                        | element                 | measured   |
+| ---------------------------- | ----------------------- | ---------- |
+| accepted, live               | its labels at `/65`     | **2.62:1** |
+| accepted, live               | its figures, full cream | 5.34:1     |
+| accepted, after the deadline | its figures, full cream | **2.21:1** |
+
+The labels are 10px, so 4.5:1 applies, and **full cream on that ground is
+3.96:1** — there is no opacity that fixes it. The fix is a ground the counter
+does not have on any of the five screens that show it, which would change the
+landing, the gate, the question and the list of who is coming, none of which
+the couple asked to change. So:
+
+- the counter ships on the accepted screen, where the couple asked for it and
+  where it is no worse than on the four screens that already carry it;
+- it is NOT shown after the deadline, where it would be 2.21:1 —
+  `RsvpConfirmed` takes `countdown={false}` from `RsvpClosed`, the day and the
+  hour are stated immediately above it either way, and
+  `closed-legibility.spec.tsx` asserts both the absence and the number, so the
+  test goes red the day the counter gains a ground and can come back;
+- the defect itself is in **Next**, with its numbers, as a decision for the
+  couple rather than a restyling of five screens smuggled into a unit about
+  one.
+
+**GREEN.** `npm test` — 2,516 unit and component tests, 2,506 passing.
+`npm run typecheck`, `npm run lint` (0 errors, 8 warnings), `npm run
+format:check`, `npm run build`. `PORT=3100 npx playwright test` — 131 passed,
+all 96 guest-facing browser tests green across both phone projects and both
+clocks.
+
+**NOT GREEN.** Ten unit and seven browser failures, all environmental and all
+the same cause U40 and U41 record: the local Supabase is past PostgREST's
+unpaged 1000-row ceiling, `console-auth.spec.ts` cannot find a seeded
+operator, and 114 console tests do not run behind it. The unit count moves
+between ten and eleven between runs as the row counts shift. Nothing reset.
+
 ## Next
 
+- **The countdown has no ground, and on bright photograph it cannot be
+  read.** It has never been measured on any of the five screens that show it.
+  On the live accepted screen its labels are **2.62:1** at `/65`; after the
+  deadline its figures are **2.21:1** at full cream. The labels are 10px, so
+  the 4.5:1 floor applies and full cream only reaches 3.96:1 — **no opacity
+  fixes this**. The fix is a ground, or the same painted halo the gate's form
+  and the accepted screen's foot already use, and it would change the
+  landing, the gate, the question and the list of who is coming as well as
+  both accepted screens. U42 declined to restyle five screens inside a unit
+  about one: the counter ships where the couple asked for it and is withheld
+  from the one screen where it measured 2.2:1, with the number asserted in
+  `closed-legibility.spec.tsx` so the day it is fixed the test says so. **The
+  decision is theirs: a ground behind the counter, or leave it.**
 - **`CEREMONY_MINUTES = 60` is an assumption nobody has confirmed, and both
   calendar entries now state an end time from it.** `lib/domain/calendar-event.ts`
   has always said so — "the couple gave a start and nobody has said how long

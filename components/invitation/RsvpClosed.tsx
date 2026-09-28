@@ -141,7 +141,17 @@ export function RsvpClosed({
         </p>
 
         {state === "accepted" ? (
-          <RsvpConfirmed venueName={venue.name} calendar={calendar} />
+          <RsvpConfirmed
+            venueName={venue.name}
+            calendar={calendar}
+            /*
+              NO COUNTER HERE, AND IT IS MEASURED RATHER THAN CHOSEN. The
+              note above pushes this block into the gap between the two
+              scrims, where the counter's figures are 2.2:1 — unreadable, and
+              not fixable by opacity. `RsvpConfirmed` carries the numbers.
+            */
+            countdown={false}
+          />
         ) : (
           /*
             THE STREAM, FOR BOTH OF THE OTHER TWO, AND NO VENUE FOR EITHER.

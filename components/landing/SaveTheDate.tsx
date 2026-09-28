@@ -8,6 +8,42 @@ import {
 import { Countdown } from "./Countdown";
 
 /**
+ * THE QUIET LINE OF THIS ANNOUNCEMENT, EXPORTED BECAUSE A SECOND SCREEN
+ * SPEAKS IT NOW.
+ *
+ * The date line's setting: spaced small caps, the shadow every line on bare
+ * photograph carries, and a tracking that widens at `sm`. The couple looked
+ * at the accepted screen beside the other three and said it "se ve muy
+ * diferente a las demás y se ve un poco fea" — and the cause was not the
+ * facts on it but their FORM: label over value, twice, which reads as a spec
+ * sheet where every other screen reads as an invitation.
+ *
+ * So `RsvpConfirmed` says the day, the hour and the dress code in this
+ * setting instead. Exported rather than copied for the reason everything
+ * shared here is: two copies of a type scale drift the first time one page's
+ * type is tuned, and the whole complaint was that two pages did not match.
+ *
+ * The tracking is measured rather than chosen — see the note on the `<time>`
+ * below, which is why it is 0.18em on a phone and 0.25em above it.
+ *
+ * AND IT IS FULL CREAM, WHERE IT WAS `/85`. The accepted screen says these
+ * words lower down the photograph than the landing does, and lower again
+ * once the RSVP closes and a note pushes them: measured at
+ * `app/i/[slug]/closed-legibility.spec.tsx`'s position, `/85` is 4.23:1 —
+ * under the floor. Full cream is 5.13:1 there and better everywhere else,
+ * and the difference between 85% and 100% of this cream at 12px is not a
+ * difference anybody sees.
+ */
+export const ANNOUNCEMENT_LINE = `
+  text-xs tracking-[0.18em] text-[#f6efe2] uppercase
+  [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
+  sm:text-sm sm:tracking-[0.25em]
+`;
+
+/** And the hairline that closes it, before the countdown. */
+export const ANNOUNCEMENT_RULE = "block h-px w-16 bg-[#f6efe2]/30 sm:w-24";
+
+/**
  * Everything the landing page says, in one block.
  *
  * A SERVER COMPONENT THAT READS ITS FACTS RATHER THAN RECEIVING THEM.
@@ -113,11 +149,7 @@ export function SaveTheDate({
         <time
           dateTime={WEDDING_ISO_DAY}
           data-testid="save-the-date-when"
-          className="
-          text-xs tracking-[0.18em] text-[#f6efe2]/85 uppercase
-          [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]
-          sm:text-sm sm:tracking-[0.25em]
-        "
+          className={ANNOUNCEMENT_LINE}
         >
           {formatWeddingWeekday()}
           {", "}
@@ -125,10 +157,7 @@ export function SaveTheDate({
         </time>
       ) : null}
 
-      <span
-        aria-hidden="true"
-        className="block h-px w-16 bg-[#f6efe2]/30 sm:w-24"
-      />
+      <span aria-hidden="true" className={ANNOUNCEMENT_RULE} />
 
       <Countdown />
     </div>
