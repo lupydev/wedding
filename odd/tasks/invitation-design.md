@@ -4337,6 +4337,153 @@ It is NEWLY REACHABLE rather than newly broken — the baseline died in that
 file's `beforeAll` at `declareDevice` and tests 123 onward never ran. It is
 recorded in `## Next` with the evidence.
 
+### U45 — done (the counter left one screen, and the ceiling moved to three)
+
+**WHAT THE COUPLE SAW, ON A REAL PHONE RATHER THAN IN AN EMULATOR.** They
+opened the list of who is coming in Brave on an iPhone, with a three-person
+household, and `Enviar respuesta` was behind the browser chrome. Their
+instruction, after being given the arithmetic: **"sacalos solo cuando la
+invitacion es de 3 personas, porque con dos personas si se ve bien."**
+
+**THE ARITHMETIC THEY WERE GIVEN WAS EXTRAPOLATED, AND EVERY NUMBER IN IT WAS
+RE-MEASURED BEFORE ANYTHING WAS STYLED.** The estimate said three people were
+"about 70 pixels over"; the shipped build says **71**. Measured on a build of
+`c8f3739`, iPhone 14, 664 pixels, by rendering the real screen and then
+deleting the two elements from the live DOM — so the "after" column is a
+measurement of the proposal rather than a prediction about it:
+
+| household | announcement whole | over   | counter and rule gone | over |
+| --------- | ------------------ | ------ | --------------------- | ---- |
+| two       | 681                | 17     | 664                   | 0    |
+| three     | 735                | **71** | 664                   | 0    |
+| four      | 789                | 125    | 690                   | 26   |
+
+A Pixel 7 is 839 and fits every one of those six cases. The trim frees **98
+pixels**: the counter is 50 tall with a 24-pixel gap above it, the hairline 1
+with another 24. The estimate had said 74 and 25, which is the same 99 to
+within a rounding of the gap.
+
+**AND THE TWO-PERSON OVERFLOW IS REAL, WHICH THE COUPLE ARE ENTITLED TO
+KNOW.** U38 recorded 17 pixels there and they say it looks fine on a phone.
+Both are true, and the measurement says exactly why: "Volver a la pregunta"
+ends at **653** of a 664-pixel screen, and every one of the 17 overflowing
+pixels is the form's own bottom padding underneath it. Nothing a guest can
+read or press is off the screen; what the overflow buys them is a page that
+can be nudged 17 pixels. **They have chosen to keep the counter there and it
+costs a hair of scroll.** At three people the same arithmetic reads
+differently: the send button itself ended at 663 of 664 — flush against the
+fold in an emulator, and behind the chrome on the phone in their hand.
+
+**SO ONE SCREEN LOSES TWO ELEMENTS, AND ONLY ONE.** The gate, the question and
+the directions are untouched at every household size;
+`e2e/invitation-one-screen.spec.ts` has a test whose whole job is to say the
+question still has its counter at the size where the list has lost it,
+because a change that took it off both would leave every other assertion
+green.
+
+**HOW IT IS WIRED, AND WHY IT IS TWO SLOTS RATHER THAN A FLAG.** Three facts
+have to meet and they live in three places: the household's SIZE is known to
+the route, WHICH SCREEN is showing is client state inside `RsvpAnswer`, and
+the announcement is a Server Component tree with a live countdown in it that
+cannot be composed on the client at all. So the route builds both renderings
+for the household it already knows and hands them down as two slots;
+`RsvpAnswer` picks by step and knows no numbers. `attendeesAnnouncement`
+falls back to `announcement`, so a two-person household and every existing
+caller — the console preview, the legibility fixtures — keep exactly what
+they had.
+
+`SaveTheDate` grew `showCountdown`, beside the `showDate` it already had. One
+prop for both elements rather than two, because the hairline exists to close
+the date line and introduce the counter: with no counter it separates
+something from nothing, and a second prop would only make that state
+expressible.
+
+**THE THRESHOLD IS ONE NAMED PLACE AND IT IS `>=`, NOT `=== 3`.**
+`attendeesScreenFitsCountdown` in `InvitationAnnouncement.tsx`, with
+`HOUSEHOLD_THAT_CROWDS_THE_LIST = 3` beside it and the measured table in its
+comment. Three is now the ceiling — "las invitaciones a la final van a ser 3
+personas como maximo", down from the four U38 was built around — but nothing
+enforces any ceiling, so an equality would hand the whole announcement back
+to the one size with least room for it. A four-person list is 789 pixels
+whole and 690 shortened; the threshold is wrong in the safe direction and
+costs nothing.
+
+**THE GUARD'S CASES MOVED DOWN WITH THE CEILING.** Its fixtures were one,
+two, four and a five-person canary; they are now **one, two, three, and a
+four-person canary** — one above whatever the ceiling is, so it measures the
+first size that actually breaks. Every generic case (the gate, the question,
+the directions, the stream) now seeds three rather than four, because three
+is the tallest screen this product is supposed to be able to draw.
+
+**`CHOSEN_OVERFLOW` DID NOT DIE, AND SAYING WHY IS THE POINT.** It held three
+entries asserting a deliberate overflow the couple accepted while they
+decided. They have decided, so the three-person case went back to
+`expectOneScreen` and is held to 1.00 like every other step. Two entries
+survive and they are **not the same kind of thing**, which the table now says
+in as many words:
+
+- **two, 17 pixels** — a price the couple knowingly paid to keep the counter.
+- **four, 26 pixels** — not a choice at all. It is the canary, already
+  wearing the shortened announcement, and it is what the first household past
+  an unenforced ceiling would get. 26 rather than the 125 it was.
+
+A Pixel 7 now has no entry at all: every size fits it, canary included.
+
+**CONTRAST RE-SAMPLED, AND THIS TIME NOTHING MOVED — WHICH IS ITSELF THE
+FINDING.** Shortening the announcement pulls the card UP into frame nobody
+had covered before: 60%–95% at two people becomes 49%–92% at three and
+45%–96% at four. The previous three re-samples each came back harsher than
+the one before, so this one was measured on the shipped build at both phone
+presets rather than reasoned about.
+
+| card                       | band, iPhone 14 | worst pixel       |
+| -------------------------- | --------------- | ----------------- |
+| two people, counter kept   | 60%–95%         | `#FFFDF4` (0.980) |
+| three people, counter gone | 49%–92%         | `#FAF8EF` (0.937) |
+| four people (canary)       | 45%–96%         | `#FFFDF4` (0.980) |
+
+`BRIGHTEST_UNDER_THE_CARD` is unchanged at **#FFFDF4**: the higher edge the
+shortened card reaches is the dark green above Michell, and the lit edge of
+her dress is still the worst thing under any card. The refusal's slot moved
+with the card and got DARKER at every size — #FEF3BB at two, #B4B587 at
+three, #A4A780 at four — and is still held to the harsher constant. "Volver a
+la pregunta" climbed from 96%–98% to 93%–96% and measures #030305 there,
+far under `BRIGHTEST_AT_THE_FOOT`. A Pixel 7 is kinder at every size. All of
+that is written into `step-legibility.spec.tsx` although no constant changed,
+because "re-sampled and unchanged" and "never looked" are indistinguishable
+from a green test.
+
+**THE SAMPLING METHOD PROVED ITSELF BEFORE IT WAS TRUSTED.** It reproduced
+the recorded fixture exactly — #FFFDF4, 0.9804, two people, iPhone 14, card
+at 60%–95% — which is the number `step-legibility.spec.tsx` already held from
+U38. A method that cannot re-derive the last measurement has no business
+producing the next one.
+
+**RED, QUOTED.** Written first and observed failing:
+
+    × can be asked for the announcement without its counter
+    expected element not to be in the document
+
+    × keeps the counter for the sizes that have room for it
+    TypeError: attendeesScreenFitsCountdown is not a function
+
+    × shows the list the shorter announcement when it is given one
+    TestingLibraryElementError: Unable to find an element with the text:
+    Nos casamos, Ana y Bruno — sin reloj
+
+**GREEN.** `npm test` — 2,543 passed, 128 files, 15.4s (2,535 at `c8f3739`,
+plus 8). `npm run typecheck`. `npm run lint` — 0 errors, 8 warnings, the same
+eight in files this unit did not touch. `npm run format:check` — clean.
+`npm run build`. `PORT=3100 npx playwright test` — **245 passed, 1 failed, 8
+did not run** (243 passed at the baseline, plus the 2 new counter assertions,
+one per phone project). All 28 geometry assertions green on both phones.
+
+**THE ONE FAILURE IS THE SAME ONE AND IT IS STILL THE ONLY ONE.**
+`console-wedding.spec.ts:226` — the gate unlock that answers 200 with
+`x-action-redirect` and never navigates. Not this unit's, unchanged by it,
+and already in `## Next` as a Next 16.3.4 `redirect()`-in-`useActionState`
+question.
+
 ## Next
 
 - **The countdown has no ground, and on bright photograph it cannot be
@@ -4414,35 +4561,32 @@ recorded in `## Next` with the evidence.
   against ~200 households, so U44 judged it distant and left it, because
   paging it adds a round trip per batch to the console's slowest read. If
   `dispatch_events` ever grows an automatic writer, this stops being distant.
-- **The screen that asks who is coming does not fit an iPhone 14, by
-  choice, and the couple owe it a decision.** The announcement is back at its
-  top with the list at the foot, which is what they asked for and why: "sin
-  importar que se lleguen a tapar las dos personas de la foto, porque sino
-  despues de aceptar esa pagina de escoger las personas se ve extraña." It
-  overflows by **17 pixels at two people, 125 at four — their stated ceiling
-  — and 179 at five**; a Pixel 7 fits every case but five, and only misses
-  that by four. They were given those numbers before it was built and
-  answered "no saques nada todavia haz los cambios y yo creo una invitacion
-  de 4 personas para ver como queda", so nothing was trimmed. What is on the
-  table, each measured: the countdown frees 74 pixels, the greeting 70, "Nos
-  casamos" 60, the date 40, the hairline rule 25 — **any two of the first
-  three clear four people**. Until they choose, `CHOSEN_OVERFLOW` in
-  `e2e/invitation-one-screen.spec.ts` asserts the measured overflow within
-  six pixels in both directions, so the suite stays green, the real number
-  stays visible, and it goes red the moment the screen grows OR shrinks.
-  **When they decide, delete that table and put those three cases back on
-  `expectOneScreen`.** U38 has the full arithmetic.
-- **Nothing in this product enforces "el máximo de personas por invitación es
-  de 4".** Not the schema (`invitation_guests` has no row-count constraint and
-  no counting trigger; the only column that ever carried an upper bound was
-  dropped by 0013), not the console (`DraftRefusal` has no code for "too many
-  members", so there is nothing an operator could be shown), and not the
-  importer (`scripts/import-guests.ts` counts members for its report and
-  bounds nothing). Until something does, a layout tuned to four breaks
-  silently the first time somebody adds a fifth — so the geometry guard keeps
-  a five-person fixture as a canary, and the rule itself is a product decision
-  with a migration and a console message behind it, not something to invent
-  here.
+- **A two-person invitation still overflows an iPhone 14 by 17 pixels, and
+  the couple chose that knowingly.** U45 closed the decision this entry used
+  to be waiting for: the counter and the hairline leave the list of who is
+  coming for households of three or more, three now fits, and the four-person
+  canary is 26 over instead of 125. What remains is the size they kept the
+  counter on. **The 17 pixels are real** — the document is 681 tall on a
+  664-pixel screen — and they are all the form's own bottom padding: "Volver
+  a la pregunta" ends at 653, so nothing is hidden and nothing is out of
+  reach. The page can be nudged, which is the whole cost, and it is the
+  couple's to reverse: one call to `attendeesScreenFitsCountdown` decides it,
+  and dropping the threshold to two would take the counter off that screen as
+  well and make it 1.00. **Recorded rather than fixed, because they were
+  explicit: "con dos personas si se ve bien."**
+- **Nothing in this product enforces "las invitaciones a la final van a ser 3
+  personas como maximo".** Not the schema (`invitation_guests` has no
+  row-count constraint and no counting trigger; the only column that ever
+  carried an upper bound was dropped by 0013), not the console
+  (`DraftRefusal` has no code for "too many members", so there is nothing an
+  operator could be shown), and not the importer
+  (`scripts/import-guests.ts` counts members for its report and bounds
+  nothing). The ceiling moved from four to three at U45 and nothing about
+  that is enforced either. Until something does, a layout tuned to three
+  breaks silently the first time somebody adds a fourth — so the geometry
+  guard keeps a **four-person** fixture as a canary, one above whatever the
+  ceiling is, and the rule itself is a product decision with a migration and
+  a console message behind it, not something to invent here.
 - **A household that declines, reconsiders, and is then refused reaches 680
   pixels on an iPhone 14** — 16 over. It is the only state carrying both the
   line naming the current answer and a two-line refusal in a 40-pixel slot.

@@ -78,6 +78,7 @@ function renderForm(
     current?: RsvpAnswerCurrent | null;
     ceremony?: CeremonyStreamDetails;
     announcement?: React.ReactNode;
+    attendeesAnnouncement?: React.ReactNode;
   } = {},
 ) {
   const action = options.action ?? actionReturning({ status: "recorded" });
@@ -86,6 +87,7 @@ function renderForm(
     <RsvpAnswer
       action={action}
       announcement={options.announcement ?? <p>{ANNOUNCEMENT}</p>}
+      attendeesAnnouncement={options.attendeesAnnouncement}
       guests={options.guests ?? GUESTS}
       greetingName={options.greetingName ?? GREETING_NAME}
       current={options.current ?? null}
@@ -115,6 +117,17 @@ const GREETING_NAME = "Familia Aguirre";
  * SCREEN it appears on, so the fixture is a sentence that is easy to look for.
  */
 const ANNOUNCEMENT = "Nos casamos, Ana y Bruno";
+
+/**
+ * And the SHORTER one, which only the screen that asks who is coming may show.
+ *
+ * The route builds two blocks and hands both down, because which screen is
+ * showing is state only this component holds. A distinct sentence rather than
+ * a subset of the first, so an assertion cannot pass by finding the wrong
+ * block: the couple's instruction is that the question screen keeps the
+ * counter and only the list loses it.
+ */
+const SHORT_ANNOUNCEMENT = "Nos casamos, Ana y Bruno — sin reloj";
 
 /** The way back from a recorded answer, on either ending. */
 function reconsiderButton() {
@@ -1524,6 +1537,51 @@ describe("what each screen carries, and what it refuses to", () => {
 
     expect(screen.getByText(ANNOUNCEMENT)).toBeInTheDocument();
     expect(attendeeBoxes()).toHaveLength(GUESTS.length);
+  });
+
+  /**
+   * AND THE LIST MAY BE HANDED A SHORTER ANNOUNCEMENT THAN THE QUESTION'S.
+   *
+   * The couple found `Enviar respuesta` behind the browser chrome on a real
+   * iPhone with a three-person invitation, and asked for the counter and the
+   * hairline to go from that screen alone: "sacalos solo cuando la invitación
+   * es de 3 personas, porque con dos personas sí se ve bien."
+   *
+   * WHY THIS COMPONENT TAKES TWO SLOTS RATHER THAN DECIDING. The announcement
+   * is a Server Component tree with a live countdown in it, so it cannot be
+   * composed on this side of the client boundary — and which screen is
+   * showing is state only this side holds. The route therefore builds both
+   * blocks for the household it already knows the size of, and this component
+   * chooses between them by STEP. `InvitationAnnouncement` holds the size
+   * threshold; nothing here knows the number three.
+   */
+  it("shows the list the shorter announcement when it is given one", async () => {
+    renderForm({ attendeesAnnouncement: <p>{SHORT_ANNOUNCEMENT}</p> });
+
+    expect(screen.getByText(ANNOUNCEMENT)).toBeInTheDocument();
+    expect(screen.queryByText(SHORT_ANNOUNCEMENT)).not.toBeInTheDocument();
+
+    await userEvent.click(acceptButton());
+
+    expect(screen.getByText(SHORT_ANNOUNCEMENT)).toBeInTheDocument();
+    expect(screen.queryByText(ANNOUNCEMENT)).not.toBeInTheDocument();
+  });
+
+  /**
+   * AND WHEN IT IS NOT, THE LIST KEEPS THE QUESTION'S OWN BLOCK.
+   *
+   * Two guests get exactly what they got before this change, and so does
+   * every caller that passes one announcement — the console preview builds no
+   * form at all, and the legibility fixtures pass a single stand-in. A second
+   * slot that silently blanked the screen for them would be a worse bug than
+   * the one this fixes.
+   */
+  it("falls back to the question's announcement when given only one", async () => {
+    renderForm();
+
+    await userEvent.click(acceptButton());
+
+    expect(screen.getByText(ANNOUNCEMENT)).toBeInTheDocument();
   });
 
   it("does not repeat the announcement on the directions", async () => {

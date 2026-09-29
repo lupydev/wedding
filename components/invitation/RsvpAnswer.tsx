@@ -340,6 +340,7 @@ export function RsvpAnswer({
   venue,
   calendar,
   announcement,
+  attendeesAnnouncement,
   action,
 }: {
   readonly guests: readonly RsvpAnswerGuest[];
@@ -397,6 +398,30 @@ export function RsvpAnswer({
    * caller that wants only the question should not have to invent one.
    */
   readonly announcement?: ReactNode;
+  /**
+   * The same announcement, as the LIST of who is coming should show it.
+   *
+   * WHY THERE ARE TWO SLOTS AND NOT ONE PROP SAYING "SHORTER". The couple
+   * found `Enviar respuesta` behind the browser chrome on a three-person
+   * invitation and asked for the counter and the hairline to leave that
+   * screen alone: "sacalos solo cuando la invitación es de 3 personas, porque
+   * con dos personas sí se ve bien." Two things have to meet for that, and
+   * they live on opposite sides of the client boundary — the household's size
+   * is known to the route, and WHICH SCREEN is showing is state only this
+   * component holds. The announcement is a Server Component tree with a live
+   * countdown in it, so it cannot be built here either way.
+   *
+   * So the route builds both blocks for the household it already knows, and
+   * this component picks by step. Nothing here knows the size threshold;
+   * `InvitationAnnouncement` does.
+   *
+   * OPTIONAL, AND IT FALLS BACK TO `announcement`. A household of two is
+   * handed the same block on both screens, which is the couple's own
+   * decision; and the callers that pass one announcement — the legibility
+   * fixtures — keep the behaviour they had. A required prop would have made
+   * "no second block" unsayable, and a missing one would blank the screen.
+   */
+  readonly attendeesAnnouncement?: ReactNode;
   readonly action: RsvpAnswerAction;
 }) {
   const [feedback, submit, pending] = useActionState(action, IDLE);
@@ -966,19 +991,30 @@ export function RsvpAnswer({
               above, the card below it, and one small line beneath the card —
               the deadline on the question, the way back here.
 
-              IT DOES NOT FIT, AND THAT IS A CHOICE RATHER THAN AN OVERSIGHT.
-              A four-person list plus the whole announcement is 124 pixels
-              past an iPhone 14, measured. The couple were given the number
-              and the list of what could be trimmed to close it — the
-              countdown is 74, the greeting 70, "Nos casamos" 60, the date
-              40, the rule 25 — and answered: "no saques nada todavia haz los
-              cambios y yo creo una invitacion de 4 personas para ver como
-              queda." They want to see it before they cut anything.
-              `e2e/invitation-one-screen.spec.ts` asserts the measured
-              overflow rather than pretending it fits, and U38 in
-              `odd/tasks/invitation-design.md` records what is owed.
+              AND THIS IS WHERE THE COUPLE SPENT THE PIXELS, ONE UNIT LATER.
+              U38 shipped the whole announcement here and it did not fit: 124
+              pixels past an iPhone 14 at four people, 71 at three. They were
+              given the list of what could be trimmed — the countdown 74, the
+              greeting 70, "Nos casamos" 60, the date 40, the rule 25 — and
+              asked to see it first: "no saques nada todavia haz los cambios
+              y yo creo una invitacion de 4 personas para ver como queda."
+              They then read it on a real iPhone and chose: "sacalos solo
+              cuando la invitación es de 3 personas, porque con dos personas
+              sí se ve bien."
+
+              SO THIS SCREEN — AND ONLY THIS SCREEN — MAY BE HANDED A SHORTER
+              BLOCK. The question keeps the whole announcement at every size,
+              and so do the gate and the directions. Which households get the
+              shorter one is `attendeesScreenFitsCountdown` in
+              `InvitationAnnouncement`, decided by the route because the size
+              is known there; what is decided HERE is only that this is the
+              screen it applies to.
+
+              A household of two is handed the same block on both screens, so
+              `attendeesAnnouncement` falls back to `announcement` rather
+              than the route passing the same node twice.
             */}
-            {announcement}
+            {attendeesAnnouncement ?? announcement}
 
             {/*
               THE SLOT, THE CARD AND THE WAY BACK, AS ONE GROUP AT THE FOOT.

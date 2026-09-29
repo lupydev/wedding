@@ -45,10 +45,11 @@ const PHONE = "+573005551111";
 /**
  * THE SIZES THIS GUARD MEASURES, AND WHY THEY ARE THESE FOUR.
  *
- * "El máximo de personas por invitación es de 4" — the couple. One person is
- * the flow with no attendee screen at all, two is the smallest household that
- * has one, and FOUR is the stated ceiling and therefore the tallest screen
- * this product is supposed to be able to draw.
+ * "Las invitaciones a la final van a ser 3 personas como máximo" — the
+ * couple, moving their own ceiling down from the four this file used to be
+ * built around. One person is the flow with no attendee screen at all, two is
+ * the smallest household that has one, and THREE is the stated ceiling and
+ * therefore the tallest screen this product is supposed to be able to draw.
  *
  * The screen that asks who is coming grows with the household — 54 pixels per
  * member, measured — so it is the only step whose height is not fixed, and a
@@ -72,22 +73,21 @@ function householdOfTwo() {
   });
 }
 
-function householdOfFour() {
+function householdOfThree() {
   return seedInvitation({
     greetingName: "Familia Aguirre",
     guests: [
       { fullName: "Camila Aguirre Vélez", phoneE164: PHONE },
       { fullName: "Rodrigo Aguirre Peña" },
       { fullName: "Sara Aguirre", isChild: true },
-      { fullName: "Tomás Aguirre Mesa", isChild: true },
     ],
   });
 }
 
 /**
- * AND A FIFTH PERSON, WHICH NOTHING IN THIS PRODUCT PREVENTS.
+ * AND A FOURTH PERSON, WHICH NOTHING IN THIS PRODUCT PREVENTS.
  *
- * The ceiling of four is the couple's own statement about their list, not a
+ * The ceiling of three is the couple's own statement about their list, not a
  * rule the software holds them to. Checked rather than assumed, and nothing
  * enforces it anywhere:
  *
@@ -101,11 +101,15 @@ function householdOfFour() {
  *  - The importer does not count. `scripts/import-guests.ts` sums members for
  *    its report and bounds nothing.
  *
- * So a layout tuned to exactly four is a layout that breaks silently the
- * first time somebody adds a fifth, and this fixture is the canary that says
+ * So a layout tuned to exactly three is a layout that breaks silently the
+ * first time somebody adds a fourth, and this fixture is the canary that says
  * so before a guest does. It stays until something enforces the ceiling.
+ *
+ * IT WAS A FIVE-PERSON FIXTURE UNTIL THE COUPLE MOVED THE CEILING. One above
+ * whatever the ceiling is, so the canary measures the first size that breaks
+ * rather than a size nobody would ever enter.
  */
-function householdOfFive() {
+function householdOfFour() {
   return seedInvitation({
     greetingName: "Familia Restrepo",
     guests: [
@@ -113,7 +117,6 @@ function householdOfFive() {
       { fullName: "Julián Restrepo Ossa" },
       { fullName: "Valentina Restrepo Mesa" },
       { fullName: "Tomás Restrepo Mesa", isChild: true },
-      { fullName: "Emilia Restrepo Mesa", isChild: true },
     ],
   });
 }
@@ -176,44 +179,54 @@ async function expectOneScreen(
 }
 
 /**
- * THE ONE SCREEN THAT DOES NOT FIT, MEASURED RATHER THAN EXCUSED.
+ * WHAT STILL DOES NOT FIT NOW THAT THE COUPLE HAVE CHOSEN, MEASURED RATHER
+ * THAN EXCUSED.
  *
- * The couple asked for the announcement back at the top of the screen that
- * asks who is coming, with the list at the foot: "sin importar que se lleguen
- * a tapar las dos personas de la foto, porque sino despues de aceptar esa
- * pagina de escoger las personas se ve extraña." It does not fit, they were
- * given the number before it was built, and they chose to see it: "no saques
- * nada todavia haz los cambios y yo creo una invitacion de 4 personas para
- * ver como queda."
+ * THE DECISION THIS TABLE USED TO BE WAITING FOR HAS BEEN MADE. U38 shipped
+ * the whole announcement on the screen that asks who is coming — "sin
+ * importar que se lleguen a tapar las dos personas de la foto" — and it
+ * overflowed at every size: 17 pixels at two, 71 at three, 125 at four. The
+ * couple asked to see it before cutting anything, read it on a real iPhone
+ * with a three-person household, and answered: "sacalos solo cuando la
+ * invitación es de 3 personas, porque con dos personas sí se ve bien." So the
+ * counter and the hairline leave the LIST — and only the list — for
+ * households of three or more, and three now fits and is held to 1.00 like
+ * every other step.
  *
- * SO THIS TABLE IS A TEMPORARY, CHOSEN STATE — NOT A TOLERANCE. Every other
- * step at every household size is still held to 1.00, and so is this one on
- * the phone where it fits. Where it does not, the assertion is the MEASURED
- * height, which is a stronger claim than skipping it: it fails if the
- * overflow grows, and it fails if the overflow goes away, because either way
- * the number written here has stopped being true and somebody has to look.
+ * TWO ENTRIES SURVIVE, AND THEY ARE NOT THE SAME KIND OF THING.
+ *
+ *  - TWO IS A PRICE THE COUPLE KNOWINGLY PAID. They kept the counter there,
+ *    and it costs 17 pixels — every one of them the form's own bottom
+ *    padding below "Volver a la pregunta", which ends at 653 of a 664-pixel
+ *    screen. Nothing is hidden and nothing is out of reach; the page can be
+ *    nudged. That is why they are right that it "se ve bien", and it is
+ *    still an overflow, so it is still written down.
+ *  - FOUR IS NOT A CHOICE AT ALL. It is the canary: nothing in the schema,
+ *    the console or the importer enforces the ceiling of three, and this is
+ *    what the first household past it would get — 26 pixels over WITH the
+ *    shorter announcement it is handed, against 125 without.
+ *
+ * Where a number stands, the assertion is the MEASURED height, which is a
+ * stronger claim than skipping it: it fails if the overflow grows, and it
+ * fails if the overflow goes away, because either way the number written
+ * here has stopped being true and somebody has to look.
  *
  * The three reactions this exists to avoid: leaving the suite red until
  * nobody reads it, deleting the cases so they quietly pass, and a `skip` with
  * no number that rots into "forgotten".
  *
- * WHEN THE COUPLE CHOOSE WHAT TO TRIM, THIS TABLE GOES and the three cases
- * below go back to `expectOneScreen`. U38 in `odd/tasks/invitation-design.md`
- * holds the candidates and what each one frees: the countdown 74 pixels, the
- * greeting 70, "Nos casamos" 60, the date 40, the rule 25. Any two of the
- * first three clear a four-person list on an iPhone 14.
- *
  * Keyed by `window.innerHeight` because the two phone projects run the same
- * file: 664 is an iPhone 14, 839 a Pixel 7. A missing entry means 1.00.
+ * file: 664 is an iPhone 14, 839 a Pixel 7. A missing entry means 1.00, and
+ * a Pixel 7 now has no entry at all: every size fits it, including the
+ * canary.
  */
 const CHOSEN_OVERFLOW: Record<string, Record<number, number>> = {
-  // A household of two is 17 pixels over on an iPhone 14 and fits a Pixel 7.
+  // Two keeps the counter, and the 17 pixels are empty padding below the
+  // last control. The couple chose this with the number in front of them.
   "attendees (2)": { 664: 17 },
-  // Four is the couple's stated ceiling, and the case they asked to see.
-  "attendees (4)": { 664: 125 },
-  // Five is the canary: nothing enforces four. It is the only case that
-  // overflows a Pixel 7 as well, and only just.
-  "attendees (5)": { 664: 179, 839: 4 },
+  // Four is the canary, already wearing the shorter announcement: nothing
+  // enforces the ceiling of three.
+  "attendees (4)": { 664: 26 },
 };
 
 /**
@@ -256,15 +269,15 @@ async function expectChosenHeight(
 
   expect(
     over,
-    `${step}: this screen is meant to overflow by ${chosen}px until the couple ` +
-      `choose what to trim, and it now overflows by ${over}px. If that is ` +
-      "worse, something grew that nobody asked for; if it is better, update " +
-      "the number in CHOSEN_OVERFLOW or, if it now fits, move this case back " +
-      "to expectOneScreen and delete its entry.",
+    `${step}: this screen is measured to overflow by ${chosen}px, and it now ` +
+      `overflows by ${over}px. If that is worse, something grew that nobody ` +
+      "asked for; if it is better, update the number in CHOSEN_OVERFLOW or, " +
+      "if it now fits, move this case back to expectOneScreen and delete its " +
+      "entry.",
   ).toBeGreaterThanOrEqual(chosen - OVERFLOW_TOLERANCE);
   expect(
     over,
-    `${step}: this screen is meant to overflow by ${chosen}px and now overflows by ${over}px`,
+    `${step}: this screen is measured to overflow by ${chosen}px and now overflows by ${over}px`,
   ).toBeLessThanOrEqual(chosen + OVERFLOW_TOLERANCE);
 
   // AND THE CONTROL IS STILL REACHABLE, which is the assertion that cannot be
@@ -302,7 +315,7 @@ test.afterEach(async () => {
 
 test.describe("the invitation, one screen at a time", () => {
   test("the gate fits, with the way in on the screen", async ({ page }) => {
-    fixture = await householdOfFour();
+    fixture = await householdOfThree();
 
     await page.goto(`/i/${fixture.slug}`);
     await expect(page.locator("section.gate")).toBeVisible();
@@ -338,7 +351,7 @@ test.describe("the invitation, one screen at a time", () => {
   test("the question fits, with both answers and the deadline on it", async ({
     page,
   }) => {
-    fixture = await householdOfFour();
+    fixture = await householdOfThree();
     await unlock(page, fixture);
 
     await expectOneScreen(
@@ -396,7 +409,7 @@ test.describe("the invitation, one screen at a time", () => {
   test("the question wears the gate's card, pushed down to the deadline", async ({
     page,
   }) => {
-    fixture = await householdOfFour();
+    fixture = await householdOfThree();
 
     // The gate first, since it is the reference the couple named.
     await page.goto(`/i/${fixture.slug}`);
@@ -458,19 +471,27 @@ test.describe("the invitation, one screen at a time", () => {
     expect(slot.height).toBeGreaterThanOrEqual(40);
   });
 
-  test("who is coming fits, for a household of four — the stated ceiling", async ({
+  test("who is coming fits, for a household of three — the stated ceiling", async ({
     page,
   }) => {
-    fixture = await householdOfFour();
+    fixture = await householdOfThree();
     await unlock(page, fixture);
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
 
     await expect(
       page.getByRole("group", { name: /Quiénes asisten/ }),
     ).toBeVisible();
-    await expectChosenHeight(
+    /*
+      HELD TO 1.00 AGAIN, WHICH IS WHAT THIS UNIT BOUGHT.
+
+      It was `expectChosenHeight` with 125 pixels of chosen overflow while
+      this case was a household of four, and 71 when it became three. The
+      couple chose what to trim and this screen fits: `expectOneScreen`, the
+      same claim every other step makes.
+    */
+    await expectOneScreen(
       page,
-      "attendees (4)",
+      "attendees (3)",
       page.getByRole("button", { name: "Enviar respuesta" }),
     );
 
@@ -502,6 +523,44 @@ test.describe("the invitation, one screen at a time", () => {
     // Against the card, not at the foot of the screen: the same gap the
     // deadline keeps from the question's card.
     expect(back.y - (card.y + card.height)).toBeLessThanOrEqual(16);
+
+    /*
+      AND THE COUNTER IS OFF THIS SCREEN, WHICH IS THE WHOLE OF THE TRIM.
+
+      "Sacalos solo cuando la invitación es de 3 personas." The hairline goes
+      with it, because it exists to introduce the counter. Asserted on the
+      screen rather than only in `InvitationAnnouncement.spec.tsx`, because
+      what a unit test can prove is that the block CAN be rendered short —
+      only a real viewport can prove the route handed the short one to this
+      step and the whole one to the step before it.
+    */
+    await expect(page.getByTestId("countdown-figures")).toHaveCount(0);
+    await expect(
+      page.locator(".invitation__announcement span[aria-hidden='true']"),
+    ).toHaveCount(0);
+    // Everything that states a fact is still here.
+    await expect(page.getByText("Nos casamos")).toBeVisible();
+    await expect(page.getByTestId("save-the-date-when")).toBeVisible();
+  });
+
+  /**
+   * AND THE SCREEN ONE TAP EARLIER KEEPS IT, WHICH IS THE OTHER HALF OF THE
+   * COUPLE'S INSTRUCTION.
+   *
+   * The trim is the list's alone. A change that took the counter off the
+   * question as well would leave every assertion above green — this is the
+   * only place that would say so.
+   */
+  test("the question keeps its counter, at the size the list loses it", async ({
+    page,
+  }) => {
+    fixture = await householdOfThree();
+    await unlock(page, fixture);
+
+    await expect(page.getByTestId("countdown-figures")).toBeVisible();
+    await expect(
+      page.locator(".invitation__announcement span[aria-hidden='true']"),
+    ).toHaveCount(1);
   });
 
   test("who is coming fits, for a household of two", async ({ page }) => {
@@ -515,19 +574,27 @@ test.describe("the invitation, one screen at a time", () => {
       "attendees (2)",
       page.getByRole("button", { name: "Enviar respuesta" }),
     );
+
+    /*
+      AND THIS ONE KEEPS THE COUNTER, WHICH IS THE COUPLE'S OWN LINE.
+
+      "Con dos personas sí se ve bien." The 17 pixels in CHOSEN_OVERFLOW are
+      what that costs, and they are all empty padding below the last control.
+    */
+    await expect(page.getByTestId("countdown-figures")).toBeVisible();
   });
 
-  test("who is coming fits, for a household of five — the canary", async ({
+  test("who is coming fits, for a household of four — the canary", async ({
     page,
   }) => {
-    fixture = await householdOfFive();
+    fixture = await householdOfFour();
     await unlock(page, fixture);
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
 
-    await expect(page.getByRole("checkbox")).toHaveCount(5);
+    await expect(page.getByRole("checkbox")).toHaveCount(4);
     await expectChosenHeight(
       page,
-      "attendees (5)",
+      "attendees (4)",
       page.getByRole("button", { name: "Enviar respuesta" }),
     );
   });
@@ -567,7 +634,7 @@ test.describe("the invitation, one screen at a time", () => {
   test("where to go fits, with the hour, the dress code and the way there", async ({
     page,
   }) => {
-    fixture = await householdOfFour();
+    fixture = await householdOfThree();
     await unlock(page, fixture);
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
     await page.getByRole("button", { name: "Enviar respuesta" }).click();
@@ -620,7 +687,7 @@ test.describe("the invitation, one screen at a time", () => {
   test("the stream fits, for a household that cannot come", async ({
     page,
   }) => {
-    fixture = await householdOfFour();
+    fixture = await householdOfThree();
     await unlock(page, fixture);
     await page.getByRole("button", { name: /No podemos acompañarlos/ }).click();
 
@@ -701,7 +768,7 @@ test.describe("the gate when something is covering half the screen", () => {
   test("lets the page scroll and keeps the way in reachable", async ({
     page,
   }) => {
-    fixture = await householdOfFour();
+    fixture = await householdOfThree();
 
     // Roughly an iPhone 14 with its keyboard raised. Not a keyboard: a window.
     await page.setViewportSize({ width: 390, height: 360 });

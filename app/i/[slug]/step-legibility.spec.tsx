@@ -74,6 +74,30 @@ import { declaredColor, over } from "@/lib/design/declared-color";
  * own worst state — a household that declined and pressed "Volver a
  * responder", 36 pixels taller, top at 61% — measures 0.9369. One constant
  * for both cards is the honest one, and it is the worst of all of them.
+ *
+ * RE-SAMPLED A FOURTH TIME WHEN THE COUNTER LEFT THE LIST, AND THIS TIME IT
+ * DID NOT MOVE. Taking the counter and the hairline off the announcement for
+ * households of three or more shortens that block by 98 pixels, which pulls
+ * the card UP into a part of the frame no card had covered before — 49%–92%
+ * at three people, 45%–96% at four. Both were measured on the shipped build
+ * at both phone presets rather than reasoned about, because the last three
+ * re-samples each came back harsher than the one before:
+ *
+ * | card                            | band, iPhone 14 | worst pixel       |
+ * | ------------------------------- | --------------- | ----------------- |
+ * | two people, counter kept        | 60%–95%         | `#FFFDF4` (0.980) |
+ * | three people, counter gone      | 49%–92%         | `#FAF8EF` (0.937) |
+ * | four people (canary), gone      | 45%–96%         | `#FFFDF4` (0.980) |
+ *
+ * So the brightest pixel any card covers is unchanged: the higher edge the
+ * shortened card reaches is the dark green above Michell, and the lit edge of
+ * her dress is still the worst thing under it. The refusal's slot moved with
+ * the card and got DARKER — #FEF3BB at two, #B4B587 at three, #A4A780 at four
+ * — and is still held to the constant above, which is harsher than any of
+ * them. A Pixel 7 remains kinder at every size (#F9F3E5 at three).
+ *
+ * Written down although nothing changed, because "re-sampled and unchanged"
+ * and "never looked" are indistinguishable from a green test.
  */
 const BRIGHTEST_UNDER_THE_CARD = "#fffdf4";
 
@@ -90,6 +114,13 @@ const BRIGHTEST_UNDER_THE_CARD = "#fffdf4";
  * It is the one number here that makes a moved block SAFER than it was. The
  * card is bright ground; the foot of the screen is the darkest ground on the
  * page.
+ *
+ * AND "VOLVER A LA PREGUNTA" CLIMBED WHEN THE COUNTER LEFT THE LIST, which is
+ * the one line this constant covers that moved: 96%–98% of an iPhone 14 at
+ * two people, 93%–96% at three now that the screen fits inside the fold
+ * instead of hanging past it. Re-measured there rather than assumed: #030305,
+ * darker than this constant by a wide margin, because the bottom scrim is at
+ * full strength across that whole band.
  */
 const BRIGHTEST_AT_THE_FOOT = "#161614";
 

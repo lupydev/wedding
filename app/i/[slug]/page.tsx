@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
-import { InvitationAnnouncement } from "@/components/invitation/InvitationAnnouncement";
+import {
+  InvitationAnnouncement,
+  attendeesScreenFitsCountdown,
+} from "@/components/invitation/InvitationAnnouncement";
 import { InvitationBody } from "@/components/invitation/InvitationBody";
 import { PhotoStage } from "@/components/landing/PhotoStage";
 import { WEDDING_PHOTO } from "@/components/landing/photos";
@@ -234,6 +237,36 @@ export default async function InvitationPage({ params }: RouteParams) {
                 */
                 announcement={
                   <InvitationAnnouncement coupleNames={ceremony.coupleNames} />
+                }
+                /*
+                  AND THE SAME BLOCK AGAIN FOR THE ONE SCREEN THAT MAY NOT
+                  AFFORD ALL OF IT.
+
+                  The couple opened the list of who is coming on a real
+                  iPhone with a three-person invitation and `Enviar
+                  respuesta` was behind the browser chrome: "sacalos solo
+                  cuando la invitación es de 3 personas, porque con dos
+                  personas sí se ve bien."
+
+                  COMPOSED HERE BECAUSE THIS IS WHERE BOTH FACTS MEET THE
+                  SERVER. The household's size is known here; which screen is
+                  showing is client state inside `RsvpAnswer`; and the block
+                  itself is a Server Component tree with a live countdown in
+                  it, which is why it crosses the boundary as a slot rather
+                  than as a flag. So the route builds both renderings and the
+                  form picks the one its step calls for.
+
+                  `attendeesScreenFitsCountdown` holds the threshold and the
+                  measurements behind it. For a household of two this is the
+                  same block as above, and the form falls back to it anyway.
+                */
+                attendeesAnnouncement={
+                  <InvitationAnnouncement
+                    coupleNames={ceremony.coupleNames}
+                    showCountdown={attendeesScreenFitsCountdown(
+                      invitation.guests.length,
+                    )}
+                  />
                 }
                 /*
                   The place reaches the FORM rather than the body, because only

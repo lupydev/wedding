@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import { COUPLE_NAMES } from "@/lib/domain/wedding-day";
 
-import { InvitationAnnouncement } from "./InvitationAnnouncement";
+import {
+  HOUSEHOLD_THAT_CROWDS_THE_LIST,
+  InvitationAnnouncement,
+  attendeesScreenFitsCountdown,
+} from "./InvitationAnnouncement";
 
 /**
  * The announcement, which two surfaces have to render identically.
@@ -72,5 +76,82 @@ describe("InvitationAnnouncement", () => {
     );
 
     expect(container.querySelector(".invitation__announcement")).not.toBeNull();
+  });
+
+  /**
+   * AND IT CAN BE MADE SHORTER FOR THE ONE SCREEN THAT CANNOT AFFORD IT ALL.
+   *
+   * The couple opened the list of who is coming on a real iPhone with a
+   * three-person invitation and `Enviar respuesta` was behind the browser
+   * chrome. Measured on the shipped build: 735 pixels on a 664-pixel iPhone
+   * 14, and the counter with its gap is 74 of them, the hairline with its gap
+   * another 25.
+   *
+   * The shorter block keeps everything that STATES SOMETHING — "Nos casamos",
+   * the couple's names, the day — and drops the two that decorate.
+   */
+  it("can be made shorter, keeping every fact and dropping the counter", () => {
+    const { container } = render(
+      <InvitationAnnouncement
+        coupleNames="Ana y Bruno"
+        showCountdown={false}
+      />,
+    );
+
+    expect(screen.getByText("Nos casamos")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Ana y Bruno" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("save-the-date-when")).toBeInTheDocument();
+
+    expect(screen.queryByTestId("countdown-figures")).not.toBeInTheDocument();
+    expect(container.querySelector("span[aria-hidden='true']")).toBeNull();
+  });
+});
+
+/**
+ * WHICH HOUSEHOLDS GET THE SHORTER BLOCK, IN ONE NAMED PLACE.
+ *
+ * "Sacalos solo cuando la invitación es de 3 personas, porque con dos
+ * personas sí se ve bien." Two numbers decide it and both were measured on
+ * the shipped build, iPhone 14, the screen that asks who is coming:
+ *
+ *  - a household of TWO is 681 pixels — 17 over, and all 17 are the form's
+ *    own bottom padding below "Volver a la pregunta". Nothing a guest can
+ *    read or press is off the screen, which is why the couple say it looks
+ *    fine, and they chose to keep the counter there knowing the page can be
+ *    nudged 17 pixels.
+ *  - a household of THREE is 735 — 71 over, and the send button ends at 663
+ *    of a 664-pixel viewport, which on a real phone is behind the browser
+ *    chrome.
+ *
+ * WHY `>=` AND NOT `=== 3`, GIVEN THREE IS NOW THE CEILING. "Las invitaciones
+ * a la final van a ser 3 personas como máximo" — but nothing in the schema,
+ * the console or the importer enforces that (see the canary in
+ * `e2e/invitation-one-screen.spec.ts`). An equality would hand the FULL
+ * announcement back to a four-person household, which is the one size that
+ * needs the space most: 789 pixels whole against 690 shortened. A threshold
+ * costs nothing and fails in the safe direction.
+ */
+describe("who is offered the shorter announcement", () => {
+  it("keeps the counter for the sizes that have room for it", () => {
+    expect(attendeesScreenFitsCountdown(1)).toBe(true);
+    expect(attendeesScreenFitsCountdown(2)).toBe(true);
+  });
+
+  it("takes it away from three, which is where it stopped fitting", () => {
+    expect(attendeesScreenFitsCountdown(3)).toBe(false);
+    expect(HOUSEHOLD_THAT_CROWDS_THE_LIST).toBe(3);
+  });
+
+  /**
+   * AND FROM ANYTHING LARGER, WHICH IS THE CASE NOTHING PREVENTS.
+   *
+   * Three is the couple's statement about their own list, not a rule the
+   * software holds them to.
+   */
+  it("takes it away from a household above the ceiling too", () => {
+    expect(attendeesScreenFitsCountdown(4)).toBe(false);
+    expect(attendeesScreenFitsCountdown(5)).toBe(false);
   });
 });

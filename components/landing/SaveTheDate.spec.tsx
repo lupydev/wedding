@@ -77,4 +77,48 @@ describe("SaveTheDate", () => {
       "Faltan 3 días para la boda.",
     );
   });
+
+  /**
+   * AND IT CAN BE ASKED TO LEAVE, FOR ONE SCREEN THAT HAS NO ROOM FOR IT.
+   *
+   * The couple read the list of who is coming on a real iPhone with a
+   * three-person invitation and found `Enviar respuesta` behind the browser
+   * chrome. Measured: that screen is 735 pixels tall on a 664-pixel iPhone
+   * 14, and the countdown with its gap is 74 of them. "Sacalos solo cuando la
+   * invitación es de 3 personas, porque con dos personas sí se ve bien."
+   *
+   * THE HAIRLINE GOES WITH IT, AND THAT IS ONE DECISION RATHER THAN TWO. The
+   * rule exists to close the date line and introduce the counter; with no
+   * counter under it, it is a divider separating something from nothing. The
+   * couple asked for both, and the block has no state in which one makes
+   * sense without the other — so this is one prop, not a pair.
+   */
+  it("can be asked for the announcement without its counter", () => {
+    vi.useFakeTimers({ now: new Date("2026-11-25T05:00:00.000Z") });
+
+    const { container } = render(<SaveTheDate showCountdown={false} />);
+
+    expect(screen.queryByTestId("countdown-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("countdown-figures")).not.toBeInTheDocument();
+    expect(container.querySelector("span[aria-hidden='true']")).toBeNull();
+  });
+
+  /**
+   * AND THE DEFAULT IS THE WHOLE BLOCK, WHICH IS THE CASE FOUR SURFACES USE.
+   *
+   * `StreamDetails` is the cautionary tale this assertion exists against: it
+   * grew `showDate` and `showTime` props defaulting to TRUE and every caller
+   * passed false, so the default branch was dead code nobody was rendering.
+   * Here it is the other way round — the landing, the gate, the question and
+   * the operator preview all take the default — and only one screen asks for
+   * less.
+   */
+  it("keeps the counter and the rule when nobody asks otherwise", () => {
+    vi.useFakeTimers({ now: new Date("2026-11-25T05:00:00.000Z") });
+
+    const { container } = render(<SaveTheDate />);
+
+    expect(screen.getByTestId("countdown-summary")).toBeInTheDocument();
+    expect(container.querySelector("span[aria-hidden='true']")).not.toBeNull();
+  });
 });

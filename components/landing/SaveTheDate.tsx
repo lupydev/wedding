@@ -40,7 +40,13 @@ export const ANNOUNCEMENT_LINE = `
   sm:text-sm sm:tracking-[0.25em]
 `;
 
-/** And the hairline that closes it, before the countdown. */
+/**
+ * And the hairline that closes it, before the countdown.
+ *
+ * IT IS PART OF THE COUNTDOWN'S OWN FURNITURE, which is why `showCountdown`
+ * takes both away together rather than leaving a divider with nothing under
+ * it to divide.
+ */
 export const ANNOUNCEMENT_RULE = "block h-px w-16 bg-[#f6efe2]/30 sm:w-24";
 
 /**
@@ -69,6 +75,7 @@ export const ANNOUNCEMENT_RULE = "block h-px w-16 bg-[#f6efe2]/30 sm:w-24";
 export function SaveTheDate({
   coupleNames = COUPLE_NAMES,
   showDate = true,
+  showCountdown = true,
 }: {
   /**
    * Who is getting married, when a caller holds a correctable answer.
@@ -88,6 +95,30 @@ export function SaveTheDate({
    * says how long is left.
    */
   readonly showDate?: boolean;
+  /**
+   * Whether this block ends with the counter and the hairline above it.
+   *
+   * THE ONE SCREEN THAT SAYS NO, AND THE MEASUREMENT BEHIND IT. The couple
+   * opened the list of who is coming on a real iPhone with a three-person
+   * invitation and found `Enviar respuesta` behind the browser chrome.
+   * Measured on the shipped build, iPhone 14: that screen is 735 pixels on a
+   * 664-pixel viewport, and this counter with its gap is 74 of them, the
+   * hairline with its gap another 25. Dropping both brings it to 664 with 27
+   * pixels to spare; dropping the counter alone would clear by four, which is
+   * not a margin on a physical phone.
+   *
+   * "Sacalos solo cuando la invitación es de 3 personas, porque con dos
+   * personas sí se ve bien" — so this is false on ONE screen of the
+   * invitation, for households of three or more, and true everywhere else.
+   * `InvitationAnnouncement` holds the threshold; this component only does as
+   * it is told.
+   *
+   * BOTH ELEMENTS, ONE PROP. The rule exists to close the date line and
+   * introduce the counter, so with no counter it separates something from
+   * nothing. There is no state of this block in which one is wanted without
+   * the other, and a second prop would only make that state expressible.
+   */
+  readonly showCountdown?: boolean;
 } = {}) {
   return (
     <div className="flex flex-col items-center gap-6 text-center sm:gap-8">
@@ -157,9 +188,23 @@ export function SaveTheDate({
         </time>
       ) : null}
 
-      <span aria-hidden="true" className={ANNOUNCEMENT_RULE} />
+      {/*
+        THE RULE AND THE COUNTER, WHICH ONE SCREEN OF THE INVITATION DOES
+        WITHOUT.
 
-      <Countdown />
+        Rendered as a pair under one condition rather than as two siblings
+        under two, because they are one piece of furniture: the hairline
+        introduces the counter and has nothing to close without it. See
+        `showCountdown` above for the measurement that took them off the list
+        of who is coming, and for the reason that screen is the only one.
+      */}
+      {showCountdown ? (
+        <>
+          <span aria-hidden="true" className={ANNOUNCEMENT_RULE} />
+
+          <Countdown />
+        </>
+      ) : null}
     </div>
   );
 }
