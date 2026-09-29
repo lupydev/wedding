@@ -28,6 +28,23 @@ export const MESSAGE_PREVIEW_APPROXIMATE_LABEL =
  * Every way the mock is known to diverge from a real WhatsApp chat.
  *
  * Ordered from the most likely to be mistaken for a defect to the least.
+ *
+ * THE LAST ENTRY USED TO NAME THE CARD, AND THAT CLAIM DIED WITH SATORI.
+ *
+ * It said «la imagen de la tarjeta dibuja los emoji con el juego Twemoji».
+ * True while the card went through `ImageResponse`; the card is a JPEG read
+ * off the disk now, there is no emoji on it and no Twemoji anywhere in this
+ * product. A list whose whole contract is "every line names a specific way
+ * the mock is KNOWN to be wrong" cannot carry a line that is itself wrong: a
+ * false caveat spends the operator's attention looking for a difference that
+ * cannot occur, which is the opposite of what this list is for.
+ *
+ * It was replaced rather than deleted because the divergence went LIVE the
+ * day the draft gained 👰🏻‍♀️🤵🏼‍♂️. The bubble draws them with the operator's
+ * own fonts and the recipient's phone draws them with its own, and a joined
+ * sequence carrying a skin tone is exactly the kind a system that does not
+ * know it renders as separate pieces. Same slot, same count, a claim that is
+ * true again.
  */
 export const MESSAGE_PREVIEW_DIVERGENCES: readonly string[] = [
   "WhatsApp pliega los mensajes largos detrás de «Ver más». No publica a partir de cuántos caracteres lo hace, y el punto de corte cambia con el ancho de la pantalla y con el tamaño de letra que tenga configurado quien lo lee.",
@@ -35,7 +52,7 @@ export const MESSAGE_PREVIEW_DIVERGENCES: readonly string[] = [
   "iOS, Android y WhatsApp Web no dibujan la tarjeta igual. Cambian los bordes, cuántas líneas de título se muestran y si la descripción aparece siquiera.",
   "Solo el primer enlace del mensaje genera vista previa. Un segundo enlace no añade otra tarjeta: quita la primera. Por eso la plantilla lleva un único enlace.",
   "La tarjeta aparece únicamente cuando WhatsApp ya descargó la imagen en el dispositivo de quien envía. Si todavía no la descargó, se ve texto plano durante unos segundos.",
-  "La imagen de la tarjeta dibuja los emoji con el juego Twemoji, mientras que el texto del mensaje usa los emoji propios del dispositivo. No van a coincidir.",
+  "Los emoji del mensaje los dibuja cada dispositivo con su propio juego: aquí se ven con los de este equipo y en el teléfono de quien lo reciba se verán con los suyos. Un sistema que no conozca uno de ellos puede partirlo en varios.",
 ];
 
 /**

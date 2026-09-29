@@ -19,11 +19,25 @@ import { seedOperator, type SeededOperator } from "./helpers/operator";
  * `buildDispatchPreflight`, the launcher's beacon-before-navigation ordering);
  * what this file proves is that the chain connects.
  *
- * `wa.me` IS INTERCEPTED, NOT VISITED. The navigation is the behaviour under
- * test, so it has to actually happen — but letting it reach Meta would make the
- * suite depend on the public internet and would open a real chat window. The
- * route is fulfilled locally and the URL that was requested is asserted, which
- * is the part the product is responsible for.
+ * THE DISPATCH IS A SCHEME HANDOFF NOW, AND IT IS OBSERVED THROUGH CDP RATHER
+ * THAN THROUGH `page.route`.
+ *
+ * `page.route` intercepts HTTP. `whatsapp://send?…` is never fetched: the
+ * browser hands it to the operating system, and nothing about that reaches the
+ * network layer — no request, no navigation, no URL change. Asserting on
+ * `page.url()` or waiting for a route would simply time out on a product that
+ * is working correctly.
+ *
+ * Chromium reports the attempt to the DevTools protocol before the handoff, as
+ * `Page.frameRequestedNavigation` carrying the exact URI. That is what this
+ * file records, and it is a stronger assertion than the old one rather than a
+ * weaker one: the previous interception proved the browser had asked for a
+ * `wa.me` URL, and this proves the browser asked the operating system for the
+ * exact draft, addressed to the exact recipient, without a page in between.
+ *
+ * `wa.me` IS STILL INTERCEPTED, because the fallback still navigates there and
+ * letting it reach Meta would make the suite depend on the public internet and
+ * would open a real chat window.
  *
  * Serial, with ONE browser context: every test needs a signed-in operator, and
  * signing in means a real round trip through the real form.
@@ -113,6 +127,14 @@ let page: Page;
 
 /** The last `wa.me` URL the browser was sent to, captured by the interceptor. */
 let lastWaUrl: string | null = null;
+
+/**
+ * Every `whatsapp://` URI the browser asked the operating system for.
+ *
+ * Recorded from `Page.frameRequestedNavigation`, which fires for a custom
+ * scheme even though no request is ever made and the document is not replaced.
+ */
+let handedOff: string[] = [];
 
 test.beforeAll(async ({ browser }) => {
   // Unique per run. The device picker labels its radios with the display name,
@@ -230,6 +252,8 @@ test.beforeAll(async ({ browser }) => {
 
   page = await browser.newPage();
 
+  // The fallback still navigates over HTTP, so the redirector still has to be
+  // fulfilled locally rather than reached.
   await page.route("https://wa.me/**", async (route) => {
     lastWaUrl = route.request().url();
     await route.fulfill({
@@ -237,6 +261,14 @@ test.beforeAll(async ({ browser }) => {
       contentType: "text/html",
       body: "<html><body><p>WhatsApp (interceptado)</p></body></html>",
     });
+  });
+
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Page.enable");
+  cdp.on("Page.frameRequestedNavigation", ({ url }) => {
+    if (url.startsWith("whatsapp:")) {
+      handedOff.push(url);
+    }
   });
 
   await signInAsOperator(page, ana);
@@ -428,6 +460,7 @@ test.describe("the send preflight", () => {
 test.describe("preparing and opening one dispatch", () => {
   test("opens WhatsApp with the household's own draft, addressed to the chosen member", async () => {
     lastWaUrl = null;
+    handedOff = [];
     await page.goto(dispatchUrl(ready));
 
     await expect(
@@ -440,12 +473,11 @@ test.describe("preparing and opening one dispatch", () => {
     );
 
     await page.getByRole("button", { name: /Abrir WhatsApp/ }).click();
-    await page.waitForURL(/wa\.me/);
+    await expect.poll(() => handedOff.length).toBe(1);
 
-    expect(lastWaUrl).not.toBeNull();
-    const opened = new URL(lastWaUrl!);
-    expect(opened.host).toBe("wa.me");
-    expect(opened.pathname).toBe("/573005552001");
+    const opened = new URL(handedOff[0]);
+    expect(opened.protocol).toBe("whatsapp:");
+    expect(opened.searchParams.get("phone")).toBe("573005552001");
 
     const text = opened.searchParams.get("text") ?? "";
     expect(text).toContain("Familia Lista Muñóz");
@@ -460,6 +492,46 @@ test.describe("preparing and opening one dispatch", () => {
     // No event detail in the draft: the date and the venue live on the page the
     // link resolves to, which can still be corrected after the message is sent.
     expect(text.replace(invitationUrl, "")).not.toMatch(/\d/);
+
+    // The draft arrives in the shape the couple wrote, through a real browser's
+    // own encoder and a real URL parse. The blank lines and the joined emoji
+    // are the two things a round trip is most likely to quietly flatten.
+    expect(text.split("\n\n")).toHaveLength(4);
+    expect(text).toContain(`\n${invitationUrl}\n\n`);
+    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️");
+    expect(handedOff[0]).toContain("%0A%0A");
+  });
+
+  test("hands the URI to the system without leaving the console", async () => {
+    // The document surviving the handoff is what lets the console ask "¿se
+    // envió?" on the press instead of waiting for a return that never comes.
+    // Asserted here rather than reasoned about: it is the property the whole
+    // two-step dispatch now rests on, and it belongs to the browser, not to us.
+    expect(page.url()).toContain(dispatchUrl(ready));
+    expect(lastWaUrl).toBeNull();
+
+    await expect(
+      page.getByRole("button", { name: /Marcar como enviada/ }),
+    ).toBeVisible();
+  });
+
+  test("offers the visible web route once the silent one has been tried", async () => {
+    // `whatsapp://` reaching nobody looks exactly like a press that did not
+    // register. The fallback is the link that answers with a page instead, and
+    // it exists only after the event has already been written.
+    lastWaUrl = null;
+
+    await page.getByRole("button", { name: /Abrirlo en el navegador/ }).click();
+    await page.waitForURL(/wa\.me/);
+
+    expect(lastWaUrl).not.toBeNull();
+    const opened = new URL(lastWaUrl!);
+    expect(opened.host).toBe("wa.me");
+    expect(opened.pathname).toBe("/573005552001");
+    // The same draft, not a second one: an operator who falls back must send
+    // the message they just approved.
+    expect(opened.searchParams.get("text")).toContain("Familia Lista Muñóz");
+    expect(opened.searchParams.get("text")).toContain("👰🏻‍♀️🤵🏼‍♂️");
   });
 
   test("records the opened link before leaving, as link_opened and nothing stronger", async () => {

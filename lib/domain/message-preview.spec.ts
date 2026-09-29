@@ -60,8 +60,39 @@ describe("MESSAGE_PREVIEW_DIVERGENCES", () => {
     expect(MESSAGE_PREVIEW_DIVERGENCES.join(" ")).toMatch(/todavía no/i);
   });
 
-  it("warns that the card's emoji and the message's emoji are different sets", () => {
-    expect(MESSAGE_PREVIEW_DIVERGENCES.join(" ")).toMatch(/emoji/i);
+  /**
+   * THIS LINE USED TO NAME THE CARD, AND THE CARD HAS DRAWN NO EMOJI SINCE U29.
+   *
+   * It said «la imagen de la tarjeta dibuja los emoji con el juego Twemoji»,
+   * which was true while the card went through Satori. The card is a JPEG read
+   * off the disk now; there is no emoji on it and no Twemoji anywhere in this
+   * product. A disclosure list whose whole contract is "every line names a
+   * specific way the mock is KNOWN to be wrong" cannot carry a line that is
+   * itself wrong — a false caveat is worse than a missing one, because the
+   * operator spends attention checking for a difference that cannot occur.
+   *
+   * What replaced it is the divergence that went LIVE when the draft gained
+   * 👰🏻‍♀️🤵🏼‍♂️: this pane draws them with the operator's own fonts and the
+   * recipient's phone draws them with its own, and a joined sequence with a
+   * skin tone is exactly the kind a system that does not know it splits apart.
+   */
+  it("warns that each device draws the message's emoji with its own set", () => {
+    const aboutEmoji = MESSAGE_PREVIEW_DIVERGENCES.filter((line) =>
+      /emoji/i.test(line),
+    );
+
+    expect(aboutEmoji).toHaveLength(1);
+    // The claim is about the MESSAGE's emoji and about the reader's device.
+    // Matched on that line alone: `join(" ")` would pass on the unrelated
+    // sentence about the first link, which also says "mensaje".
+    expect(aboutEmoji[0]).toMatch(/mensaje/i);
+    expect(aboutEmoji[0]).toMatch(/dispositivo|equipo|teléfono/i);
+  });
+
+  it("no longer claims the card draws emoji, because the card draws none", () => {
+    // Asserted as an absence: the sentence compiled, read well and had a
+    // browser assertion behind it for four units after it stopped being true.
+    expect(MESSAGE_PREVIEW_DIVERGENCES.join(" ")).not.toMatch(/twemoji/i);
   });
 
   it("states each divergence exactly once", () => {

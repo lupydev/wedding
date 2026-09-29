@@ -1,5 +1,5 @@
 import { renderMessageTemplate } from "./message-template";
-import { buildWaMeLink } from "./wa-link";
+import { buildWaMeLink, buildWhatsAppAppLink } from "./wa-link";
 
 /**
  * The invitation draft an operator sends over WhatsApp — pure.
@@ -59,12 +59,32 @@ import { buildWaMeLink } from "./wa-link";
  * message may contain are the ones inside the URL, which is a property rather
  * than a review habit. A date or a street number cannot be added without
  * breaking it.
+ *
+ * ITS SHAPE IS PART OF IT, AND THAT IS WHY IT IS A TEMPLATE LITERAL
+ *
+ * The couple wrote this out line by line and the breaks are not decoration.
+ * The URL sits ALONE on its own line with a blank line after it: that is the
+ * form a thumb can hit without catching the words around it, and the form that
+ * gives WhatsApp's link detector a clean target. A link with a comma or a
+ * closing bracket welded to its tail is the ordinary way to ship an invitation
+ * nobody can open.
+ *
+ * Written as one literal with real newlines rather than concatenated `\n`s, so
+ * the value in the source has the shape of the message on the phone. A blank
+ * line you can see is a blank line that survives an edit; `"...\n" + "\n" +
+ * "..."` is one an editor eventually tidies away. `dispatch-message.spec.ts`
+ * asserts the shape on the RENDERED draft rather than on this constant — a
+ * correct template behind a renderer that collapsed it would pass a template
+ * assertion and still reach the guest as a wall of text.
  */
-export const INVITATION_MESSAGE_TEMPLATE =
-  "Hola, {{greeting_name}}. Nos alegra mucho invitarlos a nuestra boda. " +
-  "En este enlace encontrarán la invitación con todos los detalles y el " +
-  "formulario para confirmar su asistencia: {{invitation_url}} " +
-  "Con cariño, {{couple_names}}.";
+export const INVITATION_MESSAGE_TEMPLATE = `Hola, {{greeting_name}}.
+
+Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+
+En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
+{{invitation_url}}
+
+Con cariño, {{couple_names}}.`;
 
 /** Everything the draft is allowed to vary by. Nothing else is a variable. */
 export const INVITATION_MESSAGE_VARIABLES: readonly string[] = [
@@ -117,8 +137,37 @@ export function buildInvitationMessage(input: InvitationMessageInput): string {
   return message;
 }
 
-/** The `wa.me` deep link for one household: recipient plus prefilled draft. */
+/**
+ * The link the dispatch button opens: recipient plus prefilled draft.
+ *
+ * `whatsapp://`, not `wa.me`. The web link is a redirect that lands the
+ * operator on `api.whatsapp.com/send/…` and asks them to press "Abrir
+ * aplicación" before WhatsApp opens at all; this one is handed to the
+ * operating system and reaches the installed application with no page in
+ * between. `wa-link.ts` carries the full reasoning and the measurement.
+ */
 export function buildInvitationDispatchLink(
+  input: InvitationMessageInput & { readonly recipientE164: string },
+): string {
+  return buildWhatsAppAppLink(
+    input.recipientE164,
+    buildInvitationMessage(input),
+  );
+}
+
+/**
+ * The same draft as a `wa.me` link, for when the custom scheme reached nobody.
+ *
+ * A `whatsapp://` handoff that no application claims does NOTHING — no error,
+ * no page, no way for the operator to tell a missed click from a machine
+ * without WhatsApp. This link is the one that fails visibly, so the console
+ * offers it after the direct one has been pressed and its event written.
+ *
+ * Built from the same input by the same message builder. A fallback carrying a
+ * different draft would be worse than no fallback at all: the operator would
+ * send the wrong message and nothing would say so.
+ */
+export function buildInvitationWebFallbackLink(
   input: InvitationMessageInput & { readonly recipientE164: string },
 ): string {
   return buildWaMeLink(input.recipientE164, buildInvitationMessage(input));

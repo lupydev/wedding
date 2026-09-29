@@ -25,12 +25,14 @@ const post = vi.mocked(postEventBeacon);
  *
  * THE ORDERING IS THE WHOLE TEST FILE
  *
- * Navigating to `wa.me` LEAVES the page. So the `link_opened` event has to be
- * written BEFORE the navigation, and the navigation must never wait on it. A
- * guest who never receives their invitation because a logging call hung is the
- * worst outcome available here, and an `await` in the click handler is all it
- * would take to produce it. Both halves are asserted: the beacon goes first,
- * and the navigation happens synchronously inside the same click.
+ * The `link_opened` event has to be written BEFORE the handoff, and the handoff
+ * must never wait on it. A guest who never receives their invitation because a
+ * logging call hung is the worst outcome available here, and an `await` in the
+ * click handler is all it would take to produce it. Both halves are asserted:
+ * the beacon goes first, and the handoff happens synchronously inside the same
+ * click. That was true while the destination was `wa.me` and the page unloaded
+ * under it, and it stays true now that the destination is `whatsapp://` and the
+ * page does not.
  *
  * THE TWO STEPS ARE TWO DIFFERENT FACTS
  *
@@ -38,10 +40,20 @@ const post = vi.mocked(postEventBeacon);
  * opened. The application has no sensor for a delivery: the operator is the only
  * one there is. So the send itself is a separate, explicit confirmation, and the
  * copy says so rather than letting an opened link read as a send.
+ *
+ * WHAT THE CUSTOM SCHEME CHANGED, AND WHY IT NEEDED TESTS OF ITS OWN
+ *
+ * `whatsapp://` is handed to the operating system; the document survives it.
+ * Two consequences, both asserted below. The question "¿se envió?" can no
+ * longer wait for a `visibilitychange` that may never arrive, so pressing the
+ * button asks it directly. And the handoff fails SILENTLY when no application
+ * claims the scheme — nothing happens at all — so the same press reveals the
+ * web route, which is the one that degrades into a visible page.
  */
 
 const INVITATION_ID = "11111111-1111-4111-8111-111111111111";
-const WA_URL = "https://wa.me/573001234567?text=Hola";
+const WA_URL = "whatsapp://send?phone=573001234567&text=Hola";
+const WEB_FALLBACK_URL = "https://wa.me/573001234567?text=Hola";
 const BEACON_PATH = "/console/api/dispatch-event";
 
 function props(
@@ -52,6 +64,7 @@ function props(
     greetingName: "Familia Muñóz",
     recipientName: "Ana Muñóz",
     waUrl: WA_URL,
+    webFallbackUrl: WEB_FALLBACK_URL,
     beaconPath: BEACON_PATH,
     dispatchState: "not_dispatched",
     markSentAction: vi.fn<(formData: FormData) => void>(),
@@ -62,6 +75,10 @@ function props(
 
 function openButton() {
   return screen.getByRole("button", { name: /Abrir WhatsApp/i });
+}
+
+function fallbackButton() {
+  return screen.getByRole("button", { name: /en el navegador/i });
 }
 
 beforeEach(() => {
@@ -83,7 +100,7 @@ describe("DispatchLauncher", () => {
     expect(screen.getByText(/Ana Muñóz/)).toBeInTheDocument();
   });
 
-  it("writes the opened-link event BEFORE it navigates away", () => {
+  it("writes the opened-link event BEFORE it hands off", () => {
     const order: string[] = [];
     post.mockImplementation(() => {
       order.push("beacon");
@@ -99,9 +116,9 @@ describe("DispatchLauncher", () => {
     expect(order).toEqual(["beacon", "navigate"]);
   });
 
-  it("navigates synchronously inside the click, awaiting nothing", () => {
+  it("hands off synchronously inside the click, awaiting nothing", () => {
     // `fireEvent` does not flush microtasks. If the handler awaited ANYTHING
-    // before navigating, `assign` would not have run by the time this assertion
+    // before handing off, `assign` would not have run by the time this assertion
     // executes — which is exactly the delay that must never exist.
     const assign = vi
       .spyOn(browserNavigation, "assign")
@@ -114,7 +131,7 @@ describe("DispatchLauncher", () => {
     expect(assign).toHaveBeenCalledWith(WA_URL);
   });
 
-  it("navigates even when the event could not be written at all", () => {
+  it("hands off even when the event could not be written at all", () => {
     // A logging endpoint that is down must not cost a guest their invitation.
     const assign = vi
       .spyOn(browserNavigation, "assign")
@@ -282,6 +299,17 @@ describe("DispatchLauncher", () => {
     expect(container.querySelectorAll('a[href*="wa.me"]')).toHaveLength(0);
   });
 
+  it("offers no route to WhatsApp at all until the recorded one is pressed", () => {
+    // The scheme changed, so the shape of a leak did too. Neither destination
+    // may exist as an anchor before the button has written the event.
+    const { container } = render(<DispatchLauncher {...props()} />);
+
+    expect(container.querySelectorAll("a")).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: /en el navegador/i }),
+    ).toBeNull();
+  });
+
   it("never labels an opened link as a send", () => {
     render(<DispatchLauncher {...props({ dispatchState: "link_opened" })} />);
 
@@ -303,5 +331,158 @@ describe("DispatchLauncher", () => {
     expect(
       screen.getByText(/no puede saber|no puede confirmar/i),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * THE HANDOFF DOES NOT LEAVE THE PAGE, AND THAT MOVED A QUESTION.
+ *
+ * `wa.me` was a navigation: the document went away and came back, and the
+ * console asked "¿se envió?" because it had been re-rendered or because the
+ * tab became visible again. `whatsapp://` is handed to the operating system —
+ * measured in Chromium 1243 and WebKit 26.6, the document survives it, no
+ * request is made, `pagehide` never fires — and on a desktop another
+ * application taking focus does NOT make the tab hidden. So neither route back
+ * fires, and the question that records every send would simply never be asked.
+ *
+ * The press asks it. That is the whole of this block, and it is the difference
+ * between a working two-step dispatch and an invitation nobody can mark.
+ */
+describe("DispatchLauncher — the press, not the return, is what asks", () => {
+  it("asks whether it was sent as soon as the link is opened", () => {
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+
+    // No `visibilitychange`, no remount: only the click happened.
+    expect(
+      screen.getByRole("button", { name: /Marcar como enviada/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks it after the handoff rather than before, so nothing is inserted between", () => {
+    const order: string[] = [];
+    post.mockImplementation(() => {
+      order.push("beacon");
+      return "beacon";
+    });
+    vi.spyOn(browserNavigation, "assign").mockImplementation((url) => {
+      order.push(`navigate:${url}`);
+    });
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+
+    expect(order).toEqual(["beacon", `navigate:${WA_URL}`]);
+  });
+
+  it("hands off the whatsapp:// URI, not the web page that redirects to it", () => {
+    const assign = vi
+      .spyOn(browserNavigation, "assign")
+      .mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+
+    expect(assign).toHaveBeenCalledWith(WA_URL);
+    expect(assign).not.toHaveBeenCalledWith(WEB_FALLBACK_URL);
+  });
+});
+
+/**
+ * THE FALLBACK, AND WHY IT IS NOT THE SECOND ROUTE THE BUTTON RULE FORBIDS.
+ *
+ * `whatsapp://` fails silently. No handler, no error, no page — the operator
+ * presses and nothing at all happens, and they cannot tell a missed click from
+ * a machine without WhatsApp. `https://wa.me/` is the link that degrades
+ * visibly: it answers with a page offering the download.
+ *
+ * It is offered ONLY after the primary was pressed. The rule the single route
+ * exists to protect is that no open goes unrecorded and that the operator
+ * cannot reach for the unrecorded one first — by the time this control exists,
+ * `link_opened` has already been written for this invitation and the stashed
+ * id is what reconciles it. So this control writes no event of its own: a
+ * second write for one press would be the same event twice, which is exactly
+ * what the stash and `dispatch_events_client_event_idx` exist to prevent.
+ */
+describe("DispatchLauncher — the fallback for a scheme nobody answered", () => {
+  it("appears only after the recorded link has been opened", () => {
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    expect(
+      screen.queryByRole("button", { name: /en el navegador/i }),
+    ).toBeNull();
+
+    fireEvent.click(openButton());
+
+    expect(fallbackButton()).toBeInTheDocument();
+  });
+
+  it("opens the wa.me link, which is the one that shows a page when nothing is installed", () => {
+    const assign = vi
+      .spyOn(browserNavigation, "assign")
+      .mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+    assign.mockClear();
+
+    fireEvent.click(fallbackButton());
+
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith(WEB_FALLBACK_URL);
+  });
+
+  it("writes no second event, because the press that revealed it already wrote one", () => {
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+    expect(post).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(fallbackButton());
+
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a button like the primary, never an anchor", () => {
+    // An anchor would be reachable by a middle click, a context menu and a
+    // keyboard copy before anything was recorded — the exact affordance the
+    // primary is a button to avoid.
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+
+    const { container } = render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+
+    expect(container.querySelectorAll("a")).toHaveLength(0);
+    expect(fallbackButton().tagName).toBe("BUTTON");
+  });
+
+  it("says what silence means, so a dead press is not read as a missed click", () => {
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+
+    expect(screen.getByText(/si whatsapp no se abrió/i)).toBeInTheDocument();
+  });
+
+  it("keeps the only primary button on the screen the primary one", () => {
+    // Gold means "this needs your attention" and there is one thing here that
+    // does. A fallback styled as a second primary would make the press that
+    // records the event compete with the one that does not.
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+
+    const { container } = render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+
+    const primaries = container.querySelectorAll(
+      'button[data-variant="default"]',
+    );
+
+    expect(primaries).toHaveLength(1);
+    expect(primaries[0].textContent).toMatch(/Abrir WhatsApp/);
   });
 });

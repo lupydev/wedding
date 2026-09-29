@@ -7,6 +7,7 @@ import {
   DISPATCH_EVENT_BEACON_PATH,
   buildInvitationDispatchLink,
   buildInvitationMessage,
+  buildInvitationWebFallbackLink,
 } from "@/lib/domain/dispatch-message";
 import {
   resolveDispatchRecipient,
@@ -179,6 +180,12 @@ export default async function DispatchPage({
         greetingName={invitation.greetingName}
         recipientName={recipient.guest.fullName}
         waUrl={buildInvitationDispatchLink({
+          recipientE164: recipient.phoneE164,
+          greetingName: invitation.greetingName,
+          invitationUrl,
+          coupleNames,
+        })}
+        webFallbackUrl={buildInvitationWebFallbackLink({
           recipientE164: recipient.phoneE164,
           greetingName: invitation.greetingName,
           invitationUrl,

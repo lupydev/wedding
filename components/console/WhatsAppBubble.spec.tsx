@@ -26,11 +26,25 @@ import { WhatsAppBubble, type WhatsAppBubbleProps } from "./WhatsAppBubble";
  */
 const ADVERTISED_PATH = "/i/k7q2m9xr4tabcdef/opengraph-image?88f8dd536f697fc4";
 
+/**
+ * The draft in the shape it is actually sent in: four paragraphs, the URL
+ * alone on its own line. The fixture carries the real shape because the
+ * approved snapshot is the thing that would otherwise quietly stop matching
+ * what a guest receives.
+ */
+const DRAFT = `Hola, Familia Muñóz.
+
+Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+
+En este enlace encontrarán la invitación:
+https://boda.example.test/i/k7q2m9xr4tabcdef
+
+Con cariño, Ana y Bruno.`;
+
 const PROPS: WhatsAppBubbleProps = {
-  messageText:
-    "Hola, Familia Muñóz. Nos alegra mucho invitarlos a nuestra boda. " +
-    "En este enlace encontrarán la invitación: https://boda.example.test/i/k7q2m9xr4tabcdef",
-  waUrl: "https://wa.me/573001234567?text=Hola%2C%20Familia%20Mu%C3%B1%C3%B3z.",
+  messageText: DRAFT,
+  waUrl:
+    "whatsapp://send?phone=573001234567&text=Hola%2C%20Familia%20Mu%C3%B1%C3%B3z.",
   cardImagePath: ADVERTISED_PATH,
   cardTitle: "Familia Muñóz",
   cardDescription: "Nos casamos — Ana y Bruno",
@@ -103,15 +117,71 @@ describe("WhatsAppBubble — the card image", () => {
 
 describe("WhatsAppBubble — what it shows the operator", () => {
   it("renders the exact prefilled message text", () => {
-    render(<WhatsAppBubble {...PROPS} />);
+    const { container } = render(<WhatsAppBubble {...PROPS} />);
 
-    expect(screen.getByText(PROPS.messageText)).toBeVisible();
+    // Read off the element rather than through `getByText`, whose default
+    // normaliser collapses every run of whitespace — including the blank lines
+    // that are the point of the next three tests.
+    expect(container.querySelector(".wa-preview__text")!.textContent).toBe(
+      PROPS.messageText,
+    );
   });
 
-  it("renders the raw wa.me URL, encoded exactly as it will be opened", () => {
+  /**
+   * THE PREVIEW HAS TO BREAK WHERE THE MESSAGE BREAKS.
+   *
+   * HTML collapses newlines by default, so the draft's four paragraphs would
+   * render as one wall of text — and the operator would approve a shape no
+   * guest is going to see. Worse than a missing preview: a preview that is
+   * confidently wrong about the one property the couple wrote out by hand.
+   *
+   * `whitespace-pre-line` is what preserves them, and it is a class a markup
+   * refactor can drop without anything else changing. Pinned in two places:
+   * the class here, and the computed style in a real browser in
+   * `e2e/console-preview.spec.ts`, because a class name proves the intent and
+   * only a browser proves the result.
+   */
+  it("keeps the draft's blank lines instead of collapsing them", () => {
+    const { container } = render(<WhatsAppBubble {...PROPS} />);
+    const text = container.querySelector(".wa-preview__text")!.textContent!;
+
+    expect(text.split("\n\n")).toHaveLength(4);
+    expect(text).toContain(
+      "invitación:\nhttps://boda.example.test/i/k7q2m9xr4tabcdef\n\n",
+    );
+  });
+
+  it("asks the browser to honour those breaks rather than hoping", () => {
+    const { container } = render(<WhatsAppBubble {...PROPS} />);
+
+    expect(container.querySelector(".wa-preview__text")!.className).toContain(
+      "whitespace-pre-line",
+    );
+  });
+
+  it("shows the couple's emoji whole, joiner and skin tone included", () => {
+    const { container } = render(<WhatsAppBubble {...PROPS} />);
+
+    expect(container.querySelector(".wa-preview__text")!.textContent).toContain(
+      "👰🏻‍♀️🤵🏼‍♂️",
+    );
+  });
+
+  it("renders the raw URI, encoded exactly as it will be opened", () => {
     render(<WhatsAppBubble {...PROPS} />);
 
     expect(screen.getByText(PROPS.waUrl)).toBeVisible();
+  });
+
+  it("shows the URI the button opens, not the web page it replaced", () => {
+    // "Enlace que se abrirá" is a promise. While it showed `wa.me` and the
+    // button opened `whatsapp://`, the pane named a destination the operator
+    // would never reach.
+    const { container } = render(<WhatsAppBubble {...PROPS} />);
+    const shown = container.querySelector(".wa-preview__url")!.textContent!;
+
+    expect(shown.startsWith("whatsapp://send?")).toBe(true);
+    expect(shown).not.toContain("wa.me");
   });
 
   it("renders the card's title and description as WhatsApp will read them", () => {
@@ -154,12 +224,15 @@ describe("WhatsAppBubble — what it shows the operator", () => {
     ).not.toMatch(/Ver más/);
   });
 
-  it("offers no link to wa.me, only the URL as text", () => {
-    // A clickable `wa.me` here would be a second route to the send that records
-    // no `link_opened` event at all — and the one an operator would reach for.
+  it("offers no link to WhatsApp under any scheme, only the URI as text", () => {
+    // A clickable destination here would be a second route to the send that
+    // records no `link_opened` event at all — and the one an operator would
+    // reach for. The scheme changed; the rule did not.
     const { container } = render(<WhatsAppBubble {...PROPS} />);
 
     expect(container.querySelector('a[href^="https://wa.me/"]')).toBeNull();
+    expect(container.querySelector('a[href^="whatsapp:"]')).toBeNull();
+    expect(container.querySelectorAll("a")).toHaveLength(0);
   });
 
   it("renders no phone number of its own", () => {

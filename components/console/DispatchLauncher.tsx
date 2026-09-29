@@ -17,13 +17,28 @@ import {
  *
  * WHY THE ORDER OF TWO STATEMENTS IS THE MOST IMPORTANT THING HERE
  *
- * Navigating to `wa.me` LEAVES the page. An ordinary `fetch` is cancelled on
- * unload; an awaited one delays the navigation the operator just asked for. So
- * the `link_opened` event is written FIRST, through `postEventBeacon`, which
- * returns synchronously — and the navigation that follows is never conditional
- * on it and never waits for it. A guest who never receives their invitation
- * because a logging call hung is a far worse trade than a missing audit row,
- * and the missing row is reconciled on return anyway.
+ * An ordinary `fetch` is cancelled on unload; an awaited one delays the handoff
+ * the operator just asked for. So the `link_opened` event is written FIRST,
+ * through `postEventBeacon`, which returns synchronously — and the handoff that
+ * follows is never conditional on it and never waits for it. A guest who never
+ * receives their invitation because a logging call hung is a far worse trade
+ * than a missing audit row, and the missing row is reconciled on return anyway.
+ *
+ * THE DESTINATION IS `whatsapp://`, AND IT MADE THAT ORDERING SAFER RATHER THAN
+ * RISKIER
+ *
+ * `https://wa.me/…` is a redirect to a Meta web page with an "Abrir aplicación"
+ * button on it: two presses per household, the second one on a page that exists
+ * to ask for permission the operator gave with the first. The custom scheme is
+ * handed to the operating system instead and reaches the installed application
+ * directly.
+ *
+ * That was measured before it was relied on. Assigning `whatsapp://` does NOT
+ * unload the document — in Chromium 1243 and WebKit 26.6 the page survives,
+ * `pagehide` never fires, no request leaves, and a `sendBeacon` queued on the
+ * line before is delivered. `wa.me` genuinely unloaded the page under the
+ * write; this does not. The ordering above stays exactly as it is, because it
+ * is the guarantee that does not depend on which destination is configured.
  *
  * WHY THERE ARE TWO STEPS AND NOT ONE
  *
@@ -43,6 +58,36 @@ import {
  * A client-side "check whether the row exists first" would be that same
  * deduplication with a race added, so the retry is unconditional and the index
  * is what decides.
+ *
+ * WHY THE PRESS NOW ASKS THE QUESTION, AND THE RETURN NO LONGER HAS TO
+ *
+ * While the dispatch was a navigation, "¿se envió?" could wait for a route
+ * back: the document was replaced and re-rendered, or the tab went hidden and
+ * came back. Neither happens under a scheme handoff. The page stays, and on a
+ * desktop another application taking focus does not make a tab hidden — so
+ * waiting for either signal would mean the question is never asked and the
+ * send can never be recorded. Pressing the button asks it. The stash and the
+ * `visibilitychange` listener both stay, because a machine where WhatsApp
+ * genuinely replaced the tab is still a machine this has to work on.
+ *
+ * WHY THERE IS A SECOND, QUIETER LINK AND WHY IT IS NOT THE ROUTE THE BUTTON
+ * RULE FORBIDS
+ *
+ * `whatsapp://` fails SILENTLY. No handler, no error, no page: the operator
+ * presses, nothing happens, and nothing on the screen distinguishes a missed
+ * click from a machine without WhatsApp. On the night fifty invitations go out
+ * that is the worst shape a failure can take. `https://wa.me/…` is the link
+ * that degrades visibly — it answers with a page offering the download — so it
+ * is kept and offered as the way out.
+ *
+ * It is revealed only by the press. The rule the single route protects is that
+ * no open goes unrecorded and that the operator cannot reach for the
+ * unrecorded one FIRST; by the time this control exists, `link_opened` has
+ * been written and stashed for this invitation. It writes no event of its own:
+ * a second write for one press would be the same event twice, which is what
+ * the stash exists to prevent. And it is a button, like the primary, because
+ * an anchor is reachable by a middle click and a context menu before anything
+ * has been recorded at all.
  */
 
 /** Where one invitation's in-flight client event id lives, per tab. */
@@ -55,8 +100,18 @@ export interface DispatchLauncherProps {
   readonly greetingName: string;
   /** The household member the draft is addressed to. A name, never a number. */
   readonly recipientName: string;
-  /** Built server-side by `buildInvitationDispatchLink`. */
+  /**
+   * The `whatsapp://` URI this button opens. Built server-side by
+   * `buildInvitationDispatchLink`.
+   */
   readonly waUrl: string;
+  /**
+   * The same draft as a `wa.me` link, from `buildInvitationWebFallbackLink`.
+   *
+   * Shown only after `waUrl` has been opened, for the case where nothing on
+   * the machine answered the custom scheme and the operator saw no sign of it.
+   */
+  readonly webFallbackUrl: string;
   readonly beaconPath: string;
   readonly dispatchState: DispatchState;
   readonly markSentAction: (formData: FormData) => void | Promise<void>;
@@ -97,6 +152,7 @@ export function DispatchLauncher({
   greetingName,
   recipientName,
   waUrl,
+  webFallbackUrl,
   beaconPath,
   dispatchState,
   markSentAction,
@@ -157,6 +213,23 @@ export function DispatchLauncher({
     writeStash(invitationId, clientEventId);
     postEventBeacon(beaconPath, { invitationId, clientEventId });
     browserNavigation.assign(waUrl);
+    // AFTER the handoff, never before: nothing may sit between the write and
+    // the statement that opens WhatsApp. React flushes this once the handler
+    // returns either way, so the position costs nothing and keeps the two
+    // load-bearing lines adjacent.
+    setAwaitingAnswer(true);
+  }
+
+  /**
+   * The way out of a handoff that reached nobody.
+   *
+   * Deliberately writes NO event. The press that revealed this control already
+   * wrote `link_opened` and stashed its id; a second write would be one press
+   * recorded twice, and the reconciliation on return re-posts the stashed id
+   * anyway.
+   */
+  function openInBrowser(): void {
+    browserNavigation.assign(webFallbackUrl);
   }
 
   function answered(
@@ -216,6 +289,35 @@ export function DispatchLauncher({
       >
         Abrir WhatsApp con el mensaje
       </Button>
+
+      {/*
+        THE SILENT-FAILURE NOTICE, AND IT IS QUIET ON PURPOSE.
+
+        `whatsapp://` reaching nobody looks exactly like a press that did not
+        register, so the operator is told what silence means rather than left
+        to guess. It sits under the primary and above the question because it
+        answers the earlier of the two — "did anything happen?" comes before
+        "did it get sent?". Link-styled, never a second primary: gold is
+        reserved for the one press that records an event, and this one records
+        nothing.
+      */}
+      {awaitingAnswer && (
+        <p
+          className="dispatch-launcher__fallback mt-4 text-sm text-hint"
+          style={{ maxWidth: "48ch" }}
+        >
+          Si WhatsApp no se abrió, este equipo no tiene la aplicación o no la
+          dejó abrirse. El enlace ya quedó registrado y se puede abrir igual.{" "}
+          <Button
+            className="dispatch-launcher__fallback-open h-auto p-0 align-baseline text-sm"
+            type="button"
+            onClick={openInBrowser}
+            variant="link"
+          >
+            Abrirlo en el navegador
+          </Button>
+        </p>
+      )}
 
       {awaitingAnswer && (
         <div className="dispatch-launcher__confirm mt-4 rounded-md border border-border bg-muted px-3 py-3">

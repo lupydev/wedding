@@ -6,6 +6,7 @@ import {
   INVITATION_MESSAGE_VARIABLES,
   buildInvitationDispatchLink,
   buildInvitationMessage,
+  buildInvitationWebFallbackLink,
   consoleDispatchPath,
   type DispatchCandidateGuest,
 } from "./dispatch-message";
@@ -179,6 +180,73 @@ describe("buildInvitationMessage", () => {
   });
 });
 
+/**
+ * THE SHAPE OF THE DRAFT, ASSERTED ON THE RENDERED MESSAGE AND NOT ON THE
+ * TEMPLATE.
+ *
+ * The couple wrote this out line by line, and the shape is not decoration. A
+ * URL sitting alone on its own line is the one a thumb can hit without
+ * catching the words around it, and it is what gives WhatsApp's link detector
+ * a clean target — a link with a comma or a closing bracket welded to it is
+ * the classic way to ship a dead invitation.
+ *
+ * Every assertion below reads `buildInvitationMessage(...)` rather than
+ * `INVITATION_MESSAGE_TEMPLATE`. A template with a correct shape and a
+ * renderer that collapsed it would pass a template assertion and reach the
+ * guest broken; the rendered string is the only thing the guest ever sees.
+ */
+describe("the draft's shape", () => {
+  /** The rendered draft, split the way a reader's eye splits it. */
+  function paragraphs(): string[] {
+    return buildInvitationMessage(draft()).split("\n\n");
+  }
+
+  it("is four paragraphs separated by blank lines", () => {
+    expect(paragraphs()).toHaveLength(4);
+  });
+
+  it("greets the household on a line of its own", () => {
+    expect(paragraphs()[0]).toBe("Hola, Familia Muñóz.");
+  });
+
+  it("carries the couple's emoji in the second paragraph, unsplit", () => {
+    // A multi-codepoint ZWJ sequence with a skin-tone modifier. Asserted as
+    // one string rather than by codepoint: the failure this guards against is
+    // an editor or a transform that helpfully "normalises" the joiner away and
+    // turns one bride into a bride followed by a stray gender sign.
+    expect(paragraphs()[1]).toBe(
+      "Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.",
+    );
+  });
+
+  it("puts the invitation URL alone on the last line of its paragraph", () => {
+    const lines = paragraphs()[2].split("\n");
+
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe(INVITATION_URL);
+  });
+
+  it("leaves a blank line after the URL, so nothing is welded to it", () => {
+    expect(buildInvitationMessage(draft())).toContain(
+      `${INVITATION_URL}\n\nCon cariño,`,
+    );
+  });
+
+  it("signs off in the last paragraph and ends there", () => {
+    expect(paragraphs()[3]).toBe("Con cariño, Ana y Bruno.");
+  });
+
+  it("begins and ends with no stray whitespace of its own", () => {
+    const message = buildInvitationMessage(draft());
+
+    expect(message).toBe(message.trim());
+  });
+
+  it("uses no carriage returns, which WhatsApp would show as a blank line", () => {
+    expect(buildInvitationMessage(draft())).not.toContain("\r");
+  });
+});
+
 describe("buildInvitationDispatchLink", () => {
   it("addresses the recipient and prefills the rendered draft", () => {
     const link = buildInvitationDispatchLink({
@@ -187,14 +255,97 @@ describe("buildInvitationDispatchLink", () => {
     });
     const url = new URL(link);
 
-    expect(url.origin).toBe("https://wa.me");
-    expect(url.pathname).toBe("/573001234567");
+    expect(url.protocol).toBe("whatsapp:");
+    expect(url.searchParams.get("phone")).toBe("573001234567");
+    expect(url.searchParams.get("text")).toBe(buildInvitationMessage(draft()));
+  });
+
+  /**
+   * THE LINK THE BUTTON OPENS IS THE ONE THAT REACHES THE APPLICATION.
+   *
+   * `wa.me` is a redirect to a web page with a button on it. This is the
+   * dispatch link, so it is the direct one; the web route is still built, and
+   * is offered only after the direct one has already been tried.
+   */
+  it("is the scheme the operating system hands to WhatsApp, not a web page", () => {
+    const link = buildInvitationDispatchLink({
+      ...draft(),
+      recipientE164: "+573001234567",
+    });
+
+    expect(link.startsWith("whatsapp://send?")).toBe(true);
+    expect(link).not.toContain("wa.me");
+  });
+
+  it("survives the blank lines and the emoji through the encoding", () => {
+    // `encodeURIComponent` turns a newline into `%0A` and an emoji into its
+    // UTF-8 bytes. Asserted through a real parse rather than by reading the
+    // string: what matters is that the draft comes back out byte for byte.
+    const url = new URL(
+      buildInvitationDispatchLink({
+        ...draft(),
+        recipientE164: "+573001234567",
+      }),
+    );
+
+    expect(url.href).toContain("%0A%0A");
+    expect(url.href).toContain(
+      "%F0%9F%91%B0%F0%9F%8F%BB%E2%80%8D%E2%99%80%EF%B8%8F",
+    );
+    expect(url.href).toContain(
+      "%F0%9F%A4%B5%F0%9F%8F%BC%E2%80%8D%E2%99%82%EF%B8%8F",
+    );
     expect(url.searchParams.get("text")).toBe(buildInvitationMessage(draft()));
   });
 
   it("refuses a recipient that never became E.164 instead of cleaning it up", () => {
     expect(() =>
       buildInvitationDispatchLink({
+        ...draft(),
+        recipientE164: "300 123 4567",
+      }),
+    ).toThrow(/E\.164/);
+  });
+});
+
+/**
+ * The web route, kept because `whatsapp://` fails SILENTLY.
+ *
+ * A custom scheme with no handler does nothing at all: no error, no page, no
+ * way for the operator to tell a missed click from a missing application.
+ * `https://wa.me/…` degrades instead — it answers with a page that offers the
+ * download — so it is built for every household and shown after the direct
+ * link has already been pressed and its event already written.
+ */
+describe("buildInvitationWebFallbackLink", () => {
+  it("is the wa.me link, carrying the identical draft", () => {
+    const url = new URL(
+      buildInvitationWebFallbackLink({
+        ...draft(),
+        recipientE164: "+573001234567",
+      }),
+    );
+
+    expect(url.origin).toBe("https://wa.me");
+    expect(url.pathname).toBe("/573001234567");
+    expect(url.searchParams.get("text")).toBe(buildInvitationMessage(draft()));
+  });
+
+  it("carries the same text as the link the button opens", () => {
+    // Two builders, one draft. A fallback that drifted would be worse than no
+    // fallback: the operator would send a different message and never know.
+    const input = { ...draft(), recipientE164: "+573001234567" };
+
+    expect(
+      new URL(buildInvitationWebFallbackLink(input)).searchParams.get("text"),
+    ).toBe(
+      new URL(buildInvitationDispatchLink(input)).searchParams.get("text"),
+    );
+  });
+
+  it("refuses a recipient that never became E.164, exactly as the direct link does", () => {
+    expect(() =>
+      buildInvitationWebFallbackLink({
         ...draft(),
         recipientE164: "300 123 4567",
       }),

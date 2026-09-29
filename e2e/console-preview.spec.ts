@@ -404,19 +404,71 @@ test.describe("the message preview's card image", () => {
     );
     await expect(pane).toContainText("primer enlace");
     await expect(pane).toContainText("iOS");
-    await expect(pane).toContainText("Twemoji");
+    await expect(pane).toContainText("Los emoji del mensaje");
     await expect(pane.locator("li")).toHaveCount(6);
   });
 
-  test("shows the exact draft and the raw wa.me URL", async () => {
+  test("no longer claims the card draws emoji, because the card draws none", async () => {
+    // The pane said the card rendered Twemoji for four units after Satori left
+    // it. A false caveat costs the operator the attention the true ones need,
+    // so its absence is asserted rather than left to the count above.
+    await page.goto(`/console/dispatch/${household.invitationId}`);
+
+    await expect(page.locator("section.wa-preview")).not.toContainText(
+      "Twemoji",
+    );
+  });
+
+  test("shows the exact draft and the URI the button will open", async () => {
     await page.goto(`/console/dispatch/${household.invitationId}`);
     const pane = page.locator("section.wa-preview");
 
     await expect(pane).toContainText("Familia Previa Muñóz");
     await expect(pane).toContainText(`${E2E_SITE_ORIGIN}/i/${household.slug}`);
+    // `whatsapp://`, not `wa.me`: "Enlace que se abrirá" is a promise, and
+    // while it named the redirector the pane named a destination the operator
+    // would never actually reach.
     await expect(pane.locator(".wa-preview__url")).toContainText(
-      "https://wa.me/573005557321",
+      "whatsapp://send?phone=573005557321",
     );
+    await expect(pane.locator(".wa-preview__url")).not.toContainText("wa.me");
+  });
+
+  /**
+   * THE PREVIEW HAS TO BREAK WHERE THE MESSAGE BREAKS, AND ONLY A BROWSER CAN
+   * SAY WHETHER IT DOES.
+   *
+   * The draft is four paragraphs with the invitation URL alone on its own
+   * line. HTML collapses newlines by default, so without `white-space:
+   * pre-line` the pane would show one wall of text and the operator would
+   * approve a shape no guest is going to see — a preview confidently wrong
+   * about the property the couple wrote out by hand.
+   *
+   * The unit test pins the class. Only this one pins the RESULT: jsdom applies
+   * no Tailwind, so a class that stopped being generated, got purged, or was
+   * overridden further down the cascade would leave every unit test green.
+   */
+  test("renders the draft's blank lines instead of collapsing them", async () => {
+    await page.goto(`/console/dispatch/${household.invitationId}`);
+    const draft = page.locator(".wa-preview__text");
+
+    expect(
+      await draft.evaluate((node) => getComputedStyle(node).whiteSpace),
+    ).toBe("pre-line");
+
+    const text = await draft.textContent();
+    expect(text!.split("\n\n")).toHaveLength(4);
+    expect(text).toContain(`\n${E2E_SITE_ORIGIN}/i/${household.slug}\n\n`);
+    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️");
+  });
+
+  test("offers no clickable WhatsApp link under the new scheme either", async () => {
+    // The destination changed, so the shape of an unrecorded route did too.
+    await page.goto(`/console/dispatch/${household.invitationId}`);
+
+    await expect(
+      page.locator('section.wa-preview a[href^="whatsapp:"]'),
+    ).toHaveCount(0);
   });
 
   test("offers no clickable wa.me link that would skip the recording", async () => {

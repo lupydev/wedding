@@ -4484,8 +4484,233 @@ one per phone project). All 28 geometry assertions green on both phones.
 and already in `## Next` as a Next 16.3.4 `redirect()`-in-`useActionState`
 question.
 
+### U46 — done (the console opens WhatsApp itself, and the draft breaks where the couple wrote it)
+
+**WHAT THE COUPLE ASKED FOR, AND WHAT THEY WERE ACTUALLY HITTING.** Pressing
+`Abrir WhatsApp con el mensaje` did not open WhatsApp. It opened a Meta web
+page — `wa.me` redirects to `api.whatsapp.com/send/?phone=…` — carrying an
+**Abrir aplicación** button the operator had to press before anything
+happened. Two presses per household, the second one on a page whose only
+purpose is to ask for the permission the first press already gave, and fifty
+of them on the night the invitations go out.
+
+`whatsapp://send?phone=<digits>&text=<encoded>` is not fetched at all. The
+browser hands it to the operating system and the installed application gets
+it. Same two facts inside, no page in between.
+
+**THE ORDERING CLAIM WAS MEASURED RATHER THAN REASONED ABOUT, BECAUSE IT IS
+THE ONE THIS COMPONENT IS BUILT AROUND.** `DispatchLauncher` writes
+`link_opened` through `postEventBeacon` and then hands off, never awaiting,
+because "a guest who never receives their invitation because a logging call
+hung is a far worse trade than a missing audit row". The expectation was that
+a scheme handoff gives the beacon _more_ room than an unload did. That is a
+claim about a browser, so it was put to two of them — a local page, a
+`sendBeacon`, an assignment to `whatsapp://`, and a check of what survived:
+
+| engine        | document after the handoff | `pagehide` | request made | beacon delivered |
+| ------------- | -------------------------- | ---------- | ------------ | ---------------- |
+| Chromium 1243 | survives, same `window`    | never      | none         | yes              |
+| WebKit 26.6   | survives, same `window`    | never      | none         | yes              |
+
+So the answer is the one hoped for, and it is written down rather than
+assumed. Firefox was not checked: this project installs no Gecko and the whole
+suite is Chromium, which `playwright.config.ts` already says out loud for the
+iPhone preset. The ordering in the click handler is **unchanged** either way —
+it is the guarantee that must not depend on which destination is configured.
+
+**AND THE PAGE SURVIVING MOVED A QUESTION NOBODY HAD NOTICED WAS LOAD-BEARING.**
+"¿Se envió el mensaje?" used to appear because the document came back: it was
+re-rendered after a navigation, or the tab became visible again. Neither
+happens now. On a desktop, another application taking focus does **not** make
+a tab hidden, so `visibilitychange` never fires and the mount never happens —
+the question would simply never be asked and no send could ever be recorded.
+The press asks it now. The stash and the `visibilitychange` listener both stay:
+a machine where WhatsApp genuinely replaced the tab is still a machine this has
+to work on.
+
+**THE TRADEOFF, DECIDED IN THE OPEN RATHER THAN QUIETLY.** `wa.me` degrades
+gracefully — no WhatsApp installed and you get a page offering the download.
+`whatsapp://` fails **silently**: no handler, no error, no page, nothing at
+all, and the operator cannot tell a missed click from a machine without the
+application. The two operators are the couple, on their own machines, with
+WhatsApp installed, so the risk is genuinely small — and a dead button on the
+one night fifty invitations go out is not a risk worth carrying for nothing.
+
+So the press reveals two things instead of one: the question, and a quiet line
+that says what silence means, with `Abrirlo en el navegador` behind it opening
+the `wa.me` link. **It is not the second route the button rule forbids.** That
+rule protects two properties — no open goes unrecorded, and the operator
+cannot reach for the unrecorded one _first_. By the time this control exists,
+`link_opened` has been written and stashed for this invitation, and the
+control writes no event of its own: a second write for one press would be the
+same press recorded twice, which is what the stash and
+`dispatch_events_client_event_idx` exist to prevent. It is a `variant="link"`
+button and not an anchor, for the same reason the primary is — an anchor is
+reachable by a middle click and a context menu before anything is recorded —
+and it is not gold, because there is still exactly one press on this screen
+that records an event.
+
+**THE DRAFT, IN THE COUPLE'S OWN SHAPE.** Four paragraphs, and the URL alone
+on its own line with a blank line after it. The shape is not decoration: a
+link with a comma or a closing bracket welded to its tail is the ordinary way
+to ship an invitation nobody can open, and a line of its own is what a thumb
+can hit and what gives WhatsApp's detector a clean target.
+`INVITATION_MESSAGE_TEMPLATE` is one template literal with real newlines now,
+so the value in the source has the shape of the message on the phone — a blank
+line you can see is one that survives an edit, and `"…\n" + "\n" + "…"` is one
+an editor eventually tidies away.
+
+**EVERY SHAPE ASSERTION READS THE RENDERED MESSAGE, NEVER THE TEMPLATE.** A
+correct template behind a renderer that collapsed it would pass a template
+assertion and still reach the guest as a wall of text. The encoding is checked
+end to end through a real `URL` parse: `%0A%0A` for the blank lines, and the
+two emoji as their exact UTF-8 bytes —
+`%F0%9F%91%B0%F0%9F%8F%BB%E2%80%8D%E2%99%80%EF%B8%8F` and
+`%F0%9F%A4%B5%F0%9F%8F%BC%E2%80%8D%E2%99%82%EF%B8%8F` — five codepoints each,
+skin tone and zero-width joiner included, round-tripping byte for byte. The
+browser suite asserts the same thing again on the URI a real Chromium actually
+handed to the operating system.
+
+**THE `&` IN THE NEW QUERY IS A SHARPER PROBLEM THAN THE OLD ONE WAS, AND IT
+IS ASSERTED.** `wa.me` carried the recipient in the PATH; `whatsapp://` carries
+it in the query beside the text. So an unescaped `&phone=` inside a household's
+name would no longer be cosmetic — it would open a chat with somebody else.
+`encodeURIComponent` prevents it, and a test proves the parameter list is
+exactly `["phone", "text"]` for a draft written to attack it.
+
+**THE PREVIEW ALREADY HAD `whitespace-pre-line` AND NOTHING PINNED IT.** It
+works, so the breaks show; but it is one class in a `className` string and
+nothing anywhere would have gone red if a refactor dropped it — the operator
+would have approved a wall of text and the guest would have received four
+paragraphs, or the reverse. Pinned twice now: the class in the unit test, and
+`getComputedStyle(...).whiteSpace === "pre-line"` in the browser, because a
+class name proves the intent and only a browser proves the result. The
+approved snapshot carries the real four-paragraph draft and the real
+`whatsapp://` URI, so the thing it approves is the thing that ships.
+
+**`Enlace que se abrirá:` WAS ABOUT TO BECOME A LIE, AND IT NOW SHOWS THE URI.**
+The pane named `wa.me` while the button would have opened `whatsapp://` — a
+label promising a destination the operator would never reach. It shows the URI
+the press actually hands over.
+
+**THE TWEMOJI CLAIM IS GONE, AND WHAT REPLACED IT IS THE ONE THAT WENT LIVE
+TODAY.** U32 found it and left it, correctly, as a copy decision:
+`lib/domain/message-preview.ts:38` told the operator «la imagen de la tarjeta
+dibuja los emoji con el juego Twemoji», which stopped being true at U29 when
+Satori left — the card is a JPEG read off the disk, there is no emoji on it and
+no Twemoji anywhere in this product. A list whose whole contract is "every line
+names a specific way the mock is KNOWN to be wrong" cannot carry a line that is
+itself wrong; a false caveat spends the operator's attention hunting a
+difference that cannot occur, which is the opposite of what the list is for.
+
+**Replaced rather than deleted, and that is the judgement to look at.** The
+divergence went live the moment the draft gained 👰🏻‍♀️🤵🏼‍♂️: this pane draws
+them with the operator's own fonts, the recipient's phone draws them with its
+own, and a joined sequence carrying a skin tone is exactly the kind a system
+that does not know it renders as separate pieces. Same slot, same count of six,
+a claim that is true again. **Removing the false sentence is a correction;
+choosing its replacement's wording is not, so it is in `## Next` for the
+couple** with the exact sentence quoted.
+
+**ONE MEASUREMENT THAT MOVED AND WAS LEFT ALONE.** The character count under
+the bubble reads 194 for the fixture draft, and about a dozen of those are the
+two emoji: `String.length` counts UTF-16 code units, so each five-codepoint
+sequence costs seven and displays as one. Against a folding threshold that is
+explicitly approximate and undocumented, twelve is noise, and grapheme counting
+would be a new claim to defend rather than a fix. Recorded, not changed.
+
+**RED, QUOTED.** 41 failures, written first and observed:
+
+    × builds the canonical URI shape
+    Error: No "buildWhatsAppAppLink" export is defined on the "./wa-link" mock
+
+    × is four paragraphs separated by blank lines
+    AssertionError: expected [ Array(1) ] to have a length of 4 but got 1
+
+    × addresses the recipient and prefills the rendered draft
+    AssertionError: expected 'https:' to be 'whatsapp:'
+
+    × survives the blank lines and the emoji through the encoding
+    AssertionError: expected 'https://wa.me/573001234567?text=Hola%…' to contain '%0A%0A'
+
+    × asks whether it was sent as soon as the link is opened
+    TestingLibraryElementError: Unable to find an accessible element with the
+    role "button" and name `/Marcar como enviada/i`
+
+    × no longer claims the card draws emoji, because the card draws none
+    AssertionError: expected '…con el juego Twemoji…' not to match /twemoji/i
+
+**GREEN.** `npm test` — 2,593 passed, 128 files (2,543 at `1b36a38`, plus 50).
+`npm run typecheck`. `npm run lint` — 0 errors, 8 warnings, the same eight in
+files this unit did not touch. `npm run format:check` — clean. `npm run build`.
+`PORT=3100 npx playwright test` — **250 passed, 1 failed, 8 did not run** (245
+at the baseline, plus 5: two in `console-dispatch.spec.ts` and three in
+`console-preview.spec.ts`).
+
+**THE ONE FAILURE IS THE SAME ONE AND IT IS STILL THE ONLY ONE.**
+`console-wedding.spec.ts:226` — the gate unlock that answers 200 with
+`x-action-redirect` and never navigates. Not this unit's, unchanged by it, and
+already in `## Next`.
+
+**A SECOND BROWSER FAILURE APPEARED ONCE, DID NOT REPRODUCE, AND IS WRITTEN
+DOWN RATHER THAN DISMISSED.** The first run failed at
+`console-guest-directory.spec.ts:464` — "puts the person just added at the top
+of the list" — with `Sara Aguirre` in row one. That name is seeded by four
+other spec files, the suite is `fullyParallel`, and they all write the same
+guest table: the test asserts a GLOBAL "newest row is mine" property while
+other workers are inserting guests. The second run passed it and failed only
+the recorded one. Nothing in this unit touches guest creation or ordering. It
+is a pre-existing cross-file race and it has its own entry in `## Next`.
+
+**THE BROWSER TEST FOR THE HANDOFF HAD TO CHANGE SHAPE, AND IT GOT STRONGER.**
+`page.route` intercepts HTTP; a `whatsapp://` handoff makes no request, changes
+no URL and replaces no document, so the old interception would have timed out
+on a product that was working. Chromium reports the attempt to the DevTools
+protocol as `Page.frameRequestedNavigation` carrying the exact URI, and that is
+what the suite records now. The previous assertion proved the browser had asked
+for a `wa.me` URL; this one proves it asked the operating system for the exact
+draft, addressed to the exact recipient, with the blank lines and the emoji
+intact. `wa.me` is still intercepted, because the fallback still navigates
+there — and a test clicks it and checks it carries the identical draft.
+
 ## Next
 
+- **The replacement for the Twemoji sentence is the couple's to keep or
+  reword, and it is quoted here so the choice is one line rather than an
+  archaeology exercise.** U46 removed a claim that had been false since U29;
+  what stands in its slot now is: «Los emoji del mensaje los dibuja cada
+  dispositivo con su propio juego: aquí se ven con los de este equipo y en el
+  teléfono de quien lo reciba se verán con los suyos. Un sistema que no
+  conozca uno de ellos puede partirlo en varios.» It is true, and it is the
+  divergence that went live when the draft gained 👰🏻‍♀️🤵🏼‍♂️. **What is
+  theirs is whether it earns its place**: the list has six entries and every
+  one costs attention, so dropping this one to five is a perfectly good answer
+  and so is a shorter wording. One string in `lib/domain/message-preview.ts`,
+  plus the count in `message-preview.spec.ts`, the approved snapshot and one
+  browser assertion — all four fail loudly if only the string is edited, which
+  is the point.
+- **The dispatch button can now fail with no sign at all, and the mitigation
+  is one press deep.** `whatsapp://` reaching nobody does nothing: no error,
+  no page. U46 put a visible way out behind the press — `Abrirlo en el
+navegador`, with a line saying what silence means — and that is enough for
+  two operators on their own machines with WhatsApp installed. It would not be
+  enough for a stranger. **Nothing detects the failure**, because nothing can:
+  a browser reports no result for a scheme handoff, so the console cannot know
+  whether WhatsApp opened and must not pretend to. If the couple ever hand the
+  console to somebody else, the honest change is to make the fallback louder,
+  not to try to sense the failure.
+- **`console-guest-directory.spec.ts:464` asserts a global ordering property
+  against a database four other spec files are writing in parallel.** It
+  failed once during U46 and passed on the next run with `Sara Aguirre` — a
+  name seeded by `phone-gate`, `rsvp`, `invitation-closed` and
+  `invitation-one-screen` — sitting in the row it expected to own. The suite
+  is `fullyParallel` and the guest table is shared, so "the newest row in the
+  whole directory is the one I just typed" is only true when no other worker
+  inserts between the write and the read. The fix is to scope the assertion to
+  the rows this test created rather than to row one of the list; it was not
+  made in U46 because it is a different file's test and a different concern,
+  and a flake fixed inside an unrelated unit is a flake nobody reviews. It is
+  the second known way this suite can go red without the product changing.
 - **The countdown has no ground, and on bright photograph it cannot be
   read.** It has never been measured on any of the five screens that show it.
   On the live accepted screen its labels are **2.62:1** at `/65`; after the
