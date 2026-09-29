@@ -4499,6 +4499,49 @@ question.
   from the one screen where it measured 2.2:1, with the number asserted in
   `closed-legibility.spec.tsx` so the day it is fixed the test says so. **The
   decision is theirs: a ground behind the counter, or leave it.**
+- **The declined screen is the only one without a counter, the couple asked
+  for one, and it FITS but cannot be READ — so it is blocked on the entry
+  above rather than on space.** Measured on `b8ef5d3` before anything was
+  styled, both phones, a household of three. **Room is not the problem**: the
+  screen is two groups at the two ends of a `justify-between` column with an
+  empty middle, and on an iPhone 14 that middle holds **220 pixels** of
+  slack against the 83 a hairline and a counter would spend — a spacer of 200
+  still measures 664, and 236 is the first that overflows. A Pixel 7 swallows
+  300 without moving. Ground is the problem. Full cream against the worst
+  pixel of each candidate band, and `/65` cream for the 10px labels that
+  carry the units:
+
+  | where the counter could go               | worst pixel | figures 30px | labels `/65` |
+  | ---------------------------------------- | ----------- | ------------ | ------------ |
+  | closing the top group, iPhone 46%–59%    | `#FEF3BB`   | 1.02:1       | 1.02:1       |
+  | opening the foot group, iPhone 69%–82%   | `#C1AD87`   | 1.91:1       | 1.55:1       |
+  | under the greeting, iPhone 17%–29%       | `#757A35`   | 4.00:1       | 2.64:1       |
+  | the very foot, already occupied, 82%–96% | `#535453`   | 6.65:1       | 3.89:1       |
+  | closing the top group, Pixel 32%–42%     | `#BAB8A6`   | 1.75:1       | 1.46:1       |
+  | opening the foot group, Pixel 76%–86%    | `#7D7B7B`   | 3.68:1       | 2.48:1       |
+
+  **There is no position on this screen where the labels reach 4.5:1**, and
+  the best number anywhere on it — 3.89:1 — belongs to the band the
+  reconsider sentence and its button already stand in. The figures would pass
+  at three of the six, so a counter placed there would look fine and be half
+  unreadable, which is precisely the failure the entry above describes. It
+  was not built: adding a fifth unreadable instance of the counter would be
+  deciding the question the couple were asked and have not answered. **One
+  answer unblocks both entries at once — a ground behind the counter, and
+  this screen gets it too.**
+
+- **A fifteen-minute gate on `Entrar a la transmisión` was specified and then
+  withdrawn, and it is written down so nobody rediscovers it.** The couple
+  asked for the join control to open only at 16:45 — "el entrar a la
+  transmision se debe habilitar 15 minutos antes de las 5:00 pm colombia" —
+  and then cancelled it before a line was written: **"entonces dejarlo como
+  esta el componente, no faltando 15 sino una semana."** The worry behind the
+  request was that a free Google Meet account's time limit would be eaten by
+  guests joining early; they have since configured the scheduled meeting so
+  that **nobody enters until a host admits them**, which answers that worry
+  without a gate. So `lib/domain/stream-window.ts` is untouched, the existing
+  one-week window on the landing's door is the only timing rule in the
+  product, and `StreamDetails` stays ungated on both surfaces it serves.
 - **`CEREMONY_MINUTES = 60` is an assumption nobody has confirmed, and both
   calendar entries state an end time from it.** `lib/domain/calendar-event.ts`
   has always said so — "the couple gave a start and nobody has said how long
