@@ -4673,6 +4673,92 @@ draft, addressed to the exact recipient, with the blank lines and the emoji
 intact. `wa.me` is still intercepted, because the fallback still navigates
 there — and a test clicks it and checks it carries the identical draft.
 
+### U47 — done (the fallback opens beside the console, not over it)
+
+**THE COUPLE'S CORRECTION TO U46, IN THEIR OWN WORDS.** "ese abrirlo en el
+navegador debe abrirse en una nueva pestaña no en la actual." U46 shipped the
+fallback as `browserNavigation.assign(webFallbackUrl)`, which navigated the
+console away.
+
+**IT IS NOT A PREFERENCE, AND THE REASON IS THE THING U46 ITSELF UNCOVERED.**
+That unit found the `whatsapp://` handoff leaves the document alive, and that
+finding is exactly why "¿Se envió el mensaje?" now has to be asked at the press
+— no remount and no `visibilitychange` ever arrive to ask it later. A fallback
+that navigated the current tab would carry that question off the screen with
+it, and an operator who had just sent the message would have to find their way
+back to record it. That is the audit gap the two-step dispatch exists to close,
+reopened by the one control added to protect against a different failure. The
+fallback has to preserve what the primary now preserves: **the console survives
+the press.**
+
+`browserNavigation` gains `openInNewTab`, and the fallback calls it from inside
+the same click handler with nothing awaited before it — a tab opened outside
+the user's own gesture is a tab the browser is entitled to block. It stays a
+button, not an anchor: U46's reasoning and the component's older comment both
+still hold, and `link_opened` is already stashed by the time it can be pressed.
+
+**VERIFIED IN THE SUITE'S OWN BROWSER RATHER THAN ASSUMED, because "should be
+allowed" is what the rest of this work was careful not to lean on.** A real
+click, a real `window.open(url, "_blank", "noopener")`, Chromium 1243:
+
+| property                                  | observed                        |
+| ----------------------------------------- | ------------------------------- |
+| new page opened, not swallowed as a popup | yes, one `page` event           |
+| console's own URL after the press         | unchanged                       |
+| `window.open(...)` return value           | `null` (as `noopener` requires) |
+| `window.opener` in the opened page        | `null`                          |
+| pages in the context                      | 2                               |
+| console still scriptable afterwards       | yes                             |
+
+**`noopener` IS LOAD-BEARING HERE AND HAS NOWHERE ELSE TO LIVE.** Without it
+the opened page holds a handle on the console's `window` and can navigate it.
+On an anchor the guarantee is `rel="noopener"`, which a reviewer recognises on
+sight; the fallback is a button — deliberately, so no unrecorded route to
+WhatsApp exists — and a button has no `rel`. So it is a token inside a feature
+string that the type checker cannot see, and dropping it would compile, would
+still open the tab, and would pass every component test. That is why
+`lib/browser/navigation.ts` now has a spec at all: `assign` still does not,
+for the reason the module has always given, and the new method does, for the
+one string in it that types cannot check. The module says which and why.
+
+**ONE E2E DETAIL THAT WOULD HAVE SENT A REAL REQUEST TO META.**
+`page.route("https://wa.me/**")` is scoped to a page, and the fallback now
+opens a SECOND one. A page-scoped route would never have seen it and the
+interception would have silently stopped covering the only test that needs it.
+It is registered on the context now.
+
+**ASSERTED AS THE ABSENCE OF A NAVIGATION AND AS THE SURVIVAL OF THE
+CONFIRMATION**, because a test that only checked the fallback carried the
+right draft would pass on the broken version. The component spec presses the
+fallback and then marks the invitation as sent, and the browser spec checks
+the console's URL is untouched, the question is still on screen, and
+`window.opener` is null in the tab that opened.
+
+**RED, QUOTED.** 9 failures, written first and observed:
+
+    × opens the url in a new tab
+    TypeError: browserNavigation.openInNewTab is not a function
+
+    × never navigates the console away, whatever it opens
+    AssertionError: expected "assign" to not be called at all, but actually
+    been called once
+
+    × still records the send after the fallback was used
+    TypeError: browserNavigation.openInNewTab is not a function
+
+One of them was environmental rather than behavioural and is worth a line:
+`lib/**` runs in the `unit` project, which is `environment: "node"`, so the new
+spec failed with `ReferenceError: window is not defined` until it took the
+`// @vitest-environment jsdom` docblock its sibling `beacon.spec.ts` already
+carries for the same reason.
+
+**GREEN.** `npm test` — 2,601 passed, 129 files (2,593 at `a1913c1`, plus 8 in
+one new file). `npm run typecheck`. `npm run lint` — 0 errors, 8 warnings, the
+same eight. `npm run format:check` — clean. `npm run build`.
+`PORT=3100 npx playwright test` — **250 passed, 1 failed, 8 did not run**, the
+same counts as U46: this unit changes an existing browser assertion rather than
+adding one. The single failure is `console-wedding.spec.ts:226` again.
+
 ## Next
 
 - **The replacement for the Twemoji sentence is the couple's to keep or

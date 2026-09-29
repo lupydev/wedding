@@ -88,6 +88,14 @@ import {
  * the stash exists to prevent. And it is a button, like the primary, because
  * an anchor is reachable by a middle click and a context menu before anything
  * has been recorded at all.
+ *
+ * IT OPENS A NEW TAB, AND THAT IS THE SAME PROPERTY THE PRIMARY HAS
+ *
+ * This screen has to survive both presses. The handoff leaves the document
+ * alive, which is what lets the question be asked at all; a fallback that
+ * navigated this tab away would take the question with it and leave a send
+ * the operator had already made with nowhere to record it. So it opens
+ * beside the console rather than over it.
  */
 
 /** Where one invitation's in-flight client event id lives, per tab. */
@@ -223,13 +231,29 @@ export function DispatchLauncher({
   /**
    * The way out of a handoff that reached nobody.
    *
+   * A NEW TAB, NEVER THIS ONE, AND THE REASON IS THE AUDIT TRAIL.
+   *
+   * The couple asked for it — "ese abrirlo en el navegador debe abrirse en una
+   * nueva pestaña no en la actual" — and it is not a preference. The
+   * `whatsapp://` handoff leaves this document alive, which is the only reason
+   * "¿Se envió el mensaje?" can be asked at the press at all. Navigating this
+   * tab to `wa.me` would take that question away with it, and the operator
+   * would have to find their way back to record a send they had already made:
+   * the exact gap the two-step dispatch exists to close. So the fallback
+   * preserves what the primary now preserves — the console survives the press.
+   *
+   * Called straight out of the click handler with nothing awaited before it,
+   * because a tab opened outside the user's own gesture is a tab the browser
+   * is entitled to block. `openInNewTab` carries the `noopener` that keeps the
+   * opened page from getting a handle on this window.
+   *
    * Deliberately writes NO event. The press that revealed this control already
    * wrote `link_opened` and stashed its id; a second write would be one press
    * recorded twice, and the reconciliation on return re-posts the stashed id
    * anyway.
    */
   function openInBrowser(): void {
-    browserNavigation.assign(webFallbackUrl);
+    browserNavigation.openInNewTab(webFallbackUrl);
   }
 
   function answered(

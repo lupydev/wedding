@@ -421,9 +421,42 @@ describe("DispatchLauncher — the fallback for a scheme nobody answered", () =>
   });
 
   it("opens the wa.me link, which is the one that shows a page when nothing is installed", () => {
+    const openInNewTab = vi
+      .spyOn(browserNavigation, "openInNewTab")
+      .mockImplementation(() => {});
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+
+    fireEvent.click(fallbackButton());
+
+    expect(openInNewTab).toHaveBeenCalledTimes(1);
+    expect(openInNewTab).toHaveBeenCalledWith(WEB_FALLBACK_URL);
+  });
+
+  /**
+   * IT OPENS A NEW TAB, AND THAT IS THE COUPLE'S CORRECTION RATHER THAN A
+   * PREFERENCE.
+   *
+   * "ese abrirlo en el navegador debe abrirse en una nueva pestaña no en la
+   * actual". The reason is the property this whole unit turns on: the
+   * `whatsapp://` handoff leaves the document alive, which is the only reason
+   * "¿Se envió el mensaje?" can be asked at the press at all. A fallback that
+   * navigated the current tab would take that question away with it, and the
+   * operator would have to find their way back to record a send they had
+   * already made — the exact audit gap the two-step design exists to close.
+   *
+   * So the fallback has to preserve what the primary now preserves: the
+   * console survives the press. Asserted as the absence of a navigation AND as
+   * the survival of the confirmation, because a test that only checked the
+   * fallback carried the right draft would pass on the broken version.
+   */
+  it("never navigates the console away, whatever it opens", () => {
     const assign = vi
       .spyOn(browserNavigation, "assign")
       .mockImplementation(() => {});
+    vi.spyOn(browserNavigation, "openInNewTab").mockImplementation(() => {});
 
     render(<DispatchLauncher {...props()} />);
     fireEvent.click(openButton());
@@ -431,12 +464,48 @@ describe("DispatchLauncher — the fallback for a scheme nobody answered", () =>
 
     fireEvent.click(fallbackButton());
 
-    expect(assign).toHaveBeenCalledTimes(1);
-    expect(assign).toHaveBeenCalledWith(WEB_FALLBACK_URL);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("leaves the question standing, so the send can still be recorded", () => {
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+    vi.spyOn(browserNavigation, "openInNewTab").mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props()} />);
+    fireEvent.click(openButton());
+    fireEvent.click(fallbackButton());
+
+    expect(
+      screen.getByRole("button", { name: /Marcar como enviada/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /No se pudo enviar/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("still records the send after the fallback was used", async () => {
+    // The end of the audit gap, asserted rather than inferred from the button
+    // being present: the confirmation has to reach the action.
+    const markSentAction = vi.fn<(formData: FormData) => void>();
+    vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+    vi.spyOn(browserNavigation, "openInNewTab").mockImplementation(() => {});
+
+    render(<DispatchLauncher {...props({ markSentAction })} />);
+    fireEvent.click(openButton());
+    fireEvent.click(fallbackButton());
+    await userEvent.click(
+      screen.getByRole("button", { name: /Marcar como enviada/i }),
+    );
+
+    await waitFor(() => expect(markSentAction).toHaveBeenCalledTimes(1));
+    expect(
+      (markSentAction.mock.calls[0][0] as FormData).get("invitationId"),
+    ).toBe(INVITATION_ID);
   });
 
   it("writes no second event, because the press that revealed it already wrote one", () => {
     vi.spyOn(browserNavigation, "assign").mockImplementation(() => {});
+    vi.spyOn(browserNavigation, "openInNewTab").mockImplementation(() => {});
 
     render(<DispatchLauncher {...props()} />);
     fireEvent.click(openButton());

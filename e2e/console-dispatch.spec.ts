@@ -252,9 +252,11 @@ test.beforeAll(async ({ browser }) => {
 
   page = await browser.newPage();
 
-  // The fallback still navigates over HTTP, so the redirector still has to be
-  // fulfilled locally rather than reached.
-  await page.route("https://wa.me/**", async (route) => {
+  // The fallback still reaches the redirector over HTTP, so it still has to be
+  // fulfilled locally rather than reached. Registered on the CONTEXT and not on
+  // the page, because the fallback opens a SECOND page and a page-scoped route
+  // would never see it — the request would go to Meta for real.
+  await page.context().route("https://wa.me/**", async (route) => {
     lastWaUrl = route.request().url();
     await route.fulfill({
       status: 200,
@@ -519,19 +521,44 @@ test.describe("preparing and opening one dispatch", () => {
     // `whatsapp://` reaching nobody looks exactly like a press that did not
     // register. The fallback is the link that answers with a page instead, and
     // it exists only after the event has already been written.
+    //
+    // IT OPENS BESIDE THE CONSOLE, NEVER OVER IT. The couple asked for a new
+    // tab, and the reason is this file's own subject: the handoff leaves the
+    // document alive, which is what lets "¿Se envió?" be asked at the press.
+    // A fallback that navigated this tab would take the question with it and
+    // strand a send with nowhere to record it.
     lastWaUrl = null;
+    const consoleUrl = page.url();
 
-    await page.getByRole("button", { name: /Abrirlo en el navegador/ }).click();
-    await page.waitForURL(/wa\.me/);
+    const [opened] = await Promise.all([
+      page.context().waitForEvent("page"),
+      page.getByRole("button", { name: /Abrirlo en el navegador/ }).click(),
+    ]);
+    await opened.waitForLoadState();
 
-    expect(lastWaUrl).not.toBeNull();
-    const opened = new URL(lastWaUrl!);
-    expect(opened.host).toBe("wa.me");
-    expect(opened.pathname).toBe("/573005552001");
+    const target = new URL(opened.url());
+    expect(target.host).toBe("wa.me");
+    expect(target.pathname).toBe("/573005552001");
     // The same draft, not a second one: an operator who falls back must send
     // the message they just approved.
-    expect(opened.searchParams.get("text")).toContain("Familia Lista Muñóz");
-    expect(opened.searchParams.get("text")).toContain("👰🏻‍♀️🤵🏼‍♂️");
+    expect(target.searchParams.get("text")).toContain("Familia Lista Muñóz");
+    expect(target.searchParams.get("text")).toContain("👰🏻‍♀️🤵🏼‍♂️");
+    // Fulfilled by the CONTEXT route, which is the only kind a second page
+    // ever sees — a page-scoped one would have let this reach Meta.
+    expect(lastWaUrl).toBe(opened.url());
+
+    // `noopener`, and it has to be checked here: the fallback is a button, so
+    // there is no `rel` a reviewer could read it off. Without it the opened
+    // page holds a live handle on the console and can navigate it.
+    expect(await opened.evaluate(() => window.opener === null)).toBe(true);
+
+    await opened.close();
+
+    // The console did not move, and the question is still standing on it.
+    expect(page.url()).toBe(consoleUrl);
+    await expect(
+      page.getByRole("button", { name: /Marcar como enviada/ }),
+    ).toBeVisible();
   });
 
   test("records the opened link before leaving, as link_opened and nothing stronger", async () => {
