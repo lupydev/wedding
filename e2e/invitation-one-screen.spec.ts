@@ -632,7 +632,7 @@ test.describe("the invitation, one screen at a time", () => {
       whole of what they ever see about the number.
     */
     await expect(page.locator(".rsvp__deadline")).toContainText(
-      "Reservamos un lugar para ti.",
+      "La invitación es para una (1) persona.",
     );
 
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
@@ -640,7 +640,7 @@ test.describe("the invitation, one screen at a time", () => {
     // Straight past the list of who is coming: there was nobody to choose.
     await expect(page.getByRole("checkbox")).toHaveCount(0);
     await expect(page.locator(".rsvp__reserved")).toHaveText(
-      "Reservamos un lugar para ti.",
+      "La invitación es para una (1) persona.",
     );
     await expectOneScreen(
       page,
@@ -655,7 +655,7 @@ test.describe("the invitation, one screen at a time", () => {
     fixture = await householdOfThree();
     await unlock(page, fixture);
     await expect(page.locator(".rsvp__deadline")).toContainText(
-      "Reservamos tres lugares para ustedes.",
+      "La invitación es para tres (3) personas.",
     );
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
     await page.getByRole("button", { name: "Enviar respuesta" }).click();
@@ -670,7 +670,7 @@ test.describe("the invitation, one screen at a time", () => {
       through the real stepper onto a real phone.
     */
     await expect(page.locator(".rsvp__reserved")).toHaveText(
-      "Reservamos tres lugares para ustedes.",
+      "La invitación es para tres (3) personas.",
     );
     await expectOneScreen(
       page,

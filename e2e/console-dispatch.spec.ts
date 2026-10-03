@@ -487,9 +487,17 @@ test.describe("preparing and opening one dispatch", () => {
     // AND HOW MANY PEOPLE THE INVITATION IS FOR, THROUGH A REAL ENCODER.
     // "Si en todo el flujo debe ser super claro el numero de personas
     // inclusive en el mensaje de whatsapp." This household has two members,
-    // so the draft says two — and says it in WORDS, which is what keeps the
-    // digit assertion below meaningful rather than deleted.
-    expect(text).toContain("Reservamos dos lugares para ustedes.");
+    // so the draft says two — in words AND in digits, which is the couple's
+    // own form and the reason the digit assertion below is narrowed rather
+    // than deleted.
+    expect(text).toContain("La invitación es para dos (2) personas.");
+    // The parentheses through a real encoder, which is the one new character
+    // pair this wording introduced: `(` and `)` are not reserved by
+    // `encodeURIComponent`, so they must arrive literally rather than as
+    // `%28`/`%29`, and either way the parse has to give them back.
+    expect(opened.href).toContain("(2)");
+    // And this household is a plural one, so the verb above is the plural.
+    expect(text).toContain("Nos alegra mucho invitarlos a nuestra boda");
 
     // Exactly one URL: only the first link in a WhatsApp message gets a preview
     // card, so a second one costs the card rather than adding another.
@@ -498,9 +506,25 @@ test.describe("preparing and opening one dispatch", () => {
     const invitationUrl = urls[0] ?? "";
     expect(invitationUrl).toContain(`/i/${ready.slug}`);
 
-    // No event detail in the draft: the date and the venue live on the page the
-    // link resolves to, which can still be corrected after the message is sent.
-    expect(text.replace(invitationUrl, "")).not.toMatch(/\d/);
+    // NO EVENT DETAIL IN THE DRAFT: the date and the venue live on the page
+    // the link resolves to, which can still be corrected after the message is
+    // sent. This file keeps its own copy of that rule because it is the only
+    // place it is checked on a draft that travelled through a real browser's
+    // encoder and a real URL parse.
+    //
+    // NARROWED, NOT DROPPED, ON THE COUPLE'S INSTRUCTION. The old rule was
+    // "every digit comes from the URL"; they asked for the size in words AND
+    // digits — "el numero en letras y el digito entre ()" — so the rule is
+    // now "the only digits outside the URL are the ones inside the size
+    // sentence". Subtracting the exact sentence rather than allowing a
+    // bracket pattern is what keeps "(14 de marzo de 2026)" failing.
+    // `lib/domain/dispatch-message.spec.ts` carries the negative controls.
+    expect(
+      text
+        .replace(invitationUrl, "")
+        .replace("La invitación es para dos (2) personas.", "")
+        .replace(/\D/g, ""),
+    ).toBe("");
 
     // The draft arrives in the shape the couple wrote, through a real browser's
     // own encoder and a real URL parse. The blank lines and the joined emoji

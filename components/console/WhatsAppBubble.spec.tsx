@@ -161,7 +161,7 @@ describe("WhatsAppBubble — what it shows the operator", () => {
     // And the single break inside the second paragraph, which is where the
     // seat count lives: a renderer that collapsed it would run the count
     // onto the end of the invitation sentence.
-    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️.\nReservamos tres lugares para ustedes.");
+    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️.\nLa invitación es para tres (3) personas.");
   });
 
   it("asks the browser to honour those breaks rather than hoping", () => {

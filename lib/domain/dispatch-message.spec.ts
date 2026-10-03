@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { invitationSizeSentence } from "./rsvp-copy";
+
 import {
   DISPATCH_EVENT_BEACON_PATH,
   INVITATION_MESSAGE_TEMPLATE,
@@ -68,12 +70,13 @@ function draft(overrides: Partial<InvitationMessageInput> = {}) {
 }
 
 describe("INVITATION_MESSAGE_TEMPLATE", () => {
-  it("declares exactly four variables: the household, its size, the couple and the link", () => {
+  it("declares exactly five variables: the household, how it is addressed, its size, the couple and the link", () => {
     expect([...INVITATION_MESSAGE_VARIABLES].sort()).toEqual([
       "couple_names",
       "greeting_name",
       "invitation_size",
       "invitation_url",
+      "invitation_verb",
     ]);
   });
 
@@ -159,21 +162,86 @@ describe("buildInvitationMessage", () => {
     expect(urls).toEqual([INVITATION_URL]);
   });
 
-  it("states no date and no venue: every digit it renders comes from the URL", () => {
-    // The load-bearing assertion of this file. A hard-coded "14 de marzo de
-    // 2026" or a street number would survive review and would keep announcing a
-    // detail the invitation page no longer shows.
-    //
-    // AND IT IS WHY THE SEAT COUNT IS SPELLED OUT. `invitationSizeSentence`
-    // renders "tres lugares" rather than "3 lugares" precisely so that this
-    // property survives a variable whose whole job is to carry a number;
-    // every size the product can produce is checked here rather than only
-    // the fixture's own.
+  /**
+   * THE LOAD-BEARING ASSERTION OF THIS FILE, NARROWED ON THE COUPLE'S
+   * EXPLICIT INSTRUCTION AND NOT WEAKENED BY ACCIDENT.
+   *
+   * THE OLD RULE, QUOTED SO NOBODY HAS TO GO AND FIND IT: "the only digits a
+   * rendered message may contain are the ones inside the invitation URL". It
+   * exists because a reference project hard-coded "14 de marzo de 2026" and a
+   * venue into an approved template; the event moved, the invitation page was
+   * corrected in minutes, and every already-delivered message kept announcing
+   * the old venue with no way to recall it.
+   *
+   * WHAT CHANGED. The couple asked for a digit in the body: "debe decir la
+   * invitación es para una (1) persona. y si es dos o mas debe decir el
+   * numero en letras y el digito entre ()." So the rule becomes **the only
+   * digits outside the URL are the ones inside the size sentence's
+   * parentheses** — and the parentheses are not a licence for digits
+   * generally. Everything the old rule caught, this one still catches, which
+   * is what the negative control below is for.
+   *
+   * IT IS NARROWED BY SUBTRACTING THE EXACT SENTENCE rather than by allowing
+   * a pattern. A rule phrased as "ignore anything in brackets" would wave
+   * through "(14 de marzo de 2026)" pasted anywhere; removing the one string
+   * `invitationSizeSentence` produced leaves every other digit in the
+   * message visible, including a second parenthesised number.
+   */
+  function digitsOutsideTheAllowance(
+    message: string,
+    memberCount: number,
+  ): string {
+    return message
+      .replace(INVITATION_URL, "")
+      .replace(invitationSizeSentence(memberCount), "")
+      .replace(/\D/g, "");
+  }
+
+  it("states no date and no venue: the only digits left are the size's own", () => {
     for (const memberCount of [1, 2, 3, 4, 10]) {
       const message = buildInvitationMessage(draft({ memberCount }));
 
-      expect(message.replace(INVITATION_URL, "")).not.toMatch(/\d/);
+      expect(digitsOutsideTheAllowance(message, memberCount)).toBe("");
     }
+  });
+
+  /**
+   * AND THE TEMPLATE ITSELF STILL HOLDS NO DIGIT AT ALL, which is the
+   * sharpest form of the original rule and the one the parentheses cannot
+   * touch. Every digit a guest reads arrives through a NAMED variable; a date
+   * or a street number typed into the literal above fails here before it ever
+   * reaches a rendering.
+   */
+  it("holds no digit in the template itself, whatever the variables carry", () => {
+    expect(INVITATION_MESSAGE_TEMPLATE).not.toMatch(/\d/);
+  });
+
+  /**
+   * THE NEGATIVE CONTROL, because a narrowed guard that nobody proved is a
+   * deleted guard with extra steps.
+   *
+   * A date arriving through any other variable — here the household's own
+   * name, which is the one free-text value an operator types — is exactly
+   * what the old rule caught, and the narrowed one still does.
+   */
+  it("still catches a date that arrives through any other variable", () => {
+    const message = buildInvitationMessage(
+      draft({ greetingName: "Familia Muñóz, 14 de marzo de 2026" }),
+    );
+
+    expect(digitsOutsideTheAllowance(message, 3)).toBe("142026");
+  });
+
+  /**
+   * AND A SECOND PARENTHESISED NUMBER IS NOT WAVED THROUGH EITHER, which is
+   * the failure a pattern-based narrowing would have shipped.
+   */
+  it("still catches a number dressed up in the size sentence's own clothes", () => {
+    const message = buildInvitationMessage(
+      draft({ greetingName: "Familia Muñóz (14)" }),
+    );
+
+    expect(digitsOutsideTheAllowance(message, 3)).toBe("14");
   });
 
   it("refuses a second URL, because only the first one gets a preview card", () => {
@@ -226,6 +294,34 @@ describe("the draft's shape", () => {
     expect(paragraphs()[0]).toBe("Hola, Familia Muñóz.");
   });
 
+  /**
+   * AND THE INVITATION ITSELF IS ADDRESSED IN THE READER'S OWN NUMBER.
+   *
+   * "Cuando sea para una persona debe decir nos alegra mucho invitarte
+   * (singular) cuando la invitacion es para 1 sola persona, si es para 2 o
+   * mas ahi si debe seguir igual." The line was fixed prose until the couple
+   * read it addressed to a guest invited alone.
+   *
+   * ONLY THE VERB IS A VARIABLE. The emoji and the rest of the sentence stay
+   * in the template literal, where the shape the couple wrote is still
+   * visible in the source — a whole-line variable would have moved their
+   * sentence out of the file that is supposed to show it.
+   */
+  it("invites a household in the plural", () => {
+    expect(paragraphs()[1].split("\n")[0]).toContain(
+      "Nos alegra mucho invitarlos a nuestra boda",
+    );
+  });
+
+  it("invites one guest in the singular", () => {
+    const lines = buildInvitationMessage(draft({ memberCount: 1 }))
+      .split("\n\n")[1]
+      .split("\n");
+
+    expect(lines[0]).toBe("Nos alegra mucho invitarte a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.");
+    expect(lines[0]).not.toContain("invitarlos");
+  });
+
   it("carries the couple's emoji in the second paragraph, unsplit", () => {
     // A multi-codepoint ZWJ sequence with a skin-tone modifier. Asserted as
     // one string rather than by codepoint: the failure this guards against is
@@ -260,12 +356,12 @@ describe("the draft's shape", () => {
     const lines = paragraphs()[1].split("\n");
 
     expect(lines).toHaveLength(2);
-    expect(lines[1]).toBe("Reservamos tres lugares para ustedes.");
+    expect(lines[1]).toBe("La invitación es para tres (3) personas.");
   });
 
   it("says it in the singular to an invitation that names one person", () => {
     expect(buildInvitationMessage(draft({ memberCount: 1 }))).toContain(
-      "Reservamos un lugar para ti.",
+      "La invitación es para una (1) persona.",
     );
   });
 

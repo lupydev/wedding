@@ -5006,8 +5006,229 @@ same counts as U47. The single failure is `console-wedding.spec.ts:226` again,
 which is in `## Next` and is not this unit's.
 `console-guest-directory.spec.ts:464` did not recur.
 
+### U49 — done (the couple's correction to U48's copy, and the guard it narrowed)
+
+**THEY READ THE RENDERED DRAFT AND SENT BACK TWO CHANGES.** U48 shipped the
+seat count on three surfaces; both of these are about the words, not the
+placement, and both came from seeing the message as a guest would.
+
+**1. THE INVITATION'S OWN VERB HAD TO AGREE TOO.** "Cuando sea para una
+persona debe decir nos alegra mucho invitarte (singular) cuando la invitacion
+es para 1 sola persona, si es para 2 o mas ahi si debe seguir igual." The
+first sentence of the first thing a guest reads was telling somebody invited
+alone that the couple were delighted to invite _them all_. `invitation_verb`
+is a variable now — `invitarte` or `invitarlos` — and **only the verb is**:
+making the whole line a variable would have moved the couple's sentence and
+their emoji out of the template literal, which exists so the shape of the
+message is visible in the source.
+
+It lives in `dispatch-message.ts` rather than beside `invitationSizeSentence`
+in `rsvp-copy.ts`, and the split is deliberate: the size sentence is read on
+three surfaces and belongs with the number-agreement family, this is two words
+of one template. It is private, because the only honest assertion is on the
+rendered draft.
+
+**2. THE SIZE SENTENCE CHANGED FORM — WORD AND DIGIT.** "Debe decir la
+invitación es para una (1) persona. y si es dos o mas debe decir el numero en
+letras y el digito entre ()."
+
+| size | U48 shipped                             | U49 ships                                  |
+| ---- | --------------------------------------- | ------------------------------------------ |
+| 1    | `Reservamos un lugar para ti.`          | `La invitación es para una (1) persona.`   |
+| 2    | `Reservamos dos lugares para ustedes.`  | `La invitación es para dos (2) personas.`  |
+| 3    | `Reservamos tres lugares para ustedes.` | `La invitación es para tres (3) personas.` |
+
+The word and the digit together is not redundancy: a word cannot be misread as
+a different number and a digit cannot be skimmed past. U48's form was chosen
+to tell a guest the ceiling without reading them a rule; the couple have
+decided specificity wins, which is their call on a message households forward
+and argue about.
+
+**IT ALSO DROPPED AN AGREEMENT RATHER THAN ADDING ONE.** "Reservamos … para
+ti" / "… para ustedes" had to choose who it was talking to. "La invitación es
+para …" talks about the invitation, so only the numeral word and
+`persona`/`personas` still inflect, and `una` is feminine now because the noun
+it counts changed from `lugares` to `personas`. The sentence is person-neutral,
+which is the property that lets one function keep serving a message, a
+question screen and a confirmation without a second voice.
+
+**THE DIGIT GUARD WAS NARROWED ON THEIR EXPLICIT INSTRUCTION, AND THE OLD RULE
+IS QUOTED HERE SO NOBODY LATER READS THE PARENTHESES AS LICENCE.**
+
+> the only digits a rendered message may contain are the ones inside the
+> invitation URL
+
+That rule exists because a reference project hard-coded "14 de marzo de 2026"
+and a venue into an approved template; the event moved, the invitation page
+was corrected in minutes, and every already-delivered message kept announcing
+the old venue with no way to recall it. U48 is the reason the seat count was
+spelled out in the first place — it was written to live under that rule.
+
+The couple have now asked for a digit in the body, so the rule becomes:
+
+> the only digits outside the URL are the ones inside the size sentence's
+> parentheses
+
+**IT IS NARROWED BY SUBTRACTING THE EXACT SENTENCE, NOT BY ALLOWING A
+PATTERN.** A rule phrased as "ignore anything in brackets" would wave through
+"(14 de marzo de 2026)" pasted anywhere. The check removes the one string
+`invitationSizeSentence` produced for that household and then requires no
+digit to remain, so a second parenthesised number is still a failure.
+
+**AND IT IS PROVEN TO STILL CATCH WHAT THE OLD ONE CAUGHT**, because a
+narrowed guard nobody proved is a deleted guard with extra steps. Three
+assertions rather than one:
+
+- the template literal itself holds **no digit at all**, which is the part of
+  the old rule that needed no narrowing: every digit a guest reads arrives
+  through a named variable, so a date typed into the literal fails before it
+  is ever rendered;
+- a date arriving through any other variable — the household's own name, the
+  one free-text value an operator types — still fails (`"Familia Muñóz, 14 de
+marzo de 2026"` leaves `142026` behind);
+- a number dressed up in the size sentence's own clothes — `"Familia Muñóz
+(14)"` — still fails, which is the failure a pattern-based narrowing would
+  have shipped.
+
+`e2e/console-dispatch.spec.ts` keeps its own copy of the rule and was narrowed
+the same way. It is the only place the rule is checked on a draft that has
+been through a real browser's encoder and a real `URL` parse, and it went red
+on the old form, which is how it was found.
+
+**THE DRAFT AS IT WILL BE SENT**, both sizes, rendered by
+`buildInvitationMessage`:
+
+    Hola, Camila Aguirre.
+
+    Nos alegra mucho invitarte a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+    La invitación es para una (1) persona.
+
+    En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
+    https://boda.luisymichell.com/i/k7q2m9xr4tabcdef
+
+    Con cariño, Luis & Michell.
+
+    Hola, Familia Aguirre.
+
+    Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+    La invitación es para tres (3) personas.
+
+    En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
+    https://boda.luisymichell.com/i/k7q2m9xr4tabcdef
+
+    Con cariño, Luis & Michell.
+
+**ENCODING RE-CHECKED END TO END, because the parentheses are new characters
+in this message.** `(` and `)` are not reserved by `encodeURIComponent`, so
+they travel literally — `whatsapp://send?…text=…para%20una%20(1)%20persona.`
+— and the round trip through a real `URL` parse returns the draft byte for
+byte, with `%0A%0A` and both skin-toned ZWJ sequences intact. Asserted in the
+browser suite on the link an operator actually opens, not only in a unit.
+
+**THE PREVIEW PANE SHOWS IT**, built from `buildInvitationMessage` as U48 left
+it, so the approved snapshot carries the new verb and the new sentence and the
+operator reads exactly what the guest will.
+
+**MEASURED AGAIN, BECAUSE THE SENTENCE IS LONGER.** It is not longer enough to
+wrap anywhere it did not already:
+
+| screen             | iPhone 14 (664) | Pixel 7 (839) |
+| ------------------ | --------------- | ------------- |
+| question, 1 person | 664 — 1.00      | 839 — 1.00    |
+| question, 3        | 664 — 1.00      | 839 — 1.00    |
+| question, 4 canary | 664 — 1.00      | 839 — 1.00    |
+| accepted, 1 person | 664 — 1.00      | 839 — 1.00    |
+| accepted, 3        | 664 — 1.00      | 839 — 1.00    |
+| accepted, 4 canary | 664 — 1.00      | 839 — 1.00    |
+| closed/accepted    | 664 — 1.00      | 839 — 1.00    |
+
+**CONTRAST RE-SAMPLED RATHER THAN TRUSTED, AND EVERY FIXTURE HELD.** Same
+method as U48 — both phone presets and 1280×720, every glyph and self-drawn
+ground made transparent, brightest pixel inside each element's own box. The
+seat count still occupies one line at both phone widths, so every band came
+back identical to U48's: `.rsvp__reserved` `#262620` on an iPhone 14 and
+`#32340E` at `lg`, the day `#3E4038` at 9.18:1, the hour `#66684C` at 5.04:1,
+the question's deadline line `#2C2922` at 12.75:1, and the closed screen
+unchanged at `#5C5E47` / `#63674E` with the line still withheld. Not one
+constant needed moving, which is the outcome a re-sample is supposed to be
+allowed to have.
+
+**RED, QUOTED.** 9 failures, written first and observed:
+
+    × names the size in words and in digits
+    AssertionError: expected 'Reservamos tres lugares para ustedes.' to be
+    'La invitación es para tres (3) personas.'
+
+    × says it to one guest in the feminine singular, agreeing with `persona`
+    AssertionError: expected 'Reservamos un lugar para ti.' to be
+    'La invitación es para una (1) persona.'
+
+    × addresses nobody, so it fits a message and a screen alike
+    AssertionError: expected 'Reservamos un lugar para ti.' not to match
+    /\bti\b|\bustedes\b|\btú\b/
+
+    × carries exactly one parenthesised number and no loose digit
+    AssertionError: expected null to deeply equal [ '(0)' ]
+
+    × declares exactly five variables: the household, how it is addressed,
+      its size, the couple and the link
+    AssertionError: expected [ …4 items ] to deeply equal [ …5 items ]
+
+    × invites one guest in the singular
+    AssertionError: expected 'Nos alegra mucho invitarlos a nuestra boda
+    👰🏻‍♀️🤵🏼‍♂️.' to be 'Nos alegra mucho invitarte a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.'
+
+And the browser suite's own copy of the digit rule, which is the one that
+found the guard had to be narrowed in two places rather than one:
+
+    × opens WhatsApp with the household's own draft, addressed to the chosen
+      member
+    Error: expect(received).not.toMatch(expected)
+    Expected pattern: not /\d/
+    Received string: "…La invitación es para dos (2) personas.…"
+
+**GREEN.** `npm test` — 2,630 passed, 129 files (2,624 at `c30a9ec`, plus 6).
+`npm run typecheck`. `npm run lint` — 0 errors, 8 warnings, the same eight.
+`npm run format:check` — clean. `npm run build`.
+`PORT=3100 npx playwright test` — **250 passed, 1 failed, 8 did not run**, the
+same counts as U47 and U48, the failure being `console-wedding.spec.ts:226`.
+`console-guest-directory.spec.ts:464` **did recur once** and passed on the
+next run with the whole suite back at those counts — the third time it has
+done exactly what the `## Next` entry describes, and the second time it has
+been observed rather than inferred.
+
 ## Next
 
+- **The solo draft still says `encontrarán` to one person, and it is flagged
+  rather than fixed because the couple named one verb and not two.** U49
+  changed `invitarlos` to `invitarte` for a one-person invitation, exactly as
+  asked. The paragraph below it still reads "En este enlace **encontrarán** la
+  invitación con todos los detalles…", which is the plural again, addressed to
+  the same guest four lines later. It is a smaller wrongness than the first —
+  `invitarlos` named the people being invited, `encontrarán` is a subject
+  nobody reads as a count — and the couple have knowingly kept a mixture
+  before: U38 put it to them that a household is asked "¿Podrán
+  acompañarnos?" and answers "¡Sí, acepto!", and they chose to keep it. So
+  this is theirs. **The change is one more variable in the same shape as
+  `invitation_verb`** — `encontrarás`/`encontrarán`, one line in
+  `dispatch-message.ts` and one in its spec. Their sentence, their call; it
+  was not rewritten without being asked.
+- **The screens could keep a warmer sentence than the message does, and the
+  cost of that is worth stating before they choose.** The couple's instruction
+  — "el numero en letras y el digito entre ()" — was about the WhatsApp
+  message, and `La invitación es para tres (3) personas.` is deliberately
+  contract-like, which is exactly right for something a household forwards and
+  argues about. It is applied on all three surfaces because "super claro en
+  todo el flujo" was their stated goal and one function is the whole point of
+  the design. **Under a photograph it reads stiff**, next to "Los esperamos,
+  Familia Aguirre". The warmer form U48 shipped — `Reservamos tres lugares
+para ustedes.` — is still in the history and reads better there. **What
+  splitting them costs: a second function, and two sentences about the same
+  fact that can drift apart** — which is the failure the single function was
+  built to make impossible, and the same failure the `WhatsAppBubble` fixture
+  had already quietly committed before U48 caught it. One sentence, two
+  registers, is the trade; the screens are the cheaper place to be warm and
+  the message is the place that has to be exact.
 - **The invitations already sent carry the old wording, and nothing here can
   change that.** The couple had dispatched some before the seat count existed;
   those households have a message with no number in it, and a WhatsApp message

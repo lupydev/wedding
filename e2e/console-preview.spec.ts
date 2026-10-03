@@ -464,7 +464,7 @@ test.describe("the message preview's card image", () => {
     // welded to the end of the sentence above it. This is the one break in
     // the draft that is a single newline rather than a blank line, so it is
     // the one `pre-line` could lose while every blank line survived.
-    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️.\nReservamos ");
+    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️.\nLa invitación es para ");
   });
 
   test("offers no clickable WhatsApp link under the new scheme either", async () => {

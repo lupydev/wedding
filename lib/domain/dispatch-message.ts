@@ -73,11 +73,15 @@ import { buildWaMeLink, buildWhatsAppAppLink } from "./wa-link";
  * cannot drift the way a venue or an hour can — if it changes, the household
  * has been changed and a new message is the honest outcome anyway.
  *
- * It is also the one variable that carries a number, so it is spelled out:
- * `invitationSizeSentence` renders "tres lugares", never "3 lugares", and the
- * digit property above survives intact. That is asserted on both sides — here
- * and in `rsvp-copy.spec.ts` — because the two files have to agree and
- * neither of them can see the other's reason.
+ * IT IS ALSO THE ONE VARIABLE THAT CARRIES A DIGIT, AND THE COUPLE ASKED FOR
+ * THAT DIGIT ON PURPOSE: "debe decir la invitación es para una (1) persona. y
+ * si es dos o mas debe decir el numero en letras y el digito entre ()." So
+ * the rule above was NARROWED rather than dropped — the only digits outside
+ * the URL are the ones inside that sentence's parentheses — and
+ * `dispatch-message.spec.ts` proves the narrowed form still catches a date
+ * arriving through any other variable, and still catches a second
+ * parenthesised number. The template literal itself holds no digit at all,
+ * which is the part of the old rule that did not need narrowing.
  *
  * WHAT IT DOES NOT DO IS REACH THE MESSAGES ALREADY SENT. The couple had
  * dispatched invitations before this existed; those guests have the old
@@ -102,7 +106,7 @@ import { buildWaMeLink, buildWhatsAppAppLink } from "./wa-link";
  */
 export const INVITATION_MESSAGE_TEMPLATE = `Hola, {{greeting_name}}.
 
-Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+Nos alegra mucho {{invitation_verb}} a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
 {{invitation_size}}
 
 En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
@@ -113,10 +117,42 @@ Con cariño, {{couple_names}}.`;
 /** Everything the draft is allowed to vary by. Nothing else is a variable. */
 export const INVITATION_MESSAGE_VARIABLES: readonly string[] = [
   "greeting_name",
+  "invitation_verb",
   "invitation_size",
   "invitation_url",
   "couple_names",
 ];
+
+/**
+ * How the invitation itself addresses the household: `invitarte` or
+ * `invitarlos`.
+ *
+ * THE COUPLE READ THE RENDERED DRAFT AND CAUGHT IT. "Cuando sea para una
+ * persona debe decir nos alegra mucho invitarte (singular) cuando la
+ * invitacion es para 1 sola persona, si es para 2 o mas ahi si debe seguir
+ * igual." A guest invited alone was being told the couple were delighted to
+ * invite *them all*, in the first sentence of the first thing they read.
+ *
+ * ONLY THE VERB IS A VARIABLE, AND THAT IS DELIBERATE. Making the whole line
+ * one would have moved the couple's own sentence — and their emoji — out of
+ * the template literal, which exists so that the shape of the message is
+ * visible in the source. What varies is two words of Spanish; what stays is
+ * everything they wrote.
+ *
+ * HERE RATHER THAN IN `rsvp-copy.ts`, unlike `invitationSizeSentence` beside
+ * it. That sentence is read on three surfaces, so it belongs with the rest of
+ * the number-agreement family; this one is two words of this template and
+ * nothing else renders it. It is private for the same reason: the only honest
+ * assertion is on the rendered draft, which is what a guest reads, and
+ * `dispatch-message.spec.ts` makes it there.
+ *
+ * ZERO READS AS A HOUSEHOLD, like every other inflection in this product
+ * except the size sentence, which has to print the number and therefore
+ * cannot hide a zero. An invitation with no members never reaches a dispatch.
+ */
+function invitationVerb(memberCount: number): string {
+  return memberCount === 1 ? "invitarte" : "invitarlos";
+}
 
 /** Any absolute http(s) link, however it was introduced into the text. */
 const URL_PATTERN = /https?:\/\/\S+/g;
@@ -136,13 +172,14 @@ export interface InvitationMessageInput {
   /**
    * How many people the invitation names — `guests.length`, nothing else.
    *
-   * A COUNT GOES IN AND A SENTENCE COMES OUT, and the asymmetry is the point.
-   * `invitationSizeSentence` owns every agreement Spanish needs here — the
-   * numeral word, `lugar`/`lugares`, `ti`/`ustedes` — so no call site can
-   * assemble "1 lugares" out of a bare number. The same function writes the
-   * line on the question screen and on the accepted screen, which is what
-   * makes the message and the page agree by construction rather than by
-   * review.
+   * A COUNT GOES IN AND TWO PIECES OF SPANISH COME OUT, and the asymmetry is
+   * the point. `invitationSizeSentence` owns the agreements inside the size
+   * sentence — the numeral word and `persona`/`personas` — so no call site
+   * can assemble "1 personas" out of a bare number, and `invitationVerb`
+   * owns `invitarte`/`invitarlos` in the sentence above it. The size
+   * sentence also writes the line on the question screen and on the accepted
+   * screen, which is what makes the message and the page agree by
+   * construction rather than by review.
    */
   readonly memberCount: number;
 }
@@ -157,6 +194,7 @@ export interface InvitationMessageInput {
 export function buildInvitationMessage(input: InvitationMessageInput): string {
   const message = renderMessageTemplate(INVITATION_MESSAGE_TEMPLATE, {
     greeting_name: input.greetingName,
+    invitation_verb: invitationVerb(input.memberCount),
     invitation_size: invitationSizeSentence(input.memberCount),
     invitation_url: input.invitationUrl,
     couple_names: input.coupleNames,

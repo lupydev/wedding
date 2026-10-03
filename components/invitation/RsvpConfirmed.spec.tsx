@@ -165,7 +165,7 @@ describe("RsvpConfirmed", () => {
     renderConfirmed(3);
 
     expect(
-      screen.getByText("Reservamos tres lugares para ustedes."),
+      screen.getByText("La invitación es para tres (3) personas."),
     ).toBeInTheDocument();
   });
 
@@ -177,11 +177,11 @@ describe("RsvpConfirmed", () => {
    * the whole flow where that guest is told anything about the size of their
    * invitation — no list, no name, no number anywhere else.
    */
-  it("says it to one guest in the second person singular", () => {
+  it("says it to one guest in the singular, the only place they are told", () => {
     renderConfirmed(1);
 
     expect(
-      screen.getByText("Reservamos un lugar para ti."),
+      screen.getByText("La invitación es para una (1) persona."),
     ).toBeInTheDocument();
   });
 

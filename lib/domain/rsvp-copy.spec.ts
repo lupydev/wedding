@@ -377,26 +377,40 @@ describe("rsvpDeclinedHeading", () => {
  * there is nothing else it could accidentally become.
  */
 describe("invitationSizeSentence", () => {
-  it("counts the seats a household was given", () => {
+  /**
+   * THE FORM IS THE COUPLE'S, DOWN TO THE PARENTHESES.
+   *
+   * "Debe decir la invitación es para una (1) persona. y si es dos o mas debe
+   * decir el numero en letras y el digito entre ()." They asked for it after
+   * reading the first rendering of this sentence, which said "Reservamos tres
+   * lugares para ustedes." — warmer, and in their judgement not specific
+   * enough for the thing it has to stop: a household reading an invitation as
+   * something they can extend.
+   *
+   * THE WORD AND THE DIGIT TOGETHER, WHICH IS NOT REDUNDANCY. A word cannot
+   * be misread as a different number and a digit cannot be skimmed past; a
+   * message people forward and argue about gets both.
+   */
+  it("names the size in words and in digits", () => {
     expect(invitationSizeSentence(3)).toBe(
-      "Reservamos tres lugares para ustedes.",
+      "La invitación es para tres (3) personas.",
     );
   });
 
   /**
-   * AND THE SOLO LINE IS THE ONE DOING THE WORK, which is why it is not the
-   * plural with an `s` taken off.
+   * AND THE SOLO LINE IS THE ONE DOING THE WORK, which is why `una` is
+   * feminine and `persona` is singular.
    *
    * Since `1e460f8` an invitation naming one person confirms on the first tap
    * and never passes through `¿Quiénes asisten?`. A household of two or three
    * meets its own members by name on that screen, so the set is explicit
    * there whatever this line says; a solo guest sees no list, no name and no
-   * number anywhere in the flow. "un lugar para ti" states the number in
-   * words and the person in the second person singular, which is the whole
-   * message in four words.
+   * number anywhere in the flow.
    */
-  it("says it to one guest in the second person singular", () => {
-    expect(invitationSizeSentence(1)).toBe("Reservamos un lugar para ti.");
+  it("says it to one guest in the feminine singular, agreeing with `persona`", () => {
+    expect(invitationSizeSentence(1)).toBe(
+      "La invitación es para una (1) persona.",
+    );
   });
 
   it("takes a membership and nothing about the answer", () => {
@@ -404,36 +418,57 @@ describe("invitationSizeSentence", () => {
   });
 
   /**
-   * NO DIGIT ANYWHERE IN THE RANGE THIS PRODUCT CAN PRODUCE, AND THAT IS A
-   * CONTRACT WITH ANOTHER FILE RATHER THAN A PREFERENCE.
+   * IT IS PERSON-NEUTRAL NOW, AND THAT IS ONE AGREEMENT FEWER TO GET WRONG.
    *
-   * This sentence is interpolated into the WhatsApp draft, and
-   * `dispatch-message.spec.ts` asserts that the only digits a rendered
-   * message contains are the ones inside the invitation URL — the property
-   * that keeps a date or a street number out of an approved template. A
-   * numeral here would punch a hole straight through it, so the words are
-   * load-bearing and this is where that is checked.
+   * "Reservamos … para ti" / "… para ustedes" had to choose who it was
+   * talking to. "La invitación es para …" talks about the invitation, so the
+   * only things that still inflect are the numeral word and `persona`.
+   * Asserted because it is the property that lets one sentence serve a
+   * message, a question screen and a confirmation without a second voice.
    */
-  it("spells every size out, so the WhatsApp draft stays digit-free", () => {
-    for (let memberCount = 0; memberCount <= 10; memberCount += 1) {
-      expect(invitationSizeSentence(memberCount)).not.toMatch(/\d/);
+  it("addresses nobody, so it fits a message and a screen alike", () => {
+    for (const memberCount of [1, 2, 3, 4]) {
+      const line = invitationSizeSentence(memberCount);
+
+      expect(line).not.toMatch(/\bti\b|\bustedes\b|\btú\b/);
+      expect(line).toMatch(/^La invitación es para /);
     }
   });
 
   /**
-   * ZERO SAYS "cero lugares", AND THAT IS THE DELIBERATE FAILURE MODE.
+   * EXACTLY ONE PARENTHESISED NUMBER, AND IT IS A CONTRACT WITH ANOTHER FILE.
+   *
+   * `dispatch-message.spec.ts` used to assert that the only digits in a
+   * rendered WhatsApp draft were the ones inside the invitation URL. The
+   * couple have deliberately asked for a digit in the body, so that guard was
+   * NARROWED rather than deleted: the only digits outside the URL are the
+   * ones inside this sentence's parentheses. That narrowing is only safe
+   * while this sentence contains exactly one parenthesised group and no loose
+   * digit anywhere else, which is what this asserts from the copy's side.
+   */
+  it("carries exactly one parenthesised number and no loose digit", () => {
+    for (let memberCount = 0; memberCount <= 10; memberCount += 1) {
+      const line = invitationSizeSentence(memberCount);
+
+      expect(line.match(/\(\d+\)/g)).toEqual([`(${memberCount})`]);
+      expect(line.replace(/\(\d+\)/, "")).not.toMatch(/\d/);
+    }
+  });
+
+  /**
+   * ZERO SAYS "cero (0) personas", AND THAT IS THE DELIBERATE FAILURE MODE.
    *
    * Every other function in this file treats a count it should never see as a
    * household, because being wrong in the plural costs nothing when the
    * number is not printed. Here it IS printed, so there is no harmless
-   * branch: "un lugar" for an empty invitation would be a plausible lie, and
-   * "cero lugares" is visibly broken. An invitation with no members is
-   * refused long before this is reached; if one ever arrives, the screen
-   * should say so rather than invent a seat.
+   * branch: "una (1)" for an empty invitation would be a plausible lie, and
+   * "cero (0)" is visibly broken. An invitation with no members is refused
+   * long before this is reached; if one ever arrives, the screen should say
+   * so rather than invent a seat.
    */
   it("does not invent a seat for an invitation that has none", () => {
     expect(invitationSizeSentence(0)).toBe(
-      "Reservamos cero lugares para ustedes.",
+      "La invitación es para cero (0) personas.",
     );
   });
 
@@ -449,7 +484,6 @@ describe("invitationSizeSentence", () => {
 
       expect(line).not.toMatch(/[¡!]/);
       expect(line.endsWith(".")).toBe(true);
-      expect(line).toMatch(/^Reservamos /);
     }
   });
 
@@ -470,24 +504,24 @@ describe("invitationSizeSentence", () => {
       [10, "diez"],
     ] as const) {
       expect(invitationSizeSentence(memberCount)).toBe(
-        `Reservamos ${word} lugares para ustedes.`,
+        `La invitación es para ${word} (${memberCount}) personas.`,
       );
     }
   });
 
   /**
-   * PAST THE TABLE IT FALLS BACK TO THE NUMERAL, which is the one input that
-   * can put a digit outside the URL in a WhatsApp draft.
+   * PAST THE TABLE THE WORD IS THE NUMERAL TOO, which is honest rather than
+   * tidy: "11 (11) personas" reads as a mistake, and it IS one — nothing in
+   * this product enforces the ceiling of three, so a size that large means
+   * somebody entered a household nobody planned for.
    *
-   * Asserted rather than left to be discovered: eleven people on one
-   * invitation is far past anything the couple have described, and a
-   * truthful numeral is a better failure than a table that silently runs
-   * out. If an invitation that size ever becomes real, this test is where
-   * the digit guard's exception is written down.
+   * Asserted rather than left to be discovered. The narrowed digit guard in
+   * `dispatch-message.spec.ts` still holds here, because both digits are
+   * inside this one sentence.
    */
-  it("falls back to a numeral past the size table, digit and all", () => {
+  it("falls back to the numeral past the size table", () => {
     expect(invitationSizeSentence(11)).toBe(
-      "Reservamos 11 lugares para ustedes.",
+      "La invitación es para 11 (11) personas.",
     );
   });
 });

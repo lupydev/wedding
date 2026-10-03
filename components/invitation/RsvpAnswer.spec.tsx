@@ -1536,7 +1536,7 @@ describe("what each screen carries, and what it refuses to", () => {
         GUESTS.length,
       )}`,
     );
-    expect(line.textContent!.trim()).toMatch(/^Reservamos /);
+    expect(line.textContent!.trim()).toMatch(/^La invitación es para /);
   });
 
   /**
@@ -1548,7 +1548,7 @@ describe("what each screen carries, and what it refuses to", () => {
     renderForm({ guests: [GUESTS[0]] });
 
     expect(document.querySelector(".rsvp__deadline")).toHaveTextContent(
-      "Reservamos un lugar para ti.",
+      "La invitación es para una (1) persona.",
     );
   });
 
