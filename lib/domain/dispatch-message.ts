@@ -109,7 +109,7 @@ export const INVITATION_MESSAGE_TEMPLATE = `Hola, {{greeting_name}}.
 Nos alegra mucho {{invitation_verb}} a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
 {{invitation_size}}
 
-En este enlace {{link_verb}} la invitación con todos los detalles y el formulario para confirmar su asistencia:
+En este enlace {{link_verb}} la invitación con todos los detalles y el formulario para confirmar {{attendance_possessive}} asistencia:
 {{invitation_url}}
 
 Con cariño, {{couple_names}}.`;
@@ -120,6 +120,7 @@ export const INVITATION_MESSAGE_VARIABLES: readonly string[] = [
   "invitation_verb",
   "invitation_size",
   "link_verb",
+  "attendance_possessive",
   "invitation_url",
   "couple_names",
 ];
@@ -157,30 +158,48 @@ export const INVITATION_MESSAGE_VARIABLES: readonly string[] = [
  * else renders them. Private for the same reason: the only honest assertion
  * is on the rendered draft, which is what a guest reads.
  *
- * WHAT IS STILL NOT IN HERE IS `su asistencia`, AND IT IS A REAL
- * DISAGREEMENT RATHER THAN AN OVERSIGHT. `su` is the possessive of
- * `usted`/`ustedes`: correct for a household, and out of register beside the
- * `tú` this draft now uses twice for one guest. The product's singular voice
- * is `tú` everywhere else — "Confirma antes del…", "todo lo que necesitas",
- * "Te esperamos". The correction is one more pair in this object, `tu` and
- * `su`, plus one more variable in the sentence above. It is not made here
- * because the couple have twice told this message what to say by reading it,
- * and it is their sentence; the feature document carries it with the exact
- * change so it is one line the day they say yes.
+ * AND THE THIRD PAIR WENT IN WITHOUT THE SHAPE CHANGING, WHICH IS WHY THE
+ * SHAPE IS HERE. `su` is the possessive of `usted`/`ustedes`: correct for a
+ * household, and out of register beside the `tú` this draft uses twice for
+ * one guest. The product's singular voice is `tú` everywhere else —
+ * "Confirma antes del…", "todo lo que necesitas", "Te esperamos". The
+ * previous pass flagged it with the exact correction instead of making it,
+ * because the couple have told this message what to say by reading it every
+ * time; they read it again and said "si haz el cambio". One pair, one
+ * variable, no new helper and no edit to the test that checks the whole
+ * draft — `dispatch-message.spec.ts` derives the forms it looks for from
+ * this object.
+ *
+ * AND THE AUDIT IS CLOSED. Every fixed word left in the template was read
+ * against both numbers after this change and none of them bends: the
+ * remaining prose is the couple's own subject ("Nos alegra", "nuestra
+ * boda"), things rather than people ("la invitación", "todos los detalles",
+ * "el formulario"), and a greeting and a sign-off. `los` in "los detalles"
+ * is an article and not a clitic, and `detalles` is plural because the word
+ * is. The spec freezes that list, so the audit is re-run by a human the
+ * moment a word is added.
  *
  * ZERO READS AS A HOUSEHOLD, like every other inflection in this product
  * except the size sentence, which has to print the number and therefore
  * cannot hide a zero. An invitation with no members never reaches a dispatch.
+ *
+ * EXPORTED, THOUGH NOTHING OUTSIDE THIS FILE RENDERS IT. The spec still
+ * asserts on the rendered draft, which is what a guest reads; what it takes
+ * from here is the LIST of forms to look for. Restating them in the test
+ * would put a fourth pair's coverage behind somebody remembering to update a
+ * second file, which is the failure this object exists to end.
  */
-function invitationVoice(memberCount: number): {
+export function invitationVoice(memberCount: number): {
   /** `Nos alegra mucho …` */
   readonly invite: string;
   /** `En este enlace … la invitación` */
   readonly find: string;
+  /** `para confirmar … asistencia` */
+  readonly possessive: string;
 } {
   return memberCount === 1
-    ? { invite: "invitarte", find: "encontrarás" }
-    : { invite: "invitarlos", find: "encontrarán" };
+    ? { invite: "invitarte", find: "encontrarás", possessive: "tu" }
+    : { invite: "invitarlos", find: "encontrarán", possessive: "su" };
 }
 
 /** Any absolute http(s) link, however it was introduced into the text. */
@@ -227,6 +246,7 @@ export function buildInvitationMessage(input: InvitationMessageInput): string {
     invitation_verb: voice.invite,
     invitation_size: invitationSizeSentence(input.memberCount),
     link_verb: voice.find,
+    attendance_possessive: voice.possessive,
     invitation_url: input.invitationUrl,
     couple_names: input.coupleNames,
   });

@@ -10,6 +10,7 @@ import {
   buildInvitationMessage,
   buildInvitationWebFallbackLink,
   consoleDispatchPath,
+  invitationVoice,
   type DispatchCandidateGuest,
   type InvitationMessageInput,
 } from "./dispatch-message";
@@ -70,14 +71,74 @@ function draft(overrides: Partial<InvitationMessageInput> = {}) {
 }
 
 describe("INVITATION_MESSAGE_TEMPLATE", () => {
-  it("declares exactly six variables: the household, the two verbs that address it, its size, the couple and the link", () => {
+  it("declares exactly seven variables: the household, the three words that address it, its size, the couple and the link", () => {
     expect([...INVITATION_MESSAGE_VARIABLES].sort()).toEqual([
+      "attendance_possessive",
       "couple_names",
       "greeting_name",
       "invitation_size",
       "invitation_url",
       "invitation_verb",
       "link_verb",
+    ]);
+  });
+
+  /**
+   * THE FIXED PROSE OF THIS TEMPLATE, FROZEN WORD FOR WORD.
+   *
+   * THIS IS THE GUARD THAT ACTUALLY CLOSES THE AUDIT, and it is worth being
+   * honest about why it has this shape. The couple have corrected this
+   * message's Spanish three times — `invitarlos`, `encontrarán`, `su` — and
+   * each time the word that was missed sat in a paragraph nobody was reading.
+   * After the third, every fixed word was checked against both numbers and
+   * none is left that bends.
+   *
+   * THAT CONCLUSION IS A HUMAN JUDGEMENT ABOUT SPANISH AND CANNOT BE
+   * RE-DERIVED BY A TEST. There is no regex that knows `los detalles` is an
+   * article and `invitarlos` is a clitic, or that `detalles` ends in `-es`
+   * for a reason that has nothing to do with the reader. A guard that
+   * pretended otherwise would over-trigger, be relaxed once, and then be
+   * decorative.
+   *
+   * SO THIS FREEZES THE INPUT TO THE JUDGEMENT INSTEAD. Every fixed word is
+   * listed. Any word added, removed or changed in the template's prose fails
+   * here, which forces the audit to be re-run by somebody who can read the
+   * sentence — and a new word is the only way a fourth disagreement can
+   * enter, because every word that already bends is a variable. The list is
+   * the audit's result, kept where it can be compared against the template
+   * rather than in a document nobody opens.
+   */
+  it("freezes its fixed prose, so a new word cannot slip past the audit", () => {
+    const fixed = INVITATION_MESSAGE_TEMPLATE.replace(/\{\{[a-z_]+\}\}/g, " ")
+      .split(/[\s.,:]+/)
+      .filter(Boolean);
+
+    expect(fixed).toEqual([
+      "Hola",
+      "Nos",
+      "alegra",
+      "mucho",
+      "a",
+      "nuestra",
+      "boda",
+      "👰🏻‍♀️🤵🏼‍♂️",
+      "En",
+      "este",
+      "enlace",
+      "la",
+      "invitación",
+      "con",
+      "todos",
+      "los",
+      "detalles",
+      "y",
+      "el",
+      "formulario",
+      "para",
+      "confirmar",
+      "asistencia",
+      "Con",
+      "cariño",
     ]);
   });
 
@@ -344,55 +405,86 @@ describe("the draft's shape", () => {
   });
 
   /**
-   * AND NO FORM OF THE OTHER NUMBER SURVIVES ANYWHERE IN THE DRAFT, which is
-   * the assertion the two above cannot make between them.
+   * AND HOW A HOUSEHOLD'S ATTENDANCE IS SPOKEN OF, WHICH IS THE THIRD
+   * CORRECTION AND THE LAST ONE.
    *
-   * Two inflections have now been corrected one at a time, each after the
-   * couple read a rendered draft, and each time the one that was missed was
-   * in a paragraph nobody was looking at. This checks the WHOLE message
-   * rather than a sentence, so a third inflection added to the template
-   * without an entry in `invitationVoice` fails here instead of in a chat.
+   * "Si haz el cambio." `su` is the possessive of `usted`/`ustedes`: right
+   * for a household, and out of register beside the `tú` the solo draft uses
+   * in the two sentences above it. This product's singular voice is `tú`
+   * everywhere else — "Confirma antes del…", "todo lo que necesitas", "Te
+   * esperamos".
+   *
+   * THE TEST THAT USED TO PIN `su asistencia` FOR BOTH IS THIS ONE. It was
+   * written so that changing that word would be a decision rather than a
+   * merge, and the decision has been made.
+   */
+  it("speaks of a household's attendance in the plural possessive", () => {
+    expect(paragraphs()[2]).toContain("para confirmar su asistencia");
+  });
+
+  it("speaks of one guest's attendance in the singular possessive", () => {
+    const message = buildInvitationMessage(draft({ memberCount: 1 }));
+
+    expect(message).toContain("para confirmar tu asistencia");
+    expect(message).not.toContain("su asistencia");
+  });
+
+  /**
+   * AND NO FORM OF THE OTHER NUMBER SURVIVES ANYWHERE IN THE DRAFT — DERIVED
+   * FROM `invitationVoice` RATHER THAN FROM A LIST WRITTEN HERE.
+   *
+   * THIS IS THE ASSERTION THAT HAS TO BE RIGHT, because the two before it
+   * are sentence-scoped and a sentence-scoped test is exactly what went
+   * green while `encontrarán` disagreed one paragraph below `invitarte`.
+   *
+   * IT READS THE WHOLE RENDERED MESSAGE, AND IT ASKS THE SOURCE WHAT TO LOOK
+   * FOR. Restating the forms here would mean a fourth pair added to
+   * `invitationVoice` is covered only if somebody also remembered to add it
+   * to this file — the same "two places to remember" failure that collapsing
+   * the helpers into one object was meant to end. `Object.values` means a
+   * new pair is covered the moment it exists, in both directions, with no
+   * edit here at all.
+   *
+   * WORD BOUNDARIES, not `toContain`: `tu` and `su` are two letters and would
+   * otherwise match inside a household's own name — "Arturo" contains `tu`.
    */
   it.each([
-    [1, ["invitarlos", "encontrarán"], ["invitarte", "encontrarás"]],
-    [3, ["invitarte", "encontrarás"], ["invitarlos", "encontrarán"]],
+    [1, 3],
+    [3, 1],
   ])(
-    "addresses an invitation of %i in one number throughout",
-    (memberCount, wrong, right) => {
+    "addresses an invitation of %i in its own number throughout, never %i's",
+    (memberCount, other) => {
       const message = buildInvitationMessage(draft({ memberCount }));
+      const whole = (form: string) => new RegExp(`\\b${form}\\b`, "u");
 
-      for (const form of wrong) {
-        expect(message).not.toContain(form);
+      for (const mine of Object.values(invitationVoice(memberCount))) {
+        expect(message).toMatch(whole(mine));
       }
-      for (const form of right) {
-        expect(message).toContain(form);
+      for (const theirs of Object.values(invitationVoice(other))) {
+        expect(message).not.toMatch(whole(theirs));
       }
     },
   );
 
   /**
-   * THE ONE THIRD-PERSON POSSESSIVE LEFT, PINNED SO THAT CHANGING IT IS A
-   * DECISION RATHER THAN A MERGE.
+   * AND EVERY WORD THAT BENDS IS IN THAT ONE OBJECT, which is what makes the
+   * assertion above complete rather than merely automatic.
    *
-   * "Confirmar **su** asistencia" is the possessive of `usted`/`ustedes`. It
-   * is correct for a household and it does NOT agree with the `tú` the solo
-   * draft now uses twice — `invitarte`, `encontrarás` — so a guest invited
-   * alone reads one sentence that changes register halfway through. The
-   * product's singular voice is `tú` everywhere else: "Confirma antes del…",
-   * "todo lo que necesitas", "Te esperamos".
-   *
-   * NOT CHANGED HERE, because the couple have corrected this message's
-   * wording twice by reading it and saying what they want, and this is their
-   * sentence. The feature document carries it with the exact correction —
-   * `tu asistencia` for one, `su asistencia` for two or more, one more entry
-   * in `invitationVoice` — so it is one line the day they say yes.
+   * A pair added to `invitationVoice` but never wired into the template
+   * would make the test above look for a word the message does not contain,
+   * and fail. A word inflected in the template without a pair here is caught
+   * by the frozen prose list further up. Between them there is no way to add
+   * a fourth inflection silently.
    */
-  it("still says `su asistencia` to both, which is the open question", () => {
-    for (const memberCount of [1, 3]) {
-      expect(buildInvitationMessage(draft({ memberCount }))).toContain(
-        "para confirmar su asistencia",
-      );
-    }
+  it("keeps one pair per word that bends, and bends nothing else", () => {
+    expect(Object.keys(invitationVoice(1)).sort()).toEqual([
+      "find",
+      "invite",
+      "possessive",
+    ]);
+    expect(Object.keys(invitationVoice(3))).toEqual(
+      Object.keys(invitationVoice(1)),
+    );
   });
 
   it("carries the couple's emoji in the second paragraph, unsplit", () => {

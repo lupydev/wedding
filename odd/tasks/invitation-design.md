@@ -5341,22 +5341,172 @@ same counts as U47, U48 and U49, the failure being
 again on the first attempt and passed on the second — see `## Next`, where
 that entry has been sharpened, because it is no longer an occasional flake.
 
+### U51 — done (the third pair, and the audit closed with a guard behind it)
+
+**"SI HAZ EL CAMBIO."** The last item on U50's audit: `para confirmar su
+asistencia` is the possessive of `usted`/`ustedes` — right for a household,
+out of register beside the `tú` the solo draft already used twice. It is
+`tu asistencia` for one guest now and unchanged for everybody else.
+
+**IT WENT IN AS ONE PAIR AND NOTHING ELSE MOVED, WHICH IS THE POINT OF THE
+SHAPE U50 BUILT.** `invitationVoice` collapsed two helpers into one object
+precisely so a third inflection would have exactly one place to be added:
+
+    return memberCount === 1
+      ? { invite: "invitarte",  find: "encontrarás", possessive: "tu" }
+      : { invite: "invitarlos", find: "encontrarán", possessive: "su" };
+
+One pair, one template variable, **no new helper and no edit to the test that
+checks the whole draft** — it derives the forms it looks for from this object
+rather than restating them.
+
+**THE WHOLE-DRAFT GUARD WAS THE THING TO GET RIGHT, AND IT WAS NOT RIGHT
+YET.** U50's version compared against the forms it had been handed. That is
+the same mistake one level up: a fourth pair added to `invitationVoice` would
+have been covered only if somebody also remembered to list it in the spec,
+which is the "two places to remember" failure the object exists to end. It
+reads `Object.values(invitationVoice(n))` now, both directions, so a new pair
+is covered the moment it exists. Word boundaries rather than `toContain`,
+because `tu` and `su` are two letters and would otherwise match inside a
+household's own name — "Arturo" contains `tu`.
+
+**AND THE GUARD WAS PROVED BY BREAKING IT THREE WAYS RATHER THAN BY BEING
+DESCRIBED.** Each mutation was applied to a working tree, run, and reverted:
+
+| what was broken                                             | what went red                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| a new inflected FIXED word in the prose (`Los esperamos.`)  | the frozen-prose list, plus two shape assertions                    |
+| a fourth pair added to `invitationVoice`, never wired in    | both directions of the whole-draft check, plus the pair-count check |
+| the right pair wired to the wrong value (`"su"` hard-coded) | the sentence check AND the whole-draft check                        |
+
+**THE THIRD GUARD IS THE ONE THAT CLOSES THE AUDIT, AND IT IS HONEST ABOUT
+WHAT IT CAN DO.** There is no regex that knows `los detalles` is an article
+and `invitarlos` is a clitic, or that `detalles` ends in `-es` for a reason
+that has nothing to do with the reader. A guard that pretended otherwise
+would over-trigger, be relaxed once, and then be decorative. So the spec
+**freezes the template's fixed prose word for word**. It does not detect
+disagreement; it detects CHANGE, and routes it to a human who can read the
+sentence. Since every word that already bends is a variable, a new fixed word
+is the only way a fourth disagreement can enter, and it cannot enter quietly.
+
+**THE AUDIT IS EXHAUSTED, AND THAT IS A CHECKED ANSWER RATHER THAN AN
+IMPRESSION.** Re-derived from the template after this change — 25 fixed words
+remain, and here is every one of them:
+
+    Hola | Nos | alegra | mucho | a | nuestra | boda | 👰🏻‍♀️🤵🏼‍♂️ | En | este |
+    enlace | la | invitación | con | todos | los | detalles | y | el |
+    formulario | para | confirmar | asistencia | Con | cariño
+
+Read against both numbers, every one of them falls into one of four groups
+and none of them bends:
+
+| group                        | words                                                                                  | why it cannot disagree                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| the couple's own subject     | `Nos`, `alegra`, `nuestra`, `boda`                                                     | first person — it is the couple speaking, not the reader               |
+| things, not people           | `la invitación`, `todos los detalles`, `el formulario`, `asistencia`, `enlace`, `este` | `los` here is an ARTICLE, and `detalles` is plural because the word is |
+| grammar with no person in it | `a`, `con`, `y`, `para`, `confirmar`, `En`, `el`, `la`                                 | prepositions, a conjunction and an infinitive                          |
+| greeting and sign-off        | `Hola`, `Con cariño`, 👰🏻‍♀️🤵🏼‍♂️                                                             | an interjection, a closing and an image                                |
+
+Every word that DOES bend is now a variable: `invitation_verb`, `link_verb`,
+`attendance_possessive`, plus `invitation_size`, which is person-neutral by
+construction. Seven variables, three pairs, nothing left. **The answer to "is
+that all?" is "I checked, and that is all."**
+
+**THE TWO DRAFTS, FINAL.** One person:
+
+    Hola, Camila Aguirre.
+
+    Nos alegra mucho invitarte a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+    La invitación es para una (1) persona.
+
+    En este enlace encontrarás la invitación con todos los detalles y el formulario para confirmar tu asistencia:
+    https://boda.luisymichell.com/i/k7q2m9xr4tabcdef
+
+    Con cariño, Luis & Michell.
+
+Two or more:
+
+    Hola, Familia Aguirre.
+
+    Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+    La invitación es para tres (3) personas.
+
+    En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
+    https://boda.luisymichell.com/i/k7q2m9xr4tabcdef
+
+    Con cariño, Luis & Michell.
+
+**THE PLURAL DRAFT IS BYTE-IDENTICAL TO `1c4de65`, CHECKED AT FOUR SIZES.**
+It is the one that has gone to real households, and every correction in this
+run has been about the singular. Compared line by line at 2, 3, 4 and 10:
+identical. The approved `WhatsAppBubble` snapshot did not move either — its
+fixture is a three-person household, which is the same claim made by a
+different mechanism, and the preview is still built from
+`buildInvitationMessage` so what an operator approves is what a guest reads.
+
+**ENCODING RE-CHECKED THROUGH A REAL `whatsapp://` PARSE**, both sizes: the
+round trip returns the draft byte for byte, four paragraphs both ways,
+`%0A%0A` survives, both skin-toned ZWJ sequences survive, and the parentheses
+travel literally — `(1)` and `(3)` appear unescaped in the href. The narrowed
+digit guard is untouched and still subtracts the exact size sentence rather
+than allowing a bracket pattern.
+
+**NO SCREEN MOVED, AND THAT IS STATED RATHER THAN SKIPPED.** The diff is
+`lib/domain/dispatch-message.ts` and its spec — nothing under `components/`
+or `app/`. No component renders `invitationVoice`, and
+`invitationSizeSentence`, which the question and accepted screens do render,
+is untouched. The geometry guard ran anyway as part of the suite below:
+`invitation-one-screen` and `invitation-closed` execute on the `iPhone 14`
+and `Pixel 7` projects and every step is still 1.00. No contrast fixture
+could move, because no measured element did.
+
+**RED, QUOTED.** 6 failures, written first and observed:
+
+    × declares exactly seven variables: the household, the three words that
+      address it, its size, the couple and the link
+    AssertionError: expected [ …6 items ] to deeply equal [ …7 items ]
+
+    × freezes its fixed prose, so a new word cannot slip past the audit
+    AssertionError: expected [ …26 items ] to deeply equal [ …25 items ]
+    - "su"
+
+    × speaks of one guest's attendance in the singular possessive
+    AssertionError: expected 'Hola, Familia Muñóz.…' to contain
+    'para confirmar tu asistencia'
+
+    × addresses an invitation of 1 in its own number throughout, never 3's
+    × addresses an invitation of 3 in its own number throughout, never 1's
+    × keeps one pair per word that bends, and bends nothing else
+    AssertionError: expected [ 'find', 'invite' ] to deeply equal
+    [ 'find', 'invite', 'possessive' ]
+
+**GREEN.** `npm test` — 2,638 passed, 129 files (2,635 at `1c4de65`, plus 3).
+`npm run typecheck`. `npm run lint` — 0 errors, 8 warnings, the same eight.
+`npm run format:check` — clean. `npm run build`.
+`PORT=3100 npx playwright test` — **250 passed, 1 failed, 8 did not run**, the
+same counts as U47 through U50, the failure being
+`console-wedding.spec.ts:226`. `console-guest-directory.spec.ts:464` did
+**not** recur this time, on the first attempt.
+
 ## Next
 
-- **`su asistencia` is the last word in the WhatsApp draft that does not
-  agree, and it is flagged rather than fixed for the third time in a row.**
-  U50 corrected `encontrarán` on the couple's instruction and then audited
-  every fixed word in the template against the two numbers — the full word
-  list and the paragraph-by-paragraph verdict are in U50. Exactly one item
-  came back: "el formulario para confirmar **su** asistencia". `su` is the
-  possessive of `usted`/`ustedes`; it is right for a household and it does
-  not agree with the `tú` the solo draft now uses twice, so a guest invited
-  alone reads one sentence that changes register halfway through. Everywhere
-  else this product's singular voice is `tú` — "Confirma antes del…", "todo
-  lo que necesitas", "Te esperamos". **The correction is one more pair in
-  `invitationVoice`** — `tu` for one, `su` for two or more — **and one more
-  variable in that sentence.** Nothing else in the message disagrees; this is
-  the end of the list, not the next item on it.
+- **The WhatsApp draft's Spanish is closed, and nothing in it is still
+  waiting on the couple.** Three corrections in a row — `invitarlos`,
+  `encontrarán`, `su` — each found by them reading a rendered draft, each
+  fixed on their instruction. U51 then re-derived every fixed word left in
+  the template and read all 25 against both numbers: the couple's own subject
+  (`Nos alegra`, `nuestra boda`), things rather than people (`la invitación`,
+  `todos los detalles` — an article and a noun that is plural because the
+  word is), grammar with no person in it, and a greeting and a sign-off.
+  **Nothing bends that is not a variable.** Three guards hold it there: the
+  rendered draft must carry no form of the other number anywhere, derived
+  from `invitationVoice` so a fourth pair is covered the moment it exists;
+  `invitationVoice` must hold exactly one pair per bending word; and the
+  template's fixed prose is frozen word for word, so a NEW word fails the
+  suite and sends the audit back to a human. All three were proved by
+  breaking them. **If the couple change this message again, the thing to
+  change is the frozen list in `dispatch-message.spec.ts` — and that is the
+  prompt to re-read the sentence, not a chore.**
 - **The screens could keep a warmer sentence than the message does, and the
   cost of that is worth stating before they choose.** The couple's instruction
   — "el numero en letras y el digito entre ()" — was about the WhatsApp
