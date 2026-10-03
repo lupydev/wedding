@@ -109,7 +109,7 @@ export const INVITATION_MESSAGE_TEMPLATE = `Hola, {{greeting_name}}.
 Nos alegra mucho {{invitation_verb}} a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
 {{invitation_size}}
 
-En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
+En este enlace {{link_verb}} la invitación con todos los detalles y el formulario para confirmar su asistencia:
 {{invitation_url}}
 
 Con cariño, {{couple_names}}.`;
@@ -119,39 +119,68 @@ export const INVITATION_MESSAGE_VARIABLES: readonly string[] = [
   "greeting_name",
   "invitation_verb",
   "invitation_size",
+  "link_verb",
   "invitation_url",
   "couple_names",
 ];
 
 /**
- * How the invitation itself addresses the household: `invitarte` or
- * `invitarlos`.
+ * Every word in this draft that has to agree with the size of the invitation,
+ * decided in one place.
  *
- * THE COUPLE READ THE RENDERED DRAFT AND CAUGHT IT. "Cuando sea para una
- * persona debe decir nos alegra mucho invitarte (singular) cuando la
- * invitacion es para 1 sola persona, si es para 2 o mas ahi si debe seguir
- * igual." A guest invited alone was being told the couple were delighted to
- * invite *them all*, in the first sentence of the first thing they read.
+ * THE COUPLE HAVE CORRECTED THIS TWICE, EACH TIME BY READING A RENDERED
+ * DRAFT, AND EACH TIME THE WORD THEY FOUND WAS IN A PARAGRAPH NOBODY WAS
+ * LOOKING AT. First: "cuando sea para una persona debe decir nos alegra mucho
+ * invitarte (singular) cuando la invitacion es para 1 sola persona, si es
+ * para 2 o mas ahi si debe seguir igual." That fixed `invitarlos` and left
+ * `encontrarán` four lines below it, so a guest invited alone was addressed
+ * in the singular and then in the plural inside the same short message. Then:
+ * "si arreglalo."
  *
- * ONLY THE VERB IS A VARIABLE, AND THAT IS DELIBERATE. Making the whole line
- * one would have moved the couple's own sentence — and their emoji — out of
- * the template literal, which exists so that the shape of the message is
+ * ONE OBJECT RATHER THAN A FUNCTION PER WORD, AND THAT IS THE LESSON OF
+ * HAVING BEEN TOLD TWICE. Two separate helpers switching on the same boundary
+ * are two places a third inflection can fail to be added. Everything that
+ * bends with the number bends here, on one `memberCount === 1`, and
+ * `dispatch-message.spec.ts` asserts the WHOLE rendered draft carries no form
+ * of the other number — a sentence-level assertion is what missed
+ * `encontrarán` the first time.
+ *
+ * ONLY THE WORDS ARE VARIABLES, NOT THE LINES THEY SIT IN. Making a whole
+ * sentence a variable would move the couple's own prose and their emoji out
+ * of the template literal, which exists so that the shape of the message is
  * visible in the source. What varies is two words of Spanish; what stays is
  * everything they wrote.
  *
- * HERE RATHER THAN IN `rsvp-copy.ts`, unlike `invitationSizeSentence` beside
- * it. That sentence is read on three surfaces, so it belongs with the rest of
- * the number-agreement family; this one is two words of this template and
- * nothing else renders it. It is private for the same reason: the only honest
- * assertion is on the rendered draft, which is what a guest reads, and
- * `dispatch-message.spec.ts` makes it there.
+ * HERE RATHER THAN IN `rsvp-copy.ts`, unlike `invitationSizeSentence`. That
+ * sentence is read on three surfaces, so it belongs with the rest of the
+ * number-agreement family; these are two words of this template and nothing
+ * else renders them. Private for the same reason: the only honest assertion
+ * is on the rendered draft, which is what a guest reads.
+ *
+ * WHAT IS STILL NOT IN HERE IS `su asistencia`, AND IT IS A REAL
+ * DISAGREEMENT RATHER THAN AN OVERSIGHT. `su` is the possessive of
+ * `usted`/`ustedes`: correct for a household, and out of register beside the
+ * `tú` this draft now uses twice for one guest. The product's singular voice
+ * is `tú` everywhere else — "Confirma antes del…", "todo lo que necesitas",
+ * "Te esperamos". The correction is one more pair in this object, `tu` and
+ * `su`, plus one more variable in the sentence above. It is not made here
+ * because the couple have twice told this message what to say by reading it,
+ * and it is their sentence; the feature document carries it with the exact
+ * change so it is one line the day they say yes.
  *
  * ZERO READS AS A HOUSEHOLD, like every other inflection in this product
  * except the size sentence, which has to print the number and therefore
  * cannot hide a zero. An invitation with no members never reaches a dispatch.
  */
-function invitationVerb(memberCount: number): string {
-  return memberCount === 1 ? "invitarte" : "invitarlos";
+function invitationVoice(memberCount: number): {
+  /** `Nos alegra mucho …` */
+  readonly invite: string;
+  /** `En este enlace … la invitación` */
+  readonly find: string;
+} {
+  return memberCount === 1
+    ? { invite: "invitarte", find: "encontrarás" }
+    : { invite: "invitarlos", find: "encontrarán" };
 }
 
 /** Any absolute http(s) link, however it was introduced into the text. */
@@ -172,11 +201,11 @@ export interface InvitationMessageInput {
   /**
    * How many people the invitation names — `guests.length`, nothing else.
    *
-   * A COUNT GOES IN AND TWO PIECES OF SPANISH COME OUT, and the asymmetry is
-   * the point. `invitationSizeSentence` owns the agreements inside the size
+   * A COUNT GOES IN AND FINISHED SPANISH COMES OUT, and the asymmetry is the
+   * point. `invitationSizeSentence` owns the agreements inside the size
    * sentence — the numeral word and `persona`/`personas` — so no call site
-   * can assemble "1 personas" out of a bare number, and `invitationVerb`
-   * owns `invitarte`/`invitarlos` in the sentence above it. The size
+   * can assemble "1 personas" out of a bare number, and `invitationVoice`
+   * owns every other word in this draft that bends with the number. The size
    * sentence also writes the line on the question screen and on the accepted
    * screen, which is what makes the message and the page agree by
    * construction rather than by review.
@@ -192,10 +221,12 @@ export interface InvitationMessageInput {
  * which a partially rendered draft is better than a visible error.
  */
 export function buildInvitationMessage(input: InvitationMessageInput): string {
+  const voice = invitationVoice(input.memberCount);
   const message = renderMessageTemplate(INVITATION_MESSAGE_TEMPLATE, {
     greeting_name: input.greetingName,
-    invitation_verb: invitationVerb(input.memberCount),
+    invitation_verb: voice.invite,
     invitation_size: invitationSizeSentence(input.memberCount),
+    link_verb: voice.find,
     invitation_url: input.invitationUrl,
     couple_names: input.coupleNames,
   });

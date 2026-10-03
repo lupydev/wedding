@@ -5197,22 +5197,166 @@ next run with the whole suite back at those counts — the third time it has
 done exactly what the `## Next` entry describes, and the second time it has
 been observed rather than inferred.
 
+### U50 — done (the second verb, and an audit of every word that bends)
+
+**"SI ARREGLALO."** U49 changed `invitarlos` to `invitarte` for a one-person
+invitation, exactly as asked, and flagged that the paragraph below it still
+read "En este enlace **encontrarán** la invitación" — the plural again, to the
+same guest, four lines later. The couple read the flag and said fix it. So
+`link_verb` is a variable now: `encontrarás` or `encontrarán`.
+
+**ONE OBJECT RATHER THAN A SECOND HELPER, AND THAT IS THE LESSON OF HAVING
+BEEN TOLD TWICE.** `invitationVerb` became `invitationVoice`, which returns
+every word in the draft that bends with the size:
+
+    function invitationVoice(memberCount: number) {
+      return memberCount === 1
+        ? { invite: "invitarte",  find: "encontrarás" }
+        : { invite: "invitarlos", find: "encontrarán" };
+    }
+
+Two helpers switching on the same boundary are two places a third inflection
+can fail to be added, which is precisely how `encontrarán` survived U49. Only
+the WORDS are variables, not the lines around them — the couple's prose and
+their emoji stay in the template literal, which exists so the shape of the
+message is visible in the source.
+
+**AND THE ASSERTION MOVED UP A LEVEL, BECAUSE THE SENTENCE-LEVEL ONE IS WHAT
+MISSED IT.** U49 asserted the verb in the sentence it lives in; that test was
+green while the paragraph below it disagreed. The new one reads the WHOLE
+rendered draft and requires that no form of the other number appears anywhere
+in it, both ways round:
+
+| invitation | must contain                | must not contain            |
+| ---------- | --------------------------- | --------------------------- |
+| 1 person   | `invitarte`, `encontrarás`  | `invitarlos`, `encontrarán` |
+| 2 or more  | `invitarlos`, `encontrarán` | `invitarte`, `encontrarás`  |
+
+**THE AUDIT THE COUPLE ASKED FOR, DONE EXHAUSTIVELY RATHER THAN BY EYE.**
+Every fixed word in the template, with the variables stripped out, is:
+
+    Hola | Nos | alegra | mucho | a | nuestra | boda | 👰🏻‍♀️🤵🏼‍♂️ | En | este |
+    enlace | la | invitación | con | todos | los | detalles | y | el |
+    formulario | para | confirmar | su | asistencia | Con | cariño
+
+Read against the list, paragraph by paragraph:
+
+| paragraph       | what could disagree                                 | verdict                                                                                                                                      |
+| --------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Hola, {name}.` | the greeting, the household's own name              | neutral — an interjection and an operator-entered name                                                                                       |
+| the invitation  | `Nos alegra mucho`, `invitar…`, `a nuestra boda`    | the subject is the couple; the verb is `invitation_verb` ✓                                                                                   |
+| the size        | the whole sentence                                  | `La invitación es para una (1) persona.` — third person, person-neutral by design                                                            |
+| the link        | `encontrar…`, `todos los detalles`, `su asistencia` | the verb is `link_verb` ✓; `todos los detalles` is plural because _detalles_ is, not because the household is; **`su asistencia` disagrees** |
+| the sign-off    | `Con cariño, {couple}`                              | neutral                                                                                                                                      |
+
+**ONE ITEM REMAINS AND IT IS NOT FIXED HERE: `su asistencia`.** `su` is the
+possessive of `usted`/`ustedes`. It is correct for a household, and it does
+not agree with the `tú` the solo draft now uses twice — `invitarte`,
+`encontrarás` — so a guest invited alone reads one sentence that changes
+register halfway through. This product's singular voice is `tú` everywhere
+else: "Confirma antes del…", "todo lo que necesitas", "Te esperamos", "Revisa
+que sea el celular que compartiste con nosotros".
+
+**THE CORRECTION, READY TO APPLY:** one more pair in `invitationVoice` —
+`possessive: "tu"` for one, `"su"` for two or more — and one more variable in
+that sentence, so it reads "el formulario para confirmar **tu** asistencia"
+for a solo guest and is unchanged for everybody else. It is not made here
+because the couple have now told this message what to say twice by reading it
+and saying so, and it is their sentence. `dispatch-message.spec.ts` pins the
+current wording in a test named for the question, so changing it is a
+deliberate edit rather than a merge.
+
+**THE TWO DRAFTS, FINAL.** One person:
+
+    Hola, Camila Aguirre.
+
+    Nos alegra mucho invitarte a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+    La invitación es para una (1) persona.
+
+    En este enlace encontrarás la invitación con todos los detalles y el formulario para confirmar su asistencia:
+    https://boda.luisymichell.com/i/k7q2m9xr4tabcdef
+
+    Con cariño, Luis & Michell.
+
+Two or more:
+
+    Hola, Familia Aguirre.
+
+    Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+    La invitación es para tres (3) personas.
+
+    En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
+    https://boda.luisymichell.com/i/k7q2m9xr4tabcdef
+
+    Con cariño, Luis & Michell.
+
+**THE PLURAL DRAFT IS BYTE-IDENTICAL TO WHAT `ec40528` SHIPPED, AND THAT WAS
+CHECKED RATHER THAN ASSUMED.** It is the one that has already gone to real
+households, and every correction in this run has been about the singular. The
+rendered plural was compared line by line against the text recorded in U49 at
+sizes 2, 3, 4 and 10: identical. The approved `WhatsAppBubble` snapshot did
+not move either, which is the same claim made by a different mechanism — its
+fixture is a three-person household.
+
+**ENCODING RE-CHECKED THROUGH A REAL `whatsapp://` PARSE**, both sizes: the
+round trip returns the draft byte for byte, `%0A%0A` survives, both
+skin-toned ZWJ sequences survive, and the parentheses travel literally —
+`(1)` and `(3)` appear unescaped in the href, because `(` and `)` are not
+reserved by `encodeURIComponent`. The narrowed digit guard is untouched and
+still subtracts the exact size sentence rather than allowing a bracket
+pattern.
+
+**NOTHING ON A SCREEN MOVED, AND THAT IS STATED RATHER THAN SKIPPED.** The
+diff is `lib/domain/dispatch-message.ts`, its spec, and one stale
+cross-reference comment in `InvitationAnnouncement.tsx` that quoted the
+message's opening verb as if it were fixed. No component renders
+`invitationVoice`, no class changed and no copy a screen reads changed —
+`invitationSizeSentence`, which the question and accepted screens do render,
+is untouched. The geometry guard was re-run anyway rather than reasoned
+about: `e2e/invitation-one-screen.spec.ts` and `e2e/invitation-closed.spec.ts`
+run on the `iPhone 14` and `Pixel 7` projects as part of the suite below, and
+every step is still 1.00. No contrast fixture could move, because no measured
+element did.
+
+**RED, QUOTED.** 3 failures, written first and observed:
+
+    × declares exactly six variables: the household, the two verbs that
+      address it, its size, the couple and the link
+    AssertionError: expected [ …5 items ] to deeply equal [ …6 items ]
+
+    × hands the link to one guest in the singular
+    AssertionError: expected 'Hola, Familia Muñóz.…' to contain
+    'En este enlace encontrarás la invitación'
+
+    × addresses an invitation of 1 in one number throughout
+    AssertionError: expected 'Hola, Familia Muñóz.…' not to contain
+    'encontrarán'
+
+**GREEN.** `npm test` — 2,635 passed, 129 files (2,630 at `ec40528`, plus 5).
+`npm run typecheck`. `npm run lint` — 0 errors, 8 warnings, the same eight.
+`npm run format:check` — clean. `npm run build`.
+`PORT=3100 npx playwright test` — **250 passed, 1 failed, 8 did not run**, the
+same counts as U47, U48 and U49, the failure being
+`console-wedding.spec.ts:226`. `console-guest-directory.spec.ts:464` failed
+again on the first attempt and passed on the second — see `## Next`, where
+that entry has been sharpened, because it is no longer an occasional flake.
+
 ## Next
 
-- **The solo draft still says `encontrarán` to one person, and it is flagged
-  rather than fixed because the couple named one verb and not two.** U49
-  changed `invitarlos` to `invitarte` for a one-person invitation, exactly as
-  asked. The paragraph below it still reads "En este enlace **encontrarán** la
-  invitación con todos los detalles…", which is the plural again, addressed to
-  the same guest four lines later. It is a smaller wrongness than the first —
-  `invitarlos` named the people being invited, `encontrarán` is a subject
-  nobody reads as a count — and the couple have knowingly kept a mixture
-  before: U38 put it to them that a household is asked "¿Podrán
-  acompañarnos?" and answers "¡Sí, acepto!", and they chose to keep it. So
-  this is theirs. **The change is one more variable in the same shape as
-  `invitation_verb`** — `encontrarás`/`encontrarán`, one line in
-  `dispatch-message.ts` and one in its spec. Their sentence, their call; it
-  was not rewritten without being asked.
+- **`su asistencia` is the last word in the WhatsApp draft that does not
+  agree, and it is flagged rather than fixed for the third time in a row.**
+  U50 corrected `encontrarán` on the couple's instruction and then audited
+  every fixed word in the template against the two numbers — the full word
+  list and the paragraph-by-paragraph verdict are in U50. Exactly one item
+  came back: "el formulario para confirmar **su** asistencia". `su` is the
+  possessive of `usted`/`ustedes`; it is right for a household and it does
+  not agree with the `tú` the solo draft now uses twice, so a guest invited
+  alone reads one sentence that changes register halfway through. Everywhere
+  else this product's singular voice is `tú` — "Confirma antes del…", "todo
+  lo que necesitas", "Te esperamos". **The correction is one more pair in
+  `invitationVoice`** — `tu` for one, `su` for two or more — **and one more
+  variable in that sentence.** Nothing else in the message disagrees; this is
+  the end of the list, not the next item on it.
 - **The screens could keep a warmer sentence than the message does, and the
   cost of that is worth stating before they choose.** The couple's instruction
   — "el numero en letras y el digito entre ()" — was about the WhatsApp
@@ -5298,17 +5442,22 @@ navegador`, with a line saying what silence means — and that is enough for
   console to somebody else, the honest change is to make the fallback louder,
   not to try to sense the failure.
 - **`console-guest-directory.spec.ts:464` asserts a global ordering property
-  against a database four other spec files are writing in parallel.** It
-  failed once during U46 and passed on the next run with `Sara Aguirre` — a
-  name seeded by `phone-gate`, `rsvp`, `invitation-closed` and
-  `invitation-one-screen` — sitting in the row it expected to own. The suite
-  is `fullyParallel` and the guest table is shared, so "the newest row in the
-  whole directory is the one I just typed" is only true when no other worker
-  inserts between the write and the read. The fix is to scope the assertion to
-  the rows this test created rather than to row one of the list; it was not
-  made in U46 because it is a different file's test and a different concern,
-  and a flake fixed inside an unrelated unit is a flake nobody reviews. It is
-  the second known way this suite can go red without the product changing.
+  against a database four other spec files are writing in parallel, and it is
+  no longer an occasional flake.** It failed once during U46 and passed on the
+  next run with `Sara Aguirre` — a name seeded by `phone-gate`, `rsvp`,
+  `invitation-closed` and `invitation-one-screen` — sitting in the row it
+  expected to own. **It has now done the same thing on the first attempt in
+  three of the last six runs**, across U49 and U50, and passed on the retry
+  every time. The suite is `fullyParallel` and the guest table is shared, so
+  "the newest row in the whole directory is the one I just typed" is only true
+  when no other worker inserts between the write and the read; as the suite
+  has grown the window has widened. **The cost is no longer just noise**: the
+  file is a serial `describe`, so its failure abandons the rest and the run
+  reports 234 passed with 24 never reached, which is a red run that says
+  nothing about the product and takes a second full pass to clear. The fix is
+  to scope the assertion to the rows this test created rather than to row one
+  of the list. It is still not made inside an unrelated unit — a flake fixed
+  in passing is a flake nobody reviews — but it has earned a unit of its own.
 - **The countdown has no ground, and on bright photograph it cannot be
   read.** It has never been measured on any of the five screens that show it.
   On the live accepted screen its labels are **2.62:1** at `/65`; after the

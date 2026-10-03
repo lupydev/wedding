@@ -70,13 +70,14 @@ function draft(overrides: Partial<InvitationMessageInput> = {}) {
 }
 
 describe("INVITATION_MESSAGE_TEMPLATE", () => {
-  it("declares exactly five variables: the household, how it is addressed, its size, the couple and the link", () => {
+  it("declares exactly six variables: the household, the two verbs that address it, its size, the couple and the link", () => {
     expect([...INVITATION_MESSAGE_VARIABLES].sort()).toEqual([
       "couple_names",
       "greeting_name",
       "invitation_size",
       "invitation_url",
       "invitation_verb",
+      "link_verb",
     ]);
   });
 
@@ -320,6 +321,78 @@ describe("the draft's shape", () => {
 
     expect(lines[0]).toBe("Nos alegra mucho invitarte a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.");
     expect(lines[0]).not.toContain("invitarlos");
+  });
+
+  /**
+   * AND SO IS THE SENTENCE THAT HANDS OVER THE LINK, WHICH IS THE SAME
+   * CORRECTION ONE PARAGRAPH LATER.
+   *
+   * The couple asked for `invitarte` first, read the result, and asked again:
+   * "si arreglalo." Four lines under a verb addressed to one person the
+   * message went back to the plural — "En este enlace **encontrarán** la
+   * invitación" — which is the slip that is worse than never having tried,
+   * because it is visible inside one short message.
+   */
+  it("hands the link to a household in the plural", () => {
+    expect(paragraphs()[2]).toContain("En este enlace encontrarán");
+  });
+
+  it("hands the link to one guest in the singular", () => {
+    expect(buildInvitationMessage(draft({ memberCount: 1 }))).toContain(
+      "En este enlace encontrarás la invitación",
+    );
+  });
+
+  /**
+   * AND NO FORM OF THE OTHER NUMBER SURVIVES ANYWHERE IN THE DRAFT, which is
+   * the assertion the two above cannot make between them.
+   *
+   * Two inflections have now been corrected one at a time, each after the
+   * couple read a rendered draft, and each time the one that was missed was
+   * in a paragraph nobody was looking at. This checks the WHOLE message
+   * rather than a sentence, so a third inflection added to the template
+   * without an entry in `invitationVoice` fails here instead of in a chat.
+   */
+  it.each([
+    [1, ["invitarlos", "encontrarán"], ["invitarte", "encontrarás"]],
+    [3, ["invitarte", "encontrarás"], ["invitarlos", "encontrarán"]],
+  ])(
+    "addresses an invitation of %i in one number throughout",
+    (memberCount, wrong, right) => {
+      const message = buildInvitationMessage(draft({ memberCount }));
+
+      for (const form of wrong) {
+        expect(message).not.toContain(form);
+      }
+      for (const form of right) {
+        expect(message).toContain(form);
+      }
+    },
+  );
+
+  /**
+   * THE ONE THIRD-PERSON POSSESSIVE LEFT, PINNED SO THAT CHANGING IT IS A
+   * DECISION RATHER THAN A MERGE.
+   *
+   * "Confirmar **su** asistencia" is the possessive of `usted`/`ustedes`. It
+   * is correct for a household and it does NOT agree with the `tú` the solo
+   * draft now uses twice — `invitarte`, `encontrarás` — so a guest invited
+   * alone reads one sentence that changes register halfway through. The
+   * product's singular voice is `tú` everywhere else: "Confirma antes del…",
+   * "todo lo que necesitas", "Te esperamos".
+   *
+   * NOT CHANGED HERE, because the couple have corrected this message's
+   * wording twice by reading it and saying what they want, and this is their
+   * sentence. The feature document carries it with the exact correction —
+   * `tu asistencia` for one, `su asistencia` for two or more, one more entry
+   * in `invitationVoice` — so it is one line the day they say yes.
+   */
+  it("still says `su asistencia` to both, which is the open question", () => {
+    for (const memberCount of [1, 3]) {
+      expect(buildInvitationMessage(draft({ memberCount }))).toContain(
+        "para confirmar su asistencia",
+      );
+    }
   });
 
   it("carries the couple's emoji in the second paragraph, unsplit", () => {

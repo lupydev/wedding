@@ -119,7 +119,9 @@ export function InvitationAnnouncement({
       anything. And the guest read it a few seconds earlier: the WhatsApp
       message that brought them here opens "Hola, X. Nos alegra mucho
       invitarlos a nuestra boda." (`lib/domain/dispatch-message.ts`), so the
-      first thing the invitation did was repeat the message.
+      first thing the invitation did was repeat the message. That verb is
+      inflected now — `invitarte` for an invitation naming one person — which
+      changes nothing here: the repetition was the problem, not the number.
 
       It is a copy decision and the couple can have it back — at the price of
       the question screen no longer fitting on an iPhone 14, which is the trade
