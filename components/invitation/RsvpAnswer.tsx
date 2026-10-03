@@ -7,6 +7,7 @@ import type { CalendarEvent } from "@/lib/domain/calendar-event";
 import { greetingLine } from "@/lib/domain/greeting-name";
 import {
   currentRsvpSentence,
+  invitationSizeSentence,
   rsvpChoiceCopy,
   rsvpConfirmedHeading,
   rsvpDeclinedHeading,
@@ -748,7 +749,18 @@ export function RsvpAnswer({
             itself stays: the stream screen and the way back from the list of
             who is coming both still call it.
           */}
-          <RsvpConfirmed venueName={venue.name} calendar={calendar} />
+          <RsvpConfirmed
+            venueName={venue.name}
+            /*
+              THE INVITATION'S SIZE, NOT THE ANSWER'S, for the same reason the
+              heading above takes `guests.length`: a household of three that
+              confirms two is still a household of three, and the sentence on
+              that screen is telling them the ceiling rather than reciting
+              what they ticked.
+            */
+            memberCount={guests.length}
+            calendar={calendar}
+          />
         </div>
       </>
     );
@@ -960,7 +972,44 @@ export function RsvpAnswer({
                 slot stood in the middle of them; that slot is above the card
                 now and this line sits against it.
               */}
+              {/*
+                AND HOW MANY PEOPLE THE INVITATION IS FOR, IN FRONT OF THE
+                DEADLINE RATHER THAN ON A LINE OF ITS OWN.
+
+                "Si en todo el flujo debe ser super claro el numero de
+                personas." The couple asked for the count on the accepted
+                screen first and then widened it to the whole flow, and this
+                screen is the reason the widening was right: by the time a
+                household reaches the confirmation they may already have told
+                somebody they are coming. `¿Podrán acompañarnos?` is where
+                the decision is made, so it is where the ceiling belongs.
+
+                IT SHARES THIS PARAGRAPH BECAUSE TWO OF THE COUPLE'S OWN
+                RULES LEAVE NO ROOM FOR A SECOND ONE, and both are asserted
+                in `RsvpAnswer.spec.tsx` rather than remembered. "El
+                componente debe quedar abajo pegado a la fecha de
+                confirmación" means nothing may stand between the card and
+                this line; and all three asking screens are one shape —
+                announcement, slot, card, ONE small line — which is what
+                stops answering from rearranging the page under a household.
+                A new paragraph here would have broken whichever of the two
+                it was placed against.
+
+                It is also the cheaper of the two on a screen measured to the
+                pixel: a second sentence wraps inside this paragraph rather
+                than adding a block and the group's gap with it.
+
+                THE COUNT COMES FIRST because the two sentences answer "how
+                many" and "by when", and that is the order a household asks
+                them in.
+
+                `guests.length`, like every other number on this surface. The
+                selection cannot reach it, which is what makes the sentence
+                true on the screen a household returns to after unticking
+                somebody.
+              */}
               <p className="rsvp__deadline text-center text-sm text-[#f6efe2] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">
+                {invitationSizeSentence(guests.length)}{" "}
                 {rsvpDeadlineSentence(guests.length)}
               </p>
             </div>

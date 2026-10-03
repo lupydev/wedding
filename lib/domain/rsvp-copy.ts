@@ -359,6 +359,108 @@ export function rsvpDeclinedHeading(
     : `Los vamos a extrañar, ${greetingName}`;
 }
 
+/**
+ * The Spanish for each size an invitation can plausibly be, written out.
+ *
+ * SPELLED RATHER THAN RENDERED AS A NUMERAL, AND THAT IS NOT A STYLE CHOICE.
+ * `invitationSizeSentence` below is read by the WhatsApp draft as well as by
+ * two screens, and `dispatch-message.spec.ts` asserts a property that has
+ * guarded that draft since it was written: **the only digits a rendered
+ * message may contain are the ones inside the invitation URL.** That assertion
+ * is what stops a date or a street number being pasted into an approved
+ * template and outliving the correction — a reference project did exactly
+ * that and announced the wrong venue for weeks. A seat count is a legitimate
+ * number, but a digit-shaped hole in that guard is still a hole, and words
+ * read warmer in the message anyway.
+ *
+ * ZERO IS IN THE TABLE SO THAT AN EMPTY INVITATION SAYS SO. It is unreachable
+ * — an invitation with no members is refused long before any of this — and if
+ * one ever arrives, "cero lugares" is visibly broken rather than a plausible
+ * lie.
+ *
+ * ELEVEN AND UP FALL BACK TO THE NUMERAL, which is the one input that can put
+ * a digit outside the URL. Nothing in this product enforces the stated ceiling
+ * of three, so the fallback has to exist; eleven people on one invitation is
+ * far enough past any household the couple have described that a digit in the
+ * draft is the smaller of the two problems, and a truthful numeral beats a
+ * table that silently runs out.
+ */
+const SIZE_IN_WORDS: readonly string[] = [
+  "cero",
+  "un",
+  "dos",
+  "tres",
+  "cuatro",
+  "cinco",
+  "seis",
+  "siete",
+  "ocho",
+  "nueve",
+  "diez",
+];
+
+/**
+ * AND HOW MANY PEOPLE THAT INVITATION IS FOR, WHICH IT NEVER SAID ANYWHERE.
+ *
+ * THIS IS A DEFECT REAL GUESTS FOUND IN REAL INVITATIONS. The couple had
+ * already started sending them when they came back with it: "las personas
+ * estan interpretando que van a poder invitar a mas personas." Nothing in the
+ * whole flow stated the size of the invitation, so "¿Podrán acompañarnos?"
+ * read to some households as something they could extend. Their instruction,
+ * twice: "agregar que la invitacion es para la cantidad de personas a la cual
+ * se agrego de invitados por invitacion para que sea mas especifica", and then
+ * "si en todo el flujo debe ser super claro el numero de personas inclusive en
+ * el mensaje de whatsapp."
+ *
+ * ONE FUNCTION FOR EVERY SURFACE, AND THE PLURAL IS THE REASON. Spanish needs
+ * agreement in three places at once — the numeral word, `lugar`/`lugares`, and
+ * `ti`/`ustedes` — so a surface that interpolated a bare count into its own
+ * sentence would eventually ship "1 lugares". The number never leaves this
+ * function; every caller receives a finished sentence, including the WhatsApp
+ * template, whose `{{invitation_size}}` carries this string rather than a
+ * count.
+ *
+ * NAMED WITHOUT THE `rsvp` PREFIX THE REST OF THIS FILE CARRIES, because two
+ * of its three call sites are RSVP screens and the third is the message that
+ * arrives before any of them. It lives here anyway: it keys off the same
+ * `memberCount` as the two headings above, switches at the same boundary, and
+ * belongs beside them rather than in a file of its own.
+ *
+ * THE NUMBER IS THE INVITATION'S, NOT THE ANSWER'S, exactly as in
+ * `rsvpConfirmedHeading`, and here that is the whole point rather than a
+ * grammatical detail. A household of three that confirms two still reads
+ * three: three is the ceiling they are being told about, and saying it also
+ * quietly invites the third back. The signature carries one number and every
+ * caller passes the membership, so there is no seat count it could reach.
+ *
+ * WHERE IT MATTERS MOST IS THE SOLO INVITATION, and that is why the singular
+ * is not the plural with an `s` removed. A household of two or three passes
+ * through `¿Quiénes asisten?` and meets its own members by name, so the set is
+ * explicit there whatever this line says. Since `1e460f8` an invitation naming
+ * ONE person confirms on the first tap and skips that screen entirely — that
+ * guest sees no list, no name and no number anywhere in the flow, and this
+ * sentence is the only thing in the product that tells them. "Reservamos un
+ * lugar para ti." states the number in words and the person in the second
+ * person singular, and needs no numeral to do it.
+ *
+ * WARM RATHER THAN A RULE, WHICH IS A CHOICE AND THE COUPLE'S TO REVERSE.
+ * "Reservamos tres lugares para ustedes." says the same thing as "Esta
+ * invitación es para tres personas." and does not read like a doorman; the
+ * alternative is written down in the feature document so swapping it is one
+ * line. Flat, no exclamation marks, and punctuated as the sentence it is —
+ * the headings take no full stop because they are headings,
+ * `rsvpDeadlineSentence` takes one because it is a sentence, and so is this.
+ */
+export function invitationSizeSentence(memberCount: number): string {
+  if (memberCount === 1) {
+    return "Reservamos un lugar para ti.";
+  }
+
+  const size = SIZE_IN_WORDS[memberCount] ?? `${memberCount}`;
+
+  return `Reservamos ${size} lugares para ustedes.`;
+}
+
 export function rsvpChoiceCopy(memberCount: number): RsvpChoiceCopy {
   return memberCount === 1
     ? {

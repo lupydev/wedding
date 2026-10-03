@@ -140,6 +140,7 @@ export function RsvpClosed({
         {state === "accepted" ? (
           <RsvpConfirmed
             venueName={venue.name}
+            memberCount={memberCount}
             calendar={calendar}
             /*
               NO COUNTER HERE, AND IT IS MEASURED RATHER THAN CHOSEN. The
@@ -148,6 +149,18 @@ export function RsvpClosed({
               not fixable by opacity. `RsvpConfirmed` carries the numbers.
             */
             countdown={false}
+            /*
+              AND NO SEAT COUNT HERE EITHER, FOR THE SAME KIND OF REASON AND
+              FOUND THE SAME WAY. The note above starts this group two lines
+              lower than the open screen's; a third line put the hour and the
+              dress code on #797D4F, where full cream is 3.78:1 against a
+              4.5:1 floor. `RsvpConfirmed` carries the numbers, and
+              `closed-legibility.spec.tsx` holds them. The household has been
+              told three times before reaching this screen — in the WhatsApp
+              message, under the question and on this screen the day they
+              accepted — and after the deadline the number cannot change.
+            */
+            invitationSize={false}
           />
         ) : (
           /*

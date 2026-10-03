@@ -1,4 +1,5 @@
 import { renderMessageTemplate } from "./message-template";
+import { invitationSizeSentence } from "./rsvp-copy";
 import { buildWaMeLink, buildWhatsAppAppLink } from "./wa-link";
 
 /**
@@ -15,10 +16,11 @@ import { buildWaMeLink, buildWhatsAppAppLink } from "./wa-link";
  * recalled.
  *
  * So the draft states no date, no time, no venue and no address. It carries a
- * greeting, the couple's names and a link, and the link resolves to the one
- * surface that can be corrected after the fact. The names are the one fact that
- * joined it, because a name identifies who is inviting while those four are
- * logistics that move. `INVITATION_MESSAGE_VARIABLES` is the complete list
+ * greeting, how many people the invitation is for, the couple's names and a
+ * link, and the link resolves to the one surface that can be corrected after
+ * the fact. The two facts that joined it both identify the invitation rather
+ * than the event: a name says who is inviting, a size says who is invited,
+ * and those four are logistics that move. `INVITATION_MESSAGE_VARIABLES` is the complete list
  * of what may vary, and the unit test asserts that the only digits a rendered
  * message contains are the ones inside the URL — which is what makes "no date
  * in the template" an enforced property rather than a review habit.
@@ -60,6 +62,27 @@ import { buildWaMeLink, buildWhatsAppAppLink } from "./wa-link";
  * than a review habit. A date or a street number cannot be added without
  * breaking it.
  *
+ * AND THE ONE FACT THAT HAS JOINED THEM IS THE SIZE OF THE INVITATION, WHICH
+ * IS NOT A LOGISTIC
+ *
+ * "Si en todo el flujo debe ser super claro el numero de personas inclusive en
+ * el mensaje de whatsapp." The couple asked for it after real guests read
+ * their invitations as something they could extend. It passes the test the
+ * four forbidden facts fail: how many people an invitation is for is a
+ * property OF THAT INVITATION, decided when the household was created, and it
+ * cannot drift the way a venue or an hour can — if it changes, the household
+ * has been changed and a new message is the honest outcome anyway.
+ *
+ * It is also the one variable that carries a number, so it is spelled out:
+ * `invitationSizeSentence` renders "tres lugares", never "3 lugares", and the
+ * digit property above survives intact. That is asserted on both sides — here
+ * and in `rsvp-copy.spec.ts` — because the two files have to agree and
+ * neither of them can see the other's reason.
+ *
+ * WHAT IT DOES NOT DO IS REACH THE MESSAGES ALREADY SENT. The couple had
+ * dispatched invitations before this existed; those guests have the old
+ * wording and nothing here can change that. Only new sends carry the count.
+ *
  * ITS SHAPE IS PART OF IT, AND THAT IS WHY IT IS A TEMPLATE LITERAL
  *
  * The couple wrote this out line by line and the breaks are not decoration.
@@ -80,6 +103,7 @@ import { buildWaMeLink, buildWhatsAppAppLink } from "./wa-link";
 export const INVITATION_MESSAGE_TEMPLATE = `Hola, {{greeting_name}}.
 
 Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+{{invitation_size}}
 
 En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
 {{invitation_url}}
@@ -89,6 +113,7 @@ Con cariño, {{couple_names}}.`;
 /** Everything the draft is allowed to vary by. Nothing else is a variable. */
 export const INVITATION_MESSAGE_VARIABLES: readonly string[] = [
   "greeting_name",
+  "invitation_size",
   "invitation_url",
   "couple_names",
 ];
@@ -108,6 +133,18 @@ export interface InvitationMessageInput {
    * was written last.
    */
   readonly coupleNames: string;
+  /**
+   * How many people the invitation names — `guests.length`, nothing else.
+   *
+   * A COUNT GOES IN AND A SENTENCE COMES OUT, and the asymmetry is the point.
+   * `invitationSizeSentence` owns every agreement Spanish needs here — the
+   * numeral word, `lugar`/`lugares`, `ti`/`ustedes` — so no call site can
+   * assemble "1 lugares" out of a bare number. The same function writes the
+   * line on the question screen and on the accepted screen, which is what
+   * makes the message and the page agree by construction rather than by
+   * review.
+   */
+  readonly memberCount: number;
 }
 
 /**
@@ -120,6 +157,7 @@ export interface InvitationMessageInput {
 export function buildInvitationMessage(input: InvitationMessageInput): string {
   const message = renderMessageTemplate(INVITATION_MESSAGE_TEMPLATE, {
     greeting_name: input.greetingName,
+    invitation_size: invitationSizeSentence(input.memberCount),
     invitation_url: input.invitationUrl,
     couple_names: input.coupleNames,
   });

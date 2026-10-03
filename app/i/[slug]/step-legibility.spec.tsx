@@ -121,8 +121,18 @@ const BRIGHTEST_UNDER_THE_CARD = "#fffdf4";
  * instead of hanging past it. Re-measured there rather than assumed: #030305,
  * darker than this constant by a wide margin, because the bottom scrim is at
  * full strength across that whole band.
+ *
+ * `#2C2922` RATHER THAN THE `#161614` THIS HELD, BECAUSE THE DEADLINE LINE
+ * GREW. It carries the seat count in front of the date now — "las personas
+ * estan interpretando que van a poder invitar a mas personas", the couple,
+ * about invitations already sent — so it wraps to two lines and reaches
+ * 90%–96% of an iPhone 14 instead of starting lower. Its own box therefore
+ * covers a band the bottom scrim has not fully taken yet: #2C2922, 12.8:1
+ * against full cream where the old number read 16.5:1. Still the darkest
+ * ground on the page by a wide margin, and raising it makes BOTH assertions
+ * stricter rather than either of them looser.
  */
-const BRIGHTEST_AT_THE_FOOT = "#161614";
+const BRIGHTEST_AT_THE_FOOT = "#2c2922";
 
 const GUESTS = [
   { id: "aaaaaaaa-1111-4111-8111-111111111111", fullName: "Camila Aguirre" },

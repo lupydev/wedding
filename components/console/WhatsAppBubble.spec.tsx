@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { buildInvitationMessage } from "@/lib/domain/dispatch-message";
 import {
   MESSAGE_PREVIEW_APPROXIMATE_LABEL,
   MESSAGE_PREVIEW_DIVERGENCES,
@@ -27,19 +28,27 @@ import { WhatsAppBubble, type WhatsAppBubbleProps } from "./WhatsAppBubble";
 const ADVERTISED_PATH = "/i/k7q2m9xr4tabcdef/opengraph-image?88f8dd536f697fc4";
 
 /**
- * The draft in the shape it is actually sent in: four paragraphs, the URL
- * alone on its own line. The fixture carries the real shape because the
- * approved snapshot is the thing that would otherwise quietly stop matching
- * what a guest receives.
+ * The draft in the shape it is actually sent in, BUILT BY THE BUILDER THAT
+ * SENDS IT.
+ *
+ * It used to be a hand-written literal "carrying the real shape", and by the
+ * time the seat count was added it had already drifted: its third paragraph
+ * read "En este enlace encontrarán la invitación:" while the template the
+ * console actually renders says "…con todos los detalles y el formulario para
+ * confirmar su asistencia:". Nothing failed, because nothing compared them —
+ * the approved snapshot was approving a message no guest has ever received.
+ *
+ * A copy of a string cannot stay a copy. `buildInvitationMessage` is pure and
+ * takes four values, so the fixture is the real draft for a three-person
+ * household and the snapshot below is the operator's view of exactly what is
+ * sent, including the line that says how many people the invitation is for.
  */
-const DRAFT = `Hola, Familia Muñóz.
-
-Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
-
-En este enlace encontrarán la invitación:
-https://boda.example.test/i/k7q2m9xr4tabcdef
-
-Con cariño, Ana y Bruno.`;
+const DRAFT = buildInvitationMessage({
+  greetingName: "Familia Muñóz",
+  invitationUrl: "https://boda.example.test/i/k7q2m9xr4tabcdef",
+  coupleNames: "Ana y Bruno",
+  memberCount: 3,
+});
 
 const PROPS: WhatsAppBubbleProps = {
   messageText: DRAFT,
@@ -147,8 +156,12 @@ describe("WhatsAppBubble — what it shows the operator", () => {
 
     expect(text.split("\n\n")).toHaveLength(4);
     expect(text).toContain(
-      "invitación:\nhttps://boda.example.test/i/k7q2m9xr4tabcdef\n\n",
+      "asistencia:\nhttps://boda.example.test/i/k7q2m9xr4tabcdef\n\n",
     );
+    // And the single break inside the second paragraph, which is where the
+    // seat count lives: a renderer that collapsed it would run the count
+    // onto the end of the invitation sentence.
+    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️.\nReservamos tres lugares para ustedes.");
   });
 
   it("asks the browser to honour those breaks rather than hoping", () => {

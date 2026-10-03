@@ -484,6 +484,13 @@ test.describe("preparing and opening one dispatch", () => {
     const text = opened.searchParams.get("text") ?? "";
     expect(text).toContain("Familia Lista Muñóz");
 
+    // AND HOW MANY PEOPLE THE INVITATION IS FOR, THROUGH A REAL ENCODER.
+    // "Si en todo el flujo debe ser super claro el numero de personas
+    // inclusive en el mensaje de whatsapp." This household has two members,
+    // so the draft says two — and says it in WORDS, which is what keeps the
+    // digit assertion below meaningful rather than deleted.
+    expect(text).toContain("Reservamos dos lugares para ustedes.");
+
     // Exactly one URL: only the first link in a WhatsApp message gets a preview
     // card, so a second one costs the card rather than adding another.
     const urls = text.match(/https?:\/\/\S+/g) ?? [];

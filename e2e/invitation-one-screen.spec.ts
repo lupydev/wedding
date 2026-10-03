@@ -620,10 +620,28 @@ test.describe("the invitation, one screen at a time", () => {
       page.getByRole("button", { name: /Sí, acepto/ }),
     );
 
+    /*
+      AND THE ONE PLACE A SOLO GUEST IS TOLD THE SIZE OF THEIR INVITATION,
+      WHICH IS WHY IT IS ASSERTED ON THE PHONE RATHER THAN ONLY IN A UNIT.
+
+      "Las personas estan interpretando que van a poder invitar a mas
+      personas", the couple, about invitations they had already sent. A
+      household of two or three meets its own members by name on
+      `¿Quiénes asisten?`; this guest skips that screen entirely, so the
+      sentence under the question and the one on the screen after it are the
+      whole of what they ever see about the number.
+    */
+    await expect(page.locator(".rsvp__deadline")).toContainText(
+      "Reservamos un lugar para ti.",
+    );
+
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
     await expect(page.locator(".rsvp__confirmed")).toBeVisible();
     // Straight past the list of who is coming: there was nobody to choose.
     await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await expect(page.locator(".rsvp__reserved")).toHaveText(
+      "Reservamos un lugar para ti.",
+    );
     await expectOneScreen(
       page,
       "confirmed (1)",
@@ -636,10 +654,24 @@ test.describe("the invitation, one screen at a time", () => {
   }) => {
     fixture = await householdOfThree();
     await unlock(page, fixture);
+    await expect(page.locator(".rsvp__deadline")).toContainText(
+      "Reservamos tres lugares para ustedes.",
+    );
     await page.getByRole("button", { name: /Sí, acepto/ }).click();
     await page.getByRole("button", { name: "Enviar respuesta" }).click();
 
     await expect(page.locator(".rsvp__confirmed")).toBeVisible();
+    /*
+      THE SIZE OF THE INVITATION, NOT THE SIZE OF THE ANSWER, ON THE SCREEN
+      THE COUPLE ASKED FOR IT ON. All three boxes were ticked here, so this
+      assertion cannot tell the two numbers apart on its own —
+      `RsvpAnswer.spec.tsx` is where a household that unticks somebody is
+      measured. What this holds is that the sentence survives the trip
+      through the real stepper onto a real phone.
+    */
+    await expect(page.locator(".rsvp__reserved")).toHaveText(
+      "Reservamos tres lugares para ustedes.",
+    );
     await expectOneScreen(
       page,
       "confirmed",
@@ -659,6 +691,7 @@ test.describe("the invitation, one screen at a time", () => {
     const fold = await page.evaluate(() => window.innerHeight);
     for (const locator of [
       page.locator(".invitation__greeting"),
+      page.locator(".rsvp__reserved"),
       page.locator(".rsvp__when"),
       page.locator(".rsvp__venue"),
       page.locator(".rsvp__venue-map"),

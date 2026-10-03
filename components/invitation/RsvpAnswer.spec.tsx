@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  invitationSizeSentence,
   rsvpDeadlineSentence,
   type RsvpFeedback,
 } from "@/lib/domain/rsvp-copy";
@@ -1498,15 +1499,57 @@ describe("what each screen carries, and what it refuses to", () => {
   it("says how long they have to answer, beside the question", () => {
     renderForm();
 
-    expect(
-      screen.getByText(rsvpDeadlineSentence(GUESTS.length)),
-    ).toBeInTheDocument();
+    expect(document.querySelector(".rsvp__deadline")).toHaveTextContent(
+      rsvpDeadlineSentence(GUESTS.length),
+    );
   });
 
   it("asks one guest for their own deadline, in the singular", () => {
     renderForm({ guests: [GUESTS[0]] });
 
-    expect(screen.getByText(rsvpDeadlineSentence(1))).toBeInTheDocument();
+    expect(document.querySelector(".rsvp__deadline")).toHaveTextContent(
+      rsvpDeadlineSentence(1),
+    );
+  });
+
+  /**
+   * AND HOW MANY PEOPLE THE INVITATION IS FOR, ON THE SCREEN WHERE THE
+   * HOUSEHOLD IS DECIDING.
+   *
+   * "Las personas estan interpretando que van a poder invitar a mas
+   * personas", reported by the couple about invitations they had already
+   * sent. The confirmation can only tell a household what it already
+   * decided; this screen is where the decision happens, so this is where the
+   * ceiling has to be readable.
+   *
+   * ASSERTED AGAINST THE SAME PARAGRAPH AS THE DEADLINE, because sharing it
+   * is not an accident: the card is pinned to this line and all three asking
+   * screens are one shape, so a second paragraph here would have broken one
+   * of the couple's two rules. The count goes first.
+   */
+  it("says how many people the invitation is for, in front of the deadline", () => {
+    renderForm();
+    const line = document.querySelector(".rsvp__deadline")!;
+
+    expect(line).toHaveTextContent(
+      `${invitationSizeSentence(GUESTS.length)} ${rsvpDeadlineSentence(
+        GUESTS.length,
+      )}`,
+    );
+    expect(line.textContent!.trim()).toMatch(/^Reservamos /);
+  });
+
+  /**
+   * AND IT IS THE INVITATION'S OWN SIZE, which is the number a solo guest
+   * never meets anywhere else: they confirm on the first tap and never see
+   * the list of who is coming.
+   */
+  it("counts the invitation in the singular when it names one person", () => {
+    renderForm({ guests: [GUESTS[0]] });
+
+    expect(document.querySelector(".rsvp__deadline")).toHaveTextContent(
+      "Reservamos un lugar para ti.",
+    );
   });
 
   /**

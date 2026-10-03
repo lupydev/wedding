@@ -256,3 +256,73 @@ describe("the counter after the deadline", () => {
     ).toBeLessThan(WCAG_AA_NORMAL_TEXT);
   });
 });
+
+/**
+ * AND THE SEAT COUNT IS WITHHELD HERE TOO, FOR THE SAME KIND OF REASON AND
+ * FOUND THE SAME WAY.
+ *
+ * "Si en todo el flujo debe ser super claro el numero de personas." The
+ * sentence ships on the WhatsApp message, on the question and on the live
+ * accepted screen. It does not ship here, and the reason is a measurement
+ * taken after it had already broken something: this screen opens with the
+ * closed note, so its top group starts two lines lower than the open one's,
+ * and a third line pushed the day and the hour down the brightening slope
+ * between `PhotoStage`'s two scrims.
+ *
+ * MEASURED ON AN IPHONE 14 WITH THE LINE IN PLACE, which is the only honest
+ * way to know: the day landed on #6C6F46 (**4.59:1**) and the hour and the
+ * dress code on #797D4F (**3.78:1**), against a 4.5:1 floor and from 5.72:1
+ * and 5.13:1 without it. Both lines are already FULL cream — they are
+ * `ANNOUNCEMENT_LINE` — so no opacity recovers that, and the top of this
+ * screen is deliberately ungrounded. Taking the line off restored both
+ * fixtures below to the exact bytes they already held, which is how the
+ * cause is known to be the line and not the photograph.
+ *
+ * WHAT THE HOUSEHOLD LOSES IS A FOURTH TELLING. They answered before the
+ * deadline, which means they read the count in the message, under the
+ * question and on this screen the day they accepted; after the deadline the
+ * number cannot change anyway.
+ */
+describe("the seat count after the deadline", () => {
+  it("is not shown, because the two lines under it could not be read", () => {
+    const { container } = renderClosed({ attending: true });
+
+    expect(container.querySelector(".rsvp__reserved")).toBeNull();
+  });
+
+  /**
+   * AND THIS IS WHY — the two numbers, kept where a reader will meet them.
+   *
+   * The grounds are the ones the day and the hour actually landed on with
+   * the line in place. When this screen's top group gains a ground, or the
+   * photograph behind it changes, these go red and the line can come back.
+   */
+  /** Where each line actually landed on an iPhone 14 with the count in place. */
+  const WITH_THE_COUNT = [
+    ["#6c6f46", BRIGHTEST_UNDER_A_LABEL, "the day"],
+    ["#797d4f", BRIGHTEST_UNDER_A_VALUE, "the hour and the dress code"],
+  ] as const;
+
+  it.each(WITH_THE_COUNT)(
+    "would stand %s instead of %s — %s",
+    (pushed, here) => {
+      const cream = "rgba(246, 239, 226, 1)";
+
+      expect(contrastRatio(cream, pushed)).toBeLessThan(
+        contrastRatio(cream, here),
+      );
+    },
+  );
+
+  /**
+   * AND ONE OF THE TWO WOULD BE UNDER THE FLOOR OUTRIGHT, which is the
+   * assertion that makes this a defect rather than a preference. When it
+   * goes red the ground behind this screen has changed and the line can come
+   * back.
+   */
+  it("would put the hour and the dress code under the floor", () => {
+    expect(contrastRatio("rgba(246, 239, 226, 1)", "#797d4f")).toBeLessThan(
+      WCAG_AA_NORMAL_TEXT,
+    );
+  });
+});

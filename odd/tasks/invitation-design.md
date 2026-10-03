@@ -4759,7 +4759,298 @@ same eight. `npm run format:check` — clean. `npm run build`.
 same counts as U46: this unit changes an existing browser assertion rather than
 adding one. The single failure is `console-wedding.spec.ts:226` again.
 
+### U48 — done (the invitation says how many people it is for, in three places)
+
+**REAL GUESTS, REAL INVITATIONS, AND THE COUPLE FOUND IT AFTER SENDING.** "Las
+personas estan interpretando que van a poder invitar a mas personas." Nothing
+in the whole flow had ever stated the size of an invitation — not the WhatsApp
+message, not the question, not the screen after it — so "¿Podrán
+acompañarnos?" read to some households as something they could extend. Their
+instruction, twice: "agregar que la invitacion es para la cantidad de personas
+a la cual se agrego de invitados por invitacion para que sea mas especifica",
+and then "si en todo el flujo debe ser super claro el numero de personas
+inclusive en el mensaje de whatsapp."
+
+**ONE FUNCTION, AND THE PLURAL IS WHY.** `invitationSizeSentence(memberCount)`
+sits in `lib/domain/rsvp-copy.ts` beside `rsvpConfirmedHeading` and
+`rsvpDeclinedHeading`, keys off the same number and switches at the same
+boundary. It returns a finished sentence, never a count: Spanish needs
+agreement in three places at once — the numeral word, `lugar`/`lugares`,
+`ti`/`ustedes` — so a surface that interpolated a bare number into its own
+sentence would eventually ship "1 lugares". The number never leaves the
+function.
+
+**THE NUMBER IS THE INVITATION'S, NOT THE ANSWER'S.** A household of three
+that confirms two still reads three. Three is the ceiling they are being told
+about, and saying it also quietly invites the third back. Every caller passes
+the membership; the function has no parameter a seat count could arrive
+through.
+
+**IT IS SPELLED OUT, AND THAT IS A CONTRACT WITH ANOTHER FILE RATHER THAN A
+PREFERENCE.** "Reservamos tres lugares para ustedes.", never "3 lugares".
+`dispatch-message.spec.ts` has asserted since it was written that **the only
+digits a rendered WhatsApp message contains are the ones inside the invitation
+URL** — the property that stops a date or a street number entering an approved
+template and outliving its correction, which is the reference-project defect
+that whole module exists to avoid. A numeral in this sentence would punch
+through it. So the sizes are a word table, `cero` through `diez`, and both
+sides assert it: `rsvp-copy.spec.ts` checks every size 0–10 renders digit-free,
+and the digit guard now runs over five sizes instead of one fixture. Eleven
+and up fall back to the numeral, asserted, because nothing enforces the
+ceiling and a truthful numeral beats a table that silently runs out. Words
+also read warmer, which is what the couple's register wants anyway.
+
+**WHERE IT SHIPS, AND WHERE IT DELIBERATELY DOES NOT.** "Todo el flujo" is five
+surfaces, and five statements of the same fact read as distrust. Three:
+
+| surface                     | says it | why                                                                                                                                                |
+| --------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the WhatsApp message        | **yes** | first contact, read before anything is opened, and the thing a household forwards and discusses. This is where the expectation is set.             |
+| the question (`¿Podrán…?`)  | **yes** | where the household decides. The misunderstanding forms here, not later.                                                                           |
+| the accepted screen         | **yes** | the record they can point back to a week later, after they have already told a cousin.                                                             |
+| `¿Quiénes asisten?`         | no      | it already says it, by name. Three named checkboxes tell a household the count more concretely than a sentence can; a number beside them is noise. |
+| the declined screen         | no      | they are not coming. A seat count there is pointless and slightly cold.                                                                            |
+| the gate                    | no      | argued below.                                                                                                                                      |
+| the accepted screen, CLOSED | no      | a measurement forced it. See the defect below.                                                                                                     |
+
+**THE GATE WAS MINE TO DECIDE AND THE ANSWER IS NO, FOR A REASON THAT IS NOT
+ABOUT TASTE.** It does greet the household by name before unlocking, so a name
+is already disclosed to whoever holds the link — but `lib/domain/gate-copy.ts`
+exists entirely to stop that screen disclosing anything else: "a rejection
+never says WHY… any of those turns a forwarded link into a phone-number
+checker for that household." The size of a household is a second fact about
+people who have not been verified yet, handed to anyone a link was forwarded
+to. It is also the one surface deliberately left free to scroll and already
+measured 8 pixels over an iPhone 14. The gate asks who you are; it should not
+also describe you.
+
+**THE SOLO WORDING IS THE ONE DOING THE WORK, AND IT IS NOT THE PLURAL WITH AN
+`s` REMOVED.** A household of two or three passes through `¿Quiénes asisten?`
+and meets its own members by name. Since `1e460f8` an invitation naming ONE
+person confirms on the first tap and skips that screen entirely — that guest
+sees no list, no name and no number anywhere. "Reservamos un lugar para ti."
+states the number in words and the person in the second person singular, and
+needs no numeral to do it.
+
+**THE COPY, AND THE ONE-LINE ALTERNATIVE.** Shipped:
+
+    Reservamos un lugar para ti.
+    Reservamos tres lugares para ustedes.
+
+The alternative, if the couple want it blunter:
+
+    Esta invitación es para una persona.
+    Esta invitación es para tres personas.
+
+Both say the same thing; the first does not read like a doorman. One function
+in `lib/domain/rsvp-copy.ts` and the three surfaces follow — plus the exact
+strings in `rsvp-copy.spec.ts`, which is the point: it cannot be changed by
+accident.
+
+**THE QUESTION SCREEN SHARES THE DEADLINE'S PARAGRAPH, BECAUSE TWO OF THE
+COUPLE'S OWN RULES LEAVE NO ROOM FOR A SECOND LINE.** Both are already
+asserted in `RsvpAnswer.spec.tsx` and both went red when a new `<p>` was tried:
+"el componente debe quedar abajo pegado a la fecha de confirmación" means
+nothing may stand between the card and that line, and all three asking screens
+are one shape — announcement, slot, card, ONE small line — which is what stops
+answering from rearranging the page under a household. So the line reads
+"Reservamos tres lugares para ustedes. Confirmen antes del 21 de noviembre de
+2026." — how many, then by when, which is the order a household asks them in.
+It is also cheaper: a wrapped sentence costs one line rather than a block and
+the group's gap with it.
+
+**THE WHATSAPP DRAFT KEEPS ITS SHAPE TO THE LINE.** The couple wrote that
+message out line by line in U46. The count is the SECOND LINE of the
+invitation paragraph, under the sentence it qualifies, not a fifth paragraph:
+
+    Hola, {{greeting_name}}.
+
+    Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.
+    {{invitation_size}}
+
+    En este enlace encontrarán la invitación con todos los detalles y el formulario para confirmar su asistencia:
+    {{invitation_url}}
+
+    Con cariño, {{couple_names}}.
+
+Four paragraphs before and four after, asserted across every size; the URL
+still alone on its own line with a blank line after it; the ZWJ emoji still
+one string. The round trip through `whatsapp://` was re-checked in the browser
+suite rather than assumed — `%0A%0A` and both skin-toned joiner sequences come
+back out of a real `URL` parse unchanged, and the draft now carries "Reservamos
+dos lugares para ustedes." through it.
+
+**AND THE PREVIEW PANE WAS LYING BEFORE THIS UNIT TOUCHED IT.**
+`WhatsAppBubble.spec.tsx` held a hand-written draft "carrying the real shape",
+and its third paragraph read "En este enlace encontrarán la invitación:" while
+the template the console actually renders says "…con todos los detalles y el
+formulario para confirmar su asistencia:". Nothing compared them, so the
+approved snapshot had been approving a message no guest has ever received. The
+fixture is built by `buildInvitationMessage` now, which is the only way a copy
+stays a copy, and the snapshot carries the seat count because the operator has
+to see what the guest will.
+
+**MEASURED BEFORE ANYTHING WAS STYLED, AND EVERYTHING FITS.** Both phones, the
+sizes that matter and the four-person canary, against a production build:
+
+| screen             | iPhone 14 (664) | Pixel 7 (839) |
+| ------------------ | --------------- | ------------- |
+| question, 1 person | 664 — 1.00      | 839 — 1.00    |
+| question, 3        | 664 — 1.00      | 839 — 1.00    |
+| question, 4 canary | 664 — 1.00      | 839 — 1.00    |
+| accepted, 1 person | 664 — 1.00      | 839 — 1.00    |
+| accepted, 3        | 664 — 1.00      | 839 — 1.00    |
+| accepted, 4 canary | 664 — 1.00      | 839 — 1.00    |
+| closed/accepted    | 664 — 1.00      | 839 — 1.00    |
+
+Both screens are `justify-between` columns with an emptied middle, so a line
+added at the top is paid out of the photograph rather than out of the fold.
+Nothing lost height, no touch target shrank, the guard was not loosened and
+`dvh` is untouched.
+
+**AND THEN THE CONTRAST RE-SAMPLE FOUND WHAT THE HEIGHTS COULD NOT.** Every
+line near the new one was re-measured the way U35 measures: the real page at
+both phone presets and 1280×720, every glyph and every self-drawn ground made
+transparent, the brightest pixel inside each element's own box taken off the
+shot. The method was validated against two numbers this document already
+holds — the foot's `#A29C98, 0.337` and the closed screen's `#5C5E47` /
+`#63674E` came back byte for byte.
+
+On the LIVE accepted screen the new line is comfortable and the two lines it
+pushes down are still clear:
+
+| line                        | ground before | ground now | full cream |
+| --------------------------- | ------------- | ---------- | ---------- |
+| the seat count (new)        | —             | `#32340E`  | 11.20:1    |
+| the day                     | `#262620`     | `#3E4038`  | 9.18:1     |
+| the hour and the dress code | `#2E2F27`     | `#66684C`  | 5.04:1     |
+
+**ON THE CLOSED ACCEPTED SCREEN THE SAME LINE BROKE THE FLOOR, AND I BROKE IT.**
+That screen opens with the closed note, so its top group starts two lines
+lower; a third line pushed the day and the hour further down the brightening
+slope between `PhotoStage`'s two scrims. Measured on an iPhone 14 with the line
+in place:
+
+| line                        | without the count | with it              |
+| --------------------------- | ----------------- | -------------------- |
+| the day                     | `#5C5E47` 5.72:1  | `#6C6F46` 4.59:1     |
+| the hour and the dress code | `#63674E` 5.13:1  | `#797D4F` **3.78:1** |
+
+Both lines are `ANNOUNCEMENT_LINE`, which is FULL cream — there is no opacity
+left to spend, and the top of that screen is deliberately ungrounded
+(`confirm-legibility.spec.tsx` argues why a card there is the wrong trade). So
+`RsvpClosed` passes `invitationSize={false}`, exactly as it already passes
+`countdown={false}` and for the same kind of reason, and taking the line off
+restored both fixtures to the exact bytes they already held — which is how the
+cause is known to be the line rather than the photograph. What that household
+loses is a FOURTH telling: they answered before the deadline, so they read the
+count in the message, under the question and on this same screen the day they
+accepted, and after the deadline the number cannot change. `closed-legibility.spec.tsx`
+holds both numbers so the day it can come back, the test says so.
+
+**THREE FIXTURES IN THIS REPOSITORY HAD QUIETLY STOPPED BEING TRUE, AND THE
+RE-SAMPLE IS THE ONLY REASON ANYBODY LOOKED.** None of them was failing:
+
+- `confirm-legibility`'s greeting fixture said `#303011`, "worst on a 1280×720
+  window". It is not: the Pixel 7 reads `#3E3C39` under that same line, which
+  is brighter. Corrected, and the comment no longer claims a viewport it did
+  not check.
+- `BRIGHTEST_AT_LG` said `#33350F` and recorded "every element now reads
+  darker than this at 1280×720". The desktop column reflows when a line joins
+  it, and the greeting's own box is `#373A10` there. Corrected.
+- `step-legibility`'s `BRIGHTEST_AT_THE_FOOT` said `#161614`. The deadline line
+  wraps to two lines now and reaches 90%–96% of an iPhone 14 instead of
+  starting lower, so its box covers `#2C2922` — 12.8:1 rather than 16.5:1.
+  Raised, which makes BOTH assertions that use it stricter.
+
+**RED, QUOTED.** 13 failures across two rounds, written first and observed:
+
+    × counts the seats a household was given
+    × says it to one guest in the second person singular
+    × takes a membership and nothing about the answer
+    × does not invent a seat for an invitation that has none
+    × spells every size out, so the WhatsApp draft stays digit-free
+    ReferenceError: invitationSizeSentence is not defined
+
+    × says how many people the invitation is for
+    TestingLibraryElementError: Unable to find an element with the text:
+    Reservamos tres lugares para ustedes.
+
+    × declares exactly four variables: the household, its size, the couple
+      and the link
+    AssertionError: expected [ 'couple_names', 'greeting_name',
+    'invitation_url' ] to deeply equal [ 'couple_names', 'greeting_name',
+    'invitation_size', 'invitation_url' ]
+
+    × says how many people the invitation is for, under the invitation itself
+    AssertionError: expected [ 'Nos alegra mucho invitarlos…' ] to have a
+    length of 2 but got 1
+
+Two of the reds were the couple's own rules refusing a second line on the
+question screen, and they are the reason the count shares the deadline's
+paragraph rather than standing under it:
+
+    × reserves the refusal above the card, not inside it
+    AssertionError: expected <p class="rsvp__deadline"> to be
+    <p class="rsvp__reserved">
+
+    × gives the question and the list the same three-part shape
+    AssertionError: expected [ 'slot', 'card', 'line', 'line' ] to deeply
+    equal [ 'slot', 'card', 'line' ]
+
+**GREEN.** `npm test` — 2,624 passed, 129 files (2,601 at `de9e7bc`, plus 23).
+`npm run typecheck`. `npm run lint` — 0 errors, 8 warnings, the same eight.
+`npm run format:check` — clean. `npm run build`.
+`PORT=3100 npx playwright test` — **250 passed, 1 failed, 8 did not run**, the
+same counts as U47. The single failure is `console-wedding.spec.ts:226` again,
+which is in `## Next` and is not this unit's.
+`console-guest-directory.spec.ts:464` did not recur.
+
 ## Next
+
+- **The invitations already sent carry the old wording, and nothing here can
+  change that.** The couple had dispatched some before the seat count existed;
+  those households have a message with no number in it, and a WhatsApp message
+  cannot be recalled or edited. Only NEW sends carry it. **Two of the three
+  surfaces do reach them anyway** — the question screen and the accepted screen
+  are on the invitation page, which everybody opens and which is corrected the
+  moment it is deployed — so a household that was sent the old draft still
+  meets the count twice before it answers. What they do not get is the count in
+  the thread they will scroll back to. **If that matters, the honest fix is a
+  short second WhatsApp message to the households already dispatched**, written
+  by the couple, not a console feature: the console records a dispatch as done
+  and has no notion of "send again with a correction".
+- **The seat count is withheld from the closed accepted screen, and that is
+  measured rather than chosen.** With the line in place the hour and the dress
+  code land on `#797D4F` on an iPhone 14 — **3.78:1** against a 4.5:1 floor, at
+  full cream, where no opacity helps — and the day on `#6C6F46` at 4.59:1 with
+  nothing in hand. U48 records both numbers and the test holds them. **It is
+  the same blocked question as the counter below**: the fix is a ground behind
+  the top group of that screen, and one answer unblocks all three. Until then
+  the household has been told three times before the deadline and the number
+  cannot change after it.
+- **The gate does not say how many people the invitation is for, and that was
+  my call rather than the couple's.** They asked for "todo el flujo"; the gate
+  is the one screen in the flow that is read by whoever holds the link rather
+  than by a verified household, and `gate-copy.ts` exists entirely to keep it
+  from disclosing a second fact about people it has not identified yet. It
+  already gives up the household's NAME, which is the precedent that could be
+  read either way, so this is theirs to overrule — one line in
+  `InvitationGate`, and `gate-legibility.spec.tsx` would need the new line's
+  ground measured first, on a screen already 8 pixels over an iPhone 14.
+- **`¿Quiénes asisten?` says the number by naming the people, and no sentence
+  was added there.** Three named checkboxes are a more concrete statement of
+  the count than any sentence, and a number beside them reads as the couple
+  not trusting the list they just showed. Written down because "todo el flujo"
+  literally means five surfaces and this is one of the two that were left out
+  on purpose; the other is the declined screen, where a seat count is pointless
+  and slightly cold.
+- **At 1280×720 the question screen is now 776 pixels tall, up from 768.** The
+  seat count wraps the deadline line to two lines on a desktop window too. It
+  was already over — the entry at the bottom of this list records 768 against a
+  720-pixel window — and the one-screen guard is a phone guard by construction;
+  nothing is clipped and the window scrolls. Recorded so the number in this
+  list stays measured rather than remembered.
 
 - **The replacement for the Twemoji sentence is the couple's to keep or
   reword, and it is quoted here so the choice is one line rather than an

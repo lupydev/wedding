@@ -6,6 +6,7 @@ import {
   currentRsvpSentence,
   rsvpConfirmedHeading,
   rsvpDeclinedHeading,
+  invitationSizeSentence,
   rsvpClosedNote,
   rsvpDeadlineSentence,
   rsvpReconsiderSentence,
@@ -353,6 +354,141 @@ describe("rsvpDeclinedHeading", () => {
       expect(rsvpDeclinedHeading(memberCount, "X")).toMatch(expected);
       expect(rsvpConfirmedHeading(memberCount, "X")).toMatch(expected);
     }
+  });
+});
+
+/**
+ * HOW MANY PEOPLE THE INVITATION IS FOR, SAID OUT LOUD, BECAUSE GUESTS WERE
+ * READING IT AS AN OPEN DOOR.
+ *
+ * The couple started sending invitations and came back with this: "las
+ * personas estan interpretando que van a poder invitar a mas personas."
+ * Nothing on the accepted screen ever said how big the invitation was, so
+ * "¿Podrán acompañarnos?" read to some households as an invitation they could
+ * extend. Their fix, in their words: "agregar que la invitacion es para la
+ * cantidad de personas a la cual se agrego de invitados por invitacion para
+ * que sea mas especifica."
+ *
+ * IT KEYS OFF THE INVITATION, NOT THE ANSWER, which is the same rule
+ * `rsvpConfirmedHeading` above is written to and the reason this sits beside
+ * it. A household of three that ticks two still reads three: three is the
+ * ceiling they are being told about, and saying it also quietly invites the
+ * third back. The signature carries one number and it is `guests.length`, so
+ * there is nothing else it could accidentally become.
+ */
+describe("invitationSizeSentence", () => {
+  it("counts the seats a household was given", () => {
+    expect(invitationSizeSentence(3)).toBe(
+      "Reservamos tres lugares para ustedes.",
+    );
+  });
+
+  /**
+   * AND THE SOLO LINE IS THE ONE DOING THE WORK, which is why it is not the
+   * plural with an `s` taken off.
+   *
+   * Since `1e460f8` an invitation naming one person confirms on the first tap
+   * and never passes through `¿Quiénes asisten?`. A household of two or three
+   * meets its own members by name on that screen, so the set is explicit
+   * there whatever this line says; a solo guest sees no list, no name and no
+   * number anywhere in the flow. "un lugar para ti" states the number in
+   * words and the person in the second person singular, which is the whole
+   * message in four words.
+   */
+  it("says it to one guest in the second person singular", () => {
+    expect(invitationSizeSentence(1)).toBe("Reservamos un lugar para ti.");
+  });
+
+  it("takes a membership and nothing about the answer", () => {
+    expect(invitationSizeSentence.length).toBe(1);
+  });
+
+  /**
+   * NO DIGIT ANYWHERE IN THE RANGE THIS PRODUCT CAN PRODUCE, AND THAT IS A
+   * CONTRACT WITH ANOTHER FILE RATHER THAN A PREFERENCE.
+   *
+   * This sentence is interpolated into the WhatsApp draft, and
+   * `dispatch-message.spec.ts` asserts that the only digits a rendered
+   * message contains are the ones inside the invitation URL — the property
+   * that keeps a date or a street number out of an approved template. A
+   * numeral here would punch a hole straight through it, so the words are
+   * load-bearing and this is where that is checked.
+   */
+  it("spells every size out, so the WhatsApp draft stays digit-free", () => {
+    for (let memberCount = 0; memberCount <= 10; memberCount += 1) {
+      expect(invitationSizeSentence(memberCount)).not.toMatch(/\d/);
+    }
+  });
+
+  /**
+   * ZERO SAYS "cero lugares", AND THAT IS THE DELIBERATE FAILURE MODE.
+   *
+   * Every other function in this file treats a count it should never see as a
+   * household, because being wrong in the plural costs nothing when the
+   * number is not printed. Here it IS printed, so there is no harmless
+   * branch: "un lugar" for an empty invitation would be a plausible lie, and
+   * "cero lugares" is visibly broken. An invitation with no members is
+   * refused long before this is reached; if one ever arrives, the screen
+   * should say so rather than invent a seat.
+   */
+  it("does not invent a seat for an invitation that has none", () => {
+    expect(invitationSizeSentence(0)).toBe(
+      "Reservamos cero lugares para ustedes.",
+    );
+  });
+
+  /**
+   * IT IS A SENTENCE, SO IT IS PUNCTUATED LIKE ONE — and it still does not
+   * shout. The two headings take no full stop because they are headings;
+   * `rsvpDeadlineSentence` takes one because it is a sentence, and so is
+   * this.
+   */
+  it("is written the way the rest of this surface is written", () => {
+    for (const memberCount of [1, 2, 3, 4]) {
+      const line = invitationSizeSentence(memberCount);
+
+      expect(line).not.toMatch(/[¡!]/);
+      expect(line.endsWith(".")).toBe(true);
+      expect(line).toMatch(/^Reservamos /);
+    }
+  });
+
+  /**
+   * AND IT NAMES THE SIZE IT WAS GIVEN, FOR EVERY SIZE THIS PRODUCT CAN
+   * PRODUCE.
+   *
+   * Nothing enforces the stated ceiling of three — the feature document's
+   * `## Next` carries that, and the geometry guard keeps a four-person
+   * canary for the same reason — so the line has to be right for a size
+   * nobody intended as well as for the three that were.
+   */
+  it("names whatever size the invitation actually is", () => {
+    for (const [memberCount, word] of [
+      [2, "dos"],
+      [3, "tres"],
+      [4, "cuatro"],
+      [10, "diez"],
+    ] as const) {
+      expect(invitationSizeSentence(memberCount)).toBe(
+        `Reservamos ${word} lugares para ustedes.`,
+      );
+    }
+  });
+
+  /**
+   * PAST THE TABLE IT FALLS BACK TO THE NUMERAL, which is the one input that
+   * can put a digit outside the URL in a WhatsApp draft.
+   *
+   * Asserted rather than left to be discovered: eleven people on one
+   * invitation is far past anything the couple have described, and a
+   * truthful numeral is a better failure than a table that silently runs
+   * out. If an invitation that size ever becomes real, this test is where
+   * the digit guard's exception is written down.
+   */
+  it("falls back to a numeral past the size table, digit and all", () => {
+    expect(invitationSizeSentence(11)).toBe(
+      "Reservamos 11 lugares para ustedes.",
+    );
   });
 });
 

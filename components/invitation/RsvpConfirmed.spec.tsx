@@ -31,8 +31,8 @@ import { RsvpConfirmed } from "./RsvpConfirmed";
  */
 const VENUE = "Salón para Eventos La Ñapa";
 
-function renderConfirmed() {
-  return render(<RsvpConfirmed venueName={VENUE} />);
+function renderConfirmed(memberCount = 3) {
+  return render(<RsvpConfirmed venueName={VENUE} memberCount={memberCount} />);
 }
 
 describe("RsvpConfirmed", () => {
@@ -48,7 +48,9 @@ describe("RsvpConfirmed", () => {
     const { container } = renderConfirmed();
 
     const order = Array.from(
-      container.querySelectorAll(".rsvp__when, .rsvp__venue, .rsvp__venue-map"),
+      container.querySelectorAll(
+        ".rsvp__reserved, .rsvp__when, .rsvp__venue, .rsvp__venue-map",
+      ),
     ).map((element) =>
       // The first BEM-ish hook on the element, not the first token: these
       // class strings are multi-line template literals and open with
@@ -58,7 +60,12 @@ describe("RsvpConfirmed", () => {
       )!,
     );
 
-    expect(order).toEqual(["rsvp__when", "rsvp__venue", "rsvp__venue-map"]);
+    expect(order).toEqual([
+      "rsvp__reserved",
+      "rsvp__when",
+      "rsvp__venue",
+      "rsvp__venue-map",
+    ]);
   });
 
   /**
@@ -138,9 +145,67 @@ describe("RsvpConfirmed", () => {
     // The row may still hold its seeded placeholder. An unfinished value must
     // stay visibly unfinished; hiding it turns an obviously incomplete
     // invitation into a plausible wrong one.
-    render(<RsvpConfirmed venueName="{{VENUE_NAME}}" />);
+    render(<RsvpConfirmed venueName="{{VENUE_NAME}}" memberCount={3} />);
 
     expect(screen.getByText("{{VENUE_NAME}}")).toBeInTheDocument();
+  });
+
+  /**
+   * HOW MANY PEOPLE THE INVITATION IS FOR, BECAUSE GUESTS WERE READING IT AS
+   * AN OPEN DOOR.
+   *
+   * "Las personas estan interpretando que van a poder invitar a mas
+   * personas." The couple had already sent invitations when they reported
+   * this, so it is a defect found by real guests rather than a refinement.
+   * The words live in `lib/domain/rsvp-copy.ts` beside the two headings that
+   * key off the same number; what is asserted here is that this screen says
+   * them, and says them about the INVITATION.
+   */
+  it("says how many people the invitation is for", () => {
+    renderConfirmed(3);
+
+    expect(
+      screen.getByText("Reservamos tres lugares para ustedes."),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND THE SOLO WORDING IS THE ONE THAT HAD TO BE RIGHT.
+   *
+   * An invitation naming one person confirms on the first tap and never
+   * passes through `¿Quiénes asisten?`, so this screen is the ONLY place in
+   * the whole flow where that guest is told anything about the size of their
+   * invitation — no list, no name, no number anywhere else.
+   */
+  it("says it to one guest in the second person singular", () => {
+    renderConfirmed(1);
+
+    expect(
+      screen.getByText("Reservamos un lugar para ti."),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * AND IT SITS UNDER THE LINE THAT NAMES THE HOUSEHOLD, NOT BESIDE THE
+   * VENUE.
+   *
+   * The greeting says who the invitation is for; this says how many of them
+   * there are. They are one thought, so the count opens the top group rather
+   * than joining the block about where to go — which is also the darkest
+   * ground on the screen, and the reason it needs no card of its own.
+   */
+  it("opens the group that says when, rather than the one that says where", () => {
+    const { container } = renderConfirmed();
+    const reserved = container.querySelector(".rsvp__reserved")!;
+
+    expect(container.querySelector(".rsvp__foot")!.contains(reserved)).toBe(
+      false,
+    );
+    expect(
+      reserved.compareDocumentPosition(
+        container.querySelector(".rsvp__when")!,
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   /**

@@ -6,6 +6,7 @@ import {
 } from "@/lib/domain/wedding-day";
 
 import type { CalendarEvent } from "@/lib/domain/calendar-event";
+import { invitationSizeSentence } from "@/lib/domain/rsvp-copy";
 
 import { Countdown } from "@/components/landing/Countdown";
 import {
@@ -112,11 +113,22 @@ const SHADOW = "[text-shadow:0_1px_12px_rgba(0,0,0,0.6)]";
 
 export function RsvpConfirmed({
   venueName,
+  memberCount,
   calendar,
   countdown = true,
+  invitationSize = true,
 }: {
   /** The place, from the `ceremony` row, rendered exactly as it is stored. */
   readonly venueName: string;
+  /**
+   * How many people the INVITATION names — `guests.length`, never the answer.
+   *
+   * Required rather than defaulted. A default would be a number some
+   * households read and others did not, decided by whichever call site was
+   * written last, and the one it would silently be wrong for is the solo
+   * invitation this sentence exists for.
+   */
+  readonly memberCount: number;
   /**
    * The two ways to keep the date, for the one household allowed the venue.
    *
@@ -146,6 +158,33 @@ export function RsvpConfirmed({
    * gets a ground this flag goes.
    */
   readonly countdown?: boolean;
+  /**
+   * Whether this screen says how many people the invitation is for.
+   *
+   * On by default, because real guests reading real invitations as an open
+   * door is the defect the sentence exists for.
+   *
+   * THE CLOSED SCREEN TURNS IT OFF, AND — LIKE THE COUNTER ABOVE — THE REASON
+   * IS A MEASUREMENT I TOOK AFTER BREAKING SOMETHING WITH IT. `RsvpClosed`
+   * renders this component under a line saying the answers are closed, so its
+   * top group starts two lines lower than the open one's. Adding a third
+   * pushed the day and the hour down the brightest slope of the photograph:
+   * on an iPhone 14 the hour and the dress code landed on **#797D4F**, where
+   * full cream measures **3.78:1** against a 4.5:1 floor, and the day on
+   * #6C6F46 at 4.59:1 with nothing left in hand. They read 5.13:1 and 5.72:1
+   * before the line was added. These lines are already FULL cream, so no
+   * opacity recovers it; only a ground would, and the top of this screen is
+   * deliberately ungrounded — `confirm-legibility.spec.tsx` argues that at
+   * length.
+   *
+   * WHAT THAT SCREEN LOSES IS LESS THAN IT LOOKS. The deadline has passed, so
+   * the household answered days ago: they were told the size in the WhatsApp
+   * message, again under the question, and again on this same screen when
+   * they accepted. After the deadline nothing about the number can change.
+   * The feature document carries it as the couple's to overrule, and the
+   * price of overruling it is the same ground the counter is waiting for.
+   */
+  readonly invitationSize?: boolean;
 }) {
   return (
     <div className="rsvp__confirmed flex flex-1 flex-col justify-between gap-6 text-center">
@@ -170,6 +209,43 @@ export function RsvpConfirmed({
           carries a submission that failed, on the screen the household is
           standing on. Nothing here was the only report of an error.
         */}
+
+        {/*
+          HOW MANY PEOPLE THE INVITATION IS FOR, UNDER THE LINE THAT NAMES
+          THEM — AND REAL GUESTS ARE THE REASON IT IS HERE.
+
+          "Las personas estan interpretando que van a poder invitar a mas
+          personas." The couple had already started sending invitations when
+          they reported it, so this is a defect found in the wild rather than
+          a refinement: nothing in the flow had ever stated the size of an
+          invitation, and some households read "¿Podrán acompañarnos?" as
+          something they could extend.
+
+          THIS IS THE RECORD THEY CAN POINT BACK TO, which is why the screen
+          gets it even though the question screen now says it too. A household
+          that reads the count while deciding has been told; a household that
+          reopens the invitation a week later, after telling a cousin they are
+          coming, needs to find it still there.
+
+          UNDER THE GREETING RATHER THAN BESIDE THE VENUE. The line above
+          names who the invitation is for; this says how many of them there
+          are. They are one thought, and splitting them across the screen
+          would make the count read as a condition attached to the directions.
+          It is also the darkest ground on the screen, which is why this line
+          needs no card of its own — `confirm-legibility.spec.tsx` measures
+          the pixel it actually stands on.
+
+          `text-sm` AND FULL CREAM, which is the setting of every other quiet
+          statement on this surface — `rsvp__closed-note`, `rsvp__deadline`,
+          the venue's own value. The facts under it are set in the
+          announcement's display line; a second display line here would
+          compete with the day for the eye.
+        */}
+        {invitationSize ? (
+          <p className={`rsvp__reserved m-0 text-sm text-[#f6efe2] ${SHADOW}`}>
+            {invitationSizeSentence(memberCount)}
+          </p>
+        ) : null}
 
         {/*
           THE DAY, THE HOUR AND THE DRESS CODE, IN THE VOICE THE OTHER THREE

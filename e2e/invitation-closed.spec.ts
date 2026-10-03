@@ -224,6 +224,18 @@ test.describe("the invitation after the deadline", () => {
     await expect(page.locator(".rsvp__venue")).toBeVisible();
     await expect(page.locator(".rsvp__when")).toBeVisible();
     await expect(page.getByRole("link", { name: /Cómo llegar/ })).toBeVisible();
+    /*
+      AND NOT THE SEAT COUNT, WHICH THE LIVE ACCEPTED SCREEN DOES CARRY.
+
+      It is withheld here for a measured reason rather than an editorial one:
+      this screen opens with the closed note, so its top group starts two
+      lines lower, and a third line put the hour and the dress code on
+      #797D4F — 3.78:1 against a 4.5:1 floor, at full cream, where no
+      opacity helps. `app/i/[slug]/closed-legibility.spec.tsx` holds both
+      numbers. Asserted as an absence so that putting it back is a visible
+      change to a named test rather than a quiet one.
+    */
+    await expect(page.locator(".rsvp__reserved")).toHaveCount(0);
     // And no way to change the answer, which is what the deadline closes.
     await expect(
       page.getByRole("button", { name: /Volver a responder/ }),

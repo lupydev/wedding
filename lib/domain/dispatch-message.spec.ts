@@ -9,6 +9,7 @@ import {
   buildInvitationWebFallbackLink,
   consoleDispatchPath,
   type DispatchCandidateGuest,
+  type InvitationMessageInput,
 } from "./dispatch-message";
 
 /**
@@ -49,21 +50,29 @@ const INVITATION_URL = "https://boda.example/i/abcdefghijklmn23";
  */
 const COUPLE_NAMES = "Ana y Bruno";
 
-/** One complete draft input. Every test varies a single field of it. */
-function draft(overrides: Record<string, string> = {}) {
+/**
+ * One complete draft input. Every test varies a single field of it.
+ *
+ * `memberCount` is three — the size the couple have described as the ceiling
+ * — and it is a NUMBER among strings, which is why the overrides are typed as
+ * a partial of the input rather than a bag of strings.
+ */
+function draft(overrides: Partial<InvitationMessageInput> = {}) {
   return {
     greetingName: "Familia Muñóz",
     invitationUrl: INVITATION_URL,
     coupleNames: COUPLE_NAMES,
+    memberCount: 3,
     ...overrides,
   };
 }
 
 describe("INVITATION_MESSAGE_TEMPLATE", () => {
-  it("declares exactly three variables: the household, the couple and the link", () => {
+  it("declares exactly four variables: the household, its size, the couple and the link", () => {
     expect([...INVITATION_MESSAGE_VARIABLES].sort()).toEqual([
       "couple_names",
       "greeting_name",
+      "invitation_size",
       "invitation_url",
     ]);
   });
@@ -154,9 +163,17 @@ describe("buildInvitationMessage", () => {
     // The load-bearing assertion of this file. A hard-coded "14 de marzo de
     // 2026" or a street number would survive review and would keep announcing a
     // detail the invitation page no longer shows.
-    const message = buildInvitationMessage(draft());
+    //
+    // AND IT IS WHY THE SEAT COUNT IS SPELLED OUT. `invitationSizeSentence`
+    // renders "tres lugares" rather than "3 lugares" precisely so that this
+    // property survives a variable whose whole job is to carry a number;
+    // every size the product can produce is checked here rather than only
+    // the fixture's own.
+    for (const memberCount of [1, 2, 3, 4, 10]) {
+      const message = buildInvitationMessage(draft({ memberCount }));
 
-    expect(message.replace(INVITATION_URL, "")).not.toMatch(/\d/);
+      expect(message.replace(INVITATION_URL, "")).not.toMatch(/\d/);
+    }
   });
 
   it("refuses a second URL, because only the first one gets a preview card", () => {
@@ -214,9 +231,55 @@ describe("the draft's shape", () => {
     // one string rather than by codepoint: the failure this guards against is
     // an editor or a transform that helpfully "normalises" the joiner away and
     // turns one bride into a bride followed by a stray gender sign.
-    expect(paragraphs()[1]).toBe(
+    //
+    // THE LINE, NOT THE PARAGRAPH, SINCE THE COUNT JOINED IT. The size
+    // sentence is the second line of this same paragraph — see below for why
+    // it is not a fifth one — so the emoji is asserted where it actually
+    // lives rather than against a paragraph that now holds two sentences.
+    expect(paragraphs()[1].split("\n")[0]).toBe(
       "Nos alegra mucho invitarlos a nuestra boda 👰🏻‍♀️🤵🏼‍♂️.",
     );
+  });
+
+  /**
+   * HOW MANY PEOPLE THE INVITATION IS FOR, IN THE MESSAGE THAT ARRIVES
+   * FIRST.
+   *
+   * "Si en todo el flujo debe ser super claro el numero de personas inclusive
+   * en el mensaje de whatsapp." This is the surface the couple named, and the
+   * one that matters most: it is read before anything is opened, and it is
+   * what a household forwards and discusses.
+   *
+   * THE SECOND LINE OF THE INVITATION PARAGRAPH, NOT A FIFTH PARAGRAPH. The
+   * couple wrote this message out line by line and the rhythm is theirs —
+   * four paragraphs, the URL alone with a blank line after it. The count
+   * qualifies "invitarlos", so it belongs against that sentence rather than
+   * floating between the invitation and the link.
+   */
+  it("says how many people the invitation is for, under the invitation itself", () => {
+    const lines = paragraphs()[1].split("\n");
+
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe("Reservamos tres lugares para ustedes.");
+  });
+
+  it("says it in the singular to an invitation that names one person", () => {
+    expect(buildInvitationMessage(draft({ memberCount: 1 }))).toContain(
+      "Reservamos un lugar para ti.",
+    );
+  });
+
+  /**
+   * AND THE COUNT DOES NOT COST THE DRAFT ITS SHAPE, which is the assertion
+   * that would catch a well-meaning edit promoting it to a paragraph of its
+   * own. Four paragraphs before, four after.
+   */
+  it("still arrives as four paragraphs", () => {
+    for (const memberCount of [1, 2, 3, 4]) {
+      expect(
+        buildInvitationMessage(draft({ memberCount })).split("\n\n"),
+      ).toHaveLength(4);
+    }
   });
 
   it("puts the invitation URL alone on the last line of its paragraph", () => {

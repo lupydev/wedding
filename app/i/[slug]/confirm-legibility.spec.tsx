@@ -73,9 +73,19 @@ const BRIGHTEST_UNDER_THE_TOP: readonly (readonly [string, string, string])[] =
   [
     [
       ".invitation__greeting",
-      "#303011",
-      "the line that names the household — worst on a 1280×720 window",
+      "#3e3c39",
+      "the line that names the household — worst on a Pixel 7",
     ],
+    /*
+      THE SEAT COUNT, WHICH IS NEW AND IS THE REASON THE TWO BELOW MOVED
+      AGAIN.
+
+      "Las personas estan interpretando que van a poder invitar a mas
+      personas" — real guests, real invitations. The sentence opens the top
+      group, directly under the line that names the household, and it pushes
+      everything after it one line further down the photograph.
+    */
+    [".rsvp__reserved", "#32340e", "how many people the invitation is for"],
     /*
       THE TWO LINES THAT REPLACED THE LABEL/VALUE PAIRS, RE-SAMPLED WHERE
       THEY NOW STAND.
@@ -85,11 +95,20 @@ const BRIGHTEST_UNDER_THE_TOP: readonly (readonly [string, string, string])[] =
       announcement's own setting, because the couple said this screen read
       as a spec sheet beside the other three. Both moved, so both were
       measured again rather than inheriting the pairs' numbers.
+
+      AND BOTH MOVED A SECOND TIME WHEN THE SEAT COUNT JOINED THE GROUP, down
+      the brightening slope between `PhotoStage`'s two scrims. On an iPhone
+      14 the day went from #262620 to #3E4038 and the hour from #2E2F27 to
+      #66684C — 9.18:1 and 5.04:1 against the 4.5:1 floor, where they were
+      13.3:1 and 11.8:1. Nothing here is under the floor and the second
+      number is the tightest on the screen's top group; the same shift on
+      the CLOSED screen, which starts two lines lower, put the hour at
+      3.78:1 and is why `RsvpClosed` passes `invitationSize={false}`.
     */
-    [".rsvp__when p:first-of-type", "#262620", "the day"],
+    [".rsvp__when p:first-of-type", "#3e4038", "the day"],
     [
       ".rsvp__when p:nth-of-type(2)",
-      "#2e2f27",
+      "#66684c",
       "the hour and the dress code, on one line now",
     ],
   ];
@@ -146,21 +165,24 @@ const BRIGHTEST_UNDER_THE_FOOT = "#f3f1e6";
  * which is a claim worth a number rather than a sentence: measured at
  * 1280×720, the brightest pixel under any line of this screen is #33350f.
  *
- * RE-MEASURED AFTER THE TWO LINES LEFT, and it stays. Every element's own box
- * now reads darker than this at 1280×720 — #303011 under the greeting is the
- * worst of them — so the old value is the harsher of the two and there is no
- * reason to relax it. The framed print in the other column is far brighter
- * than any of these numbers and is deliberately not in them: nothing on this
- * screen is written over it.
+ * RE-MEASURED WHEN THE SEAT COUNT JOINED THE COLUMN, AND IT MOVED. At `lg`
+ * the words are one flex column, so a new line shifts every line below it
+ * here too: the worst box at 1280×720 is the greeting's at **#373A10**,
+ * 10.3:1 against full cream, where the value this held was #33350F. That old
+ * number was recorded as "every element now reads darker than this", which
+ * had stopped being true. The framed print in the other column is far
+ * brighter than any of these numbers and is deliberately not in them:
+ * nothing on this screen is written over it.
  */
-const BRIGHTEST_AT_LG = "#33350f";
+const BRIGHTEST_AT_LG = "#373a10";
 
-function renderConfirmed() {
+function renderConfirmed(memberCount = 3) {
   const { container } = render(
     <>
       <InvitationGreeting>Los esperamos, Familia Aguirre</InvitationGreeting>
       <RsvpConfirmed
         venueName="Salón para Eventos Villa Campestre"
+        memberCount={memberCount}
         calendar={{
           event: buildCeremonyCalendarEvent(
             {
@@ -257,6 +279,23 @@ describe("the ground the foot of the accepted screen stands on", () => {
     // Any painted ground on this screen is named `…-ground`, as the gate's is.
     expect(container.querySelectorAll("[class*='-ground']")).toHaveLength(1);
   });
+
+  /**
+   * AND THE SEAT COUNT STANDS ON NEITHER OF THEM, WHICH IS WHY IT HAD TO BE
+   * MEASURED WHERE IT IS.
+   *
+   * It is bare cream on bare photograph in the top group, and the table
+   * above holds it to #32340E. Asserted structurally as well, because the
+   * tempting "fix" for a line that ever measures tight here is to drop it
+   * into the foot's card — which would move it away from the line that names
+   * the household and break the couple's own ordering of this screen.
+   */
+  it("does not cover the seat count, which is up in the top group", () => {
+    const { find, container } = renderConfirmed();
+
+    expect(find(".rsvp__foot").querySelector(".rsvp__reserved")).toBeNull();
+    expect(container.querySelector(".rsvp__reserved")).not.toBeNull();
+  });
 });
 
 describe("what the accepted screen's words measure against the photograph", () => {
@@ -321,6 +360,7 @@ describe("what the accepted screen's words measure against the photograph", () =
    */
   it.each([
     ".invitation__greeting",
+    ".rsvp__reserved",
     ".rsvp__when p:first-of-type",
     ".rsvp__when p:nth-of-type(2)",
     ".rsvp__venue dt",

@@ -184,12 +184,14 @@ export default async function DispatchPage({
           greetingName: invitation.greetingName,
           invitationUrl,
           coupleNames,
+          memberCount: invitation.guests.length,
         })}
         webFallbackUrl={buildInvitationWebFallbackLink({
           recipientE164: recipient.phoneE164,
           greetingName: invitation.greetingName,
           invitationUrl,
           coupleNames,
+          memberCount: invitation.guests.length,
         })}
         beaconPath={DISPATCH_EVENT_BEACON_PATH}
         dispatchState={invitation.dispatchState}
@@ -204,12 +206,14 @@ export default async function DispatchPage({
           greetingName: invitation.greetingName,
           invitationUrl,
           coupleNames,
+          memberCount: invitation.guests.length,
         })}
         waUrl={buildInvitationDispatchLink({
           recipientE164: recipient.phoneE164,
           greetingName: invitation.greetingName,
           invitationUrl,
           coupleNames,
+          memberCount: invitation.guests.length,
         })}
         cardImagePath={cardImagePath}
         cardTitle={cardText.title}

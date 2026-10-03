@@ -460,6 +460,11 @@ test.describe("the message preview's card image", () => {
     expect(text!.split("\n\n")).toHaveLength(4);
     expect(text).toContain(`\n${E2E_SITE_ORIGIN}/i/${household.slug}\n\n`);
     expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️");
+    // AND THE SEAT COUNT ON ITS OWN LINE INSIDE THE SECOND PARAGRAPH, not
+    // welded to the end of the sentence above it. This is the one break in
+    // the draft that is a single newline rather than a blank line, so it is
+    // the one `pre-line` could lose while every blank line survived.
+    expect(text).toContain("👰🏻‍♀️🤵🏼‍♂️.\nReservamos ");
   });
 
   test("offers no clickable WhatsApp link under the new scheme either", async () => {
